@@ -1,0 +1,15 @@
+# Rust source checkout (large, cloned locally only)
+rust/ulnclaw/
+
+# Build outputs
+dist/
+target/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
