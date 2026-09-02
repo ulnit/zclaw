@@ -1,9 +1,50 @@
 //! SQLite persistence — zclaw_memory.db in workspace_dir.
 //! Stores sessions and messages so getSessions/getMessages survive restarts.
+//!
+//! v0.8.4 backports (zeroclaw-labs/zeroclaw):
+//! - #8899 content scanning at write and recall boundaries (scan_content)
+//! - #8897 typed memory classification (fact / preference / note)
+//! - #8893 auditable recall paths (memory_audit trail)
 
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 use std::sync::Mutex;
+
+/// v0.8.4 #8899: lightweight content scanning applied at the write and
+/// recall boundaries. Returns Some(reason) when the content should be
+/// rejected at the memory boundary.
+fn scan_content(content: &str) -> Option<&'static str> {
+    // Mobile memory store is meant for facts/preferences, not secrets.
+    // Reject obvious credential material at the write/recall boundary.
+    let lowered = content.to_ascii_lowercase();
+    const SECRET_PATTERNS: &[&str] = &[
+        "api_key", "apikey", "access_key_secret", "accesskeysecret",
+        "private_key", "-----begin", "password=", "secret=",
+        "bearer ", "authorization: basic",
+    ];
+    for p in SECRET_PATTERNS {
+        if lowered.contains(p) {
+            return Some("content looks like credential material");
+        }
+    }
+    if content.len() > 8_000 {
+        return Some("content too large for memory (max 8000 chars)");
+    }
+    None
+}
+
+/// v0.8.4 #8897: classify a stored memory into a typed fact so recall can be
+/// filtered and audited by kind.
+fn classify(key: &str, content: &str) -> &'static str {
+    let k = key.to_ascii_lowercase();
+    if k.starts_with("pref") || k.contains("like") || k.contains("favorite") {
+        "preference"
+    } else if k.starts_with("fact") || content.contains(" is ") || content.contains("是") {
+        "fact"
+    } else {
+        "note"
+    }
+}
 
 pub struct MemoryStore {
     conn: Mutex<Connection>,
@@ -48,14 +89,29 @@ impl MemoryStore {
                 key TEXT UNIQUE NOT NULL,
                 content TEXT NOT NULL,
                 category TEXT NOT NULL DEFAULT 'core',
+                mem_type TEXT NOT NULL DEFAULT 'note',
                 session_id TEXT,
                 created_at INTEGER NOT NULL
              );
              CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
                 key, content, category
+             );
+             CREATE TABLE IF NOT EXISTS memory_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                op TEXT NOT NULL,
+                key TEXT NOT NULL,
+                ts INTEGER NOT NULL
              );",
         )?;
+        Self::migrate(&conn);
         Ok(Self { conn: Mutex::new(conn) })
+    }
+
+    /// Migration-tolerant column adds for DBs created by older builds.
+    fn migrate(conn: &Connection) {
+        conn.execute_batch(
+            "ALTER TABLE memories ADD COLUMN mem_type TEXT NOT NULL DEFAULT 'note';",
+        ).ok();
     }
 
     fn now_ms() -> i64 {
@@ -137,46 +193,66 @@ impl MemoryStore {
     // ── Long-term memory (FTS5 + BM25, mirrors the original) ──
 
     pub fn store(&self, key: &str, content: &str, category: &str) -> anyhow::Result<()> {
+        // v0.8.4 #8899: content scanning at the write boundary
+        if let Some(reason) = scan_content(content) {
+            return Err(anyhow::anyhow!("memory write rejected: {}", reason));
+        }
+        let mem_type = classify(key, content);
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO memories (key, content, category, created_at) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(key) DO UPDATE SET content = excluded.content, category = excluded.category, created_at = excluded.created_at",
-            params![key, content, category, Self::now_ms()],
+            "INSERT INTO memories (key, content, category, mem_type, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(key) DO UPDATE SET content = excluded.content, category = excluded.category, mem_type = excluded.mem_type, created_at = excluded.created_at",
+            params![key, content, category, mem_type, Self::now_ms()],
         )?;
         conn.execute(
             "INSERT INTO memories_fts (rowid, key, content, category) SELECT rowid, key, content, category FROM memories WHERE key = ?1
              ON CONFLICT(rowid) DO UPDATE SET content = excluded.content, category = excluded.category",
             params![key],
         ).ok();
+        // v0.8.4 #8893: auditable write path
+        conn.execute("INSERT INTO memory_audit (op, key, ts) VALUES ('store', ?1, ?2)", params![key, Self::now_ms()]).ok();
         Ok(())
     }
 
     pub fn recall(&self, query: &str, limit: usize) -> Vec<MemoryHit> {
+        // v0.8.4 #8899: scan at the recall boundary (reject credential-like queries)
+        if scan_content(query).is_some() {
+            return Vec::new();
+        }
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT m.id, m.key, m.content, m.category, m.created_at, bm25(memories_fts) as score
+            "SELECT m.id, m.key, m.content, m.category, m.mem_type, m.created_at, bm25(memories_fts) as score
              FROM memories_fts f JOIN memories m ON m.rowid = f.rowid
              WHERE memories_fts MATCH ?1 ORDER BY score LIMIT ?2",
         );
         let Ok(mut stmt) = stmt else { return Vec::new() };
-        stmt.query_map(params![query, limit as i64], |r| {
+        let hits: Vec<MemoryHit> = stmt.query_map(params![query, limit as i64], |r| {
             Ok(MemoryHit {
                 id: r.get(0)?,
                 key: r.get(1)?,
                 content: r.get(2)?,
                 category: r.get(3)?,
-                created_at: r.get(4)?,
-                score: r.get::<_, f64>(5).unwrap_or(0.0),
+                mem_type: r.get(4)?,
+                created_at: r.get(5)?,
+                score: r.get::<_, f64>(6).unwrap_or(0.0),
             })
         })
         .map(|rows| rows.filter_map(|r| r.ok()).collect())
-        .unwrap_or_default()
+        .unwrap_or_default();
+        // v0.8.4 #8893: auditable recall path
+        for h in &hits {
+            conn.execute("INSERT INTO memory_audit (op, key, ts) VALUES ('recall', ?1, ?2)", params![h.key, Self::now_ms()]).ok();
+        }
+        hits
     }
 
     pub fn forget(&self, key: &str) -> anyhow::Result<bool> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM memories_fts WHERE rowid IN (SELECT rowid FROM memories WHERE key = ?1)", params![key]).ok();
         let n = conn.execute("DELETE FROM memories WHERE key = ?1", params![key])?;
+        if n > 0 {
+            conn.execute("INSERT INTO memory_audit (op, key, ts) VALUES ('forget', ?1, ?2)", params![key, Self::now_ms()]).ok();
+        }
         Ok(n > 0)
     }
 }
@@ -187,6 +263,7 @@ pub struct MemoryHit {
     pub key: String,
     pub content: String,
     pub category: String,
+    pub mem_type: String,
     pub created_at: i64,
     pub score: f64,
 }

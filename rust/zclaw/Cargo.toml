@@ -1,8 +1,8 @@
 [package]
 name = "zclaw"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
-description = "ZClaw mobile agent — faithful rebuild of the HarmonyOS libzclaw.so FFI (v0.2)"
+description = "ZClaw mobile agent — FFI v0.2, tracking zeroclaw v0.8.4 improvements"
 license = "MIT OR Apache-2.0"
 
 [lib]

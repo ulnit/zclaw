@@ -9,7 +9,7 @@
 //! - zclaw_get_sessions() -> *const c_char
 //! - zclaw_get_messages(session_id) -> *const c_char
 //! - zclaw_free(ptr)
-//! - zclaw_version() -> *const c_char          ("0.2.0-mobile")
+//! - zclaw_version() -> *const c_char          ("0.3.0-mobile")
 
 use crate::agent::dispatcher::{Chunk, Dispatcher};
 use crate::config::Config;
@@ -210,7 +210,7 @@ pub extern "C" fn zclaw_free(ptr: *const c_char) {
 
 #[no_mangle]
 pub extern "C" fn zclaw_version() -> *const c_char {
-    to_cstring("0.2.0-mobile")
+    to_cstring("0.3.0-mobile")
 }
 
 // Silence unused-import lint for c_void (kept for ABI clarity).

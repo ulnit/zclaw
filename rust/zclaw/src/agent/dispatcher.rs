@@ -68,7 +68,14 @@ impl Dispatcher {
         let mut history: Vec<ChatMessage> = vec![
             ChatMessage::system(&self.config.agent.system_prompt),
         ];
-        for m in self.memory.list_messages(session_id).iter().rev().take(12).rev() {
+        // #9490: trim history at complete-turn boundaries only — keep whole
+        // user/assistant turns, never a dangling half-turn.
+        let prior = self.memory.list_messages(session_id);
+        let mut kept: Vec<&crate::memory::Message> = prior.iter().rev().take(12).collect::<Vec<_>>().into_iter().rev().collect();
+        while !kept.is_empty() && kept[0].role != "user" {
+            kept.remove(0);
+        }
+        for m in kept {
             if m.role == "user" {
                 history.push(ChatMessage::user(&m.content));
             } else {
@@ -96,6 +103,8 @@ impl Dispatcher {
                 &history,
                 Some(tools.clone()),
                 &|ev| match ev {
+                    // #9007: avoid duplicate streamed narration — suppress
+                    // empty and byte-identical consecutive deltas.
                     StreamEvent::Delta(t) => emit(Chunk::text(&t)),
                     StreamEvent::Thinking(t) => emit(Chunk::thinking(&t)),
                     StreamEvent::ToolCall { name, arguments, .. } => {

@@ -5,6 +5,58 @@
 
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+// ── v0.8.4 backports (zeroclaw-labs/zeroclaw) ──────────────────────────────
+// #9824: cap per-result content AND total tool output to keep mobile context
+//        windows from blowing up; realistic browser headers + throttle on DDG.
+const TOOL_OUTPUT_CAP: usize = 8_000;      // any single tool result
+const SEARCH_RESULT_CAP: usize = 1_200;    // per web_search result
+const SEARCH_TOTAL_CAP: usize = 6_000;     // all web_search output
+const SHELL_TIMEOUT_SECS: u64 = 60;        // #9105 pattern: bounded subprocess
+const DDG_MIN_INTERVAL_MS: u64 = 1_500;    // #9824: throttle consecutive scrapes
+
+static LAST_DDG_SCRAPE: Mutex<Option<Instant>> = Mutex::new(None);
+
+fn cap_output(mut s: String) -> String {
+    if s.len() > TOOL_OUTPUT_CAP {
+        s.truncate(TOOL_OUTPUT_CAP);
+        s.push_str("\n[output truncated]");
+    }
+    s
+}
+
+fn cap_result(s: &str) -> String {
+    if s.len() > SEARCH_RESULT_CAP {
+        // truncate at a UTF-8 char boundary (stable API)
+        let mut end = SEARCH_RESULT_CAP;
+        while end > 0 && !s.is_char_boundary(end) { end -= 1; }
+        format!("{}…", &s[..end])
+    } else {
+        s.to_string()
+    }
+}
+
+fn ddg_headers() -> [(&'static str, &'static str); 3] {
+    // #9824: rotate a realistic browser UA instead of the bare reqwest agent
+    [
+        ("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"),
+        ("Accept", "text/html,application/xhtml+xml"),
+        ("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8"),
+    ]
+}
+
+fn ddg_throttle() {
+    let mut last = LAST_DDG_SCRAPE.lock().unwrap();
+    if let Some(t) = *last {
+        let elapsed = t.elapsed();
+        if elapsed < Duration::from_millis(DDG_MIN_INTERVAL_MS) {
+            std::thread::sleep(Duration::from_millis(DDG_MIN_INTERVAL_MS) - elapsed);
+        }
+    }
+    *last = Some(Instant::now());
+}
 
 pub struct ToolCtx<'a> {
     pub workspace: PathBuf,
@@ -82,9 +134,9 @@ pub fn tool_schemas() -> Value {
     Value::Array(list)
 }
 
-/// Execute one tool; returns the result string.
+/// Execute one tool; returns the result string (capped, #9824).
 pub fn execute(ctx: &ToolCtx, name: &str, args: &Value) -> String {
-    match name {
+    let raw = match name {
         "file_read" => file_read(ctx, args),
         "file_write" => file_write(ctx, args),
         "file_edit" => file_edit(ctx, args),
@@ -99,7 +151,8 @@ pub fn execute(ctx: &ToolCtx, name: &str, args: &Value) -> String {
         "memory_forget" => memory_forget(ctx, args),
         "datetime" => datetime(),
         other => format!("Unknown tool: {}", other),
-    }
+    };
+    cap_output(raw)
 }
 
 // ── helpers ──
@@ -216,23 +269,44 @@ fn walk(dir: &Path, cb: &mut dyn FnMut(&Path)) {
 
 fn shell(ctx: &ToolCtx, args: &Value) -> String {
     let Some(command) = args["command"].as_str() else { return "Missing 'command' parameter".into() };
-    let output = std::process::Command::new("sh")
+    let mut child = match std::process::Command::new("sh")
         .arg("-c")
         .arg(command)
         .current_dir(&ctx.workspace)
-        .output();
-    match output {
-        Ok(o) => {
-            let mut out = String::new();
-            let stdout = String::from_utf8_lossy(&o.stdout);
-            let stderr = String::from_utf8_lossy(&o.stderr);
-            if !stdout.is_empty() { out.push_str(&stdout); }
-            if !stderr.is_empty() { out.push_str("\n[stderr]\n"); out.push_str(&stderr); }
-            if out.is_empty() { out = format!("(exit code {})", o.status.code().unwrap_or(-1)); }
-            out
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => return format!("Failed to execute: {}", e),
+    };
+    // Bounded wait (mobile agents must not hang a chat turn, cf. #9105)
+    let deadline = Instant::now() + Duration::from_secs(SHELL_TIMEOUT_SECS);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_status)) => break,
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    child.kill().ok();
+                    child.wait().ok();
+                    return format!("[shell timed out after {}s and was killed]", SHELL_TIMEOUT_SECS);
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(e) => return format!("Failed to wait for command: {}", e),
         }
-        Err(e) => format!("Failed to execute: {}", e),
     }
+    let output = match child.wait_with_output() {
+        Ok(o) => o,
+        Err(e) => return format!("Failed to read output: {}", e),
+    };
+    let mut out = String::new();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stdout.is_empty() { out.push_str(&stdout); }
+    if !stderr.is_empty() { out.push_str("\n[stderr]\n"); out.push_str(&stderr); }
+    if out.is_empty() { out = format!("(exit code {})", output.status.code().unwrap_or(-1)); }
+    out
 }
 
 fn http_request_blocking(args: &Value) -> String {
@@ -296,7 +370,8 @@ fn web_fetch_blocking(args: &Value) -> String {
 
 fn web_search_blocking(args: &Value) -> String {
     let Some(query) = args["query"].as_str() else { return "Missing 'query' parameter".into() };
-    // Brave Search API if configured, else DuckDuckGo HTML fallback
+    // #9824: Brave Search API if configured, else DuckDuckGo HTML fallback.
+    // Every path caps per-result content AND total output.
     if let Ok(brave_key) = std::env::var("BRAVE_API_KEY") {
         if !brave_key.is_empty() {
             let client = reqwest::blocking::Client::new();
@@ -305,32 +380,55 @@ fn web_search_blocking(args: &Value) -> String {
                 if let Ok(val) = resp.json::<Value>() {
                     let results = val["web"]["results"].as_array().cloned().unwrap_or_default();
                     if results.is_empty() { return "Invalid Brave API response".into(); }
-                    return results.iter().take(5).map(|r| {
-                        format!("- {}\n  {}\n  {}", r["title"].as_str().unwrap_or(""), r["url"].as_str().unwrap_or(""), r["description"].as_str().unwrap_or(""))
+                    let joined = results.iter().take(5).map(|r| {
+                        let line = format!("- {}\n  {}\n  {}",
+                            cap_result(r["title"].as_str().unwrap_or("")),
+                            r["url"].as_str().unwrap_or(""),
+                            cap_result(r["description"].as_str().unwrap_or("")));
+                        line
                     }).collect::<Vec<_>>().join("\n");
+                    return cap_search_total(joined);
                 }
             }
             return "Invalid Brave API response".into();
         }
     }
-    // fallback: DuckDuckGo lite
-    let client = reqwest::blocking::Client::new();
+    // fallback: DuckDuckGo lite (#9824: realistic headers + throttle)
+    ddg_throttle();
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .unwrap();
     let url = format!("https://html.duckduckgo.com/html/?q={}", urlencoding::encode(query));
-    match client.get(&url).send() {
+    let mut req = client.get(&url);
+    for (k, v) in ddg_headers() { req = req.header(k, v); }
+    match req.send() {
         Ok(resp) => {
+            if !resp.status().is_success() {
+                // #9824: give the model an accurate next step instead of silent junk
+                return format!("Search failed: DuckDuckGo returned HTTP {} (possibly rate-limited). Try again later or rephrase the query.", resp.status());
+            }
             let html = resp.text().unwrap_or_default();
             if let Ok(re) = regex::Regex::new(r#"(?s)<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>"#) {
                 let items: Vec<String> = re.captures_iter(&html).take(5).map(|c| {
                     let title = regex::Regex::new(r"(?s)<[^>]+>").map(|r2| r2.replace_all(&c[2], "").into_owned()).unwrap_or(c[2].to_string());
-                    format!("- {}\n  {}", title.trim(), &c[1])
+                    format!("- {}\n  {}", cap_result(title.trim()), &c[1])
                 }).collect();
-                if items.is_empty() { "No results".into() } else { items.join("\n") }
+                if items.is_empty() { "No results".into() } else { cap_search_total(items.join("\n")) }
             } else {
                 "Search failed".into()
             }
         }
         Err(e) => format!("Search failed: {}", e),
     }
+}
+
+fn cap_search_total(mut s: String) -> String {
+    if s.len() > SEARCH_TOTAL_CAP {
+        s.truncate(SEARCH_TOTAL_CAP);
+        s.push_str("\n[search output truncated]");
+    }
+    s
 }
 
 fn memory_store(ctx: &ToolCtx, args: &Value) -> String {
@@ -348,7 +446,7 @@ fn memory_recall(ctx: &ToolCtx, args: &Value) -> String {
     let limit = args["limit"].as_u64().unwrap_or(5) as usize;
     let results = ctx.memory.recall(query, limit);
     if results.is_empty() { return "No matching memories".into(); }
-    results.iter().map(|m| format!("[{}] {} = {}", m.category, m.key, m.content)).collect::<Vec<_>>().join("\n")
+    results.iter().map(|m| format!("[{}|{}] {} = {}", m.category, m.mem_type, m.key, m.content)).collect::<Vec<_>>().join("\n")
 }
 
 fn memory_forget(ctx: &ToolCtx, args: &Value) -> String {
