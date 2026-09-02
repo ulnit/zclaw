@@ -88,3 +88,19 @@ iOS 不允许运行时 dlopen 外部 .so，因此静态链接（.a），由
   所以那份二进制只能用于鸿蒙；Android/iOS 需用本仓库重建版重新编译。
 - 工具集、chunk 协议、SQLite 库名、版本号都与鸿蒙端实际使用的行为对齐，
   保证三端体验一致。
+
+## 上游跟踪（zeroclaw）
+
+zclaw 参考 [zeroclaw-labs/zeroclaw](https://github.com/zeroclaw-labs/zeroclaw) 开源项目实现。
+当前版本 **0.3.0** 已移植上游最新稳定版 **v0.8.4**（2026-08-02）中适用于移动端嵌入式的改进：
+
+| zeroclaw 编号 | 改进 | zclaw 落地 |
+|---|---|---|
+| #9824 | 工具输出封顶 + 搜索防限流 | 单结果 8KB / 搜索每结果 1.2KB / 总量 6KB；DDG 真实浏览器头 + 节流 + 限流时给模型准确提示 |
+| #9105 | 进程控制超时 | shell 工具 60s 超时，防移动端聊天回合卡死 |
+| #9490 | 按完整轮次裁剪历史 | 会话历史不留半轮对话 |
+| #8899 | 记忆内容扫描 | 写入/召回边界拒绝凭据类内容、8KB 上限 |
+| #8897 | 类型化记忆分类 | fact / preference / note（mem_type 列） |
+| #8893 | 记忆审计 | memory_audit 表记录 store/recall/forget |
+
+桌面/通道/发布类改进（A2A、SOP 引擎、Channels 等）不适用于移动端单进程库，故不移植。
