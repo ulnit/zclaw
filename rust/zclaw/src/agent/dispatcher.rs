@@ -82,8 +82,24 @@ impl Dispatcher {
                 history.push(ChatMessage::assistant(&m.content));
             }
         }
-        history.push(ChatMessage::user(user_text));
-        self.memory.save_message(session_id, "user", user_text);
+        // Multimodal FFI envelope. The image is sent only in this request and is
+        // intentionally not persisted to SQLite.
+        let envelope = serde_json::from_str::<Value>(user_text).ok()
+            .filter(|v| v["__zclaw_multimodal"].as_bool() == Some(true));
+        let (persisted_text, user_message) = if let Some(v) = envelope {
+            let text = v["text"].as_str().unwrap_or("");
+            let image = v["image_data_url"].as_str().unwrap_or("");
+            if image.starts_with("data:image/") {
+                let persisted = if text.trim().is_empty() { "[图片]".to_string() } else { format!("{}\n[图片]", text) };
+                (persisted, ChatMessage::user_multimodal(text, image))
+            } else {
+                (text.to_string(), ChatMessage::user(text))
+            }
+        } else {
+            (user_text.to_string(), ChatMessage::user(user_text))
+        };
+        history.push(user_message);
+        self.memory.save_message(session_id, "user", &persisted_text);
 
         let max_iter = self.config.agent.max_iterations.max(1);
         let tools = tools::tool_schemas();

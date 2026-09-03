@@ -210,7 +210,7 @@ pub extern "C" fn zclaw_free(ptr: *const c_char) {
 
 #[no_mangle]
 pub extern "C" fn zclaw_version() -> *const c_char {
-    to_cstring("0.3.0-mobile")
+    to_cstring("0.4.0-mobile")
 }
 
 // Silence unused-import lint for c_void (kept for ABI clarity).

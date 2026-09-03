@@ -7,7 +7,7 @@ use serde_json::Value;
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChatMessage {
     pub role: String,
-    pub content: String,
+    pub content: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -16,19 +16,27 @@ pub struct ChatMessage {
 
 impl ChatMessage {
     pub fn user(content: &str) -> Self {
-        Self { role: "user".into(), content: content.into(), tool_calls: None, tool_call_id: None }
+        Self { role: "user".into(), content: Value::String(content.into()), tool_calls: None, tool_call_id: None }
+    }
+    pub fn user_multimodal(text: &str, image_data_url: &str) -> Self {
+        let mut parts = Vec::new();
+        if !text.trim().is_empty() {
+            parts.push(json!({"type":"text", "text": text}));
+        }
+        parts.push(json!({"type":"image_url", "image_url":{"url": image_data_url}}));
+        Self { role: "user".into(), content: Value::Array(parts), tool_calls: None, tool_call_id: None }
     }
     pub fn system(content: &str) -> Self {
-        Self { role: "system".into(), content: content.into(), tool_calls: None, tool_call_id: None }
+        Self { role: "system".into(), content: Value::String(content.into()), tool_calls: None, tool_call_id: None }
     }
     pub fn assistant(content: &str) -> Self {
-        Self { role: "assistant".into(), content: content.into(), tool_calls: None, tool_call_id: None }
+        Self { role: "assistant".into(), content: Value::String(content.into()), tool_calls: None, tool_call_id: None }
     }
     pub fn assistant_with_tools(content: &str, tool_calls: Value) -> Self {
-        Self { role: "assistant".into(), content: content.into(), tool_calls: Some(tool_calls), tool_call_id: None }
+        Self { role: "assistant".into(), content: Value::String(content.into()), tool_calls: Some(tool_calls), tool_call_id: None }
     }
     pub fn tool(call_id: &str, content: &str) -> Self {
-        Self { role: "tool".into(), content: content.into(), tool_calls: None, tool_call_id: Some(call_id.into()) }
+        Self { role: "tool".into(), content: Value::String(content.into()), tool_calls: None, tool_call_id: Some(call_id.into()) }
     }
 }
 

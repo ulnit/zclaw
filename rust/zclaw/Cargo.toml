@@ -1,6 +1,6 @@
 [package]
 name = "zclaw"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "ZClaw mobile agent — FFI v0.2, tracking zeroclaw v0.8.4 improvements"
 license = "MIT OR Apache-2.0"
