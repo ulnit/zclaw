@@ -1,216 +1,125 @@
-# ulnclaw Desktop ☤
+# ulnclaw desktop 🦞
 
-<p align="center">
-  <a href="https://github.com/NousResearch/ulnclaw-agent/releases"><img src="https://img.shields.io/badge/Download-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-FFD700?style=for-the-badge" alt="Download"></a>
-  <a href="https://ulnclaw-agent.nousresearch.com/docs/"><img src="https://img.shields.io/badge/Docs-ulnclaw--agent.nousresearch.com-FFD700?style=for-the-badge" alt="Documentation"></a>
-  <a href="https://discord.gg/NousResearch"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
-  <a href="https://github.com/NousResearch/ulnclaw-agent/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
-</p>
-
-**The native desktop app for [ulnclaw Agent](../../README.md) — the self-improving AI agent from [Nous Research](https://nousresearch.com).** Same agent, same skills, same memory as the CLI and gateway, in a polished native window — chat with streaming tool output, side-by-side previews, a file browser, voice, and settings, no terminal required. Available for **macOS, Windows, and Linux**.
+**The desktop app for [ulnclaw](../README.md)** — a faithful, vendored port of
+the hermes-agent Electron desktop (v2026.8.3, MIT), backed by the ulnclaw Rust
+gateway instead of the hermes Python backend. Same views, same styles, same
+interaction logic as hermes desktop: the shell is upstream code renamed, and
+the only intentional differences are ~70 lines of backend plumbing across 7
+files (see [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md)). Available for **Windows,
+macOS, and Linux**.
 
 <table>
-<tr><td><b>Chat with the full agent</b></td><td>Streaming responses, live tool activity, structured tool summaries, and the same conversation history as every other ulnclaw surface.</td></tr>
-<tr><td><b>Side-by-side previews</b></td><td>Render web pages, files, and tool outputs in a right-hand pane while you keep chatting.</td></tr>
-<tr><td><b>File browser</b></td><td>Explore and preview the working directory without leaving the app.</td></tr>
-<tr><td><b>Voice</b></td><td>Talk to ulnclaw and hear it back.</td></tr>
-<tr><td><b>Settings & onboarding</b></td><td>Manage providers, models, tools, and credentials from a real UI. First-run setup gets you to your first message in seconds.</td></tr>
-<tr><td><b>Stays current</b></td><td>Built-in updates pull the latest agent and rebuild the app in place.</td></tr>
+<tr><td><b>Sixteen views</b></td><td>Chat, sessions, jobs, usage, models, skills, kanban, projects, runs, webhooks, plugins, pairing, profiles, config, doctor, settings — plus a Ctrl/Cmd+K command palette, dashboard themes/fonts and a language picker.</td></tr>
+<tr><td><b>Chat with the full agent</b></td><td>Live turn streaming over a JSON-RPC WebSocket plus HTTP/SSE, streaming tool output, approvals and clarify prompts rendered natively.</td></tr>
+<tr><td><b>Terminal &amp; files</b></td><td>xterm.js terminal panes, a right-hand file tree with a git review pane.</td></tr>
+<tr><td><b>Self-contained</b></td><td>Installers bundle the statically linked <code>ulnclaw</code> gateway binary — no Rust/Python toolchain needed; first launch works keyless with onboarding.</td></tr>
+<tr><td><b>Stays current</b></td><td>Silent whole-shell auto-update (v0.7.1+): app + bundled gateway replaced in one background restart.</td></tr>
 </table>
-
----
 
 ## Install
 
-### Install with ulnclaw (recommended)
+Prebuilt installers ship on the releases page for every `v*` tag, built by the
+`release-desktop` workflow:
 
-Already have the ulnclaw CLI? Just run:
+- **Windows** — `ulnclaw-<ver>-win-x64.exe` (NSIS, per-user install, directory
+  selectable). Fully self-contained: the statically linked gateway binary
+  (static CRT) rides inside the bundle.
+- **macOS** — `ulnclaw-<ver>-mac-arm64.dmg` (Apple Silicon) /
+  `ulnclaw-<ver>-mac-x64.dmg` (Intel). Ad-hoc signed: on first launch use
+  right-click › Open, or run `xattr -cr "/Applications/ulnclaw desktop.app"`
+  if Gatekeeper reports it as damaged.
+- **Linux** — `ulnclaw-<ver>-linux-x86_64.AppImage` (deb/rpm also build).
+  Every release ships a `SHA256SUMS.txt`.
 
-```bash
-ulnclaw desktop
-```
-
-It builds and launches the GUI against your existing install — same config, keys, sessions, and skills. If Desktop cannot find a usable runtime or saved remote connection, first launch lets you connect to an existing ulnclaw gateway or install ulnclaw locally. Local onboarding then walks you through choosing a provider and model.
-
-### Prebuilt installers
-
-Prebuilt installers are built and distributed via [the ulnclaw Desktop website.](https://ulnclaw-agent.nousresearch.com/).
-
----
-
-## Updating
-
-The app checks for updates in the background and offers a one-click update when one is ready. You can also update any time from the CLI:
+## Launching from the CLI
 
 ```bash
-ulnclaw update
+ulnclaw gui              # alias: ulnclaw desktop — spawn the packaged app detached
+ulnclaw gui --dev        # run the unpackaged app from this directory (npm start)
+ulnclaw gui --binary PATH    # explicit executable
+ULNCLAW_DESKTOP_BINARY=PATH ulnclaw gui
 ```
 
----
+Binary resolution order: `--binary` → `ULNCLAW_DESKTOP_BINARY` →
+`desktop-electron/release/{linux,win,mac}-unpacked/…` (built by
+`npm run pack`). If nothing is found, `ulnclaw gui` prints build instructions.
+Unlike `hermes gui`, this command does **not** build the app on demand — build
+once with `npm run dist` / `npm run pack`, or use the prebuilt installers.
 
-## Requirements
+## How it works
 
-The installer handles everything for you (Python 3.11+, a portable Git, ripgrep).
+- The **Electron main process** spawns and supervises the bundled statically
+  linked `ulnclaw` gateway (`ULNCLAW_DESKTOP=1`) on `127.0.0.1:8642`, probes
+  `/health` with capped respawn, shows boot diagnostics on the offline banner,
+  and owns the tray + native menus, `ulnclaw://` deep links, single-instance
+  handoff and window-state persistence.
+- The **renderer** (React 19 + Vite) talks to the gateway over HTTP/SSE plus a
+  JSON-RPC WebSocket — the same contract hermes desktop uses against the
+  hermes gateway (`shared/src/json-rpc-gateway.ts`, vendored verbatim).
+- The desktop bridge tools (`close_terminal` / `read_terminal` / `focus_pane`
+  / `open_preview` / `react_to_message`) reach the webview over the
+  `/api/desktop/events` SSE bridge.
+- First launch needs no API key: the gateway boots keyless and the
+  onboarding / Models view walks you through adding a provider key
+  (persisted to `config.toml` / the credentials pool); restart the gateway
+  once a key is saved (tray › Restart Gateway).
 
----
+Configuration lives in `~/.ulnclaw/config.toml` (Windows:
+`%USERPROFILE%\.ulnclaw\config.toml`) — exactly as for the CLI. Boot logs land
+in `~/.ulnclaw/logs/desktop.log`; gateway output in
+`~/.ulnclaw/gateway.log`.
 
 ## Development
 
-Want to hack on the app itself? Install workspace deps from the repo root once, then run the dev server from this directory:
-
 ```bash
-npm install          # from repo root — links apps/desktop, web, apps/shared
-cd apps/desktop
-npm run dev          # Vite renderer + Electron, which boots the Python backend
+npm install
+npm run dev            # Vite renderer (:5174) + Electron against it
+npm run dev:fake-boot  # exercise the startup overlay with deterministic delays
+
+npm run typecheck && npm run lint
+npm run test:ui            # renderer unit tests
+npm run test:desktop:platforms   # electron-side tests
 ```
 
-Point the app at a specific source checkout, or sandbox it away from your real config:
-
-```bash
-# throwaway ULNCLAW_HOME, separate Electron userData, distinct app name to avoid the single-instance lock
-../scripts/dev-sandbox.sh npm run dev
-ULNCLAW_DESKTOP_ULNCLAW_ROOT=/path/to/clone npm run dev
-ULNCLAW_HOME=/tmp/throwaway npm run dev
-npm run dev:fake-boot   # exercise the startup overlay with deterministic delays
-```
+Note: hermes' upstream test suite (462 unit + 25 e2e files) is not vendored by
+default — see the sync machinery below.
 
 ### Building installers
 
 ```bash
+npm run pack         # unpacked app under release/ (what `ulnclaw gui` resolves)
+npm run dist         # installers for the current OS
 npm run dist:mac     # DMG + zip
 npm run dist:win     # NSIS + MSI
 npm run dist:linux   # AppImage + deb + rpm
-npm run pack         # unpacked app under release/ (no installer)
 ```
 
-Installers are built and uploaded to GitHub Releases manually. macOS/Windows signing & notarization happen automatically when the relevant credentials are present in the environment (`CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_*` for macOS, `WIN_CSC_*` for Windows).
+Release installers are produced by `.github/workflows/release-desktop.yml` on
+every `v*` tag: it builds the core `ulnclaw` gateway first (statically
+linked), stages it into `resources/binaries/`, then builds the installers so
+the packaged app can spawn the gateway without any local toolchain.
 
-### How it works
+## Vendoring & upstream sync
 
-The packaged app ships the Electron shell and a native React chat surface. On
-first launch it can install the ulnclaw Agent runtime into `ULNCLAW_HOME`
-(`~/.ulnclaw`, or `%LOCALAPPDATA%\ulnclaw` on Windows), using the same layout as a
-CLI install.
+This tree is a **direct copy** of hermes-agent `apps/desktop` + `apps/shared`
+(current vendored revision: v2026.8.3), transformed in two passes: a
+mechanical brand rename (`HERMES→ULNCLAW`, `Hermes→ulnclaw`, `hermes→ulnclaw`
+— contents and file names) and the 7-file functional divergence catalog
+(backend argv `serve`→`gateway`, readiness regex, bundled gateway binary,
+package.json branding, vendored-layout paths, repo-root depth).
 
-The app has three boundaries:
-
-- **Electron** resolves and validates a runnable backend, owns native
-  filesystem/git/window capabilities, and exposes a narrow preload bridge.
-- **React** owns the Desktop routes, panes, interaction state, and
-  `@assistant-ui/react` transcript.
-- **ulnclaw Agent** runs as a headless `ulnclaw serve` process and exposes the
-  `tui_gateway` JSON-RPC/WebSocket API. The renderer connects through
-  [`apps/shared`](../shared/), which is also used by the browser dashboard.
-
-Backend resolution is an ordered ladder:
-
-1. `ULNCLAW_DESKTOP_ULNCLAW_ROOT`
-2. the current source checkout during development
-3. a completed managed install
-4. `ULNCLAW_DESKTOP_ULNCLAW`, or `ulnclaw` on `PATH`
-5. a system Python that can import the ulnclaw runtime
-6. the first-launch bootstrap installer
-
-Candidates are probed before use; an existing shim or interpreter is not enough.
-A runtime that predates `serve` falls back to headless
-`dashboard --no-open`. This is compatibility for the backend command only and
-does not launch or embed the dashboard UI.
-
-The Electron orchestration entry point is `electron/main.ts`; pure resolution,
-probe, hardening, and platform policies live in focused modules beside it. The
-renderer is under `src/`, with shared atoms in `src/store` and transport/native
-adapters in `src/lib`.
-
-Before changing the app, read:
-
-- [`AGENTS.md`](./AGENTS.md): architecture, state ownership, resolver/fallback,
-  transport, performance, and testing rules.
-- [`DESIGN.md`](./DESIGN.md): visual system, information architecture, motion,
-  direct manipulation, and keyboard behavior.
-
-### Connections, projects, and switching
-
-Desktop supports a managed local backend, explicit remote gateways, and ulnclaw
-Cloud connections. Remote and cloud modes use the same remote-capability path;
-authentication and discovery differ, not the renderer feature model.
-
-When no usable local runtime or saved remote connection exists, the first-run
-screen offers **Connect to existing ulnclaw** before starting the local installer.
-Desktop probes the gateway to discover token or OAuth authentication, requires a
-successful HTTP and WebSocket connection test, and saves the connection using
-the same encrypted Desktop configuration used by Settings. A saved remote
-connection bypasses this choice on later launches. The regular Desktop build
-still includes the local-install option; this is a remote operating mode, not a
-separate client-only application.
-
-In remote mode the gateway host is the execution boundary: agent tools,
-terminal commands, and file operations run against the remote ulnclaw host, not
-the computer displaying the Desktop UI.
-
-Projects are the workspace abstraction. A project may own multiple folders,
-repositories, worktrees, and sessions; a bare new chat remains detached unless
-the user enters a project or configures a default project directory. Use the
-Projects UI rather than adding a second per-session folder-picker workflow.
-
-Changing profiles or connection modes is a soft workspace switch, not another
-cold boot. The shell and current management overlay remain mounted while
-gateway-bound nanostores are wiped, query-backed data is invalidated, and the
-new connection repopulates skeletons. This prevents rows or transcripts from
-the previous gateway bleeding into the next one.
-
-### Verification
-
-Run before opening a PR (lint may surface pre-existing warnings but must exit cleanly):
+**Do not hand-edit vendored files.** Change the patch catalog instead, or send
+the change upstream to hermes. When hermes desktop moves, sync with:
 
 ```bash
-npm run fix
-npm run typecheck
-npm run lint
-npm run test:ui
-npm run test:desktop:platforms
+node scripts/sync-from-hermes.mjs /path/to/hermes-checkout          # dry run
+node scripts/sync-from-hermes.mjs /path/to/hermes-checkout --apply  # write
 ```
 
-Run `npm run test:desktop:all` for install, boot, update, packaging, or other
-release-path changes.
+Full details in [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md).
 
-### Troubleshooting
+## License & credits
 
-Boot logs land in `ULNCLAW_HOME/logs/desktop.log` (includes backend output and recent Python tracebacks) — check it first if the app reports a boot failure.
-
-**macOS / Linux:**
-
-```bash
-# Force a clean first-launch setup
-rm "$HOME/.ulnclaw/ulnclaw-agent/.ulnclaw-bootstrap-complete"
-# Rebuild a broken Python venv
-rm -rf "$HOME/.ulnclaw/ulnclaw-agent/venv"
-# Reset a stuck macOS microphone prompt (macOS only)
-tccutil reset Microphone com.nousresearch.ulnclaw
-```
-
-**Windows (PowerShell):**
-
-```powershell
-# Force a clean first-launch setup
-Remove-Item "$env:LOCALAPPDATA\ulnclaw\ulnclaw-agent\.ulnclaw-bootstrap-complete"
-# Rebuild a broken Python venv
-Remove-Item -Recurse -Force "$env:LOCALAPPDATA\ulnclaw\ulnclaw-agent\venv"
-```
-
-> The default ulnclaw home on Windows is `%LOCALAPPDATA%\ulnclaw`. Set the `ULNCLAW_HOME` env var if you've relocated it.
-
----
-
-## Community
-
-- 💬 [Discord](https://discord.gg/NousResearch)
-- 📖 [Documentation](https://ulnclaw-agent.nousresearch.com/docs/)
-- 🐛 [Issues](https://github.com/NousResearch/ulnclaw-agent/issues)
-
----
-
-## License
-
-MIT — see [LICENSE](../../LICENSE).
-
-Built by [Nous Research](https://nousresearch.com).
+The shell is vendored from [hermes-agent](https://github.com/NousResearch/hermes-agent)
+by [Nous Research](https://nousresearch.com) (MIT); the ulnclaw project is
+MIT OR Apache-2.0.
