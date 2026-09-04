@@ -1823,299 +1823,190 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
   （`/api/tools/computer-use/permissions/grant` 以可轮询后台动作拉起
   `cua-driver permissions grant`，仅 macOS）；嵌入式守护进程 socket 模式
   未移植；`install` 直接调用上游 trycua 安装脚本。
-- 插件：ulnclaw 插件是讲 hermes shell-hook JSON 协议的子进程（目录插件 +
-  `[hooks]` 配置），不是 Python 导入；核心触发 hermes v2026.8.3 运行期
-  实际发出的全部钩子（23 个中的 13 个 —— 其余 10 个在 hermes 中也仅存于
-  目录）；pre_verify 无 ulnclaw verify 循环可挂载；`ulnclaw kanban` 引擎
-  现已在 claim/done/block 时触发 kanban_task_claimed/completed/blocked
-  钩子，agent 侧 kanban_* 工具现已改用同一 KanbanStore 引擎
-  （P119 统一了此前独立的表）；P122 移植了调度器 tick（`kanban dispatch` CLI +
-  `POST /api/kanban/dispatch`：过期认领回收（存活 pid 自动续期）、父任务完成的
-  todo→ready 晋升、就绪任务经分离的 `ulnclaw run` 生成 worker（ULNCLAW_KANBAN_TASK
-  环境）、实时并发上限、连续 2 次 spawn 失败自动阻塞）；P123 新增网关内嵌定时调度
-  （`[kanban] dispatch_in_gateway / dispatch_interval_secs / max_spawn`，默认开/60 秒/2）
-  与 hermes kanban-stop 提醒（worker 未调用 kanban_complete/block 就结束时最多重新
-  提示 2 次，`ULNCLAW_KANBAN_STOP_NUDGE=0` 可关闭）；P124 补齐了按任务
-  git-worktree 隔离（`[kanban] worktrees`，默认开启：每个被调度的 worker 运行在
-  `<repo>/.worktrees/<task-id>` 的 `kanban/<task-id>` 分支上，重启可复用；
-  `ulnclaw kanban gc` 清理已完成/归档任务的树，分支保留）；P125 移植了 hermes
-  kanban swarm（`hermes_cli/kanban_swarm.py`）：`ulnclaw kanban swarm <goal>
-  --worker ASSIGNEE:TITLE [--worker ...] --verifier ASSIGNEE --synthesizer
-  ASSIGNEE [--json]` 构建 workers→verifier→synthesizer 任务图 ——
-  根黑板/审计任务（创建即 done）、N 个注入 swarm 协议简报的 ready worker、
-  链接到所有 worker 的验证者、链接到验证者的综合者；拓扑以 `blackboard` 评论 +
-  `swarm` 事件发布，调度器随父任务完成逐级晋升验证者/综合者
-  （`recompute_ready`）；P127 补齐 swarm 面：worker 技能透传
-  （`--worker ASSIGNEE:TITLE:skill,skill`，验证者固定
-  `requesting-code-review`、综合者固定 `humanizer` —— 与 hermes 逐字一致）、
-  任务级 `skills`/`max_runtime_seconds`/`idempotency_key` 列（增量迁移；
-  `kanban create --skill X --max-runtime N --idempotency-key K`，网关创建
-  API 同字段）、幂等 swarm 恢复（同键 ⇒ 从根黑板重建拓扑，不重复建图）、
-  调度器 `reap_timed_out`（SIGTERM + 5 秒宽限 + SIGKILL，任务回 ready 并记
-  `timed_out` 事件），派生 worker 的启动提示词内联强制加载的技能
-  （hermes 以 `--skills` 参数对传递）；P128 移植了 triage 流水线
-  （`hermes_cli/kanban_specify.py` + `kanban_decompose.py`）：
-  `kanban create --triage` 把想法暂存进新的 `triage` 列，`kanban specify`
-  经 `auxiliary.triage_specifier` 生成 Goal/Approach/Acceptance-criteria
-  规格并晋升 triage→todo，`kanban decompose` 将其扇出为 2-6 个子任务
-  依赖图并按 profile 名册路由（`[kanban] orchestrator_profile /
-  default_assignee / auto_promote_children`；根任务作为所有子任务的父级
-  存留作唤醒卡，Kahn 环检测，--all 批量时对单任务失败容错），
-  `kanban diagnostics` 移植 `kanban_diagnostics.py` 规则引擎（幻觉卡号、
-  正文幻影引用、重复 spawn 失败、worker 崩溃循环、阻塞超 24 小时、
-  block/unblock 循环、滞留 ready、triage 无辅助模型），阈值与严重度
-  排序与 hermes 一致；P129 补齐了其余 hermes kanban CLI 面：
-  schedule/promote（父任务门控、--force 覆盖）/reclaim/reassign
-  （--reclaim）/edit/set-model、附件 CLI（attach/attachments/attach-rm，
-  稳定 id）、tail --follow 事件流、按看板状态统计、boards
-  rename/set-workdir；P130 新增全板 `kanban watch` 实时事件流
-  （assignee/kind 过滤，hermes watch 后端）、`kanban stats` 采用 hermes
-  `board_stats` 语义（按 assignee 统计 + 最老 ready 等待时长 +
-  `--json`）与 `kanban dispatch --json`；P131 移植网关通知底座：
-  `kanban_notify_subs` 表（task × platform × chat × thread 主键，
-  订阅时游标快照到当前最新事件、chat_type/profile/metadata 自愈）、
-  `kanban notify-subscribe / notify-list / notify-unsubscribe` CLI、
-  供网关通知器使用的 `unseen_events_for_sub` + `advance_notify_cursor`
-  构件，以及 `kanban log [--tail N]` —— 打印任务在
-  `<home>/kanban/worker-logs/` 下的 worker 日志，tail 采用 hermes 的
-  断行安全语义；P132 新增 `task_runs` 尝试历史表（hermes `Run` 生命
-  周期：认领时开 run，携带认领锁/TTL 与运行时限，心跳与 spawn 出的
-  worker pid 同步写入，按 hermes outcome 语义关闭 —— done/block/
-  reclaim/过期回收/超时分别对应 completed/blocked/reclaimed/
-  timed_out，CLI 直接完成未认领任务与调度器 spawn 失败则合成瞬时
-  run；重新认领时把残留活跃 run 恢复为 `reclaimed`）、
-  `kanban runs [--json] [--state-type status|outcome --state-name V]`
-  CLI（hermes 表格格式）与 `latest_run` / `latest_summary` 存储
-  辅助方法；P133 接通网关调度器的 triage 自动分解路径（hermes
-  `_auto_decompose_tick`）：每个 tick 从配置实时重读
-  `[kanban] auto_decompose`（默认开）/ `auto_decompose_per_tick`
-  （默认 3），翻转开关在下一 tick 即停止失控扇出、无需重启网关
-  （hermes #49638 故障安全语义 —— 配置读取失败则本轮跳过），
-  随后在 dispatch 扇出之前经辅助 LLM 分解至多 N 个 triage 任务，
-  成功记 info、无操作跳过记 debug；P134 补齐 hermes kanban CLI 的
-  最后几块：`kanban context`（完整移植 `build_worker_context` ——
-  带上限的正文/附件、历史尝试的 run 摘要与 metadata、已完成父任务
-  的交接结果与相对时间陈旧度提示、assignee 跨任务角色历史、带上限
-  的评论区；`kanban_show` 工具同步返回 `worker_context`，spawn 出的
-  worker 无需额外往返即可读取）、`kanban repair`（integrity_check +
-  内容寻址隔离备份 + 仅索引损坏的 REINDEX 自动修复，其余情况保守
-  失败）、`kanban assignees`（配置名册与看板 assignee 合并、按状态
-  计数）、`kanban daemon`（hermes 已弃用的存根，指向网关；`--force`
-  保留独立循环）以及 `ls`/`new` 可见别名；P135 接通通知投递：
-  网关运行 kanban notifier 循环（hermes kanban_watchers 通知器，
-  5 秒一拍），轮询 `kanban_notify_subs`，领取未送达的终态事件
-  （completed/blocked/gave_up/crashed/timed_out/status，其中
-  archived/unblocked 只推游标不发声，避免堵塞后续事件），按 hermes
-  消息格式渲染（✔ 完成 + 交接首行、⏸ 阻塞 + 原因、⏱ 超时、
-  ✖ 崩溃/放弃、🔄 状态变更，带 @assignee 与 [board] 标签），经已
-  注册的平台发送器投递，投递后推进每个订阅的游标；订阅在任务
-  崩溃/重试周期中保留，仅当任务真正 done/archived 时移除（去重靠
-  游标）。与 hermes 的范围差异：无按 profile 的适配器归属（单一
-  共享存储）、无线程路由与死聊天清理（PlatformSender 无失败通
-  道），发送视为已送达；P136 移植统一失败记账与熔断器（hermes
-  `_record_task_failure`）：任务新增 `consecutive_failures` /
-  `last_failure_error` / `max_retries` 列，每次 spawn 失败与超时
-  尝试都消耗重试预算，达到阈值（按任务 `max_retries` > 调度器
-  limit > 默认 2）即 ready→blocked 并发出 `gave_up` 事件（payload
-  含 failures / effective_limit / limit_source / trigger_outcome），
-  计数器在任务完成与主动 unblock 时清零（hermes 重新起步策略）。
-  CLI：`kanban create --max-retries N`（校验 >= 1，与 hermes 一
-  致），网关创建 API 接受同一字段；P137 补齐调度器的 worker 健康
-  检测（hermes `detect_crashed_workers` + `detect_stale_running`）：
-  每 tick 立即回收 worker pid 已死亡的 running 任务（30 秒启动
-  宽限期，`ULNCLAW_KANBAN_CRASH_GRACE_SECONDS` 可覆盖；发
-  `crashed` 事件、run 以 `crashed` 关闭、计入熔断预算），以及运行
-  超过 `[kanban] stale_timeout_seconds`（hermes
-  `dispatch_stale_timeout_seconds`，默认 14400，0 关闭，网关循环
-  实时重读）且心跳缺失或超过 1 小时的任务（worker 先 SIGTERM 后
-  SIGKILL，发 `stale` 事件、run 以 `stale` 关闭，按 hermes 策略
-  不计为失败）；两者分别进入 `DispatchResult.stale` / `.crashed`；
-  P138 加固内嵌调度器的运维安全（hermes gateway 循环）：排他
-  `flock` 单例锁（`<home>/kanban/dispatcher.lock`）保证全机只有
-  一个网关进程在调度 —— 第二个网关记录竞争日志、继续提供 HTTP
-  但不调度（防配置漂移与重启竞争的兜底）—— 并新增调度器卡死
-  健康遥测：ready 队列连续 6 拍非空却零 spawn 时告警（300 秒
-  节流）；P139 移植 hermes 的按任务工作区：任务新增
-  `workspace_kind`（默认 `scratch` / `worktree` / `dir`）、
-  `workspace_path`、`branch_name` 三列；`kanban create --workspace
-  scratch|worktree|worktree:<path>|dir:<path>` 与 `--branch <名>`
-  （仅 worktree 可用，校验文案与 hermes 一致），网关创建 API 接受
-  相同字段；调度器在 spawn 之前解析工作区（hermes
-  `resolve_workspace` / `_resolve_worktree_workspace`）：scratch 目录
-  位于 `<home>/kanban/workspaces/<id>`，`dir:` 路径必须为绝对路径
-  （防混淆代理人穿越，沿用 hermes 威胁模型），worktree 以看板
-  `default_workdir` 为锚（未配置时回退调度器 CWD，保留 P139 之前的
-  行为；hermes 则直接报错），在 `<repo>/.worktrees/<task-id>` 物化
-  分支 `wt/<task-id>`（或 `--branch` 指定），被兄弟任务占用的检出
-  会自动改用同仓库下的新树；解析出的路径与分支持久化到任务行供
-  重试复用，解析失败按 `workspace:` 前缀计入 spawn 失败熔断，
-  `kanban claim` 认领时解析并打印工作区（hermes `_cmd_claim`），
-  `[kanban] worktrees=true` 对未显式指定 `--workspace` 的任务保持
-  原语义，decompose 子任务继承根任务的工作区类型/路径（worktree
-  子任务各自独占新树，hermes 兄弟任务策略）；P140 补齐重生守卫
-  与时长语法：`kanban create --max-runtime` 接受
-  `30s`/`5m`/`2h`/`1d` 与纯秒数（hermes `_parse_duration`）；
-  调度器对立即重试无益的就绪任务延后重生（hermes
-  `check_respawn_guard`）—— `rate_limit_cooldown`（最近一次 run 以
-  `rate_limited` 结束且仍在冷却期内，
-  `ULNCLAW_KANBAN_RATE_LIMIT_COOLDOWN_SECONDS` 默认 300，0 关闭）、
-  `blocker_auth`（最近失败命中配额/鉴权模式）、`recent_success`
-  （1 小时内有已完成 run 且其后无主动重新入队）、`active_pr`
-  （24 小时内评论中出现 GitHub PR 链接）；被守卫的任务保持
-  ready，每次延后都会记录 `respawn_guarded` 事件，网关 dispatch
-  API 一并返回；P141 移植唤醒路由：任务新增 `session_id` 列，由
-  agent `kanban_create` 工具写入（网关创建 API 亦接受该字段）；
-  订阅任务进入可唤醒终态事件（`completed` / `gave_up` /
-  `crashed` / `timed_out` / `blocked` —— hermes `_WAKE_KINDS`）
-  时，通知器以 hermes 格式的唤醒文案（`[kanban] Task <id>
-  <status>. …`）自 POST 网关自身的 `/v1/chat/completions` 并携带
-  `X-Ulnclaw-Session-Id`，恢复创建者会话（hermes
-  `_self_post_chat_completion`：通配绑定走回环、配置了密钥则带
-  bearer、单轮上限 600 秒、429/瞬时错误按 2/5/10 秒退避重试、
-  其余 HTTP 错误快速失败）；唤醒在文本通知之后尽力异步执行，
-  不阻塞其他订阅；P142 移植类型化阻塞（hermes
-  `block_task(kind=…)`）：`kanban block --kind dependency` 把任务
-  停进 `todo`（`dependency_wait` 事件），由父任务门控 +
-  `recompute_ready` 在父任务完成后自动晋升 —— 无需人工与定时
-  解锁；`needs_input` / `capability` / `transient` / 未类型化进入
-  `blocked` 并持久化 `block_kind` 与 `block_recurrences`，解锁循环
-  熔断器在同一原因于解锁后再次阻塞达到
-  `BLOCK_RECURRENCE_LIMIT`（2）次时把任务改路由到 `triage`
-  （`block_loop_detected` 事件）—— 复发计数刻意跨越 unblock 保留、
-  仅在任务完成时清零；`unblock_task` 现在按未完成父任务重新门控
-  （父任务未了则 blocked → `todo`），与 hermes 的不变式修复一致；
-  agent `kanban_block` 工具与网关 block API 同步接受 kind；P143 补齐生命周期 CLI 面：批量 `kanban
-  done/block/schedule/unblock/promote/archive`（多个 id，hermes
-  `task_ids` + `--ids`），`kanban done --summary/--metadata` 把结构化
-  交接（完整 summary + JSON 事实）写入收尾 run，`completed` 事件则
-  携带 summary 首行（400 字符上限）供通知器渲染，`kanban archive
-  --rm` 彻底清除已归档任务及其全部关联行（护栏：仅 archived 可
-  删除），`kanban unblock --reason` 先记评论再解锁，`kanban promote
-  --dry-run/--json` 由无副作用的 `validate_promote` 支撑，`kanban
-  watch --tenant`；archive 现在同时把进行中的 run 以 reclaimed 收
-  尾，并立即晋升那些仅被已归档父任务挡住的子任务
-  （`recompute_ready` 按 hermes 语义把 archived 父任务视同完成）。
-  P144 补齐完成态恢复：`kanban edit --result/--summary/--metadata`
-  可改写已 done 任务的交接（result 文本 + 最近一次 completed run 的
-  summary/metadata，缺少 run 行时自动合成；发出 `edited` 事件），
-  terminal kanban 工具新增 `summary` + `metadata` 参数供 worker 交付
-  结构化事实，block 操作先写 `BLOCKED: <reason>` 评论再落锁
-  （hermes `_cmd_block` 对齐）。P145 把 `recompute_ready` 扩展到
-  blocked 列：父任务全部 done/archived 的阻塞任务自动恢复为 ready
-  （保留 `consecutive_failures`，发出 `promoted` 事件），除非阻塞是
-  粘性的 —— 最近一次 blocked/unblocked 事件是 worker/运维主动发起的
-  `blocked`（#28712）—— 或失败计数已达到有效上限（任务 `max_retries`
-  > 调度器 `failure_limit` > 默认 2，#35072）；调度器经
-  `dispatch_once` 透传自身配置的上限。P146 补上不可 spawn 门控与健康
-  探针：`dispatch_once` 接受配置的 profile 集合，把 assignee 不在集合
-  内的就绪任务归入 `skipped_nonspawnable`（只能经 claim 拉取的控制面
-  通道，绝不自动 spawn —— hermes #kanban-dispatcher-crash-loop）；
-  网关调度器的 stuck 警告改由 `has_spawnable_ready` 判定，就绪队列里
-  只有通道任务时视为"正常空闲"，仅在确有可 spawn 工作（未指派或已配
-  置 profile 的任务）等待时才告警。P147 移植完成工件：`kanban done
-  --artifact <path>`（可重复）、agent `kanban_done` 工具（`artifacts`
-  数组）与网关 complete API 会把托管 scratch 工作区内的文件先行暂存
-  到 `<home>/kanban/attachments/<task>/`（25 MiB 上限，缺失/超限的声
-  明直接让完成失败并回滚），登记为 `artifact` 附件并发出 `attached`
-  事件，同时合并 summary/result 文本中提到的绝对交付物路径，最终路
-  径随 `completed` 事件与 run metadata 下发（hermes
-  `kanban_complete(artifacts=[...])`、
-  `_persist_scratch_completion_artifacts`、
-  `_merge_completion_prose_artifacts`）。P148 移植 review 列：
-  `review` 加入状态集（🔍）；worker 开 PR 后调用 `kanban review <id>
-  [--reason]` / `kanban_review` 工具（running → review，收尾 worker
-  run，发出 `review_requested` 事件）；`dispatch_once` 新增共享
-  max_spawn 上限的 review 循环 —— 未指派的 review 任务归入
-  `skipped_unassigned`，未知 assignee 归入 `skipped_nonspawnable`，
-  认领时开新 run 且不再复查父任务依赖（`claim_review_task`），
-  `<home>/skills/` 装有 `sdlc-review` 技能时强制加载；
-  `has_spawnable_review` 并入网关健康探针。P149 增加按 profile 的
-  并发上限：`[kanban] max_in_progress_per_profile`（hermes #21582）
-  即使全局仍有余量，也拒绝为已达在飞上限的 assignee 再生 worker ——
-  计数每 tick 从 running 列播种、dry-run 的拟 spawn 同样计数；被跳过
-  的任务归入 `skipped_per_profile_capped`（CLI 行 + dispatch JSON）。
-  P150 移植反幻觉完成门：`kanban done --created-card <id>`（可重复；
-  agent `created_cards` 数组与网关 complete API 同步）逐一核验声明的
-  卡片 —— 必须存在，且由该 worker 的 profile 创建、以 worker 任务 id
-  作为 created_by、或已挂为 worker 任务的子任务。幻影 id 发出
-  `completion_blocked_hallucination` 事件并在零改动下阻断完成
-  （hermes `HallucinatedCardsError`）；核验通过的 id 随 `completed`
-  事件下发，summary/result 文本中无法解析的 `t_<hex>` 引用在成功完成
-  后以 `suspected_hallucinated_references` 事件提示（仅告警，hermes
-  `_scan_prose_for_phantom_ids`）。P151 增加按 tick 的调度锁
-  （#35240）：每次 `dispatch_once` 都在 `<kanban.db>.dispatch.lock`
-  的非阻塞 `flock` 下进行；失败的调度器（例如逃出服务重启的孤儿进
-  程）返回 `skipped_locked = true` 且零数据库写入，下一间隔再试 ——
-  CLI（`dispatch: skipped …`）与 dispatch API JSON 均可见。P152 增
-  加 worker 日志轮转：`kanban/worker-logs/` 下的按任务日志在达到
-  `[kanban] worker_log_rotate_bytes`（默认 2 MiB）时轮转，保留一份
-  `.log.1` 备份代，同一代内追加写入 —— 重生 attempt 不再截断先前输
-  出（hermes `worker_log_rotation_config`）。P153 封死过期 worker
-  竞态：调度改为先认领再 spawn（hermes 顺序），spawn 时 run 行已存
-  在；worker 携带 `ULNCLAW_KANBAN_RUN_ID`（hermes
-  `HERMES_KANBAN_RUN_ID`），其完成/阻塞以 `expected_run_id` 提交 ——
-  原子的 `current_run_id` 守卫拒绝已被回收的 attempt，绝不覆盖新
-  attempt（CLI Done/Block、`kanban_complete`/`kanban_block` 工具与
-  网关 complete/block API 全链路透传）。已认领 attempt 的 spawn/工作
-  区失败现在收尾 run、释放认领回 ready 并计入失败（hermes
-  `_record_spawn_failure`）。P154 增加 `[kanban] max_in_progress`
-  全局并发上限（#33488）：当板上运行中任务已达上限时，本轮调度直接提
-  前返回（积压任务保持 ready，不落任何跳过桶）；否则有效 spawn 上限
-  收紧为 `max_spawn` 与 `max_in_progress` 的较小者，使运行列恰好填满
-  上限 —— 慢 worker（本地模型、资源受限主机）先消化存量，避免堆积任
-  务超时。P154 同时移植了一次性 scratch 工作区提示（hermes
-  `_maybe_emit_scratch_tip`）：整个安装内首次物化 scratch 工作区时，
-  调度器警告 scratch 产物是临时的（任务完成即删除），在任务上记录
-  `tip_scratch_workspace` 事件，并写入 `.scratch_tip_shown` 哨兵文件
-  使提示不再重复；worktree/dir 工作区按设计保留，从不提示。P156 增加看板 goal 模式
-  worker（hermes `create --goal` / `--goal-max-turns`）：goal 卡片 spawn 的
-  worker 在同一会话内把运行包进 Ralph 式评判循环 —— 每轮结束后由辅助评判
-  模型（`[auxiliary.goal_judge]`）对照卡片标题+正文评估最新回复；`continue`
-  注入续跑提示，`done` 先发一次明确的 kanban_complete 提醒、再提醒无效则以
-  "评判已完成但从未收尾" 阻塞卡片，turn 预算耗尽（或任务被回收/归档）以粘性
-  block 留待人工审查。goal 卡片的完成在 CLI `kanban done` 与 `kanban_complete`
-  工具两条路径上过 #38367 评判门：评判可用时结论必须为 `done`，否则带着评判理
-  由拒绝完成（未配置/不可达评判时 fail-open；网关 `/api/kanban` complete 端点
-  有意不门控）。P157 增加 `create --initial-status running|blocked`
-  （hermes `VALID_INITIAL_STATUSES`）：`blocked` 直接把卡片停入 blocked 等
-  待人工运维审查（优先于 `--triage`），`running` 保持默认流程（CLI 与网关
-  create API 同步支持）。P158 增加工作流模板钩子（hermes
-  `workflow_template_id` / `current_step_key` 任务列）：外部工作流引擎在建卡
-  时打标（网关 create API 携带两字段），并经 `kanban list
-  --workflow-template-id` 查回（SQL 级过滤；网关 list API 同名查询参数）。
-  模板引擎本体在两个项目中都位于看板之外。P159 把按任务 model/provider
-  覆盖接到 worker（hermes `model_override` / `provider_override`）：新增
-  `provider` 任务列，`kanban create --provider` 与网关 create 请求体，
-  `kanban set-model [--provider P]`（清 model 时一并清 provider；只给
-  provider 不给 model 按 hermes 契约拒绝），全局 `-m/--model` 与
-  `--provider` CLI 标志（优先于配置与 profile，spawn 出的 `ulnclaw run`
-  worker 携带同名标志），`dispatch_spawn` 依卡片透传 `--model` /
-  `--provider`。P160 移植了 hermes 的一等项目登记簿（`projects_db` +
-  `project` CLI）：按 profile 隔离的 `projects.db` 具名多文件夹工作区
-  （`ulnclaw project create/list/show/add-folder/remove-folder/rename/
-  set-primary/use/archive/restore/bind-board` —— slug 唯一化、主目录重指、
-  活跃项目指针；`bind-board` 同时把主仓库镜像为绑定 board 的
-  `default_workdir`），以及 `kanban create --project <id|slug>`（CLI 与
-  网关 create 请求体）：建卡时解析项目，把 worktree 锚定到项目主仓库下
-  （`<repo>/.worktrees/<task-id>`）并派生确定性分支
-  `<slug>/<task-id>[-<title-slug>]`，存于新增 `tasks.project_id` 列；
-  无法解析的链接静默丢弃（hermes 丢弃悬空引用语义）。P161 补上了 hermes
-  从未提供的仓库发现扫描器（其 `discovered_repos` 缓存表存在但仅 Electron
-  桌面端以 TypeScript 走盘扫描）：`ulnclaw project scan [--root PATH ...]
-  [--max-depth N]` 查找 git 检出（`.git` 目录或 worktree 文件；隐藏与跳过
-  清单目录剪枝、符号链接不跟随、支持嵌套检出），以 replace 语义 +
-  `cli-scan:v1` 策略键写入缓存；`project repos [--clear]` 列出/清空缓存。P162 把登记簿暴露给网关
-  服务桌面界面：`/api/projects` 增删查改（`PATCH` board 绑定与 CLI
-  `bind-board` 相同地把主仓库镜像为 board 的 `default_workdir`；文件夹
-  增删、主目录设置、归档/恢复、硬删除、活跃指针）以及
-  `/api/projects/scan|repos` 发现端点。P164 把会话接入项目：
-  `/api/sessions` 行（list 与 get）携带 `project` slug（按会话 cwd 对
-  `projects.db` 文件夹做最长前缀匹配，归档项目除外；projects.db 缺失时
-  降级为 `project: null`），桌面侧栏以徽章渲染——对齐 hermes 桌面按
-  项目分组会话的契约。
-  看板其余有意保留的
-  差异：调度期 `default_assignee` 应用（ulnclaw 在默认 profile 上 spawn
-  未指派任务而不是跳过）。
+- 插件：ulnclaw 插件是讲 hermes shell-hook JSON 协议的子进程（目录插件 + `[hooks]` 配置），不是 Python 导入
+  - 核心触发 hermes v2026.8.3 运行期实际发出的全部钩子（23 个中的 13 个 —— 其余 10 个在 hermes 中也仅存于目录）
+  - pre_verify 无 ulnclaw verify 循环可挂载
+  - `ulnclaw kanban` 引擎现已在 claim/done/block 时触发 kanban_task_claimed/completed/blocked 钩子，agent 侧
+    kanban_* 工具现已改用同一 KanbanStore 引擎（P119 统一了此前独立的表）：
+    - P122 移植了调度器 tick（`kanban dispatch` CLI + `POST /api/kanban/dispatch`：过期认领回收（存活 pid 自动续期）、父任务完成的
+        todo→ready 晋升、就绪任务经分离的 `ulnclaw run` 生成 worker（ULNCLAW_KANBAN_TASK 环境）、实时并发上限、连续 2 次 spawn
+        失败自动阻塞）
+    - P123 新增网关内嵌定时调度（`[kanban] dispatch_in_gateway / dispatch_interval_secs / max_spawn`，默认开/60 秒/2）
+        与 hermes kanban-stop 提醒（worker 未调用 kanban_complete/block 就结束时最多重新提示 2
+        次，`ULNCLAW_KANBAN_STOP_NUDGE=0` 可关闭）
+    - P124 补齐了按任务 git-worktree 隔离（`[kanban] worktrees`，默认开启：每个被调度的 worker 运行在
+        `<repo>/.worktrees/<task-id>` 的 `kanban/<task-id>` 分支上，重启可复用； `ulnclaw kanban gc`
+        清理已完成/归档任务的树，分支保留）
+    - P125 移植了 hermes kanban swarm（`hermes_cli/kanban_swarm.py`）：`ulnclaw kanban swarm <goal> --worker
+        ASSIGNEE:TITLE [--worker ...] --verifier ASSIGNEE --synthesizer ASSIGNEE [--json]` 构建
+        workers→verifier→synthesizer 任务图 —— 根黑板/审计任务（创建即 done）、N 个注入 swarm 协议简报的 ready worker、链接到所有
+        worker 的验证者、链接到验证者的综合者；拓扑以 `blackboard` 评论 + `swarm` 事件发布，调度器随父任务完成逐级晋升验证者/综合者
+        （`recompute_ready`）
+    - P127 补齐 swarm 面：worker 技能透传（`--worker ASSIGNEE:TITLE:skill,skill`，验证者固定
+        `requesting-code-review`、综合者固定 `humanizer` —— 与 hermes 逐字一致）、任务级
+        `skills`/`max_runtime_seconds`/`idempotency_key` 列（增量迁移； `kanban create --skill X --max-runtime
+        N --idempotency-key K`，网关创建 API 同字段）、幂等 swarm 恢复（同键 ⇒ 从根黑板重建拓扑，不重复建图）、调度器
+        `reap_timed_out`（SIGTERM + 5 秒宽限 + SIGKILL，任务回 ready 并记 `timed_out` 事件），派生 worker
+        的启动提示词内联强制加载的技能（hermes 以 `--skills` 参数对传递）
+    - P128 移植了 triage 流水线（`hermes_cli/kanban_specify.py` + `kanban_decompose.py`）： `kanban create
+        --triage` 把想法暂存进新的 `triage` 列，`kanban specify` 经 `auxiliary.triage_specifier` 生成
+        Goal/Approach/Acceptance-criteria 规格并晋升 triage→todo，`kanban decompose` 将其扇出为 2-6 个子任务依赖图并按
+        profile 名册路由（`[kanban] orchestrator_profile / default_assignee /
+        auto_promote_children`；根任务作为所有子任务的父级存留作唤醒卡，Kahn 环检测，--all 批量时对单任务失败容错）， `kanban diagnostics` 移植
+        `kanban_diagnostics.py` 规则引擎（幻觉卡号、正文幻影引用、重复 spawn 失败、worker 崩溃循环、阻塞超 24 小时、 block/unblock 循环、滞留
+        ready、triage 无辅助模型），阈值与严重度排序与 hermes 一致
+    - P129 补齐了其余 hermes kanban CLI 面： schedule/promote（父任务门控、--force 覆盖）/reclaim/reassign
+        （--reclaim）/edit/set-model、附件 CLI（attach/attachments/attach-rm，稳定 id）、tail --follow
+        事件流、按看板状态统计、boards rename/set-workdir
+    - P130 新增全板 `kanban watch` 实时事件流（assignee/kind 过滤，hermes watch 后端）、`kanban stats` 采用 hermes
+        `board_stats` 语义（按 assignee 统计 + 最老 ready 等待时长 + `--json`）与 `kanban dispatch --json`
+    - P131 移植网关通知底座： `kanban_notify_subs` 表（task × platform × chat × thread 主键，
+        订阅时游标快照到当前最新事件、chat_type/profile/metadata 自愈）、 `kanban notify-subscribe / notify-list /
+        notify-unsubscribe` CLI、供网关通知器使用的 `unseen_events_for_sub` + `advance_notify_cursor` 构件，以及
+        `kanban log [--tail N]` —— 打印任务在 `<home>/kanban/worker-logs/` 下的 worker 日志，tail 采用 hermes 的
+        断行安全语义
+    - P132 新增 `task_runs` 尝试历史表（hermes `Run` 生命周期：认领时开 run，携带认领锁/TTL 与运行时限，心跳与 spawn 出的 worker pid
+        同步写入，按 hermes outcome 语义关闭 —— done/block/ reclaim/过期回收/超时分别对应 completed/blocked/reclaimed/
+        timed_out，CLI 直接完成未认领任务与调度器 spawn 失败则合成瞬时 run；重新认领时把残留活跃 run 恢复为 `reclaimed`）、 `kanban runs
+        [--json] [--state-type status|outcome --state-name V]` CLI（hermes 表格格式）与 `latest_run` /
+        `latest_summary` 存储辅助方法
+    - P133 接通网关调度器的 triage 自动分解路径（hermes `_auto_decompose_tick`）：每个 tick 从配置实时重读 `[kanban]
+        auto_decompose`（默认开）/ `auto_decompose_per_tick` （默认 3），翻转开关在下一 tick 即停止失控扇出、无需重启网关（hermes
+        #49638 故障安全语义 —— 配置读取失败则本轮跳过），随后在 dispatch 扇出之前经辅助 LLM 分解至多 N 个 triage 任务，成功记 info、无操作跳过记
+        debug
+    - P134 补齐 hermes kanban CLI 的最后几块：`kanban context`（完整移植 `build_worker_context` —— 带上限的正文/附件、历史尝试的
+        run 摘要与 metadata、已完成父任务的交接结果与相对时间陈旧度提示、assignee 跨任务角色历史、带上限的评论区；`kanban_show` 工具同步返回
+        `worker_context`，spawn 出的 worker 无需额外往返即可读取）、`kanban repair`（integrity_check + 内容寻址隔离备份 + 仅索引损坏的
+        REINDEX 自动修复，其余情况保守失败）、`kanban assignees`（配置名册与看板 assignee 合并、按状态计数）、`kanban daemon`（hermes
+        已弃用的存根，指向网关；`--force` 保留独立循环）以及 `ls`/`new` 可见别名
+    - P135 接通通知投递：网关运行 kanban notifier 循环（hermes kanban_watchers 通知器， 5 秒一拍），轮询
+        `kanban_notify_subs`，领取未送达的终态事件（completed/blocked/gave_up/crashed/timed_out/status，其中
+        archived/unblocked 只推游标不发声，避免堵塞后续事件），按 hermes 消息格式渲染（✔ 完成 + 交接首行、⏸ 阻塞 + 原因、⏱ 超时、 ✖ 崩溃/放弃、🔄
+        状态变更，带 @assignee 与 [board] 标签），经已注册的平台发送器投递，投递后推进每个订阅的游标；订阅在任务崩溃/重试周期中保留，仅当任务真正 done/archived
+        时移除（去重靠游标）。与 hermes 的范围差异：无按 profile 的适配器归属（单一共享存储）、无线程路由与死聊天清理（PlatformSender 无失败通道），发送视为已送达
+    - P136 移植统一失败记账与熔断器（hermes `_record_task_failure`）：任务新增 `consecutive_failures` /
+        `last_failure_error` / `max_retries` 列，每次 spawn 失败与超时尝试都消耗重试预算，达到阈值（按任务 `max_retries` > 调度器
+        limit > 默认 2）即 ready→blocked 并发出 `gave_up` 事件（payload 含 failures / effective_limit /
+        limit_source / trigger_outcome），计数器在任务完成与主动 unblock 时清零（hermes 重新起步策略）。 CLI：`kanban create
+        --max-retries N`（校验 >= 1，与 hermes 一致），网关创建 API 接受同一字段
+    - P137 补齐调度器的 worker 健康检测（hermes `detect_crashed_workers` + `detect_stale_running`）：每 tick 立即回收
+        worker pid 已死亡的 running 任务（30 秒启动宽限期，`ULNCLAW_KANBAN_CRASH_GRACE_SECONDS` 可覆盖；发 `crashed`
+        事件、run 以 `crashed` 关闭、计入熔断预算），以及运行超过 `[kanban] stale_timeout_seconds`（hermes
+        `dispatch_stale_timeout_seconds`，默认 14400，0 关闭，网关循环实时重读）且心跳缺失或超过 1 小时的任务（worker 先 SIGTERM 后
+        SIGKILL，发 `stale` 事件、run 以 `stale` 关闭，按 hermes 策略不计为失败）；两者分别进入 `DispatchResult.stale` /
+        `.crashed`
+    - P138 加固内嵌调度器的运维安全（hermes gateway 循环）：排他 `flock` 单例锁（`<home>/kanban/dispatcher.lock`）保证全机只有
+        一个网关进程在调度 —— 第二个网关记录竞争日志、继续提供 HTTP 但不调度（防配置漂移与重启竞争的兜底）—— 并新增调度器卡死健康遥测：ready 队列连续 6 拍非空却零 spawn
+        时告警（300 秒节流）
+    - P139 移植 hermes 的按任务工作区：任务新增 `workspace_kind`（默认 `scratch` / `worktree` / `dir`）、
+        `workspace_path`、`branch_name` 三列；`kanban create --workspace
+        scratch|worktree|worktree:<path>|dir:<path>` 与 `--branch <名>` （仅 worktree 可用，校验文案与 hermes
+        一致），网关创建 API 接受相同字段；调度器在 spawn 之前解析工作区（hermes `resolve_workspace` /
+        `_resolve_worktree_workspace`）：scratch 目录位于 `<home>/kanban/workspaces/<id>`，`dir:` 路径必须为绝对路径
+        （防混淆代理人穿越，沿用 hermes 威胁模型），worktree 以看板 `default_workdir` 为锚（未配置时回退调度器 CWD，保留
+    - P139 之前的行为；hermes 则直接报错），在 `<repo>/.worktrees/<task-id>` 物化分支 `wt/<task-id>`（或 `--branch`
+        指定），被兄弟任务占用的检出会自动改用同仓库下的新树；解析出的路径与分支持久化到任务行供重试复用，解析失败按 `workspace:` 前缀计入 spawn 失败熔断， `kanban
+        claim` 认领时解析并打印工作区（hermes `_cmd_claim`）， `[kanban] worktrees=true` 对未显式指定 `--workspace` 的任务保持
+        原语义，decompose 子任务继承根任务的工作区类型/路径（worktree 子任务各自独占新树，hermes 兄弟任务策略）
+    - P140 补齐重生守卫与时长语法：`kanban create --max-runtime` 接受 `30s`/`5m`/`2h`/`1d` 与纯秒数（hermes
+        `_parse_duration`）；调度器对立即重试无益的就绪任务延后重生（hermes `check_respawn_guard`）——
+        `rate_limit_cooldown`（最近一次 run 以 `rate_limited` 结束且仍在冷却期内，
+        `ULNCLAW_KANBAN_RATE_LIMIT_COOLDOWN_SECONDS` 默认 300，0 关闭）、
+        `blocker_auth`（最近失败命中配额/鉴权模式）、`recent_success` （1 小时内有已完成 run 且其后无主动重新入队）、`active_pr` （24
+        小时内评论中出现 GitHub PR 链接）；被守卫的任务保持 ready，每次延后都会记录 `respawn_guarded` 事件，网关 dispatch API 一并返回
+    - P141 移植唤醒路由：任务新增 `session_id` 列，由 agent `kanban_create` 工具写入（网关创建 API 亦接受该字段）；
+        订阅任务进入可唤醒终态事件（`completed` / `gave_up` / `crashed` / `timed_out` / `blocked` —— hermes
+        `_WAKE_KINDS`）时，通知器以 hermes 格式的唤醒文案（`[kanban] Task <id> <status>. …`）自 POST 网关自身的
+        `/v1/chat/completions` 并携带 `X-Ulnclaw-Session-Id`，恢复创建者会话（hermes
+        `_self_post_chat_completion`：通配绑定走回环、配置了密钥则带 bearer、单轮上限 600 秒、429/瞬时错误按 2/5/10 秒退避重试、其余 HTTP
+        错误快速失败）；唤醒在文本通知之后尽力异步执行，不阻塞其他订阅
+    - P142 移植类型化阻塞（hermes `block_task(kind=…)`）：`kanban block --kind dependency` 把任务停进
+        `todo`（`dependency_wait` 事件），由父任务门控 + `recompute_ready` 在父任务完成后自动晋升 —— 无需人工与定时解锁；`needs_input`
+        / `capability` / `transient` / 未类型化进入 `blocked` 并持久化 `block_kind` 与 `block_recurrences`，解锁循环
+        熔断器在同一原因于解锁后再次阻塞达到 `BLOCK_RECURRENCE_LIMIT`（2）次时把任务改路由到 `triage` （`block_loop_detected` 事件）——
+        复发计数刻意跨越 unblock 保留、仅在任务完成时清零；`unblock_task` 现在按未完成父任务重新门控（父任务未了则 blocked → `todo`），与 hermes
+        的不变式修复一致； agent `kanban_block` 工具与网关 block API 同步接受 kind
+    - P143 补齐生命周期 CLI 面：批量 `kanban done/block/schedule/unblock/promote/archive`（多个 id，hermes
+        `task_ids` + `--ids`），`kanban done --summary/--metadata` 把结构化交接（完整 summary + JSON 事实）写入收尾
+        run，`completed` 事件则携带 summary 首行（400 字符上限）供通知器渲染，`kanban archive --rm` 彻底清除已归档任务及其全部关联行（护栏：仅
+        archived 可删除），`kanban unblock --reason` 先记评论再解锁，`kanban promote --dry-run/--json` 由无副作用的
+        `validate_promote` 支撑，`kanban watch --tenant`；archive 现在同时把进行中的 run 以 reclaimed 收
+        尾，并立即晋升那些仅被已归档父任务挡住的子任务（`recompute_ready` 按 hermes 语义把 archived 父任务视同完成）。
+    - P144 补齐完成态恢复：`kanban edit --result/--summary/--metadata` 可改写已 done 任务的交接（result 文本 + 最近一次
+        completed run 的 summary/metadata，缺少 run 行时自动合成；发出 `edited` 事件）， terminal kanban 工具新增 `summary` +
+        `metadata` 参数供 worker 交付结构化事实，block 操作先写 `BLOCKED: <reason>` 评论再落锁（hermes `_cmd_block` 对齐）。
+    - P145 把 `recompute_ready` 扩展到 blocked 列：父任务全部 done/archived 的阻塞任务自动恢复为 ready （保留
+        `consecutive_failures`，发出 `promoted` 事件），除非阻塞是粘性的 —— 最近一次 blocked/unblocked 事件是 worker/运维主动发起的
+        `blocked`（#28712）—— 或失败计数已达到有效上限（任务 `max_retries` > 调度器 `failure_limit` > 默认 2，#35072）；调度器经
+        `dispatch_once` 透传自身配置的上限。
+    - P146 补上不可 spawn 门控与健康探针：`dispatch_once` 接受配置的 profile 集合，把 assignee 不在集合内的就绪任务归入
+        `skipped_nonspawnable`（只能经 claim 拉取的控制面通道，绝不自动 spawn —— hermes #kanban-dispatcher-crash-loop）；
+        网关调度器的 stuck 警告改由 `has_spawnable_ready` 判定，就绪队列里只有通道任务时视为"正常空闲"，仅在确有可 spawn 工作（未指派或已配置 profile
+        的任务）等待时才告警。
+    - P147 移植完成工件：`kanban done --artifact <path>`（可重复）、agent `kanban_done` 工具（`artifacts` 数组）与网关
+        complete API 会把托管 scratch 工作区内的文件先行暂存到 `<home>/kanban/attachments/<task>/`（25 MiB 上限，缺失/超限的声
+        明直接让完成失败并回滚），登记为 `artifact` 附件并发出 `attached` 事件，同时合并 summary/result 文本中提到的绝对交付物路径，最终路径随
+        `completed` 事件与 run metadata 下发（hermes `kanban_complete(artifacts=[...])`、
+        `_persist_scratch_completion_artifacts`、 `_merge_completion_prose_artifacts`）。
+    - P148 移植 review 列： `review` 加入状态集（🔍）；worker 开 PR 后调用 `kanban review <id> [--reason]` /
+        `kanban_review` 工具（running → review，收尾 worker run，发出 `review_requested` 事件）；`dispatch_once` 新增共享
+        max_spawn 上限的 review 循环 —— 未指派的 review 任务归入 `skipped_unassigned`，未知 assignee 归入
+        `skipped_nonspawnable`，认领时开新 run 且不再复查父任务依赖（`claim_review_task`）， `<home>/skills/` 装有
+        `sdlc-review` 技能时强制加载； `has_spawnable_review` 并入网关健康探针。
+    - P149 增加按 profile 的并发上限：`[kanban] max_in_progress_per_profile`（hermes #21582）
+        即使全局仍有余量，也拒绝为已达在飞上限的 assignee 再生 worker —— 计数每 tick 从 running 列播种、dry-run 的拟 spawn 同样计数；被跳过
+        的任务归入 `skipped_per_profile_capped`（CLI 行 + dispatch JSON）。
+    - P150 移植反幻觉完成门：`kanban done --created-card <id>`（可重复； agent `created_cards` 数组与网关 complete API
+        同步）逐一核验声明的卡片 —— 必须存在，且由该 worker 的 profile 创建、以 worker 任务 id 作为 created_by、或已挂为 worker 任务的子任务。幻影
+        id 发出 `completion_blocked_hallucination` 事件并在零改动下阻断完成（hermes `HallucinatedCardsError`）；核验通过的 id
+        随 `completed` 事件下发，summary/result 文本中无法解析的 `t_<hex>` 引用在成功完成后以
+        `suspected_hallucinated_references` 事件提示（仅告警，hermes `_scan_prose_for_phantom_ids`）。
+    - P151 增加按 tick 的调度锁（#35240）：每次 `dispatch_once` 都在 `<kanban.db>.dispatch.lock` 的非阻塞 `flock`
+        下进行；失败的调度器（例如逃出服务重启的孤儿进程）返回 `skipped_locked = true` 且零数据库写入，下一间隔再试 —— CLI（`dispatch: skipped
+        …`）与 dispatch API JSON 均可见。
+    - P152 增加 worker 日志轮转：`kanban/worker-logs/` 下的按任务日志在达到 `[kanban] worker_log_rotate_bytes`（默认 2
+        MiB）时轮转，保留一份 `.log.1` 备份代，同一代内追加写入 —— 重生 attempt 不再截断先前输出（hermes `worker_log_rotation_config`）。
+    - P153 封死过期 worker 竞态：调度改为先认领再 spawn（hermes 顺序），spawn 时 run 行已存在；worker 携带
+        `ULNCLAW_KANBAN_RUN_ID`（hermes `HERMES_KANBAN_RUN_ID`），其完成/阻塞以 `expected_run_id` 提交 —— 原子的
+        `current_run_id` 守卫拒绝已被回收的 attempt，绝不覆盖新 attempt（CLI Done/Block、`kanban_complete`/`kanban_block`
+        工具与网关 complete/block API 全链路透传）。已认领 attempt 的 spawn/工作区失败现在收尾 run、释放认领回 ready 并计入失败（hermes
+        `_record_spawn_failure`）。
+    - P154 增加 `[kanban] max_in_progress` 全局并发上限（#33488）：当板上运行中任务已达上限时，本轮调度直接提前返回（积压任务保持
+        ready，不落任何跳过桶）；否则有效 spawn 上限收紧为 `max_spawn` 与 `max_in_progress` 的较小者，使运行列恰好填满上限 —— 慢
+        worker（本地模型、资源受限主机）先消化存量，避免堆积任务超时。
+    - P154 同时移植了一次性 scratch 工作区提示（hermes `_maybe_emit_scratch_tip`）：整个安装内首次物化 scratch 工作区时，调度器警告
+        scratch 产物是临时的（任务完成即删除），在任务上记录 `tip_scratch_workspace` 事件，并写入 `.scratch_tip_shown` 哨兵文件
+        使提示不再重复；worktree/dir 工作区按设计保留，从不提示。
+    - P156 增加看板 goal 模式 worker（hermes `create --goal` / `--goal-max-turns`）：goal 卡片 spawn 的 worker
+        在同一会话内把运行包进 Ralph 式评判循环 —— 每轮结束后由辅助评判模型（`[auxiliary.goal_judge]`）对照卡片标题+正文评估最新回复；`continue`
+        注入续跑提示，`done` 先发一次明确的 kanban_complete 提醒、再提醒无效则以 "评判已完成但从未收尾" 阻塞卡片，turn 预算耗尽（或任务被回收/归档）以粘性 block
+        留待人工审查。goal 卡片的完成在 CLI `kanban done` 与 `kanban_complete` 工具两条路径上过 #38367 评判门：评判可用时结论必须为
+        `done`，否则带着评判理由拒绝完成（未配置/不可达评判时 fail-open；网关 `/api/kanban` complete 端点有意不门控）。
+    - P157 增加 `create --initial-status running|blocked` （hermes `VALID_INITIAL_STATUSES`）：`blocked`
+        直接把卡片停入 blocked 等待人工运维审查（优先于 `--triage`），`running` 保持默认流程（CLI 与网关 create API 同步支持）。
+    - P158 增加工作流模板钩子（hermes `workflow_template_id` / `current_step_key` 任务列）：外部工作流引擎在建卡时打标（网关 create
+        API 携带两字段），并经 `kanban list --workflow-template-id` 查回（SQL 级过滤；网关 list API 同名查询参数）。
+        模板引擎本体在两个项目中都位于看板之外。
+    - P159 把按任务 model/provider 覆盖接到 worker（hermes `model_override` / `provider_override`）：新增
+        `provider` 任务列，`kanban create --provider` 与网关 create 请求体， `kanban set-model [--provider P]`（清
+        model 时一并清 provider；只给 provider 不给 model 按 hermes 契约拒绝），全局 `-m/--model` 与 `--provider` CLI
+        标志（优先于配置与 profile，spawn 出的 `ulnclaw run` worker 携带同名标志），`dispatch_spawn` 依卡片透传 `--model` /
+        `--provider`。
+    - P160 移植了 hermes 的一等项目登记簿（`projects_db` + `project` CLI）：按 profile 隔离的 `projects.db` 具名多文件夹工作区
+        （`ulnclaw project create/list/show/add-folder/remove-folder/rename/
+        set-primary/use/archive/restore/bind-board` —— slug 唯一化、主目录重指、活跃项目指针；`bind-board` 同时把主仓库镜像为绑定
+        board 的 `default_workdir`），以及 `kanban create --project <id|slug>`（CLI 与网关 create 请求体）：建卡时解析项目，把
+        worktree 锚定到项目主仓库下（`<repo>/.worktrees/<task-id>`）并派生确定性分支
+        `<slug>/<task-id>[-<title-slug>]`，存于新增 `tasks.project_id` 列；无法解析的链接静默丢弃（hermes 丢弃悬空引用语义）。
+    - P161 补上了 hermes 从未提供的仓库发现扫描器（其 `discovered_repos` 缓存表存在但仅 Electron 桌面端以 TypeScript
+        走盘扫描）：`ulnclaw project scan [--root PATH ...] [--max-depth N]` 查找 git 检出（`.git` 目录或 worktree
+        文件；隐藏与跳过清单目录剪枝、符号链接不跟随、支持嵌套检出），以 replace 语义 + `cli-scan:v1` 策略键写入缓存；`project repos [--clear]`
+        列出/清空缓存。
+    - P162 把登记簿暴露给网关服务桌面界面：`/api/projects` 增删查改（`PATCH` board 绑定与 CLI `bind-board` 相同地把主仓库镜像为 board 的
+        `default_workdir`；文件夹增删、主目录设置、归档/恢复、硬删除、活跃指针）以及 `/api/projects/scan|repos` 发现端点。
+    - P164 把会话接入项目： `/api/sessions` 行（list 与 get）携带 `project` slug（按会话 cwd 对 `projects.db`
+        文件夹做最长前缀匹配，归档项目除外；projects.db 缺失时降级为 `project: null`），桌面侧栏以徽章渲染——对齐 hermes 桌面按项目分组会话的契约。
+    - 看板其余有意保留的差异：调度期 `default_assignee` 应用（ulnclaw 在默认 profile 上 spawn 未指派任务而不是跳过）。
 - 消息平台：图片附件以原生多模态内容注入用户轮（P226，对齐 hermes
   媒体注入）：≤ 8 MB 的 `image/*` 文件 base64 编码为 `data:` URL，随本轮
   请求发送 —— OpenAI 兼容端以 `image_url` 部件、Anthropic 以 base64 图像

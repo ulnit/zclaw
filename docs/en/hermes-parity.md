@@ -2225,371 +2225,284 @@ session, retires expired endpoints, and `main` releases the session at exit (her
 - Computer-use: driver payloads (SOM screenshot b64, AX trees) pass through
   without the hermes PNG post-processing / multimodal eviction layer; the macOS TCC grant flow is exposed to the desktop (`/api/tools/computer-use/permissions/grant` spawns `cua-driver permissions grant` as a polled background action, macOS-only); the embedded-daemon socket mode is not
   ported; `install` shells out to the upstream trycua installer script.
-- Plugins: ulnclaw plugins are subprocesses speaking the hermes shell-hook
-  JSON protocol (directory plugins + `[hooks]` config), not Python imports;
-  the core fires every hook event hermes v2026.8.3 emits at runtime (13 of
-  23 — the other 10 are catalog-only in hermes itself); pre_verify has no
-  ulnclaw verify loop to attach to; the `ulnclaw kanban` engine now fires
-  the kanban_task_claimed/completed/blocked hooks on claim/done/block, but
-  the agent-side kanban_* tools now ride the same KanbanStore engine
-  (P119 unified the previously separate tables), and P122 ported the dispatcher tick (`kanban dispatch` CLI +
-  `POST /api/kanban/dispatch`: stale-claim reclaim with live-pid extension,
-  parent-done todo→ready promotion, ready-task worker spawn via detached
-  `ulnclaw run` with ULNCLAW_KANBAN_TASK, live concurrency cap, spawn-failure
-  auto-block after 2 tries); P123 added the embedded gateway ticker (`[kanban] dispatch_in_gateway /
-  dispatch_interval_secs / max_spawn`, default on/60 s/2) and the hermes
-  kanban-stop nudge (one-shot workers that end without kanban_complete/block
-  are re-prompted up to 2x, `ULNCLAW_KANBAN_STOP_NUDGE=0` disables); P124 added per-task git-worktree
-  isolation (`[kanban] worktrees`, default on: each dispatched worker runs in
-  `<repo>/.worktrees/<task-id>` on branch `kanban/<task-id>`, reused across
-  respawns; `ulnclaw kanban gc` removes trees of done/archived tasks, branches
-  kept); P125 ported the hermes kanban swarm (`hermes_cli/kanban_swarm.py`):
-  `ulnclaw kanban swarm <goal> --worker ASSIGNEE:TITLE [--worker ...]
-  --verifier ASSIGNEE --synthesizer ASSIGNEE [--json]` builds a
-  workers→verifier→synthesizer graph — a root blackboard/audit task
-  (created done), N ready workers briefed with the swarm protocol, a
-  verifier linked to every worker, and a synthesizer linked to the
-  verifier; the topology is posted as a `blackboard` comment + `swarm`
-  event, and the existing dispatcher promotes verifier/synthesizer as
-  their parents complete (`recompute_ready`); P127 completed the swarm
-  surface: worker skills passthrough (`--worker ASSIGNEE:TITLE:skill,skill`,
-  verifier pinned to `requesting-code-review`, synthesizer to `humanizer`
-  — hermes-verbatim), task-level `skills`/`max_runtime_seconds`/
-  `idempotency_key` columns (additive migrations; `kanban create
-  --skill X --max-runtime N --idempotency-key K`, same fields on the
-  gateway create API), idempotent swarm recovery (same key ⇒ topology
-  rebuilt from the root blackboard, no duplicate graph), dispatcher
-  `reap_timed_out` (SIGTERM + 5 s grace + SIGKILL, task back to ready
-  with a `timed_out` event) and force-loaded skills inlined into the
-  spawned worker's founding prompt (hermes passes `--skills` pairs); P128
-  ported the triage pipeline (`hermes_cli/kanban_specify.py` +
-  `kanban_decompose.py`): `kanban create --triage` parks an idea in a new
-  `triage` column, `kanban specify` fleshes it into a Goal/Approach/
-  Acceptance-criteria spec via `auxiliary.triage_specifier` and promotes
-  triage→todo, `kanban decompose` fans it into a 2-6 child dependency
-  graph routed over the profile roster (`[kanban] orchestrator_profile /
-  default_assignee / auto_promote_children`; root stays alive as the
-  child-of-every-child wake-up card, Kahn cycle-checked, fail-soft
-  outcomes for --all sweeps), and `kanban diagnostics` ports the
-  `kanban_diagnostics.py` rule engine (hallucinated card ids, phantom
-  prose refs, repeated spawn failures, worker crash-loops, stuck-blocked
-  > 24 h, block/unblock cycling, stranded-in-ready, triage-without-aux)
-  with hermes' thresholds and severity ordering; P129 completed the
-  remaining hermes kanban CLI surfaces: schedule/promote (parent-gated,
-  --force override)/reclaim/reassign (--reclaim)/edit/set-model, the
-  attachments CLI (attach/attachments/attach-rm with stable ids), tail
-  --follow event streaming, per-board status stats, and boards
-  rename/set-workdir; P130 added the board-wide `kanban watch`
-  live event stream (assignee/kind filters, hermes watch backend),
-  hermes `board_stats` semantics on `kanban stats` (per-assignee counts
-  + oldest-ready age + `--json`) and `kanban dispatch --json`; P131
-  ported the gateway notification substrate: the `kanban_notify_subs`
-  table (task × platform × chat × thread primary key, caught-up cursor
-  snapshot on subscribe, chat_type/profile/metadata self-heal), the
-  `kanban notify-subscribe / notify-list / notify-unsubscribe` CLI
-  surface, `unseen_events_for_sub` + `advance_notify_cursor` building
-  blocks for the gateway notifier, and `kanban log [--tail N]` which
-  prints a task's worker log from `<home>/kanban/worker-logs/` with
-  hermes' partial-line-safe tail; P132 added the `task_runs`
-  attempt-history table (hermes `Run` lifecycle: a run opens on claim
-  carrying claim lock/TTL + runtime cap, heartbeats and the spawned
-  worker pid are mirrored onto it, and it closes with hermes outcome
-  semantics — completed / blocked / reclaimed / timed_out on
-  done/block/reclaim/stale-release/timeout, plus instant synthesized
-  runs for CLI completes on never-claimed tasks and dispatcher spawn
-  failures; re-claim recovers stale active runs as `reclaimed`), the
-  `kanban runs [--json] [--state-type status|outcome --state-name V]`
-  CLI with hermes' table format, and `latest_run` / `latest_summary`
-  store helpers; P133 wired the gateway dispatcher's auto-decompose
-  path (hermes `_auto_decompose_tick`): each tick re-reads
-  `[kanban] auto_decompose` (default on) /
-  `auto_decompose_per_tick` (default 3) live from config so flipping
-  the toggle stops a runaway fan-out on the next tick without a
-  gateway restart (hermes #49638 fail-safe semantics — config read
-  errors disable the pass), then decomposes up to N triage tasks via
-  the auxiliary LLM before the dispatch fan-out, logging successes at
-  info and no-op skips at debug; P134 completed the remaining hermes
-  kanban CLI surface: `kanban context` (full `build_worker_context`
-  port — capped body/attachments, prior-attempt run summaries with
-  metadata, done-parent handoffs with relative-age staleness hints,
-  assignee cross-task role history, capped comment thread; the
-  `kanban_show` tool now returns the same `worker_context` so spawned
-  workers read it without extra round-trips), `kanban repair`
-  (integrity_check + content-addressed quarantine + index-scoped
-  REINDEX auto-repair, fail-closed otherwise), `kanban assignees`
-  (config roster merged with board assignees, per-status counts),
-  `kanban daemon` (hermes-deprecated stub pointing at the gateway,
-  `--force` keeps the standalone loop), and `ls`/`new` visible
-  aliases; P135 wired notification delivery: the gateway runs a
-  kanban notifier loop (hermes kanban_watchers notifier, 5 s tick)
-  that polls `kanban_notify_subs`, claims unseen terminal events
-  (completed/blocked/gave_up/crashed/timed_out/status, with
-  archived/unblocked claimed-but-silent so they can't wedge later
-  events), renders hermes' message formats (✔ done + handoff first
-  line, ⏸ blocked + reason, ⏱ timed_out, ✖ crashed/gave_up, 🔄
-  status, @assignee + [board] tags) and sends them through the
-  registered platform sender, advancing the per-sub cursor after
-  delivery; subscriptions survive crash/retry cycles and are removed
-  only when the task reaches done/archived (cursor handles dedup).
-  Scoped vs hermes: no per-profile adapter ownership (single shared
-  store), no thread routing or dead-chat drop (PlatformSender exposes
-  no failure channel), sends assumed delivered; P136 ported the
-  unified failure accounting + circuit breaker (hermes
-  `_record_task_failure`): tasks grow `consecutive_failures` /
-  `last_failure_error` / `max_retries` columns, every spawn failure
-  and timed-out attempt consumes the retry budget, hitting the
-  threshold (per-task `max_retries` > dispatcher limit > default 2)
-  flips ready→blocked with a `gave_up` event (failures /
-  effective_limit / limit_source / trigger_outcome payload), and the
-  counter resets on completion and deliberate unblock (hermes
-  fresh-start policy). CLI: `kanban create --max-retries N` (>= 1
-  validated, matching hermes) and the gateway create API accepts the
-  same field; P137 added the dispatcher's worker-health detection
-  (hermes `detect_crashed_workers` + `detect_stale_running`): every
-  tick immediately reclaims running tasks whose worker pid died
-  (30 s launch-grace, `ULNCLAW_KANBAN_CRASH_GRACE_SECONDS` override;
-  `crashed` event, run closed with outcome `crashed`, failure counted
-  against the breaker) and running tasks past
-  `[kanban] stale_timeout_seconds` (hermes
-  `dispatch_stale_timeout_seconds`, default 14400, 0 disables,
-  re-read live in the gateway loop) whose heartbeat is missing or
-  older than an hour (worker SIGTERM→SIGKILL, `stale` event, run
-  outcome `stale`, deliberately NOT counted as a failure — hermes
-  policy); both surface in `DispatchResult.stale` / `.crashed`;
-  P138 hardened the embedded dispatcher (hermes gateway loop): an
-  exclusive `flock` singleton lock (`<home>/kanban/dispatcher.lock`)
-  guarantees exactly one dispatching gateway per machine — a second
-  gateway logs the contention and keeps serving HTTP without
-  dispatching — plus stuck-dispatcher telemetry (warn when the ready
-  queue stays non-empty for 6 consecutive ticks with zero spawns,
-  throttled to 300 s); P139 ported hermes' per-task workspaces:
-  tasks gain `workspace_kind` (`scratch` default / `worktree` /
-  `dir`), `workspace_path` and `branch_name` columns; `kanban create
-  --workspace scratch|worktree|worktree:<path>|dir:<path>` and
-  `--branch <name>` (worktree-only, hermes validation text) with the
-  gateway create API accepting the same fields; the dispatcher
-  resolves the workspace BEFORE spawn (hermes `resolve_workspace` /
-  `_resolve_worktree_workspace`): scratch dirs under
-  `<home>/kanban/workspaces/<id>`, `dir:` paths must be absolute
-  (confused-deputy guard, hermes threat model), worktrees anchor on
-  the board `default_workdir` (dispatcher-CWD fallback keeps the
-  pre-P139 behaviour; hermes raises instead) and materialize
-  `<repo>/.worktrees/<task-id>` on branch `wt/<task-id>` (or
-  `--branch`), reusing occupied sibling checkouts via a fresh tree;
-  the resolved path + branch are persisted on the task row so retries
-  reuse them, resolution errors count as `workspace:` spawn failures
-  against the circuit breaker, `kanban claim` resolves + prints the
-  workspace (hermes `_cmd_claim`), `[kanban] worktrees=true` keeps
-  its meaning for tasks created without `--workspace`, and decompose
-  children inherit the root's workspace kind/path (worktree children
-  always get their own tree, hermes sibling policy); P140 added the
-  respawn guard + duration syntax: `kanban create --max-runtime`
-  accepts `30s`/`5m`/`2h`/`1d` as well as bare seconds (hermes
-  `_parse_duration`), and the dispatcher defers ready tasks that
-  cannot benefit from an immediate retry (hermes
-  `check_respawn_guard`) — `rate_limit_cooldown` (latest run ended
-  `rate_limited` inside `ULNCLAW_KANBAN_RATE_LIMIT_COOLDOWN_SECONDS`,
-  default 300, 0 disables), `blocker_auth` (last failure matches the
-  quota/auth pattern), `recent_success` (completed run within 1 h
-  without a deliberate re-queue) and `active_pr` (GitHub PR URL in a
-  24 h comment window); guarded tasks stay ready, each deferral emits
-  a `respawn_guarded` event, and the gateway dispatch API reports
-  them; P141 ported wake routing: tasks gain a `session_id` column
-  stamped by the agent `kanban_create` tool (and accepted by the
-  gateway create API), and when a subscribed task reaches a
-  wake-eligible terminal event (`completed` / `gave_up` / `crashed` /
-  `timed_out` / `blocked` — hermes `_WAKE_KINDS`) the notifier
-  resumes the creator session by self-POSTing the hermes-format wake
-  message (`[kanban] Task <id> <status>. …`) to the gateway's own
-  `/v1/chat/completions` with `X-Ulnclaw-Session-Id` (hermes
-  `_self_post_chat_completion`: loopback for wildcard binds, bearer
-  key when configured, 600 s turn ceiling, 2/5/10 s backoff on 429 /
-  transient errors, fail-fast on other HTTP errors); the wake runs
-  best-effort and detached after the text ping so it cannot stall
-  other subscriptions; P142 ported typed block kinds (hermes
-  `block_task(kind=…)`): `kanban block --kind dependency` parks the
-  task in `todo` (`dependency_wait` event) where parent gating +
-  `recompute_ready` promote it automatically once the parents finish
-  — no human, no cron; `needs_input` / `capability` / `transient` /
-  untyped land in `blocked` with `block_kind` +
-  `block_recurrences` persisted, and the unblock-loop breaker routes
-  a task to `triage` (`block_loop_detected`) when the same cause
-  re-blocks `BLOCK_RECURRENCE_LIMIT` (2) times after unblocks —
-  recurrences survive unblock deliberately and reset only on
-  completion; `unblock_task` now re-gates on open parents
-  (blocked → `todo` while parents remain) matching hermes' invariant
-  fix; the agent `kanban_block` tool and the gateway block API accept
-  the kind; P143 completed the lifecycle CLI surface: bulk `kanban
-  done/block/schedule/unblock/promote/archive` (multiple ids, hermes
-  `task_ids` + `--ids`), `kanban done --summary/--metadata` storing
-  the structured handoff (full summary + JSON facts) on the closing
-  run while the `completed` event carries the first summary line
-  (400-char cap) for notifiers, `kanban archive --rm` purging
-  already-archived tasks with all related rows (guard: only archived
-  tasks delete), `kanban unblock --reason` commenting before
-  unblocking, `kanban promote --dry-run/--json` backed by a
-  mutation-free `validate_promote`, `kanban watch --tenant`, and
-  archive now closes an in-flight run as reclaimed + immediately
-  promotes children whose archived parent was the last gate
-  (`recompute_ready` treats archived parents as done, hermes
-  semantics). P144 added completion recovery: `kanban edit
-  --result/--summary/--metadata` rewrites a done task's handoff
-  (result text + latest completed run's summary/metadata,
-  synthesizing a run row when none exists; emits `edited`), the
-  terminal kanban tool gained `summary` + `metadata` so workers hand
-  off structured facts, and blocking now writes a `BLOCKED: <reason>`
-  comment before the state change (hermes `_cmd_block` parity).
-  P145 extended `recompute_ready` to the blocked column: a blocked
-  task whose parents are all done/archived auto-recovers to ready
-  (preserving `consecutive_failures`, `promoted` event) unless the
-  block is sticky — latest `blocked`/`unblocked` event is a
-  worker/operator `blocked` (#28712) — or the failure count already
-  reached the effective limit (per-task `max_retries` > dispatcher
-  `failure_limit` > default 2, #35072); the dispatcher passes its
-  configured limit through `dispatch_once`. P146 added the
-  non-spawnable gate + health probe: `dispatch_once` takes the
-  configured profile set and parks ready tasks whose assignee is not
-  a configured profile in `skipped_nonspawnable` (claim-pulled
-  control-plane lanes that must never auto-spawn — hermes
-  #kanban-dispatcher-crash-loop), and the gateway dispatcher's stuck
-  warning now consults `has_spawnable_ready` so a ready queue full of
-  lanes reads as "correctly idle", firing only when spawnable work
-  (unassigned or known-profile tasks) actually waits. P147 ported
-  completion artifacts: `kanban done --artifact <path>` (repeatable),
-  the agent `kanban_done` tool (`artifacts` array) and the gateway
-  complete API stage files living inside a managed scratch workspace
-  into `<home>/kanban/attachments/<task>/` before any cleanup can
-  erase them (25 MiB cap, missing/oversized declarations fail the
-  completion with rollback), record them as `artifact` attachments
-  with `attached` events, merge absolute deliverable paths mentioned
-  in summary/result prose, and carry the final paths on the
-  `completed` event + run metadata (hermes `kanban_complete(
-  artifacts=[...])`, `_persist_scratch_completion_artifacts`,
-  `_merge_completion_prose_artifacts`). P148 ported the review
-  column: `review` joins the status set (🔍); workers call `kanban
-  review <id> [--reason]` / the `kanban_review` tool after opening a
-  PR (running → review, worker run closed, `review_requested` event);
-  `dispatch_once` grows a review loop sharing the max_spawn cap —
-  unassigned review tasks land in `skipped_unassigned`, unknown
-  assignees in `skipped_nonspawnable`, claimed review tasks open a
-  fresh run without re-gating parents (`claim_review_task`), and the
-  `sdlc-review` skill is force-loaded when installed under
-  `<home>/skills/`; `has_spawnable_review` joins the gateway health
-  probe. P149 added the per-profile concurrency cap: `[kanban]
-  max_in_progress_per_profile` (hermes #21582) refuses to spawn for
-  an assignee already at its in-flight limit even with global
-  headroom — counts seed from the running column each tick and count
-  would-be spawns in dry runs; skipped tasks land in
-  `skipped_per_profile_capped` (CLI line + dispatch JSON). P150
-  ported the anti-hallucination completion gate: `kanban done
-  --created-card <id>` (repeatable; also the agent `created_cards`
-  array and the gateway complete API) verifies each claimed card —
-  it must exist AND be created by the worker's profile, created under
-  the worker's task id, or linked as the worker's child. Phantom ids
-  emit `completion_blocked_hallucination` and block the completion
-  without mutating anything (hermes `HallucinatedCardsError`);
-  verified ids ride on the `completed` event, and unresolved
-  `t_<hex>` references in summary/result prose are flagged after a
-  successful completion via `suspected_hallucinated_references`
-  (advisory, hermes `_scan_prose_for_phantom_ids`). P151 added the
-  per-tick dispatch lock (#35240): every `dispatch_once` tick runs
-  under a non-blocking `flock` on `<kanban.db>.dispatch.lock`; a
-  losing dispatcher (e.g. an orphan escaped a service restart)
-  returns `skipped_locked = true` with zero DB writes and retries
-  next interval — surfaced in the CLI (`dispatch: skipped …`) and the
-  dispatch API JSON. P152 added worker log rotation: per-task logs
-  under `kanban/worker-logs/` rotate at `[kanban]
-  worker_log_rotate_bytes` (default 2 MiB), keep one `.log.1` backup
-  generation, and append within a generation so re-spawned attempts
-  no longer truncate earlier output (hermes
-  `worker_log_rotation_config`). P153 closed the stale-worker race:
-  dispatch now claims BEFORE spawning (hermes order) so the run row
-  exists at spawn time; workers carry `ULNCLAW_KANBAN_RUN_ID` (hermes
-  `HERMES_KANBAN_RUN_ID`) and their completions/blocks pass it as
-  `expected_run_id` — an atomic `current_run_id` guard refuses a
-  reclaimed attempt instead of clobbering the fresh one (CLI Done/
-  Block, the `kanban_complete`/`kanban_block` tools and the gateway
-  complete/block APIs all thread it). Spawn/workspace failures of a
-  claimed attempt now end the run, release the claim back to ready
-  and count the failure (hermes `_record_spawn_failure`). P154 added
-  the `[kanban] max_in_progress` global concurrency cap (#33488): a
-  tick whose board already runs at/above the cap returns early (the
-  backlog stays ready, nothing is bucketed), otherwise the effective
-  spawn cap clamps to the tighter of `max_spawn` and
-  `max_in_progress` so the running column fills exactly to the cap —
-  slow workers (local LLMs, resource-constrained hosts) drain before
-  piled-up tasks time out. P154 also ported the one-time
-  scratch-workspace tip (hermes `_maybe_emit_scratch_tip`): the first
-  scratch workspace materialized across the whole install logs a
-  warning that scratch output is ephemeral (deleted when the task
-  completes), records a `tip_scratch_workspace` event on the task,
-  and touches the `.scratch_tip_shown` sentinel so the tip never
-  repeats; worktree/dir workspaces are preserved by design and never
-  tip. P156 added kanban goal-mode workers (hermes `create --goal` /
-  `--goal-max-turns`): a goal card spawns a worker that wraps its run
-  in the Ralph-style judge loop IN THE SAME SESSION — after every turn
-  the auxiliary judge (`[auxiliary.goal_judge]`) evaluates the latest
-  response against the card's title+body; `continue` feeds a
-  continuation prompt, `done` issues one explicit kanban_complete
-  nudge and then blocks the card as judged-done-never-finalized, and
-  an exhausted turn budget (or a reclaimed/archived task) ends in a
-  sticky block for human review. Goal-card completions pass the #38367
-  judge gate on the CLI `kanban done` and the `kanban_complete` tool:
-  a verdict other than `done` rejects the completion with the judge's
-  reason (fail-open when no judge is configured or reachable; the
-  gateway `/api/kanban` complete endpoint is deliberately not
-  gated). P157 added `create --initial-status running|blocked`
-  (hermes `VALID_INITIAL_STATUSES`): `blocked` parks the card for
-  human-ops review until unblocked — it wins over `--triage` — while
-  `running` keeps the default flow (CLI, gateway create API). P158
-  added the workflow-template hooks (hermes `workflow_template_id` /
-  `current_step_key` task columns): external workflow engines stamp
-  cards at create time (gateway create API carries both fields) and
-  query them back via `kanban list --workflow-template-id` (SQL-level
-  filter; gateway list API takes the same query param). The template
-  engine itself lives outside the board in both projects. P159 wired
-  per-task model/provider overrides to the workers (hermes
-  `model_override` / `provider_override`): a new `provider` task
-  column, `kanban create --provider` / gateway create body,
-  `kanban set-model [--provider P]` (provider clears together with
-  the model; provider-without-model is rejected — hermes contract),
-  global `-m/--model` + `--provider` CLI flags that win over config
-  and profile (the flags the spawned `ulnclaw run` worker carries),
-  and `dispatch_spawn` now passes `--model` / `--provider` from the
-  card. P160 ported hermes' first-class project registry
-  (`projects_db` + `project` CLI): a per-profile `projects.db` with
-  named multi-folder workspaces (`ulnclaw project
-  create/list/show/add-folder/remove-folder/rename/set-primary/use/
-  archive/restore/bind-board` — slug uniqueness, primary-folder
-  repointing, active-project pointer; `bind-board` also mirrors the
-  primary repo into the bound board's `default_workdir`), plus
-  `kanban create --project <id|slug>` (CLI + gateway create body):
-  the project resolves at create time and anchors the worktree under
-  the project's primary repo (`<repo>/.worktrees/<task-id>`) with a
-  deterministic `<slug>/<task-id>[-<title-slug>]` branch, stored in
-  a new `tasks.project_id` column; unresolvable links drop silently
-  (hermes drop-dangling semantics). P161 completed the projects
-  subsystem with the repo-discovery scanner hermes never shipped
-  (its `discovered_repos` cache table exists but only the Electron
-  desktop walks the disk, in TypeScript): `ulnclaw project scan
-  [--root PATH ...] [--max-depth N]` finds git checkouts (`.git`
-  directory or worktree file; hidden + skip-listed dirs pruned,
-  symlinks never followed, nested checkouts included) and records
-  them with replace semantics + the `cli-scan:v1` policy key;
-  `project repos [--clear]` lists/clears the cache. P162 exposed the
-  registry to the gateway for desktop surfaces: `/api/projects` CRUD
-  (`PATCH` board binding mirrors the primary repo into the board's
-  `default_workdir` exactly like CLI `bind-board`; folders add/remove,
-  set-primary, archive/restore, hard delete, active pointer) plus
-  `/api/projects/scan|repos` discovery. P164 linked sessions to
-  projects: `/api/sessions` rows (list + get) carry a `project` slug
-  resolved by longest-prefix cwd match against `projects.db` folders
-  (archived projects excluded; a missing store degrades to
-  `project: null`), and the desktop sidebar renders it as a badge —
-  the hermes desktop session-grouping-by-project contract. Remaining deliberate kanban
-  divergences: dispatch-time `default_assignee` application (ulnclaw
-  spawns unassigned tasks on the default profile instead of skipping
-  them).
+- Plugins: ulnclaw plugins are subprocesses speaking the hermes shell-hook JSON protocol
+  (directory plugins + `[hooks]` config), not Python imports
+  - the core fires every hook event hermes v2026.8.3 emits at runtime (13 of 23 — the other 10 are
+    catalog-only in hermes itself)
+  - pre_verify has no ulnclaw verify loop to attach to
+  - the `ulnclaw kanban` engine now fires the kanban_task_claimed/completed/blocked hooks on
+    claim/done/block, but the agent-side kanban_* tools now ride the same KanbanStore engine (P119
+    unified the previously separate tables):
+    - P122 ported the dispatcher tick (`kanban dispatch` CLI + `POST /api/kanban/dispatch`:
+        stale-claim reclaim with live-pid extension, parent-done todo→ready promotion, ready-task worker
+        spawn via detached `ulnclaw run` with ULNCLAW_KANBAN_TASK, live concurrency cap, spawn-failure
+        auto-block after 2 tries)
+    - P123 added the embedded gateway ticker (`[kanban] dispatch_in_gateway / dispatch_interval_secs /
+        max_spawn`, default on/60 s/2) and the hermes kanban-stop nudge (one-shot workers that end
+        without kanban_complete/block are re-prompted up to 2x, `ULNCLAW_KANBAN_STOP_NUDGE=0` disables)
+    - P124 added per-task git-worktree isolation (`[kanban] worktrees`, default on: each dispatched
+        worker runs in `<repo>/.worktrees/<task-id>` on branch `kanban/<task-id>`, reused across
+        respawns; `ulnclaw kanban gc` removes trees of done/archived tasks, branches kept)
+    - P125 ported the hermes kanban swarm (`hermes_cli/kanban_swarm.py`): `ulnclaw kanban swarm <goal>
+        --worker ASSIGNEE:TITLE [--worker ...] --verifier ASSIGNEE --synthesizer ASSIGNEE [--json]`
+        builds a workers→verifier→synthesizer graph — a root blackboard/audit task (created done), N
+        ready workers briefed with the swarm protocol, a verifier linked to every worker, and a
+        synthesizer linked to the verifier; the topology is posted as a `blackboard` comment + `swarm`
+        event, and the existing dispatcher promotes verifier/synthesizer as their parents complete
+        (`recompute_ready`)
+    - P127 completed the swarm surface: worker skills passthrough (`--worker
+        ASSIGNEE:TITLE:skill,skill`, verifier pinned to `requesting-code-review`, synthesizer to
+        `humanizer` — hermes-verbatim), task-level `skills`/`max_runtime_seconds`/ `idempotency_key`
+        columns (additive migrations; `kanban create --skill X --max-runtime N --idempotency-key K`,
+        same fields on the gateway create API), idempotent swarm recovery (same key ⇒ topology rebuilt
+        from the root blackboard, no duplicate graph), dispatcher `reap_timed_out` (SIGTERM + 5 s grace
+        + SIGKILL, task back to ready with a `timed_out` event) and force-loaded skills inlined into the
+        spawned worker's founding prompt (hermes passes `--skills` pairs)
+    - P128 ported the triage pipeline (`hermes_cli/kanban_specify.py` + `kanban_decompose.py`):
+        `kanban create --triage` parks an idea in a new `triage` column, `kanban specify` fleshes it
+        into a Goal/Approach/ Acceptance-criteria spec via `auxiliary.triage_specifier` and promotes
+        triage→todo, `kanban decompose` fans it into a 2-6 child dependency graph routed over the
+        profile roster (`[kanban] orchestrator_profile / default_assignee / auto_promote_children`; root
+        stays alive as the child-of-every-child wake-up card, Kahn cycle-checked, fail-soft outcomes for
+        --all sweeps), and `kanban diagnostics` ports the `kanban_diagnostics.py` rule engine
+        (hallucinated card ids, phantom prose refs, repeated spawn failures, worker crash-loops,
+        stuck-blocked > 24 h, block/unblock cycling, stranded-in-ready, triage-without-aux) with hermes'
+        thresholds and severity ordering
+    - P129 completed the remaining hermes kanban CLI surfaces: schedule/promote (parent-gated, --force
+        override)/reclaim/reassign (--reclaim)/edit/set-model, the attachments CLI
+        (attach/attachments/attach-rm with stable ids), tail --follow event streaming, per-board status
+        stats, and boards rename/set-workdir
+    - P130 added the board-wide `kanban watch` live event stream (assignee/kind filters, hermes watch
+        backend), hermes `board_stats` semantics on `kanban stats` (per-assignee counts + oldest-ready
+        age + `--json`) and `kanban dispatch --json`
+    - P131 ported the gateway notification substrate: the `kanban_notify_subs` table (task × platform
+        × chat × thread primary key, caught-up cursor snapshot on subscribe, chat_type/profile/metadata
+        self-heal), the `kanban notify-subscribe / notify-list / notify-unsubscribe` CLI surface,
+        `unseen_events_for_sub` + `advance_notify_cursor` building blocks for the gateway notifier, and
+        `kanban log [--tail N]` which prints a task's worker log from `<home>/kanban/worker-logs/` with
+        hermes' partial-line-safe tail
+    - P132 added the `task_runs` attempt-history table (hermes `Run` lifecycle: a run opens on claim
+        carrying claim lock/TTL + runtime cap, heartbeats and the spawned worker pid are mirrored onto
+        it, and it closes with hermes outcome semantics — completed / blocked / reclaimed / timed_out on
+        done/block/reclaim/stale-release/timeout, plus instant synthesized runs for CLI completes on
+        never-claimed tasks and dispatcher spawn failures; re-claim recovers stale active runs as
+        `reclaimed`), the `kanban runs [--json] [--state-type status|outcome --state-name V]` CLI with
+        hermes' table format, and `latest_run` / `latest_summary` store helpers
+    - P133 wired the gateway dispatcher's auto-decompose path (hermes `_auto_decompose_tick`): each
+        tick re-reads `[kanban] auto_decompose` (default on) / `auto_decompose_per_tick` (default 3)
+        live from config so flipping the toggle stops a runaway fan-out on the next tick without a
+        gateway restart (hermes #49638 fail-safe semantics — config read errors disable the pass), then
+        decomposes up to N triage tasks via the auxiliary LLM before the dispatch fan-out, logging
+        successes at info and no-op skips at debug
+    - P134 completed the remaining hermes kanban CLI surface: `kanban context` (full
+        `build_worker_context` port — capped body/attachments, prior-attempt run summaries with
+        metadata, done-parent handoffs with relative-age staleness hints, assignee cross-task role
+        history, capped comment thread; the `kanban_show` tool now returns the same `worker_context` so
+        spawned workers read it without extra round-trips), `kanban repair` (integrity_check +
+        content-addressed quarantine + index-scoped REINDEX auto-repair, fail-closed otherwise), `kanban
+        assignees` (config roster merged with board assignees, per-status counts), `kanban daemon`
+        (hermes-deprecated stub pointing at the gateway, `--force` keeps the standalone loop), and
+        `ls`/`new` visible aliases
+    - P135 wired notification delivery: the gateway runs a kanban notifier loop (hermes
+        kanban_watchers notifier, 5 s tick) that polls `kanban_notify_subs`, claims unseen terminal
+        events (completed/blocked/gave_up/crashed/timed_out/status, with archived/unblocked
+        claimed-but-silent so they can't wedge later events), renders hermes' message formats (✔ done +
+        handoff first line, ⏸ blocked + reason, ⏱ timed_out, ✖ crashed/gave_up, 🔄 status, @assignee +
+        [board] tags) and sends them through the registered platform sender, advancing the per-sub
+        cursor after delivery; subscriptions survive crash/retry cycles and are removed only when the
+        task reaches done/archived (cursor handles dedup). Scoped vs hermes: no per-profile adapter
+        ownership (single shared store), no thread routing or dead-chat drop (PlatformSender exposes no
+        failure channel), sends assumed delivered
+    - P136 ported the unified failure accounting + circuit breaker (hermes `_record_task_failure`):
+        tasks grow `consecutive_failures` / `last_failure_error` / `max_retries` columns, every spawn
+        failure and timed-out attempt consumes the retry budget, hitting the threshold (per-task
+        `max_retries` > dispatcher limit > default 2) flips ready→blocked with a `gave_up` event
+        (failures / effective_limit / limit_source / trigger_outcome payload), and the counter resets on
+        completion and deliberate unblock (hermes fresh-start policy). CLI: `kanban create --max-retries
+        N` (>= 1 validated, matching hermes) and the gateway create API accepts the same field
+    - P137 added the dispatcher's worker-health detection (hermes `detect_crashed_workers` +
+        `detect_stale_running`): every tick immediately reclaims running tasks whose worker pid died (30
+        s launch-grace, `ULNCLAW_KANBAN_CRASH_GRACE_SECONDS` override; `crashed` event, run closed with
+        outcome `crashed`, failure counted against the breaker) and running tasks past `[kanban]
+        stale_timeout_seconds` (hermes `dispatch_stale_timeout_seconds`, default 14400, 0 disables,
+        re-read live in the gateway loop) whose heartbeat is missing or older than an hour (worker
+        SIGTERM→SIGKILL, `stale` event, run outcome `stale`, deliberately NOT counted as a failure —
+        hermes policy); both surface in `DispatchResult.stale` / `.crashed`
+    - P138 hardened the embedded dispatcher (hermes gateway loop): an exclusive `flock` singleton lock
+        (`<home>/kanban/dispatcher.lock`) guarantees exactly one dispatching gateway per machine — a
+        second gateway logs the contention and keeps serving HTTP without dispatching — plus
+        stuck-dispatcher telemetry (warn when the ready queue stays non-empty for 6 consecutive ticks
+        with zero spawns, throttled to 300 s)
+    - P139 ported hermes' per-task workspaces: tasks gain `workspace_kind` (`scratch` default /
+        `worktree` / `dir`), `workspace_path` and `branch_name` columns; `kanban create --workspace
+        scratch|worktree|worktree:<path>|dir:<path>` and `--branch <name>` (worktree-only, hermes
+        validation text) with the gateway create API accepting the same fields; the dispatcher resolves
+        the workspace BEFORE spawn (hermes `resolve_workspace` / `_resolve_worktree_workspace`): scratch
+        dirs under `<home>/kanban/workspaces/<id>`, `dir:` paths must be absolute (confused-deputy
+        guard, hermes threat model), worktrees anchor on the board `default_workdir` (dispatcher-CWD
+        fallback keeps the pre-
+    - P139 behaviour; hermes raises instead) and materialize `<repo>/.worktrees/<task-id>` on branch
+        `wt/<task-id>` (or `--branch`), reusing occupied sibling checkouts via a fresh tree; the
+        resolved path + branch are persisted on the task row so retries reuse them, resolution errors
+        count as `workspace:` spawn failures against the circuit breaker, `kanban claim` resolves +
+        prints the workspace (hermes `_cmd_claim`), `[kanban] worktrees=true` keeps its meaning for
+        tasks created without `--workspace`, and decompose children inherit the root's workspace
+        kind/path (worktree children always get their own tree, hermes sibling policy)
+    - P140 added the respawn guard + duration syntax: `kanban create --max-runtime` accepts
+        `30s`/`5m`/`2h`/`1d` as well as bare seconds (hermes `_parse_duration`), and the dispatcher
+        defers ready tasks that cannot benefit from an immediate retry (hermes `check_respawn_guard`) —
+        `rate_limit_cooldown` (latest run ended `rate_limited` inside
+        `ULNCLAW_KANBAN_RATE_LIMIT_COOLDOWN_SECONDS`, default 300, 0 disables), `blocker_auth` (last
+        failure matches the quota/auth pattern), `recent_success` (completed run within 1 h without a
+        deliberate re-queue) and `active_pr` (GitHub PR URL in a 24 h comment window); guarded tasks
+        stay ready, each deferral emits a `respawn_guarded` event, and the gateway dispatch API reports
+        them
+    - P141 ported wake routing: tasks gain a `session_id` column stamped by the agent `kanban_create`
+        tool (and accepted by the gateway create API), and when a subscribed task reaches a
+        wake-eligible terminal event (`completed` / `gave_up` / `crashed` / `timed_out` / `blocked` —
+        hermes `_WAKE_KINDS`) the notifier resumes the creator session by self-POSTing the hermes-format
+        wake message (`[kanban] Task <id> <status>. …`) to the gateway's own `/v1/chat/completions` with
+        `X-Ulnclaw-Session-Id` (hermes `_self_post_chat_completion`: loopback for wildcard binds, bearer
+        key when configured, 600 s turn ceiling, 2/5/10 s backoff on 429 / transient errors, fail-fast
+        on other HTTP errors); the wake runs best-effort and detached after the text ping so it cannot
+        stall other subscriptions
+    - P142 ported typed block kinds (hermes `block_task(kind=…)`): `kanban block --kind dependency`
+        parks the task in `todo` (`dependency_wait` event) where parent gating + `recompute_ready`
+        promote it automatically once the parents finish — no human, no cron; `needs_input` /
+        `capability` / `transient` / untyped land in `blocked` with `block_kind` + `block_recurrences`
+        persisted, and the unblock-loop breaker routes a task to `triage` (`block_loop_detected`) when
+        the same cause re-blocks `BLOCK_RECURRENCE_LIMIT` (2) times after unblocks — recurrences survive
+        unblock deliberately and reset only on completion; `unblock_task` now re-gates on open parents
+        (blocked → `todo` while parents remain) matching hermes' invariant fix; the agent `kanban_block`
+        tool and the gateway block API accept the kind
+    - P143 completed the lifecycle CLI surface: bulk `kanban
+        done/block/schedule/unblock/promote/archive` (multiple ids, hermes `task_ids` + `--ids`),
+        `kanban done --summary/--metadata` storing the structured handoff (full summary + JSON facts) on
+        the closing run while the `completed` event carries the first summary line (400-char cap) for
+        notifiers, `kanban archive --rm` purging already-archived tasks with all related rows (guard:
+        only archived tasks delete), `kanban unblock --reason` commenting before unblocking, `kanban
+        promote --dry-run/--json` backed by a mutation-free `validate_promote`, `kanban watch --tenant`,
+        and archive now closes an in-flight run as reclaimed + immediately promotes children whose
+        archived parent was the last gate (`recompute_ready` treats archived parents as done, hermes
+        semantics).
+    - P144 added completion recovery: `kanban edit --result/--summary/--metadata` rewrites a done
+        task's handoff (result text + latest completed run's summary/metadata, synthesizing a run row
+        when none exists; emits `edited`), the terminal kanban tool gained `summary` + `metadata` so
+        workers hand off structured facts, and blocking now writes a `BLOCKED: <reason>` comment before
+        the state change (hermes `_cmd_block` parity).
+    - P145 extended `recompute_ready` to the blocked column: a blocked task whose parents are all
+        done/archived auto-recovers to ready (preserving `consecutive_failures`, `promoted` event)
+        unless the block is sticky — latest `blocked`/`unblocked` event is a worker/operator `blocked`
+        (#28712) — or the failure count already reached the effective limit (per-task `max_retries` >
+        dispatcher `failure_limit` > default 2, #35072); the dispatcher passes its configured limit
+        through `dispatch_once`.
+    - P146 added the non-spawnable gate + health probe: `dispatch_once` takes the configured profile
+        set and parks ready tasks whose assignee is not a configured profile in `skipped_nonspawnable`
+        (claim-pulled control-plane lanes that must never auto-spawn — hermes
+        #kanban-dispatcher-crash-loop), and the gateway dispatcher's stuck warning now consults
+        `has_spawnable_ready` so a ready queue full of lanes reads as "correctly idle", firing only when
+        spawnable work (unassigned or known-profile tasks) actually waits.
+    - P147 ported completion artifacts: `kanban done --artifact <path>` (repeatable), the agent
+        `kanban_done` tool (`artifacts` array) and the gateway complete API stage files living inside a
+        managed scratch workspace into `<home>/kanban/attachments/<task>/` before any cleanup can erase
+        them (25 MiB cap, missing/oversized declarations fail the completion with rollback), record them
+        as `artifact` attachments with `attached` events, merge absolute deliverable paths mentioned in
+        summary/result prose, and carry the final paths on the `completed` event + run metadata (hermes
+        `kanban_complete( artifacts=[...])`, `_persist_scratch_completion_artifacts`,
+        `_merge_completion_prose_artifacts`).
+    - P148 ported the review column: `review` joins the status set (🔍); workers call `kanban review
+        <id> [--reason]` / the `kanban_review` tool after opening a PR (running → review, worker run
+        closed, `review_requested` event); `dispatch_once` grows a review loop sharing the max_spawn cap
+        — unassigned review tasks land in `skipped_unassigned`, unknown assignees in
+        `skipped_nonspawnable`, claimed review tasks open a fresh run without re-gating parents
+        (`claim_review_task`), and the `sdlc-review` skill is force-loaded when installed under
+        `<home>/skills/`; `has_spawnable_review` joins the gateway health probe.
+    - P149 added the per-profile concurrency cap: `[kanban] max_in_progress_per_profile` (hermes
+        #21582) refuses to spawn for an assignee already at its in-flight limit even with global
+        headroom — counts seed from the running column each tick and count would-be spawns in dry runs;
+        skipped tasks land in `skipped_per_profile_capped` (CLI line + dispatch JSON).
+    - P150 ported the anti-hallucination completion gate: `kanban done --created-card <id>`
+        (repeatable; also the agent `created_cards` array and the gateway complete API) verifies each
+        claimed card — it must exist AND be created by the worker's profile, created under the worker's
+        task id, or linked as the worker's child. Phantom ids emit `completion_blocked_hallucination`
+        and block the completion without mutating anything (hermes `HallucinatedCardsError`); verified
+        ids ride on the `completed` event, and unresolved `t_<hex>` references in summary/result prose
+        are flagged after a successful completion via `suspected_hallucinated_references` (advisory,
+        hermes `_scan_prose_for_phantom_ids`).
+    - P151 added the per-tick dispatch lock (#35240): every `dispatch_once` tick runs under a
+        non-blocking `flock` on `<kanban.db>.dispatch.lock`; a losing dispatcher (e.g. an orphan escaped
+        a service restart) returns `skipped_locked = true` with zero DB writes and retries next interval
+        — surfaced in the CLI (`dispatch: skipped …`) and the dispatch API JSON.
+    - P152 added worker log rotation: per-task logs under `kanban/worker-logs/` rotate at `[kanban]
+        worker_log_rotate_bytes` (default 2 MiB), keep one `.log.1` backup generation, and append within
+        a generation so re-spawned attempts no longer truncate earlier output (hermes
+        `worker_log_rotation_config`).
+    - P153 closed the stale-worker race: dispatch now claims BEFORE spawning (hermes order) so the run
+        row exists at spawn time; workers carry `ULNCLAW_KANBAN_RUN_ID` (hermes `HERMES_KANBAN_RUN_ID`)
+        and their completions/blocks pass it as `expected_run_id` — an atomic `current_run_id` guard
+        refuses a reclaimed attempt instead of clobbering the fresh one (CLI Done/ Block, the
+        `kanban_complete`/`kanban_block` tools and the gateway complete/block APIs all thread it).
+        Spawn/workspace failures of a claimed attempt now end the run, release the claim back to ready
+        and count the failure (hermes `_record_spawn_failure`).
+    - P154 added the `[kanban] max_in_progress` global concurrency cap (#33488): a tick whose board
+        already runs at/above the cap returns early (the backlog stays ready, nothing is bucketed),
+        otherwise the effective spawn cap clamps to the tighter of `max_spawn` and `max_in_progress` so
+        the running column fills exactly to the cap — slow workers (local LLMs, resource-constrained
+        hosts) drain before piled-up tasks time out.
+    - P154 also ported the one-time scratch-workspace tip (hermes `_maybe_emit_scratch_tip`): the
+        first scratch workspace materialized across the whole install logs a warning that scratch output
+        is ephemeral (deleted when the task completes), records a `tip_scratch_workspace` event on the
+        task, and touches the `.scratch_tip_shown` sentinel so the tip never repeats; worktree/dir
+        workspaces are preserved by design and never tip.
+    - P156 added kanban goal-mode workers (hermes `create --goal` / `--goal-max-turns`): a goal card
+        spawns a worker that wraps its run in the Ralph-style judge loop IN THE SAME SESSION — after
+        every turn the auxiliary judge (`[auxiliary.goal_judge]`) evaluates the latest response against
+        the card's title+body; `continue` feeds a continuation prompt, `done` issues one explicit
+        kanban_complete nudge and then blocks the card as judged-done-never-finalized, and an exhausted
+        turn budget (or a reclaimed/archived task) ends in a sticky block for human review. Goal-card
+        completions pass the #38367 judge gate on the CLI `kanban done` and the `kanban_complete` tool:
+        a verdict other than `done` rejects the completion with the judge's reason (fail-open when no
+        judge is configured or reachable; the gateway `/api/kanban` complete endpoint is deliberately
+        not gated).
+    - P157 added `create --initial-status running|blocked` (hermes `VALID_INITIAL_STATUSES`):
+        `blocked` parks the card for human-ops review until unblocked — it wins over `--triage` — while
+        `running` keeps the default flow (CLI, gateway create API).
+    - P158 added the workflow-template hooks (hermes `workflow_template_id` / `current_step_key` task
+        columns): external workflow engines stamp cards at create time (gateway create API carries both
+        fields) and query them back via `kanban list --workflow-template-id` (SQL-level filter; gateway
+        list API takes the same query param). The template engine itself lives outside the board in both
+        projects.
+    - P159 wired per-task model/provider overrides to the workers (hermes `model_override` /
+        `provider_override`): a new `provider` task column, `kanban create --provider` / gateway create
+        body, `kanban set-model [--provider P]` (provider clears together with the model;
+        provider-without-model is rejected — hermes contract), global `-m/--model` + `--provider` CLI
+        flags that win over config and profile (the flags the spawned `ulnclaw run` worker carries), and
+        `dispatch_spawn` now passes `--model` / `--provider` from the card.
+    - P160 ported hermes' first-class project registry (`projects_db` + `project` CLI): a per-profile
+        `projects.db` with named multi-folder workspaces (`ulnclaw project
+        create/list/show/add-folder/remove-folder/rename/set-primary/use/ archive/restore/bind-board` —
+        slug uniqueness, primary-folder repointing, active-project pointer; `bind-board` also mirrors
+        the primary repo into the bound board's `default_workdir`), plus `kanban create --project
+        <id|slug>` (CLI + gateway create body): the project resolves at create time and anchors the
+        worktree under the project's primary repo (`<repo>/.worktrees/<task-id>`) with a deterministic
+        `<slug>/<task-id>[-<title-slug>]` branch, stored in a new `tasks.project_id` column;
+        unresolvable links drop silently (hermes drop-dangling semantics).
+    - P161 completed the projects subsystem with the repo-discovery scanner hermes never shipped (its
+        `discovered_repos` cache table exists but only the Electron desktop walks the disk, in
+        TypeScript): `ulnclaw project scan [--root PATH ...] [--max-depth N]` finds git checkouts
+        (`.git` directory or worktree file; hidden + skip-listed dirs pruned, symlinks never followed,
+        nested checkouts included) and records them with replace semantics + the `cli-scan:v1` policy
+        key; `project repos [--clear]` lists/clears the cache.
+    - P162 exposed the registry to the gateway for desktop surfaces: `/api/projects` CRUD (`PATCH`
+        board binding mirrors the primary repo into the board's `default_workdir` exactly like CLI
+        `bind-board`; folders add/remove, set-primary, archive/restore, hard delete, active pointer)
+        plus `/api/projects/scan|repos` discovery.
+    - P164 linked sessions to projects: `/api/sessions` rows (list + get) carry a `project` slug
+        resolved by longest-prefix cwd match against `projects.db` folders (archived projects excluded;
+        a missing store degrades to `project: null`), and the desktop sidebar renders it as a badge —
+        the hermes desktop session-grouping-by-project contract.
+    - Remaining deliberate kanban divergences: dispatch-time `default_assignee` application (ulnclaw
+        spawns unassigned tasks on the default profile instead of skipping them).
 - Messaging: image attachments are injected natively into the user turn
   as multimodal content parts (P226, hermes media-injection parity):
   `image/*` files ≤ 8 MB are base64-encoded into `data:` URLs and ride
