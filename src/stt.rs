@@ -339,7 +339,12 @@ async fn run_command_stt(name: &str, command: &str, path: &Path) -> SttOutcome {
         Ok(c) => c,
         Err(e) => return SttOutcome::fail(name, format!("spawn stt command: {e}")),
     };
-    let output = match tokio::time::timeout(std::time::Duration::from_secs(300), child.wait_with_output()).await {
+    let output = match tokio::time::timeout(
+        std::time::Duration::from_secs(300),
+        child.wait_with_output(),
+    )
+    .await
+    {
         Ok(Ok(o)) => o,
         Ok(Err(e)) => return SttOutcome::fail(name, format!("stt command: {e}")),
         Err(_) => return SttOutcome::fail(name, "stt command timed out (300s)"),
@@ -418,7 +423,10 @@ async fn openai_compat_transcribe(
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return SttOutcome::fail(name, format!("{name} API {status}: {}", &body[..body.len().min(300)]));
+        return SttOutcome::fail(
+            name,
+            format!("{name} API {status}: {}", &body[..body.len().min(300)]),
+        );
     }
     let value: serde_json::Value = match response.json().await {
         Ok(v) => v,
@@ -453,7 +461,10 @@ async fn deepinfra_default_model(base: &str) -> Option<String> {
     for item in items {
         let id = item.get("id")?.as_str()?.to_lowercase();
         if id.contains("whisper") || id.contains("scribe") || id.contains("stt") {
-            return item.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
+            return item
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
         }
     }
     None
@@ -468,7 +479,10 @@ pub async fn transcribe_audio(stt: &SttConfig, path: &Path) -> SttOutcome {
         return SttOutcome::fail("(unset)", "stt.provider is empty");
     }
     if !path.exists() {
-        return SttOutcome::fail(&provider, format!("audio file not found: {}", path.display()));
+        return SttOutcome::fail(
+            &provider,
+            format!("audio file not found: {}", path.display()),
+        );
     }
     match provider.as_str() {
         "local" => {
@@ -518,8 +532,15 @@ pub async fn transcribe_audio(stt: &SttConfig, path: &Path) -> SttOutcome {
                 .unwrap_or_else(|| "https://api.openai.com/v1".into());
             let url = format!("{}/audio/transcriptions", base.trim_end_matches('/'));
             let language = resolve_language(&stt.language, &stt.openai.language);
-            openai_compat_transcribe("openai", &url, &key, path, Some(&stt.openai.model), language.as_deref())
-                .await
+            openai_compat_transcribe(
+                "openai",
+                &url,
+                &key,
+                path,
+                Some(&stt.openai.model),
+                language.as_deref(),
+            )
+            .await
         }
         "mistral" => {
             let Some(key) = crate::config::get_env_value("MISTRAL_API_KEY") else {
@@ -574,13 +595,19 @@ pub async fn transcribe_audio(stt: &SttConfig, path: &Path) -> SttOutcome {
             let mut form = reqwest::multipart::Form::new()
                 .part("file", part)
                 .text("model_id", stt.elevenlabs.model_id.clone())
-                .text("tag_audio_events", stt.elevenlabs.tag_audio_events.to_string())
+                .text(
+                    "tag_audio_events",
+                    stt.elevenlabs.tag_audio_events.to_string(),
+                )
                 .text("diarize", stt.elevenlabs.diarize.to_string());
             // hermes: language_code uses ISO-639-3 ("eng", "spa", …) — the
             // global BCP-47 hint only applies when the per-provider code is
             // set explicitly.
             if !stt.elevenlabs.language_code.trim().is_empty() {
-                form = form.text("language_code", stt.elevenlabs.language_code.trim().to_string());
+                form = form.text(
+                    "language_code",
+                    stt.elevenlabs.language_code.trim().to_string(),
+                );
             }
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(300))
@@ -606,7 +633,9 @@ pub async fn transcribe_audio(stt: &SttConfig, path: &Path) -> SttOutcome {
             }
             let value: serde_json::Value = match response.json().await {
                 Ok(v) => v,
-                Err(e) => return SttOutcome::fail("elevenlabs", format!("elevenlabs response: {e}")),
+                Err(e) => {
+                    return SttOutcome::fail("elevenlabs", format!("elevenlabs response: {e}"))
+                }
             };
             let transcript = value
                 .get("text")
@@ -690,7 +719,10 @@ pub fn probe_audio_duration(path: &Path) -> Option<String> {
     if !output.status.success() {
         return None;
     }
-    let secs: f64 = String::from_utf8_lossy(&output.stdout).trim().parse().ok()?;
+    let secs: f64 = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse()
+        .ok()?;
     Some(format_duration(secs))
 }
 
@@ -704,7 +736,9 @@ fn wav_duration(path: &Path) -> Option<f64> {
     let mut data_size: Option<u32> = None;
     while pos + 8 <= data.len() {
         let chunk_id = &data[pos..pos + 4];
-        let chunk_size = u32::from_le_bytes([data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]]) as usize;
+        let chunk_size =
+            u32::from_le_bytes([data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]])
+                as usize;
         let body = pos + 8;
         if chunk_id == b"fmt " && body + 16 <= data.len() {
             byte_rate = Some(u32::from_le_bytes([
@@ -772,7 +806,10 @@ pub async fn enrich_message_with_transcription(
                     abs.display(),
                     duration
                 )),
-                None => notes.push(format!("[The user sent a voice message: {}]", abs.display())),
+                None => notes.push(format!(
+                    "[The user sent a voice message: {}]",
+                    abs.display()
+                )),
             }
         }
         if notes.is_empty() {
@@ -839,7 +876,11 @@ pub async fn enrich_message_with_transcription(
     }
 
     if enriched_parts.is_empty() {
-        return (user_text.to_string(), successful_transcripts, transcribed_paths);
+        return (
+            user_text.to_string(),
+            successful_transcripts,
+            transcribed_paths,
+        );
     }
     let prefix = enriched_parts.join("\n\n");
     (
@@ -872,9 +913,11 @@ pub fn provider_readiness(stt: &SttConfig) -> Result<(), String> {
     match provider.as_str() {
         "local" => {
             if stt.local.command.trim().is_empty() {
-                Err("provider 'local' needs stt.local.command (faster-whisper is not \
+                Err(
+                    "provider 'local' needs stt.local.command (faster-whisper is not \
                      embedded in the static binary)"
-                    .into())
+                        .into(),
+                )
             } else {
                 Ok(())
             }
@@ -1064,10 +1107,7 @@ mod tests {
     #[test]
     fn join_with_user_text_semantics() {
         assert_eq!(join_with_user_text("P", ""), "P");
-        assert_eq!(
-            join_with_user_text("P", EMPTY_CONTENT_PLACEHOLDER),
-            "P"
-        );
+        assert_eq!(join_with_user_text("P", EMPTY_CONTENT_PLACEHOLDER), "P");
         assert_eq!(join_with_user_text("P", "caption"), "P\n\ncaption");
     }
 
@@ -1092,12 +1132,13 @@ mod tests {
     async fn command_provider_transcribes_and_enriches() {
         let mut stt = SttConfig::default();
         stt.provider = "shout".into();
-        stt
-            .providers
-            .insert("shout".into(), SttCommandBlock {
+        stt.providers.insert(
+            "shout".into(),
+            SttCommandBlock {
                 provider_type: String::new(),
                 command: "printf 'hello from stt'".into(),
-            });
+            },
+        );
         let dir = std::env::temp_dir().join(format!("ulnclaw-stt-test3-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("note.ogg");
@@ -1114,12 +1155,13 @@ mod tests {
     async fn failed_provider_emits_neutral_marker() {
         let mut stt = SttConfig::default();
         stt.provider = "shout".into();
-        stt
-            .providers
-            .insert("shout".into(), SttCommandBlock {
+        stt.providers.insert(
+            "shout".into(),
+            SttCommandBlock {
                 provider_type: String::new(),
                 command: "exit 3".into(),
-            });
+            },
+        );
         let dir = std::env::temp_dir().join(format!("ulnclaw-stt-test4-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("note.ogg");
@@ -1138,12 +1180,13 @@ mod tests {
     async fn empty_transcript_sentinel() {
         let mut stt = SttConfig::default();
         stt.provider = "shout".into();
-        stt
-            .providers
-            .insert("shout".into(), SttCommandBlock {
+        stt.providers.insert(
+            "shout".into(),
+            SttCommandBlock {
                 provider_type: String::new(),
                 command: "printf ''".into(),
-            });
+            },
+        );
         let dir = std::env::temp_dir().join(format!("ulnclaw-stt-test5-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("note.ogg");

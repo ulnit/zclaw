@@ -157,7 +157,10 @@ where
 /// `register_provider`).
 pub fn register_provider(provider: Arc<dyn VideoGenProvider>) {
     let name = provider.name().trim().to_string();
-    assert!(!name.is_empty(), "video gen provider name must be non-empty");
+    assert!(
+        !name.is_empty(),
+        "video gen provider name must be non-empty"
+    );
     with_registry(|map| {
         map.insert(name, provider);
     });
@@ -180,7 +183,9 @@ pub fn get_provider(name: &str) -> Option<Arc<dyn VideoGenProvider>> {
 ///      not registered;
 ///   2. otherwise, exactly one *available* provider auto-selects;
 ///   3. otherwise `None` (the tool surfaces a helpful error).
-pub fn get_active_provider(config: &crate::config::UlncLawConfig) -> Option<Arc<dyn VideoGenProvider>> {
+pub fn get_active_provider(
+    config: &crate::config::UlncLawConfig,
+) -> Option<Arc<dyn VideoGenProvider>> {
     let configured = config
         .video_gen
         .provider
@@ -278,8 +283,14 @@ mod tests {
     fn registry_roundtrip_and_active_resolution() {
         let _guard = registry_lock();
         reset_for_tests();
-        register_provider(Arc::new(StubProvider { name: "alpha", available: true }));
-        register_provider(Arc::new(StubProvider { name: "beta", available: false }));
+        register_provider(Arc::new(StubProvider {
+            name: "alpha",
+            available: true,
+        }));
+        register_provider(Arc::new(StubProvider {
+            name: "beta",
+            available: false,
+        }));
 
         assert_eq!(list_providers().len(), 2);
         assert!(get_provider("alpha").is_some());
@@ -307,8 +318,14 @@ mod tests {
     fn no_available_provider_resolves_none() {
         let _guard = registry_lock();
         reset_for_tests();
-        register_provider(Arc::new(StubProvider { name: "a", available: true }));
-        register_provider(Arc::new(StubProvider { name: "b", available: true }));
+        register_provider(Arc::new(StubProvider {
+            name: "a",
+            available: true,
+        }));
+        register_provider(Arc::new(StubProvider {
+            name: "b",
+            available: true,
+        }));
         let config = UlncLawConfig::default();
         assert!(get_active_provider(&config).is_none());
         reset_for_tests();

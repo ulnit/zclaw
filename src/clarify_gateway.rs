@@ -223,7 +223,12 @@ mod tests {
     fn register_resolve_roundtrip() {
         let _guard = test_lock().lock().unwrap();
         reset_for_tests();
-        let handle = register("platform-whatsapp_cloud-1", "Pick", &["a".into(), "b".into()], false);
+        let handle = register(
+            "platform-whatsapp_cloud-1",
+            "Pick",
+            &["a".into(), "b".into()],
+            false,
+        );
         assert!(pending_for_session("platform-whatsapp_cloud-1").is_some());
         assert!(resolve(&handle.clarify_id, "a"));
         // Second resolve: no waiter anymore.
@@ -243,7 +248,10 @@ mod tests {
         );
         assert!(contains(&handle.clarify_id));
         assert!(!is_awaiting_text(&handle.clarify_id));
-        assert_eq!(peek_choice(&handle.clarify_id, "1").as_deref(), Some("Beta"));
+        assert_eq!(
+            peek_choice(&handle.clarify_id, "1").as_deref(),
+            Some("Beta")
+        );
         // Out-of-range and non-numeric lookups miss.
         assert_eq!(peek_choice(&handle.clarify_id, "9"), None);
         assert_eq!(peek_choice(&handle.clarify_id, "other"), None);

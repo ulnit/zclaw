@@ -137,7 +137,10 @@ impl Default for WeixinConfig {
 }
 
 fn env_or_none(name: &str) -> Option<String> {
-    std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 pub fn resolve_account_id(cfg: &WeixinConfig) -> String {
@@ -181,7 +184,12 @@ pub fn resolve_token(cfg: &WeixinConfig, home: &Path) -> String {
     let account_id = resolve_account_id(cfg);
     if !account_id.is_empty() {
         if let Some(persisted) = load_weixin_account(home, &account_id) {
-            let token = persisted.get("token").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            let token = persisted
+                .get("token")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
             if !token.is_empty() {
                 return token;
             }
@@ -208,7 +216,9 @@ pub fn pkcs7_unpad(data: &[u8]) -> Vec<u8> {
     let pad_len = *data.last().unwrap() as usize;
     if (1..=16).contains(&pad_len)
         && data.len() >= pad_len
-        && data[data.len() - pad_len..].iter().all(|b| *b as usize == pad_len)
+        && data[data.len() - pad_len..]
+            .iter()
+            .all(|b| *b as usize == pad_len)
     {
         data[..data.len() - pad_len].to_vec()
     } else {
@@ -220,7 +230,9 @@ pub fn aes128_ecb_encrypt(plaintext: &[u8], key: &[u8; 16]) -> Vec<u8> {
     let cipher = aes::Aes128::new_from_slice(key).expect("16-byte key");
     let mut out = pkcs7_pad(plaintext);
     for block in out.chunks_exact_mut(16) {
-        cipher.encrypt_block(aes::cipher::generic_array::GenericArray::from_mut_slice(block));
+        cipher.encrypt_block(aes::cipher::generic_array::GenericArray::from_mut_slice(
+            block,
+        ));
     }
     out
 }
@@ -229,7 +241,9 @@ pub fn aes128_ecb_decrypt(ciphertext: &[u8], key: &[u8; 16]) -> Vec<u8> {
     let cipher = aes::Aes128::new_from_slice(key).expect("16-byte key");
     let mut out = ciphertext.to_vec();
     for block in out.chunks_exact_mut(16) {
-        cipher.decrypt_block(aes::cipher::generic_array::GenericArray::from_mut_slice(block));
+        cipher.decrypt_block(aes::cipher::generic_array::GenericArray::from_mut_slice(
+            block,
+        ));
     }
     pkcs7_unpad(&out)
 }
@@ -259,7 +273,10 @@ pub fn parse_aes_key(aes_key_b64: &str) -> std::result::Result<[u8; 16], String>
             return Ok(key);
         }
     }
-    Err(format!("unexpected aes_key format ({} decoded bytes)", decoded.len()))
+    Err(format!(
+        "unexpected aes_key format ({} decoded bytes)",
+        decoded.len()
+    ))
 }
 
 fn base64_decode(input: &str) -> std::result::Result<Vec<u8>, String> {
@@ -306,7 +323,9 @@ fn getrandom_fill(bytes: &mut [u8]) {
         .map(|d| d.as_secs())
         .unwrap_or(0x9E3779B97F4A7C15);
     for slot in bytes.iter_mut() {
-        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         *slot = (seed >> 33) as u8;
     }
 }
@@ -314,10 +333,16 @@ fn getrandom_fill(bytes: &mut [u8]) {
 pub fn request_headers(token: Option<&str>) -> Vec<(String, String)> {
     let mut headers = vec![
         ("Content-Type".to_string(), "application/json".to_string()),
-        ("AuthorizationType".to_string(), "ilink_bot_token".to_string()),
+        (
+            "AuthorizationType".to_string(),
+            "ilink_bot_token".to_string(),
+        ),
         ("X-WECHAT-UIN".to_string(), random_wechat_uin()),
         ("iLink-App-Id".to_string(), ILINK_APP_ID.to_string()),
-        ("iLink-App-ClientVersion".to_string(), ILINK_APP_CLIENT_VERSION.to_string()),
+        (
+            "iLink-App-ClientVersion".to_string(),
+            ILINK_APP_CLIENT_VERSION.to_string(),
+        ),
     ];
     if let Some(token) = token {
         if !token.is_empty() {
@@ -352,11 +377,21 @@ async fn api_post(
     for (key, value) in request_headers(token) {
         request = request.header(key, value);
     }
-    let response = request.send().await.map_err(|e| format!("iLink POST {endpoint}: {e}"))?;
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("iLink POST {endpoint}: {e}"))?;
     let status = response.status();
-    let raw = response.text().await.map_err(|e| format!("iLink POST {endpoint} body: {e}"))?;
+    let raw = response
+        .text()
+        .await
+        .map_err(|e| format!("iLink POST {endpoint} body: {e}"))?;
     if !status.is_success() {
-        return Err(format!("iLink POST {endpoint} HTTP {}: {}", status.as_u16(), truncate_str(&raw, 200)));
+        return Err(format!(
+            "iLink POST {endpoint} HTTP {}: {}",
+            status.as_u16(),
+            truncate_str(&raw, 200)
+        ));
     }
     serde_json::from_str(&raw).map_err(|e| format!("iLink POST {endpoint} JSON: {e}"))
 }
@@ -376,11 +411,18 @@ async fn api_get(
         }
         request = request.header(key, value);
     }
-    let response = request.send().await.map_err(|e| format!("iLink GET {endpoint_and_query}: {e}"))?;
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("iLink GET {endpoint_and_query}: {e}"))?;
     let status = response.status();
     let raw = response.text().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        return Err(format!("iLink GET HTTP {}: {}", status.as_u16(), truncate_str(&raw, 200)));
+        return Err(format!(
+            "iLink GET HTTP {}: {}",
+            status.as_u16(),
+            truncate_str(&raw, 200)
+        ));
     }
     serde_json::from_str(&raw).map_err(|e| format!("iLink GET JSON: {e}"))
 }
@@ -403,7 +445,9 @@ pub fn is_stale_session_ret(ret: Option<i64>, errcode: Option<i64>, errmsg: Opti
     if ret != Some(RATE_LIMIT_ERRCODE) && errcode != Some(RATE_LIMIT_ERRCODE) {
         return false;
     }
-    errmsg.map(|m| m.to_lowercase() == "unknown error").unwrap_or(false)
+    errmsg
+        .map(|m| m.to_lowercase() == "unknown error")
+        .unwrap_or(false)
 }
 
 // ---------------------------------------------------------------------------
@@ -442,7 +486,9 @@ pub fn assert_weixin_cdn_url(url: &str) -> std::result::Result<(), String> {
     let parsed = url::Url::parse(url).map_err(|_| format!("Unparseable media URL: {url:?}"))?;
     let scheme = parsed.scheme().to_lowercase();
     if scheme != "http" && scheme != "https" {
-        return Err(format!("Media URL has disallowed scheme {scheme:?}; only http/https are permitted."));
+        return Err(format!(
+            "Media URL has disallowed scheme {scheme:?}; only http/https are permitted."
+        ));
     }
     let host = parsed.host_str().unwrap_or("").to_string();
     if !WEIXIN_CDN_ALLOWLIST.contains(&host.as_str()) {
@@ -453,7 +499,11 @@ pub fn assert_weixin_cdn_url(url: &str) -> std::result::Result<(), String> {
     Ok(())
 }
 
-async fn download_bytes(client: &reqwest::Client, url: &str, timeout: Duration) -> std::result::Result<Vec<u8>, String> {
+async fn download_bytes(
+    client: &reqwest::Client,
+    url: &str,
+    timeout: Duration,
+) -> std::result::Result<Vec<u8>, String> {
     let response = client
         .get(url)
         .timeout(timeout)
@@ -516,10 +566,17 @@ pub async fn upload_ciphertext(
             }
         }
         let raw = response.text().await.unwrap_or_default();
-        return Err(format!("CDN upload missing x-encrypted-param header: {}", truncate_str(&raw, 200)));
+        return Err(format!(
+            "CDN upload missing x-encrypted-param header: {}",
+            truncate_str(&raw, 200)
+        ));
     }
     let raw = response.text().await.unwrap_or_default();
-    Err(format!("CDN upload HTTP {}: {}", status.as_u16(), truncate_str(&raw, 200)))
+    Err(format!(
+        "CDN upload HTTP {}: {}",
+        status.as_u16(),
+        truncate_str(&raw, 200)
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -535,8 +592,11 @@ fn accounts_dir(home: &Path) -> PathBuf {
 
 fn atomic_json_write(path: &Path, value: &Value) -> std::result::Result<(), String> {
     let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, serde_json::to_string_pretty(value).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
+    std::fs::write(
+        &tmp,
+        serde_json::to_string_pretty(value).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
     #[cfg(unix)]
     {
@@ -547,7 +607,13 @@ fn atomic_json_write(path: &Path, value: &Value) -> std::result::Result<(), Stri
 }
 
 /// Persist iLink credentials for reuse (hermes `save_weixin_account`).
-pub fn save_weixin_account(home: &Path, account_id: &str, token: &str, base_url: &str, user_id: &str) {
+pub fn save_weixin_account(
+    home: &Path,
+    account_id: &str,
+    token: &str,
+    base_url: &str,
+    user_id: &str,
+) {
     let payload = json!({
         "token": token,
         "base_url": base_url,
@@ -646,7 +712,8 @@ impl TypingTicketCache {
     }
 
     pub fn set(&mut self, user_id: &str, ticket: &str) {
-        self.entries.insert(user_id.to_string(), (ticket.to_string(), Instant::now()));
+        self.entries
+            .insert(user_id.to_string(), (ticket.to_string(), Instant::now()));
     }
 }
 
@@ -658,7 +725,11 @@ pub fn load_sync_buf(home: &Path, account_id: &str) -> String {
     std::fs::read_to_string(sync_buf_path(home, account_id))
         .ok()
         .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-        .and_then(|v| v.get("get_updates_buf").and_then(|b| b.as_str()).map(|s| s.to_string()))
+        .and_then(|v| {
+            v.get("get_updates_buf")
+                .and_then(|b| b.as_str())
+                .map(|s| s.to_string())
+        })
         .unwrap_or_default()
 }
 
@@ -713,7 +784,9 @@ fn header_re() -> &'static regex::Regex {
 
 fn table_rule_re() -> &'static regex::Regex {
     static RE: OnceLock<regex::Regex> = OnceLock::new();
-    RE.get_or_init(|| regex::Regex::new(r"^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$").unwrap())
+    RE.get_or_init(|| {
+        regex::Regex::new(r"^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$").unwrap()
+    })
 }
 
 fn bold_only_re() -> &'static regex::Regex {
@@ -961,9 +1034,12 @@ fn pack_markdown_blocks_for_weixin(content: &str, max_length: usize) -> Vec<Stri
         return vec![content.to_string()];
     }
     let blocks = split_markdown_blocks(content);
-    greedy_pack_blocks(&blocks, max_length, "\n\n", Some(&|block: &str| {
-        split_oversized_block(block, max_length)
-    }))
+    greedy_pack_blocks(
+        &blocks,
+        max_length,
+        "\n\n",
+        Some(&|block: &str| split_oversized_block(block, max_length)),
+    )
 }
 
 /// hermes `_split_delivery_units_for_weixin`.
@@ -985,8 +1061,8 @@ pub fn split_delivery_units(content: &str) -> Vec<String> {
                 }
                 continue;
             }
-            let is_continuation = !current.is_empty()
-                && (raw_line.starts_with(' ') || raw_line.starts_with('\t'));
+            let is_continuation =
+                !current.is_empty() && (raw_line.starts_with(' ') || raw_line.starts_with('\t'));
             if is_continuation {
                 current.push(line);
                 continue;
@@ -1053,7 +1129,11 @@ fn should_split_short_chat_block(block: &str) -> bool {
 }
 
 /// hermes `_split_text_for_weixin_delivery`.
-pub fn split_text_for_weixin_delivery(content: &str, max_length: usize, split_per_line: bool) -> Vec<String> {
+pub fn split_text_for_weixin_delivery(
+    content: &str,
+    max_length: usize,
+    split_per_line: bool,
+) -> Vec<String> {
     if content.is_empty() {
         return Vec::new();
     }
@@ -1070,12 +1150,23 @@ pub fn split_text_for_weixin_delivery(content: &str, max_length: usize, split_pe
             chunks.extend(pack_markdown_blocks_for_weixin(&unit, max_length));
         }
         let chunks: Vec<String> = chunks.into_iter().filter(|c| !c.is_empty()).collect();
-        return if chunks.is_empty() { vec![content.to_string()] } else { chunks };
+        return if chunks.is_empty() {
+            vec![content.to_string()]
+        } else {
+            chunks
+        };
     }
     if content.chars().count() <= max_length {
         return if should_split_short_chat_block(content) {
-            let units: Vec<String> = split_delivery_units(content).into_iter().filter(|u| !u.is_empty()).collect();
-            if units.is_empty() { vec![content.to_string()] } else { units }
+            let units: Vec<String> = split_delivery_units(content)
+                .into_iter()
+                .filter(|u| !u.is_empty())
+                .collect();
+            if units.is_empty() {
+                vec![content.to_string()]
+            } else {
+                units
+            }
         } else {
             vec![content.to_string()]
         };
@@ -1115,7 +1206,10 @@ pub fn extract_text(item_list: &[Value]) -> String {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
-                if matches!(ref_type, Some(ITEM_IMAGE) | Some(ITEM_VIDEO) | Some(ITEM_FILE) | Some(ITEM_VOICE)) {
+                if matches!(
+                    ref_type,
+                    Some(ITEM_IMAGE) | Some(ITEM_VIDEO) | Some(ITEM_FILE) | Some(ITEM_VOICE)
+                ) {
                     let prefix = if title.is_empty() {
                         "[引用媒体]\n".to_string()
                     } else {
@@ -1132,7 +1226,9 @@ pub fn extract_text(item_list: &[Value]) -> String {
                     parts.push(ref_text);
                 }
                 if !parts.is_empty() {
-                    return format!("[引用: {}]\n{}", parts.join(" | "), text).trim().to_string();
+                    return format!("[引用: {}]\n{}", parts.join(" | "), text)
+                        .trim()
+                        .to_string();
                 }
             }
             return text;
@@ -1185,7 +1281,10 @@ pub fn guess_chat_type(message: &Value, account_id: &str) -> (String, String) {
         .unwrap_or("")
         .to_string();
     let is_group = !room_id.is_empty()
-        || (!to_user_id.is_empty() && !account_id.is_empty() && to_user_id != account_id && msg_type == Some(1));
+        || (!to_user_id.is_empty()
+            && !account_id.is_empty()
+            && to_user_id != account_id
+            && msg_type == Some(1));
     if is_group {
         let chat_id = if !room_id.is_empty() {
             room_id
@@ -1223,7 +1322,11 @@ fn render_qr_ascii(data: &str) -> Option<String> {
 
 /// Run the interactive iLink QR login flow. Returns the credential dict
 /// (account_id/token/base_url/user_id) on success.
-pub async fn qr_login(home: &Path, bot_type: &str, timeout_seconds: u64) -> std::result::Result<Option<HashMap<String, String>>, String> {
+pub async fn qr_login(
+    home: &Path,
+    bot_type: &str,
+    timeout_seconds: u64,
+) -> std::result::Result<Option<HashMap<String, String>>, String> {
     let client = reqwest::Client::new();
     let mut qr_resp = api_get(
         &client,
@@ -1234,15 +1337,27 @@ pub async fn qr_login(home: &Path, bot_type: &str, timeout_seconds: u64) -> std:
     )
     .await?;
 
-    let mut qrcode_value = qr_resp.get("qrcode").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let mut qrcode_url = qr_resp.get("qrcode_img_content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let mut qrcode_value = qr_resp
+        .get("qrcode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let mut qrcode_url = qr_resp
+        .get("qrcode_img_content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if qrcode_value.is_empty() {
         return Err("weixin: QR response missing qrcode".into());
     }
 
     // qrcode_url is the full scannable liteapp URL; qrcode_value is just
     // the hex token — WeChat must scan the full URL.
-    let qr_scan_data = if qrcode_url.is_empty() { qrcode_value.clone() } else { qrcode_url.clone() };
+    let qr_scan_data = if qrcode_url.is_empty() {
+        qrcode_value.clone()
+    } else {
+        qrcode_url.clone()
+    };
     println!("\n请使用微信扫描以下二维码：");
     if !qrcode_url.is_empty() {
         println!("{qrcode_url}");
@@ -1277,12 +1392,20 @@ pub async fn qr_login(home: &Path, bot_type: &str, timeout_seconds: u64) -> std:
                 continue;
             }
         };
-        let status = status_resp.get("status").and_then(|v| v.as_str()).unwrap_or("wait").to_string();
+        let status = status_resp
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("wait")
+            .to_string();
         match status.as_str() {
             "wait" => print!("."),
             "scaned" => println!("\n已扫码，请在微信里确认..."),
             "scaned_but_redirected" => {
-                let redirect_host = status_resp.get("redirect_host").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let redirect_host = status_resp
+                    .get("redirect_host")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if !redirect_host.is_empty() {
                     current_base_url = format!("https://{redirect_host}");
                 }
@@ -1302,9 +1425,21 @@ pub async fn qr_login(home: &Path, bot_type: &str, timeout_seconds: u64) -> std:
                     QR_TIMEOUT_MS,
                 )
                 .await?;
-                qrcode_value = qr_resp.get("qrcode").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                qrcode_url = qr_resp.get("qrcode_img_content").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let scan_data = if qrcode_url.is_empty() { qrcode_value.clone() } else { qrcode_url.clone() };
+                qrcode_value = qr_resp
+                    .get("qrcode")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                qrcode_url = qr_resp
+                    .get("qrcode_img_content")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let scan_data = if qrcode_url.is_empty() {
+                    qrcode_value.clone()
+                } else {
+                    qrcode_url.clone()
+                };
                 if !qrcode_url.is_empty() {
                     println!("{qrcode_url}");
                 }
@@ -1313,15 +1448,27 @@ pub async fn qr_login(home: &Path, bot_type: &str, timeout_seconds: u64) -> std:
                 }
             }
             "confirmed" => {
-                let account_id = status_resp.get("ilink_bot_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let token = status_resp.get("bot_token").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let account_id = status_resp
+                    .get("ilink_bot_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let token = status_resp
+                    .get("bot_token")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 let base_url = status_resp
                     .get("baseurl")
                     .and_then(|v| v.as_str())
                     .filter(|s| !s.is_empty())
                     .unwrap_or(ILINK_BASE_URL)
                     .to_string();
-                let user_id = status_resp.get("ilink_user_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let user_id = status_resp
+                    .get("ilink_user_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 if account_id.is_empty() || token.is_empty() {
                     return Err("weixin: QR confirmed but credential payload was incomplete".into());
                 }
@@ -1413,8 +1560,21 @@ pub struct WeixinHandle {
 }
 
 impl WeixinHandle {
-    async fn ilink_post(&self, endpoint: &str, payload: Value, timeout_ms: u64) -> std::result::Result<Value, String> {
-        api_post(&self.client, &self.base_url, endpoint, payload, Some(&self.token), timeout_ms).await
+    async fn ilink_post(
+        &self,
+        endpoint: &str,
+        payload: Value,
+        timeout_ms: u64,
+    ) -> std::result::Result<Value, String> {
+        api_post(
+            &self.client,
+            &self.base_url,
+            endpoint,
+            payload,
+            Some(&self.token),
+            timeout_ms,
+        )
+        .await
     }
 
     /// hermes `_send_message`.
@@ -1436,13 +1596,18 @@ impl WeixinHandle {
         if let Some(context_token) = context_token.filter(|t| !t.is_empty()) {
             message["context_token"] = json!(context_token);
         }
-        self.ilink_post(EP_SEND_MESSAGE, json!({ "msg": message }), API_TIMEOUT_MS).await
+        self.ilink_post(EP_SEND_MESSAGE, json!({ "msg": message }), API_TIMEOUT_MS)
+            .await
     }
 
     /// hermes `_send_text_chunk` + `_send_text_chunk_locked`: per-chunk
     /// retry, session-expired tokenless fallback, rate-limit backoff +
     /// circuit breaker.
-    pub async fn send_text_chunk(&self, chat_id: &str, chunk: &str) -> std::result::Result<(), String> {
+    pub async fn send_text_chunk(
+        &self,
+        chat_id: &str,
+        chunk: &str,
+    ) -> std::result::Result<(), String> {
         if chunk.trim().is_empty() {
             return Err("_send_message: text must not be empty".into());
         }
@@ -1453,11 +1618,19 @@ impl WeixinHandle {
         for attempt in 0..=self.send_chunk_retries {
             let cooldown = self.circuit.lock().unwrap().cooldown_remaining();
             if cooldown > Duration::ZERO {
-                return Err(format!("weixin rate-limit circuit open for another {:.0}s", cooldown.as_secs_f64()));
+                return Err(format!(
+                    "weixin rate-limit circuit open for another {:.0}s",
+                    cooldown.as_secs_f64()
+                ));
             }
             let client_id = format!("ulnclaw-weixin-{}", new_client_id_hex());
             match self
-                .send_message_raw(chat_id, json!([{"type": ITEM_TEXT, "text_item": {"text": chunk}}]), context_token.as_deref(), &client_id)
+                .send_message_raw(
+                    chat_id,
+                    json!([{"type": ITEM_TEXT, "text_item": {"text": chunk}}]),
+                    context_token.as_deref(),
+                    &client_id,
+                )
                 .await
             {
                 Ok(resp) => {
@@ -1482,7 +1655,8 @@ impl WeixinHandle {
                             eprintln!("[weixin] session expired for {chat_id}; retrying without context_token");
                             continue;
                         }
-                        let rate_limited = ret == Some(RATE_LIMIT_ERRCODE) || errcode == Some(RATE_LIMIT_ERRCODE);
+                        let rate_limited =
+                            ret == Some(RATE_LIMIT_ERRCODE) || errcode == Some(RATE_LIMIT_ERRCODE);
                         if rate_limited {
                             let tripped = self.circuit.lock().unwrap().record();
                             last_error = Some(format!("iLink sendmessage rate limited: ret={ret:?} errcode={errcode:?} errmsg={errmsg}"));
@@ -1507,7 +1681,10 @@ impl WeixinHandle {
                     if attempt >= self.send_chunk_retries {
                         break;
                     }
-                    tokio::time::sleep(Duration::from_secs_f64(self.send_chunk_retry_delay_seconds)).await;
+                    tokio::time::sleep(Duration::from_secs_f64(
+                        self.send_chunk_retry_delay_seconds,
+                    ))
+                    .await;
                 }
             }
         }
@@ -1518,10 +1695,11 @@ impl WeixinHandle {
     /// `send()` text half).
     pub async fn send_text(&self, chat_id: &str, text: &str, split_multiline: bool) {
         let formatted = format_message(text);
-        let chunks: Vec<String> = split_text_for_weixin_delivery(&formatted, MAX_MESSAGE_LENGTH, split_multiline)
-            .into_iter()
-            .filter(|c| !c.trim().is_empty())
-            .collect();
+        let chunks: Vec<String> =
+            split_text_for_weixin_delivery(&formatted, MAX_MESSAGE_LENGTH, split_multiline)
+                .into_iter()
+                .filter(|c| !c.trim().is_empty())
+                .collect();
         for (idx, chunk) in chunks.iter().enumerate() {
             if let Err(e) = self.send_text_chunk(chat_id, chunk).await {
                 eprintln!("[weixin] send chunk failed to={chat_id}: {e}");
@@ -1562,7 +1740,12 @@ impl WeixinHandle {
     }
 
     /// hermes `_send_file`: AES-ECB CDN upload + media message item.
-    pub async fn send_file(&self, chat_id: &str, path: &Path, caption: &str) -> std::result::Result<String, String> {
+    pub async fn send_file(
+        &self,
+        chat_id: &str,
+        path: &Path,
+        caption: &str,
+    ) -> std::result::Result<String, String> {
         let plaintext = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         let (media_type, item_kind) = outbound_media_builder(path);
         let filekey = new_client_id_hex();
@@ -1571,10 +1754,26 @@ impl WeixinHandle {
         let rawsize = plaintext.len();
         let rawfilemd5 = md5_hex(&plaintext);
         let upload_response = self
-            .get_upload_url(chat_id, media_type, &filekey, rawsize, &rawfilemd5, aes_padded_size(rawsize), &hex_encode(&aes_key))
+            .get_upload_url(
+                chat_id,
+                media_type,
+                &filekey,
+                rawsize,
+                &rawfilemd5,
+                aes_padded_size(rawsize),
+                &hex_encode(&aes_key),
+            )
             .await?;
-        let upload_param = upload_response.get("upload_param").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let upload_full_url = upload_response.get("upload_full_url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let upload_param = upload_response
+            .get("upload_param")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let upload_full_url = upload_response
+            .get("upload_full_url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         let ciphertext = aes128_ecb_encrypt(&plaintext, &aes_key);
 
         // Prefer upload_full_url (direct CDN), fall back to the CDN URL
@@ -1585,16 +1784,23 @@ impl WeixinHandle {
         } else if !upload_param.is_empty() {
             cdn_upload_url(&self.cdn_base_url, &upload_param, &filekey)
         } else {
-            return Err(format!("getUploadUrl returned neither upload_param nor upload_full_url: {upload_response}"));
+            return Err(format!(
+                "getUploadUrl returned neither upload_param nor upload_full_url: {upload_response}"
+            ));
         };
 
-        let encrypted_query_param = upload_ciphertext(&self.client, &ciphertext, &upload_url).await?;
+        let encrypted_query_param =
+            upload_ciphertext(&self.client, &ciphertext, &upload_url).await?;
         let context_token = self.tokens.lock().unwrap().get(chat_id);
         // The iLink API expects aes_key as base64(hex_string), not
         // base64(raw_bytes) — otherwise images render as grey boxes.
         let aes_key_for_api = base64_encode(hex_encode(&aes_key).as_bytes());
-        let file_name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let is_silk_voice = media_type == MEDIA_VOICE && path.extension().map(|e| e == "silk").unwrap_or(false);
+        let file_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let is_silk_voice =
+            media_type == MEDIA_VOICE && path.extension().map(|e| e == "silk").unwrap_or(false);
 
         let media = json!({
             "encrypt_query_param": encrypted_query_param,
@@ -1602,7 +1808,9 @@ impl WeixinHandle {
             "encrypt_type": 1,
         });
         let media_item = match item_kind {
-            OutboundKind::Image => json!({"type": ITEM_IMAGE, "image_item": {"media": media, "mid_size": ciphertext.len()}}),
+            OutboundKind::Image => {
+                json!({"type": ITEM_IMAGE, "image_item": {"media": media, "mid_size": ciphertext.len()}})
+            }
             OutboundKind::Video => json!({
                 "type": ITEM_VIDEO,
                 "video_item": {"media": media, "video_size": ciphertext.len(), "play_length": 0, "video_md5": rawfilemd5},
@@ -1625,13 +1833,23 @@ impl WeixinHandle {
 
         if !caption.trim().is_empty() {
             let caption_client_id = format!("ulnclaw-weixin-{}", new_client_id_hex());
-            self.send_message_raw(chat_id, json!([{"type": ITEM_TEXT, "text_item": {"text": format_message(caption)}}]), context_token.as_deref(), &caption_client_id)
-                .await?;
+            self.send_message_raw(
+                chat_id,
+                json!([{"type": ITEM_TEXT, "text_item": {"text": format_message(caption)}}]),
+                context_token.as_deref(),
+                &caption_client_id,
+            )
+            .await?;
         }
 
         let last_message_id = format!("ulnclaw-weixin-{}", new_client_id_hex());
-        self.send_message_raw(chat_id, json!([media_item]), context_token.as_deref(), &last_message_id)
-            .await?;
+        self.send_message_raw(
+            chat_id,
+            json!([media_item]),
+            context_token.as_deref(),
+            &last_message_id,
+        )
+        .await?;
         Ok(last_message_id)
     }
 
@@ -1676,9 +1894,16 @@ impl WeixinHandle {
                 if let Some(context_token) = context_token {
                     payload["context_token"] = json!(context_token);
                 }
-                match self.ilink_post(EP_GET_CONFIG, payload, CONFIG_TIMEOUT_MS).await {
+                match self
+                    .ilink_post(EP_GET_CONFIG, payload, CONFIG_TIMEOUT_MS)
+                    .await
+                {
                     Ok(resp) => {
-                        let ticket = resp.get("typing_ticket").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                        let ticket = resp
+                            .get("typing_ticket")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
                         if ticket.is_empty() {
                             return;
                         }
@@ -1690,7 +1915,9 @@ impl WeixinHandle {
             }
         };
         let payload = json!({ "ilink_user_id": chat_id, "typing_ticket": ticket, "status": 1 });
-        self.ilink_post(EP_SEND_TYPING, payload, CONFIG_TIMEOUT_MS).await.ok();
+        self.ilink_post(EP_SEND_TYPING, payload, CONFIG_TIMEOUT_MS)
+            .await
+            .ok();
     }
 }
 
@@ -1754,7 +1981,11 @@ struct Runner {
 }
 
 /// Start the weixin adapter (hermes `WeixinAdapter.connect` + poll loop).
-pub async fn run(cfg: WeixinConfig, dispatcher: Arc<Dispatcher>, pairing: Option<Arc<PairingStore>>) {
+pub async fn run(
+    cfg: WeixinConfig,
+    dispatcher: Arc<Dispatcher>,
+    pairing: Option<Arc<PairingStore>>,
+) {
     let home = crate::config::ulnclaw_home();
     let account_id = resolve_account_id(&cfg);
     let token = resolve_token(&cfg, &home);
@@ -1793,7 +2024,11 @@ pub async fn run(cfg: WeixinConfig, dispatcher: Arc<Dispatcher>, pairing: Option
         batches: Mutex::new(HashMap::new()),
     });
 
-    eprintln!("[weixin] connected account={} base={}", safe_id(&account_id), base_url);
+    eprintln!(
+        "[weixin] connected account={} base={}",
+        safe_id(&account_id),
+        base_url
+    );
     if cfg.group_policy != "disabled" {
         eprintln!(
             "[weixin] group_policy={} is set, but QR-login connects an iLink bot identity that \
@@ -1825,7 +2060,9 @@ struct WeixinSender {
 #[async_trait::async_trait]
 impl crate::messaging::PlatformSender for WeixinSender {
     async fn send_text(&self, chat_id: &str, text: &str) {
-        self.handle.send_text(chat_id, text, self.split_multiline).await;
+        self.handle
+            .send_text(chat_id, text, self.split_multiline)
+            .await;
     }
 }
 
@@ -1860,7 +2097,11 @@ async fn poll_loop(runner: Arc<Runner>) {
                 let bad_ret = ret.map(|r| r != 0).unwrap_or(false);
                 let bad_err = errcode.map(|e| e != 0).unwrap_or(false);
                 if bad_ret || bad_err {
-                    let errmsg = response.get("errmsg").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let errmsg = response
+                        .get("errmsg")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
                     let session_expired = ret == Some(SESSION_EXPIRED_ERRCODE)
                         || errcode == Some(SESSION_EXPIRED_ERRCODE)
                         || is_stale_session_ret(ret, errcode, Some(&errmsg));
@@ -1897,20 +2138,32 @@ async fn poll_loop(runner: Arc<Runner>) {
                     save_sync_buf(&runner.home, &runner.handle.account_id, &new_sync_buf);
                 }
 
-                let msgs = response.get("msgs").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                let msgs = response
+                    .get("msgs")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
                 for message in msgs {
                     let runner = runner.clone();
                     tokio::spawn(async move {
                         if let Err(e) = process_message(&runner, &message).await {
-                            let from = message.get("from_user_id").and_then(|v| v.as_str()).unwrap_or("");
-                            eprintln!("[weixin] unhandled inbound error from={}: {e}", safe_id(from));
+                            let from = message
+                                .get("from_user_id")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            eprintln!(
+                                "[weixin] unhandled inbound error from={}: {e}",
+                                safe_id(from)
+                            );
                         }
                     });
                 }
             }
             Err(e) => {
                 consecutive_failures += 1;
-                eprintln!("[weixin] poll error ({consecutive_failures}/{MAX_CONSECUTIVE_FAILURES}): {e}");
+                eprintln!(
+                    "[weixin] poll error ({consecutive_failures}/{MAX_CONSECUTIVE_FAILURES}): {e}"
+                );
                 let delay = if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
                     BACKOFF_DELAY_SECONDS
                 } else {
@@ -1926,7 +2179,11 @@ async fn poll_loop(runner: Arc<Runner>) {
 }
 
 /// hermes `_get_updates` — timeout degrades to an empty batch.
-async fn get_updates(handle: &WeixinHandle, sync_buf: &str, timeout_ms: u64) -> std::result::Result<Value, String> {
+async fn get_updates(
+    handle: &WeixinHandle,
+    sync_buf: &str,
+    timeout_ms: u64,
+) -> std::result::Result<Value, String> {
     // iLink holds the connection server-side for ~timeout_ms; give the
     // client extra slack so transport timeouts don't mask real messages.
     let result = handle
@@ -1949,12 +2206,22 @@ async fn get_updates(handle: &WeixinHandle, sync_buf: &str, timeout_ms: u64) -> 
 
 /// hermes `_process_message` (safe wrapper inlined).
 async fn process_message(runner: &Arc<Runner>, message: &Value) -> std::result::Result<(), String> {
-    let sender_id = message.get("from_user_id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let sender_id = message
+        .get("from_user_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if sender_id.is_empty() || sender_id == runner.handle.account_id {
         return Ok(());
     }
 
-    let message_id = message.get("message_id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let message_id = message
+        .get("message_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if !message_id.is_empty() && runner.dedup.is_duplicate(&message_id) {
         return Ok(());
     }
@@ -1978,7 +2245,12 @@ async fn process_message(runner: &Arc<Runner>, message: &Value) -> std::result::
         match runner.cfg.group_policy.as_str() {
             "disabled" => return Ok(()),
             "allowlist" => {
-                if !runner.cfg.group_allow_from.iter().any(|id| *id == effective_chat_id) {
+                if !runner
+                    .cfg
+                    .group_allow_from
+                    .iter()
+                    .any(|id| *id == effective_chat_id)
+                {
                     return Ok(());
                 }
             }
@@ -1990,9 +2262,19 @@ async fn process_message(runner: &Arc<Runner>, message: &Value) -> std::result::
         return Ok(());
     }
 
-    let context_token = message.get("context_token").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let context_token = message
+        .get("context_token")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if !context_token.is_empty() {
-        runner.handle.tokens.lock().unwrap().set(&sender_id, &context_token);
+        runner
+            .handle
+            .tokens
+            .lock()
+            .unwrap()
+            .set(&sender_id, &context_token);
     }
 
     // Collect media from items and referenced messages (hermes
@@ -2000,7 +2282,11 @@ async fn process_message(runner: &Arc<Runner>, message: &Value) -> std::result::
     let mut attachments: Vec<MediaAttachment> = Vec::new();
     let mut items: Vec<Value> = item_list.clone();
     for item in &item_list {
-        if let Some(ref_item) = item.get("ref_msg").and_then(|v| v.get("message_item")).filter(|v| v.is_object()) {
+        if let Some(ref_item) = item
+            .get("ref_msg")
+            .and_then(|v| v.get("message_item"))
+            .filter(|v| v.is_object())
+        {
             items.push(ref_item.clone());
         }
     }
@@ -2039,7 +2325,15 @@ async fn process_message(runner: &Arc<Runner>, message: &Value) -> std::result::
     if !text.is_empty() && attachments.is_empty() {
         enqueue_text_event(runner, &effective_chat_id, &sender_id, &sender_id, &text);
     } else {
-        dispatch_event(runner, &effective_chat_id, &sender_id, &sender_id, &text, attachments).await;
+        dispatch_event(
+            runner,
+            &effective_chat_id,
+            &sender_id,
+            &sender_id,
+            &text,
+            attachments,
+        )
+        .await;
     }
     Ok(())
 }
@@ -2060,10 +2354,16 @@ fn dm_intake_allowed(runner: &Runner, sender_id: &str) -> bool {
         "pairing" => true,
         "open" => {
             matches!(
-                std::env::var("GATEWAY_ALLOW_ALL_USERS").unwrap_or_default().to_lowercase().as_str(),
+                std::env::var("GATEWAY_ALLOW_ALL_USERS")
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .as_str(),
                 "true" | "1" | "yes"
             ) || matches!(
-                std::env::var("WEIXIN_ALLOW_ALL_USERS").unwrap_or_default().to_lowercase().as_str(),
+                std::env::var("WEIXIN_ALLOW_ALL_USERS")
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .as_str(),
                 "true" | "1" | "yes"
             )
         }
@@ -2090,7 +2390,9 @@ async fn offer_pairing(runner: &Runner, sender_id: &str, chat_id: &str) {
         "[weixin] refusing message from {sender_id} — add it to messaging.weixin.allow_from or approve a pairing code"
     );
     if let Some(store) = &runner.pairing {
-        if let Some(reply) = crate::messaging::pairing_offer_public(store, "weixin", sender_id, sender_id) {
+        if let Some(reply) =
+            crate::messaging::pairing_offer_public(store, "weixin", sender_id, sender_id)
+        {
             if let Err(e) = runner.handle.send_text_chunk(chat_id, &reply).await {
                 eprintln!("[weixin] pairing reply failed: {e}");
             }
@@ -2104,20 +2406,33 @@ async fn collect_media(runner: &Arc<Runner>, item: &Value) -> Option<MediaAttach
     let home = crate::config::ulnclaw_home();
     match item_type {
         ITEM_IMAGE => {
-            let media = item.get("image_item").and_then(|v| v.get("media")).filter(|v| v.is_object());
+            let media = item
+                .get("image_item")
+                .and_then(|v| v.get("media"))
+                .filter(|v| v.is_object());
             let image_item = item.get("image_item").filter(|v| v.is_object());
             // hermes: image aeskey arrives as hex inside image_item, the
             // CDN reference carries the base64 form.
-            let aes_key_b64 = match image_item.and_then(|v| v.get("aeskey")).and_then(|v| v.as_str()) {
+            let aes_key_b64 = match image_item
+                .and_then(|v| v.get("aeskey"))
+                .and_then(|v| v.as_str())
+            {
                 Some(hex_key) if !hex_key.is_empty() => Some(base64_encode(hex_key.as_bytes())),
-                _ => media.and_then(|m| m.get("aes_key")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+                _ => media
+                    .and_then(|m| m.get("aes_key"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
             };
             let data = download_and_decrypt_media(
                 &runner.handle.client,
                 &runner.handle.cdn_base_url,
-                media.and_then(|m| m.get("encrypt_query_param")).and_then(|v| v.as_str()),
+                media
+                    .and_then(|m| m.get("encrypt_query_param"))
+                    .and_then(|v| v.as_str()),
                 aes_key_b64.as_deref(),
-                media.and_then(|m| m.get("full_url")).and_then(|v| v.as_str()),
+                media
+                    .and_then(|m| m.get("full_url"))
+                    .and_then(|v| v.as_str()),
                 Duration::from_secs(30),
             )
             .await
@@ -2129,13 +2444,22 @@ async fn collect_media(runner: &Arc<Runner>, item: &Value) -> Option<MediaAttach
             cache_attachment(&home, &data, "image/jpeg", "image.jpg")
         }
         ITEM_VIDEO => {
-            let media = item.get("video_item").and_then(|v| v.get("media")).filter(|v| v.is_object());
+            let media = item
+                .get("video_item")
+                .and_then(|v| v.get("media"))
+                .filter(|v| v.is_object());
             let data = download_and_decrypt_media(
                 &runner.handle.client,
                 &runner.handle.cdn_base_url,
-                media.and_then(|m| m.get("encrypt_query_param")).and_then(|v| v.as_str()),
-                media.and_then(|m| m.get("aes_key")).and_then(|v| v.as_str()),
-                media.and_then(|m| m.get("full_url")).and_then(|v| v.as_str()),
+                media
+                    .and_then(|m| m.get("encrypt_query_param"))
+                    .and_then(|v| v.as_str()),
+                media
+                    .and_then(|m| m.get("aes_key"))
+                    .and_then(|v| v.as_str()),
+                media
+                    .and_then(|m| m.get("full_url"))
+                    .and_then(|v| v.as_str()),
                 Duration::from_secs(120),
             )
             .await
@@ -2148,7 +2472,9 @@ async fn collect_media(runner: &Arc<Runner>, item: &Value) -> Option<MediaAttach
         }
         ITEM_FILE => {
             let file_item = item.get("file_item").filter(|v| v.is_object());
-            let media = file_item.and_then(|v| v.get("media")).filter(|v| v.is_object());
+            let media = file_item
+                .and_then(|v| v.get("media"))
+                .filter(|v| v.is_object());
             let filename = file_item
                 .and_then(|v| v.get("file_name"))
                 .and_then(|v| v.as_str())
@@ -2158,9 +2484,15 @@ async fn collect_media(runner: &Arc<Runner>, item: &Value) -> Option<MediaAttach
             let data = download_and_decrypt_media(
                 &runner.handle.client,
                 &runner.handle.cdn_base_url,
-                media.and_then(|m| m.get("encrypt_query_param")).and_then(|v| v.as_str()),
-                media.and_then(|m| m.get("aes_key")).and_then(|v| v.as_str()),
-                media.and_then(|m| m.get("full_url")).and_then(|v| v.as_str()),
+                media
+                    .and_then(|m| m.get("encrypt_query_param"))
+                    .and_then(|v| v.as_str()),
+                media
+                    .and_then(|m| m.get("aes_key"))
+                    .and_then(|v| v.as_str()),
+                media
+                    .and_then(|m| m.get("full_url"))
+                    .and_then(|v| v.as_str()),
                 Duration::from_secs(60),
             )
             .await
@@ -2173,16 +2505,24 @@ async fn collect_media(runner: &Arc<Runner>, item: &Value) -> Option<MediaAttach
         }
         ITEM_VOICE => {
             let voice_item = item.get("voice_item").filter(|v| v.is_object());
-            let media = voice_item.and_then(|v| v.get("media")).filter(|v| v.is_object());
+            let media = voice_item
+                .and_then(|v| v.get("media"))
+                .filter(|v| v.is_object());
             // hermes #27300: always download raw audio for the central STT
             // pipeline; Tencent's voice_item.text is unreliable for
             // non-Chinese speech.
             let data = download_and_decrypt_media(
                 &runner.handle.client,
                 &runner.handle.cdn_base_url,
-                media.and_then(|m| m.get("encrypt_query_param")).and_then(|v| v.as_str()),
-                media.and_then(|m| m.get("aes_key")).and_then(|v| v.as_str()),
-                media.and_then(|m| m.get("full_url")).and_then(|v| v.as_str()),
+                media
+                    .and_then(|m| m.get("encrypt_query_param"))
+                    .and_then(|v| v.as_str()),
+                media
+                    .and_then(|m| m.get("aes_key"))
+                    .and_then(|v| v.as_str()),
+                media
+                    .and_then(|m| m.get("full_url"))
+                    .and_then(|v| v.as_str()),
                 Duration::from_secs(60),
             )
             .await
@@ -2197,7 +2537,12 @@ async fn collect_media(runner: &Arc<Runner>, item: &Value) -> Option<MediaAttach
     }
 }
 
-fn cache_attachment(home: &Path, data: &[u8], mime: &str, filename_hint: &str) -> Option<MediaAttachment> {
+fn cache_attachment(
+    home: &Path,
+    data: &[u8],
+    mime: &str,
+    filename_hint: &str,
+) -> Option<MediaAttachment> {
     let path = crate::media_cache::cache_media_bytes(home, data, mime, filename_hint).ok()?;
     Some(MediaAttachment {
         path,
@@ -2211,20 +2556,28 @@ fn cache_attachment(home: &Path, data: &[u8], mime: &str, filename_hint: &str) -
 // Text debounce batching (hermes `_enqueue_text_event` / `_flush_text_batch`)
 // ---------------------------------------------------------------------------
 
-fn enqueue_text_event(runner: &Arc<Runner>, chat_id: &str, sender_id: &str, sender_name: &str, text: &str) {
+fn enqueue_text_event(
+    runner: &Arc<Runner>,
+    chat_id: &str,
+    sender_id: &str,
+    sender_name: &str,
+    text: &str,
+) {
     let chunk_len = text.chars().count();
     let generation;
     {
         let mut batches = runner.batches.lock().unwrap();
-        let entry = batches.entry(chat_id.to_string()).or_insert_with(|| PendingBatch {
-            text: String::new(),
-            last_chunk_len: 0,
-            generation: 0,
-            attachments: Vec::new(),
-            sender_id: sender_id.to_string(),
-            sender_name: sender_name.to_string(),
-            chat_id: chat_id.to_string(),
-        });
+        let entry = batches
+            .entry(chat_id.to_string())
+            .or_insert_with(|| PendingBatch {
+                text: String::new(),
+                last_chunk_len: 0,
+                generation: 0,
+                attachments: Vec::new(),
+                sender_id: sender_id.to_string(),
+                sender_name: sender_name.to_string(),
+                chat_id: chat_id.to_string(),
+            });
         if !text.is_empty() {
             if entry.text.is_empty() {
                 entry.text = text.to_string();
@@ -2311,7 +2664,9 @@ async fn dispatch_event(
         runner
             .dispatcher
             .send_with_ledger("weixin", chat_id, &reply_text, || {
-                runner.handle.send_text(chat_id, &reply_text, runner.cfg.split_multiline_messages)
+                runner
+                    .handle
+                    .send_text(chat_id, &reply_text, runner.cfg.split_multiline_messages)
             })
             .await;
     }
@@ -2319,7 +2674,11 @@ async fn dispatch_event(
 
 /// One-shot send helper for webhook/cron delivery (hermes
 /// `send_weixin_direct`).
-pub async fn send_weixin_direct(cfg: &WeixinConfig, chat_id: &str, message: &str) -> std::result::Result<(), String> {
+pub async fn send_weixin_direct(
+    cfg: &WeixinConfig,
+    chat_id: &str,
+    message: &str,
+) -> std::result::Result<(), String> {
     let home = crate::config::ulnclaw_home();
     let token = resolve_token(cfg, &home);
     if token.is_empty() {
@@ -2338,7 +2697,9 @@ pub async fn send_weixin_direct(cfg: &WeixinConfig, chat_id: &str, message: &str
         tokens: Mutex::new(ContextTokenStore::open(&home, chat_id)),
         circuit: Mutex::new(RateLimitCircuit::new()),
     };
-    handle.send_text(chat_id, message, cfg.split_multiline_messages).await;
+    handle
+        .send_text(chat_id, message, cfg.split_multiline_messages)
+        .await;
     Ok(())
 }
 
@@ -2411,13 +2772,19 @@ mod tests {
     #[test]
     fn normalize_markdown_collapses_blank_runs() {
         let input = "line one\n\n\n\nline two\n\n\nline three";
-        assert_eq!(normalize_markdown_blocks(input), "line one\n\nline two\n\nline three");
+        assert_eq!(
+            normalize_markdown_blocks(input),
+            "line one\n\nline two\n\nline three"
+        );
     }
 
     #[test]
     fn normalize_markdown_keeps_code_fence_blanks() {
         let input = "before\n```\ncode\n\ncode\n```\nafter";
-        assert_eq!(normalize_markdown_blocks(input), "before\n```\ncode\n\ncode\n```\nafter");
+        assert_eq!(
+            normalize_markdown_blocks(input),
+            "before\n```\ncode\n\ncode\n```\nafter"
+        );
     }
 
     #[test]
@@ -2425,7 +2792,10 @@ mod tests {
         let long = vec!["word"; 40].join(" "); // ~199 chars
         let wrapped = wrap_copy_friendly_lines(&long);
         for line in wrapped.lines() {
-            assert!(line.chars().count() <= COPY_LINE_WIDTH, "line too long: {line}");
+            assert!(
+                line.chars().count() <= COPY_LINE_WIDTH,
+                "line too long: {line}"
+            );
         }
         assert!(wrapped.lines().count() > 1);
         // Words survive the wrap.
@@ -2435,7 +2805,10 @@ mod tests {
     #[test]
     fn wrap_copy_friendly_leaves_code_and_tables() {
         let long_in_code = vec!["x"; 200].join("");
-        let input = format!("```\n{long_in_code}\n```\n| {} | b |\n", vec!["y"; 200].join(""));
+        let input = format!(
+            "```\n{long_in_code}\n```\n| {} | b |\n",
+            vec!["y"; 200].join("")
+        );
         let wrapped = wrap_copy_friendly_lines(&input);
         assert_eq!(wrapped, input.trim());
     }
@@ -2444,7 +2817,10 @@ mod tests {
     fn split_markdown_blocks_keeps_fences_intact() {
         let input = "para one\n\n```\ncode\ngated\n```\n\npara two";
         let blocks = split_markdown_blocks(input);
-        assert_eq!(blocks, vec!["para one", "```\ncode\ngated\n```", "para two"]);
+        assert_eq!(
+            blocks,
+            vec!["para one", "```\ncode\ngated\n```", "para two"]
+        );
     }
 
     #[test]
@@ -2471,7 +2847,9 @@ mod tests {
     fn split_long_content_respects_limit() {
         let mut content = String::new();
         for i in 0..60 {
-            content.push_str(&format!("Paragraph {i} with a bit of body text to push the size up.\n\n"));
+            content.push_str(&format!(
+                "Paragraph {i} with a bit of body text to push the size up.\n\n"
+            ));
         }
         let chunks = split_text_for_weixin_delivery(&content, MAX_MESSAGE_LENGTH, false);
         assert!(chunks.len() > 1);
@@ -2512,13 +2890,18 @@ mod tests {
             "text_item": {"text": "answering"},
             "ref_msg": {"title": "Alice", "message_item": {"type": 1, "text_item": {"text": "question?"}}},
         })];
-        assert_eq!(extract_text(&quoted_text), "[引用: Alice | question?]\nanswering");
+        assert_eq!(
+            extract_text(&quoted_text),
+            "[引用: Alice | question?]\nanswering"
+        );
     }
 
     #[test]
     fn extract_text_voice_stt_fallback() {
         // Voice with media → empty (download raw audio for STT instead).
-        let with_media = vec![json!({"type": 3, "voice_item": {"text": "hi", "media": {"encrypt_query_param": "x"}}})];
+        let with_media = vec![
+            json!({"type": 3, "voice_item": {"text": "hi", "media": {"encrypt_query_param": "x"}}}),
+        ];
         assert_eq!(extract_text(&with_media), "");
 
         // Voice without media → use Tencent's transcription with a marker.
@@ -2532,10 +2915,16 @@ mod tests {
     #[test]
     fn guess_chat_type_group_and_dm() {
         let group = json!({"from_user_id": "u1", "room_id": "123@chatroom", "msg_type": 1});
-        assert_eq!(guess_chat_type(&group, "bot"), ("group".into(), "123@chatroom".into()));
+        assert_eq!(
+            guess_chat_type(&group, "bot"),
+            ("group".into(), "123@chatroom".into())
+        );
 
         let to_other = json!({"from_user_id": "u1", "to_user_id": "someone-else", "msg_type": 1});
-        assert_eq!(guess_chat_type(&to_other, "bot"), ("group".into(), "someone-else".into()));
+        assert_eq!(
+            guess_chat_type(&to_other, "bot"),
+            ("group".into(), "someone-else".into())
+        );
 
         let dm = json!({"from_user_id": "u1", "to_user_id": "bot", "msg_type": 1});
         assert_eq!(guess_chat_type(&dm, "bot"), ("dm".into(), "u1".into()));
@@ -2582,8 +2971,16 @@ mod tests {
     fn stale_session_detection() {
         assert!(is_stale_session_ret(Some(-2), None, Some("Unknown error")));
         assert!(is_stale_session_ret(None, Some(-2), Some("unknown error")));
-        assert!(!is_stale_session_ret(Some(-2), None, Some("frequency limit")));
-        assert!(!is_stale_session_ret(Some(0), Some(0), Some("unknown error")));
+        assert!(!is_stale_session_ret(
+            Some(-2),
+            None,
+            Some("frequency limit")
+        ));
+        assert!(!is_stale_session_ret(
+            Some(0),
+            Some(0),
+            Some("unknown error")
+        ));
     }
 
     #[test]
@@ -2593,9 +2990,12 @@ mod tests {
         assert_eq!(packed, vec!["aaaa\n\nbbbb", "cc"]);
 
         let oversized: Vec<String> = vec!["x".repeat(25)];
-        let packed = greedy_pack_blocks(&oversized, 10, "\n", Some(&|block: &str| {
-            split_oversized_block(block, 10)
-        }));
+        let packed = greedy_pack_blocks(
+            &oversized,
+            10,
+            "\n",
+            Some(&|block: &str| split_oversized_block(block, 10)),
+        );
         assert!(packed.iter().all(|c| c.chars().count() <= 10));
         assert_eq!(packed.join("").chars().count(), 25);
     }

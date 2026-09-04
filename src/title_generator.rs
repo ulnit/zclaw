@@ -131,7 +131,6 @@ pub async fn generate_title_forced(
     user_message: &str,
     assistant_response: &str,
 ) -> Option<String> {
-
     // Truncate long messages to keep the request small.
     let user_snippet = truncate_chars(user_message, SNIPPET_CHARS);
     let assistant_snippet = truncate_chars(assistant_response, SNIPPET_CHARS);
@@ -182,9 +181,9 @@ pub async fn generate_title_forced(
         temperature: Some(0.3),
         stream: false,
         stop: None,
-    
-    images: None,
-};
+
+        images: None,
+    };
 
     let content = match resolution.provider.chat_completion(request).await {
         Ok(response) => response.content.unwrap_or_default(),
@@ -235,13 +234,8 @@ pub fn maybe_auto_title(
             _ => {}
         }
 
-        let Some(title) = generate_title(
-            &config,
-            main_provider,
-            &user_message,
-            &assistant_response,
-        )
-        .await
+        let Some(title) =
+            generate_title(&config, main_provider, &user_message, &assistant_response).await
         else {
             return;
         };
@@ -268,10 +262,22 @@ mod tests {
 
     #[test]
     fn clean_title_strips_quotes_and_prefix() {
-        assert_eq!(clean_title("\"Fix the build\"").as_deref(), Some("Fix the build"));
-        assert_eq!(clean_title("'Fix the build'").as_deref(), Some("Fix the build"));
-        assert_eq!(clean_title("Title: Fix the build").as_deref(), Some("Fix the build"));
-        assert_eq!(clean_title("title:   Fix the build").as_deref(), Some("Fix the build"));
+        assert_eq!(
+            clean_title("\"Fix the build\"").as_deref(),
+            Some("Fix the build")
+        );
+        assert_eq!(
+            clean_title("'Fix the build'").as_deref(),
+            Some("Fix the build")
+        );
+        assert_eq!(
+            clean_title("Title: Fix the build").as_deref(),
+            Some("Fix the build")
+        );
+        assert_eq!(
+            clean_title("title:   Fix the build").as_deref(),
+            Some("Fix the build")
+        );
     }
 
     #[test]

@@ -129,7 +129,10 @@ impl Default for QQBotConfig {
 }
 
 fn env_or_none(name: &str) -> Option<String> {
-    std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 pub fn resolve_app_id(cfg: &QQBotConfig) -> String {
@@ -142,7 +145,11 @@ pub fn resolve_app_id(cfg: &QQBotConfig) -> String {
     }
     // Scan-to-configure credentials persisted by `ulnclaw qq login`.
     load_onboard_credentials(&crate::config::ulnclaw_home())
-        .and_then(|v| v.get("app_id").and_then(|id| id.as_str()).map(|s| s.to_string()))
+        .and_then(|v| {
+            v.get("app_id")
+                .and_then(|id| id.as_str())
+                .map(|s| s.to_string())
+        })
         .unwrap_or_default()
 }
 
@@ -166,7 +173,10 @@ pub fn resolve_client_secret(cfg: &QQBotConfig) -> String {
 fn open_dm_opted_in() -> bool {
     for var in ["GATEWAY_ALLOW_ALL_USERS", "QQ_ALLOW_ALL_USERS"] {
         if matches!(
-            std::env::var(var).unwrap_or_default().to_lowercase().as_str(),
+            std::env::var(var)
+                .unwrap_or_default()
+                .to_lowercase()
+                .as_str(),
             "true" | "1" | "yes"
         ) {
             return true;
@@ -285,7 +295,9 @@ fn getrandom_fill(bytes: &mut [u8]) {
         .map(|d| d.as_secs())
         .unwrap_or(0x9E3779B97F4A7C15);
     for slot in bytes.iter_mut() {
-        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         *slot = (seed >> 33) as u8;
     }
 }
@@ -359,7 +371,10 @@ impl QQHandle {
             .await
             .map_err(|e| format!("Failed to get QQ Bot access token: {e}"))?;
         let status = response.status();
-        let data: Value = response.json().await.map_err(|e| format!("QQ token response: {e}"))?;
+        let data: Value = response
+            .json()
+            .await
+            .map_err(|e| format!("QQ token response: {e}"))?;
         if !status.is_success() {
             return Err(format!("QQ token HTTP {}: {data}", status.as_u16()));
         }
@@ -369,7 +384,10 @@ impl QQHandle {
             .filter(|t| !t.is_empty())
             .ok_or_else(|| format!("QQ Bot token response missing access_token: {data}"))?
             .to_string();
-        let expires_in = data.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(7200);
+        let expires_in = data
+            .get("expires_in")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(7200);
         self.token.lock().unwrap().replace(TokenCache {
             token: token.clone(),
             expires_at: Instant::now() + Duration::from_secs(expires_in),
@@ -398,7 +416,10 @@ impl QQHandle {
         if let Some(body) = body {
             request = request.json(body);
         }
-        let response = request.send().await.map_err(|e| format!("QQ Bot API timeout [{path}]: {e}"))?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| format!("QQ Bot API timeout [{path}]: {e}"))?;
         let status = response.status();
         let data: Value = response.json().await.unwrap_or(Value::Null);
         if status.as_u16() >= 400 {
@@ -406,7 +427,10 @@ impl QQHandle {
                 .get("message")
                 .map(|m| m.to_string())
                 .unwrap_or_else(|| data.to_string());
-            return Err(format!("QQ Bot API error [{}] {path}: {message}", status.as_u16()));
+            return Err(format!(
+                "QQ Bot API error [{}] {path}: {message}",
+                status.as_u16()
+            ));
         }
         Ok(data)
     }
@@ -456,7 +480,10 @@ impl QQHandle {
         }
         let formatted = self.format_message(content);
         let reply_to = self.last_msg_id.lock().unwrap().get(chat_id).cloned();
-        for (idx, chunk) in chunk_reply(&formatted, MAX_MESSAGE_LENGTH).iter().enumerate() {
+        for (idx, chunk) in chunk_reply(&formatted, MAX_MESSAGE_LENGTH)
+            .iter()
+            .enumerate()
+        {
             // Only the first chunk rides the passive reply.
             let reply = if idx == 0 { reply_to.clone() } else { None };
             if let Err(e) = self.send_chunk(chat_id, chunk, reply.as_deref()).await {
@@ -496,7 +523,10 @@ impl QQHandle {
                     last_error = e;
                     if attempt < 2 {
                         let delay = 1.0f64 * 2f64.powi(attempt as i32);
-                        eprintln!("[qqbot] send retry {}/3 after {delay:.1}s: {last_error}", attempt + 1);
+                        eprintln!(
+                            "[qqbot] send retry {}/3 after {delay:.1}s: {last_error}",
+                            attempt + 1
+                        );
                         tokio::time::sleep(Duration::from_secs_f64(delay)).await;
                     }
                 }
@@ -506,7 +536,12 @@ impl QQHandle {
     }
 
     /// hermes `_build_text_body` + `_send_c2c_text`.
-    async fn send_c2c_text(&self, openid: &str, content: &str, reply_to: Option<&str>) -> std::result::Result<(), String> {
+    async fn send_c2c_text(
+        &self,
+        openid: &str,
+        content: &str,
+        reply_to: Option<&str>,
+    ) -> std::result::Result<(), String> {
         let body = self.build_text_body(content, reply_to);
         self.api_request(
             reqwest::Method::POST,
@@ -518,7 +553,12 @@ impl QQHandle {
         Ok(())
     }
 
-    async fn send_group_text(&self, group_openid: &str, content: &str, reply_to: Option<&str>) -> std::result::Result<(), String> {
+    async fn send_group_text(
+        &self,
+        group_openid: &str,
+        content: &str,
+        reply_to: Option<&str>,
+    ) -> std::result::Result<(), String> {
         let body = self.build_text_body(content, reply_to);
         self.api_request(
             reqwest::Method::POST,
@@ -530,7 +570,12 @@ impl QQHandle {
         Ok(())
     }
 
-    async fn send_guild_text(&self, channel_id: &str, content: &str, reply_to: Option<&str>) -> std::result::Result<(), String> {
+    async fn send_guild_text(
+        &self,
+        channel_id: &str,
+        content: &str,
+        reply_to: Option<&str>,
+    ) -> std::result::Result<(), String> {
         let truncated: String = content.chars().take(MAX_MESSAGE_LENGTH).collect();
         let mut body = json!({ "content": truncated });
         if let Some(reply_to) = reply_to {
@@ -548,7 +593,12 @@ impl QQHandle {
 
     /// Guild-DM reply via `/dms/<guild_id>/messages` (hermes left the
     /// `dm` chat type unrouted; ulnclaw completes the path).
-    async fn send_dm_text(&self, guild_id: &str, content: &str, reply_to: Option<&str>) -> std::result::Result<(), String> {
+    async fn send_dm_text(
+        &self,
+        guild_id: &str,
+        content: &str,
+        reply_to: Option<&str>,
+    ) -> std::result::Result<(), String> {
         let truncated: String = content.chars().take(MAX_MESSAGE_LENGTH).collect();
         let mut body = json!({ "content": truncated });
         if let Some(reply_to) = reply_to {
@@ -784,18 +834,26 @@ impl QQHandle {
         let mut last_error = String::new();
         for attempt in 0..3u32 {
             match self
-                .api_request(reqwest::Method::POST, &path, Some(&body), Duration::from_secs(FILE_UPLOAD_TIMEOUT_SECS))
+                .api_request(
+                    reqwest::Method::POST,
+                    &path,
+                    Some(&body),
+                    Duration::from_secs(FILE_UPLOAD_TIMEOUT_SECS),
+                )
                 .await
             {
                 Ok(data) => return Ok(data),
                 Err(e) => {
-                    let permanent = ["400", "401", "Invalid", "timeout", "Timeout"].iter().any(|k| e.contains(k));
+                    let permanent = ["400", "401", "Invalid", "timeout", "Timeout"]
+                        .iter()
+                        .any(|k| e.contains(k));
                     if permanent {
                         return Err(e);
                     }
                     last_error = e;
                     if attempt < 2 {
-                        tokio::time::sleep(Duration::from_secs_f64(1.5 * (attempt + 1) as f64)).await;
+                        tokio::time::sleep(Duration::from_secs_f64(1.5 * (attempt + 1) as f64))
+                            .await;
                     }
                 }
             }
@@ -805,7 +863,12 @@ impl QQHandle {
 
     /// hermes `_send_media` for local files: chunked upload for big files,
     /// inline base64 under the ~10 MB API cap, then a msg_type 7 message.
-    pub async fn send_media_file(&self, chat_id: &str, path: &Path, caption: &str) -> std::result::Result<(), String> {
+    pub async fn send_media_file(
+        &self,
+        chat_id: &str,
+        path: &Path,
+        caption: &str,
+    ) -> std::result::Result<(), String> {
         let chat_type = self.chat_type(chat_id);
         if chat_type == "guild" || chat_type == "dm" {
             return Err("Guild channels don't support native media upload via this path".into());
@@ -813,7 +876,10 @@ impl QQHandle {
         let metadata = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
         let file_size = metadata.len() as usize;
         let file_type = media_type_for_path(path);
-        let file_name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "media".into());
+        let file_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "media".into());
 
         // Inline base64 under the cap keeps small files off the chunked path.
         const INLINE_CAP: usize = 8 * 1024 * 1024;
@@ -827,12 +893,19 @@ impl QQHandle {
                 file_type,
                 None,
                 Some(&b64),
-                if file_type == MEDIA_TYPE_FILE { Some(file_name.as_str()) } else { None },
+                if file_type == MEDIA_TYPE_FILE {
+                    Some(file_name.as_str())
+                } else {
+                    None
+                },
             )
             .await?
         } else {
-            let upload_id = self.chunked_upload(&chat_type, chat_id, file_type, &file_name, path, file_size).await?;
-            self.complete_upload(&chat_type, chat_id, &upload_id).await?
+            let upload_id = self
+                .chunked_upload(&chat_type, chat_id, file_type, &file_name, path, file_size)
+                .await?;
+            self.complete_upload(&chat_type, chat_id, &upload_id)
+                .await?
         };
 
         let file_info = upload
@@ -857,8 +930,13 @@ impl QQHandle {
         } else {
             format!("/v2/groups/{chat_id}/messages")
         };
-        self.api_request(reqwest::Method::POST, &endpoint, Some(&body), Duration::from_secs(DEFAULT_API_TIMEOUT_SECS))
-            .await?;
+        self.api_request(
+            reqwest::Method::POST,
+            &endpoint,
+            Some(&body),
+            Duration::from_secs(DEFAULT_API_TIMEOUT_SECS),
+        )
+        .await?;
         Ok(())
     }
 
@@ -886,7 +964,11 @@ impl QQHandle {
         let sha1 = sha1_hex(&data);
         let md5_10m = md5_hex(&data[..file_size.min(MD5_10M_SIZE)]);
 
-        let base = if chat_type == "c2c" { "/v2/users" } else { "/v2/groups" };
+        let base = if chat_type == "c2c" {
+            "/v2/users"
+        } else {
+            "/v2/groups"
+        };
         let prepare_body = json!({
             "file_type": file_type,
             "file_name": file_name,
@@ -905,7 +987,9 @@ impl QQHandle {
             .await
             .map_err(|e| {
                 if e.contains(&BIZ_CODE_DAILY_LIMIT.to_string()) {
-                    format!("QQ daily upload limit exceeded for {file_name:?}. Retry tomorrow. ({e})")
+                    format!(
+                        "QQ daily upload limit exceeded for {file_name:?}. Retry tomorrow. ({e})"
+                    )
                 } else {
                     e
                 }
@@ -920,15 +1004,28 @@ impl QQHandle {
             .get("upload_id")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| format!("upload_prepare response missing upload_id: {}", truncate_str(&raw.to_string(), 200)))?
+            .ok_or_else(|| {
+                format!(
+                    "upload_prepare response missing upload_id: {}",
+                    truncate_str(&raw.to_string(), 200)
+                )
+            })?
             .to_string();
         let block_size = src.get("block_size").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-        let retry_timeout = src.get("retry_timeout").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let retry_timeout = src
+            .get("retry_timeout")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         let raw_parts = src
             .get("parts")
             .or_else(|| src.get("part_list"))
             .and_then(|v| v.as_array())
-            .ok_or_else(|| format!("upload_prepare response missing parts: {}", truncate_str(&raw.to_string(), 200)))?;
+            .ok_or_else(|| {
+                format!(
+                    "upload_prepare response missing parts: {}",
+                    truncate_str(&raw.to_string(), 200)
+                )
+            })?;
 
         for part in raw_parts {
             let part_index = part
@@ -943,21 +1040,37 @@ impl QQHandle {
                 .unwrap_or("")
                 .to_string();
             if presigned_url.is_empty() {
-                return Err(format!("upload_prepare part {part_index} missing presigned_url"));
+                return Err(format!(
+                    "upload_prepare part {part_index} missing presigned_url"
+                ));
             }
             let offset = part_index * block_size;
             let length = block_size.min(file_size.saturating_sub(offset));
             let chunk = &data[offset..offset + length];
             let part_md5 = md5_hex(chunk);
 
-            self.put_presigned(&presigned_url, chunk, part_index).await?;
-            self.part_finish(base, target_id, &upload_id, part_index, length, &part_md5, retry_timeout)
+            self.put_presigned(&presigned_url, chunk, part_index)
                 .await?;
+            self.part_finish(
+                base,
+                target_id,
+                &upload_id,
+                part_index,
+                length,
+                &part_md5,
+                retry_timeout,
+            )
+            .await?;
         }
         Ok(upload_id)
     }
 
-    async fn put_presigned(&self, url: &str, data: &[u8], part_index: usize) -> std::result::Result<(), String> {
+    async fn put_presigned(
+        &self,
+        url: &str,
+        data: &[u8],
+        part_index: usize,
+    ) -> std::result::Result<(), String> {
         let mut last_error = String::new();
         for attempt in 0..=PART_UPLOAD_MAX_RETRIES {
             let result = self
@@ -970,7 +1083,12 @@ impl QQHandle {
                 .await;
             match result {
                 Ok(response) if response.status().is_success() => return Ok(()),
-                Ok(response) => last_error = format!("COS PUT part {part_index} HTTP {}", response.status().as_u16()),
+                Ok(response) => {
+                    last_error = format!(
+                        "COS PUT part {part_index} HTTP {}",
+                        response.status().as_u16()
+                    )
+                }
                 Err(e) => last_error = format!("COS PUT part {part_index}: {e}"),
             }
             if attempt < PART_UPLOAD_MAX_RETRIES {
@@ -1016,18 +1134,30 @@ impl QQHandle {
                     if retry_timeout > 0.0 && start.elapsed().as_secs_f64() >= retry_timeout {
                         return Err(format!("upload_part_finish persistent retry timed out after {retry_timeout:.0}s: {e}"));
                     }
-                    if retry_timeout <= 0.0 && start.elapsed() > Duration::from_secs(_PART_FINISH_LOCAL_CAP_SECS) {
+                    if retry_timeout <= 0.0
+                        && start.elapsed() > Duration::from_secs(_PART_FINISH_LOCAL_CAP_SECS)
+                    {
                         return Err(format!("upload_part_finish retry cap reached: {e}"));
                     }
-                    tokio::time::sleep(Duration::from_secs_f64(PART_FINISH_RETRY_INTERVAL_SECS)).await;
+                    tokio::time::sleep(Duration::from_secs_f64(PART_FINISH_RETRY_INTERVAL_SECS))
+                        .await;
                 }
             }
         }
     }
 
     /// hermes `_complete_upload` (exponential-backoff retry).
-    async fn complete_upload(&self, chat_type: &str, target_id: &str, upload_id: &str) -> std::result::Result<Value, String> {
-        let base = if chat_type == "c2c" { "/v2/users" } else { "/v2/groups" };
+    async fn complete_upload(
+        &self,
+        chat_type: &str,
+        target_id: &str,
+        upload_id: &str,
+    ) -> std::result::Result<Value, String> {
+        let base = if chat_type == "c2c" {
+            "/v2/users"
+        } else {
+            "/v2/groups"
+        };
         let body = json!({ "upload_id": upload_id });
         let mut last_error = String::new();
         for attempt in 0..=COMPLETE_UPLOAD_MAX_RETRIES {
@@ -1050,7 +1180,10 @@ impl QQHandle {
                 }
             }
         }
-        Err(format!("complete_upload failed after {} attempts: {last_error}", COMPLETE_UPLOAD_MAX_RETRIES + 1))
+        Err(format!(
+            "complete_upload failed after {} attempts: {last_error}",
+            COMPLETE_UPLOAD_MAX_RETRIES + 1
+        ))
     }
 }
 
@@ -1060,14 +1193,22 @@ const _PART_FINISH_LOCAL_CAP_SECS: u64 = 120;
 
 fn media_type_for_path(path: &Path) -> i64 {
     let mime = crate::media_cache::mime_for_ext(path);
-    let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
     if mime.starts_with("image/") {
         return MEDIA_TYPE_IMAGE;
     }
     if mime.starts_with("video/") {
         return MEDIA_TYPE_VIDEO;
     }
-    if mime.starts_with("audio/") || matches!(ext.as_str(), "silk" | "ogg" | "opus" | "mp3" | "wav" | "m4a" | "amr") {
+    if mime.starts_with("audio/")
+        || matches!(
+            ext.as_str(),
+            "silk" | "ogg" | "opus" | "mp3" | "wav" | "m4a" | "amr"
+        )
+    {
         return MEDIA_TYPE_VOICE;
     }
     MEDIA_TYPE_FILE
@@ -1121,7 +1262,11 @@ fn dedup_check(seen: &mut HashMap<String, Instant>, msg_id: &str) -> bool {
 }
 
 /// Start the QQ Bot adapter (token + WS gateway + REST outbound).
-pub async fn run(cfg: QQBotConfig, dispatcher: Arc<Dispatcher>, pairing: Option<Arc<PairingStore>>) {
+pub async fn run(
+    cfg: QQBotConfig,
+    dispatcher: Arc<Dispatcher>,
+    pairing: Option<Arc<PairingStore>>,
+) {
     let app_id = resolve_app_id(&cfg);
     let client_secret = resolve_client_secret(&cfg);
     if app_id.is_empty() || client_secret.is_empty() {
@@ -1283,11 +1428,19 @@ async fn listen_loop(runner: Arc<Runner>) {
 
 /// One WebSocket connection: Hello → Identify/Resume, heartbeat, dispatch.
 /// Returns Ok(()) on clean end, Err(close_code) otherwise.
-async fn run_ws_session(runner: &Arc<Runner>, gateway_url: &str, session: &mut WsSession) -> std::result::Result<(), u16> {
+async fn run_ws_session(
+    runner: &Arc<Runner>,
+    gateway_url: &str,
+    session: &mut WsSession,
+) -> std::result::Result<(), u16> {
     use futures::{SinkExt, StreamExt};
     use tokio_tungstenite::tungstenite::Message as WsMessage;
 
-    let connect = tokio::time::timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS + 10), tokio_tungstenite::connect_async(gateway_url)).await;
+    let connect = tokio::time::timeout(
+        Duration::from_secs(CONNECT_TIMEOUT_SECS + 10),
+        tokio_tungstenite::connect_async(gateway_url),
+    )
+    .await;
     let (ws, _) = match connect {
         Ok(Ok(pair)) => pair,
         Ok(Err(e)) => return Err(close_code_from_error(&e.to_string())),
@@ -1308,7 +1461,11 @@ async fn run_ws_session(runner: &Arc<Runner>, gateway_url: &str, session: &mut W
         if identified && last_heartbeat.elapsed() >= heartbeat_interval {
             let seq = session.last_seq;
             let payload = json!({ "op": 1, "d": seq });
-            if sink.send(WsMessage::Text(payload.to_string())).await.is_err() {
+            if sink
+                .send(WsMessage::Text(payload.to_string()))
+                .await
+                .is_err()
+            {
                 runner.handle.connected.store(false, Ordering::SeqCst);
                 return Err(0);
             }
@@ -1329,9 +1486,14 @@ async fn run_ws_session(runner: &Arc<Runner>, gateway_url: &str, session: &mut W
             Err(_) => continue, // poll tick — loop back to heartbeat check
         };
 
-        let WsMessage::Text(text) = message else { continue };
+        let WsMessage::Text(text) = message else {
+            continue;
+        };
         let Ok(payload) = serde_json::from_str::<Value>(&text) else {
-            eprintln!("[qqbot] failed to parse payload: {}", truncate_str(&text, 120));
+            eprintln!(
+                "[qqbot] failed to parse payload: {}",
+                truncate_str(&text, 120)
+            );
             continue;
         };
         let op = payload.get("op").and_then(|v| v.as_u64());
@@ -1399,12 +1561,18 @@ async fn run_ws_session(runner: &Arc<Runner>, gateway_url: &str, session: &mut W
                 let d = payload.get("d").cloned().unwrap_or(Value::Null);
                 match event_type {
                     "READY" => {
-                        session.session_id = d.get("session_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        session.session_id = d
+                            .get("session_id")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
                         eprintln!("[qqbot] Ready, session_id={:?}", session.session_id);
                     }
                     "RESUMED" => eprintln!("[qqbot] Session resumed"),
-                    "C2C_MESSAGE_CREATE" | "GROUP_AT_MESSAGE_CREATE" | "DIRECT_MESSAGE_CREATE"
-                    | "GUILD_MESSAGE_CREATE" | "GUILD_AT_MESSAGE_CREATE" => {
+                    "C2C_MESSAGE_CREATE"
+                    | "GROUP_AT_MESSAGE_CREATE"
+                    | "DIRECT_MESSAGE_CREATE"
+                    | "GUILD_MESSAGE_CREATE"
+                    | "GUILD_AT_MESSAGE_CREATE" => {
                         let runner = runner.clone();
                         let event_type = event_type.to_string();
                         tokio::spawn(async move {
@@ -1458,17 +1626,33 @@ fn close_code_from_error(text: &str) -> u16 {
 // ---------------------------------------------------------------------------
 
 async fn on_message(runner: &Arc<Runner>, event_type: &str, d: &Value) {
-    let msg_id = d.get("id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let msg_id = d
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if msg_id.is_empty() || runner.is_duplicate(&msg_id) {
         return;
     }
-    let content = d.get("content").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-    let author = d.get("author").filter(|v| v.is_object()).cloned().unwrap_or(json!({}));
+    let content = d
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let author = d
+        .get("author")
+        .filter(|v| v.is_object())
+        .cloned()
+        .unwrap_or(json!({}));
 
     match event_type {
         "C2C_MESSAGE_CREATE" => handle_c2c(runner, d, &msg_id, &content, &author).await,
         "GROUP_AT_MESSAGE_CREATE" => handle_group(runner, d, &msg_id, &content, &author).await,
-        "GUILD_MESSAGE_CREATE" | "GUILD_AT_MESSAGE_CREATE" => handle_guild(runner, d, &msg_id, &content, &author).await,
+        "GUILD_MESSAGE_CREATE" | "GUILD_AT_MESSAGE_CREATE" => {
+            handle_guild(runner, d, &msg_id, &content, &author).await
+        }
         "DIRECT_MESSAGE_CREATE" => handle_guild_dm(runner, d, &msg_id, &content, &author).await,
         _ => {}
     }
@@ -1476,7 +1660,11 @@ async fn on_message(runner: &Arc<Runner>, event_type: &str, d: &Value) {
 
 /// Process attachments + quoted context into (text_extra, attachments)
 /// (hermes `_process_attachments` + `_process_quoted_context`).
-async fn collect_inbound(runner: &Arc<Runner>, d: &Value, base_text: &str) -> (String, Vec<MediaAttachment>) {
+async fn collect_inbound(
+    runner: &Arc<Runner>,
+    d: &Value,
+    base_text: &str,
+) -> (String, Vec<MediaAttachment>) {
     let mut text = base_text.to_string();
     let mut attachments: Vec<MediaAttachment> = Vec::new();
     let mut info_lines: Vec<String> = Vec::new();
@@ -1489,8 +1677,16 @@ async fn collect_inbound(runner: &Arc<Runner>, d: &Value, base_text: &str) -> (S
     // msg_elements[0].
     let message_type = d.get("message_type").and_then(|v| v.as_i64()).unwrap_or(0);
     if message_type == 103 {
-        if let Some(element) = d.get("msg_elements").and_then(|v| v.as_array()).and_then(|a| a.first()) {
-            if let Some(quote_text) = element.get("text_element").and_then(|t| t.get("text")).and_then(|v| v.as_str()) {
+        if let Some(element) = d
+            .get("msg_elements")
+            .and_then(|v| v.as_array())
+            .and_then(|a| a.first())
+        {
+            if let Some(quote_text) = element
+                .get("text_element")
+                .and_then(|t| t.get("text"))
+                .and_then(|v| v.as_str())
+            {
                 if !quote_text.trim().is_empty() {
                     text = merge_quote(&text, quote_text.trim());
                 }
@@ -1503,11 +1699,27 @@ async fn collect_inbound(runner: &Arc<Runner>, d: &Value, base_text: &str) -> (S
 
     let home = crate::config::ulnclaw_home();
     for list in lists {
-        let Some(items) = list.as_array() else { continue };
+        let Some(items) = list.as_array() else {
+            continue;
+        };
         for att in items {
-            let content_type = att.get("content_type").and_then(|v| v.as_str()).unwrap_or("").trim().to_lowercase();
-            let url_raw = att.get("url").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-            let filename = att.get("filename").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let content_type = att
+                .get("content_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_lowercase();
+            let url_raw = att
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let filename = att
+                .get("filename")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let url = if let Some(rest) = url_raw.strip_prefix("//") {
                 format!("https:{rest}")
             } else {
@@ -1518,27 +1730,55 @@ async fn collect_inbound(runner: &Arc<Runner>, d: &Value, base_text: &str) -> (S
             }
             if is_voice_content_type(&content_type, &filename) {
                 // hermes priority: QQ's asr_refer_text first...
-                let asr = att.get("asr_refer_text").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                let asr = att
+                    .get("asr_refer_text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
                 if !asr.is_empty() {
                     text = append_block(&text, &format!("[Voice] {asr}"));
                     continue;
                 }
                 // ...then the wav URL / raw audio into the central STT
                 // pipeline.
-                let wav_url = att.get("voice_wav_url").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-                let fetch_url = if wav_url.is_empty() { url.clone() } else { fix_scheme(&wav_url) };
-                if let Some(attachment) = download_attachment(runner, &home, &fetch_url, "audio/wav", &filename).await {
+                let wav_url = att
+                    .get("voice_wav_url")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                let fetch_url = if wav_url.is_empty() {
+                    url.clone()
+                } else {
+                    fix_scheme(&wav_url)
+                };
+                if let Some(attachment) =
+                    download_attachment(runner, &home, &fetch_url, "audio/wav", &filename).await
+                {
                     attachments.push(attachment);
                 } else {
                     text = append_block(&text, "[Voice] [语音识别失败]");
                 }
             } else if content_type.starts_with("image/") {
-                if let Some(attachment) = download_attachment(runner, &home, &url, &content_type, &filename).await {
+                if let Some(attachment) =
+                    download_attachment(runner, &home, &url, &content_type, &filename).await
+                {
                     attachments.push(attachment);
                 }
-            } else if let Some(attachment) = download_attachment(runner, &home, &url, &content_type, &filename).await {
-                let kind = if content_type.starts_with("video/") { "video" } else { "file" };
-                let name = if filename.is_empty() { content_type.clone() } else { filename.clone() };
+            } else if let Some(attachment) =
+                download_attachment(runner, &home, &url, &content_type, &filename).await
+            {
+                let kind = if content_type.starts_with("video/") {
+                    "video"
+                } else {
+                    "file"
+                };
+                let name = if filename.is_empty() {
+                    content_type.clone()
+                } else {
+                    filename.clone()
+                };
                 info_lines.push(format!("[{kind}: {name} ({})]", attachment.path.display()));
                 attachments.push(attachment);
             }
@@ -1583,7 +1823,10 @@ fn is_voice_content_type(content_type: &str, filename: &str) -> bool {
         .extension()
         .map(|e| e.to_string_lossy().to_lowercase())
         .unwrap_or_default();
-    matches!(ext.as_str(), "silk" | "amr" | "ogg" | "opus" | "mp3" | "wav" | "m4a")
+    matches!(
+        ext.as_str(),
+        "silk" | "amr" | "ogg" | "opus" | "mp3" | "wav" | "m4a"
+    )
 }
 
 async fn download_attachment(
@@ -1602,7 +1845,11 @@ async fn download_attachment(
         .await
         .ok()?;
     if !response.status().is_success() {
-        eprintln!("[qqbot] attachment download HTTP {} for {}", response.status().as_u16(), truncate_str(url, 80));
+        eprintln!(
+            "[qqbot] attachment download HTTP {} for {}",
+            response.status().as_u16(),
+            truncate_str(url, 80)
+        );
         return None;
     }
     let data = response.bytes().await.ok()?.to_vec();
@@ -1632,7 +1879,12 @@ async fn dispatch_inbound(
     if text.trim().is_empty() && attachments.is_empty() {
         return;
     }
-    runner.handle.last_msg_id.lock().unwrap().insert(chat_id.to_string(), msg_id.to_string());
+    runner
+        .handle
+        .last_msg_id
+        .lock()
+        .unwrap()
+        .insert(chat_id.to_string(), msg_id.to_string());
     let mut event = MessageEvent {
         platform: "qq".into(),
         chat_id: chat_id.to_string(),
@@ -1671,7 +1923,11 @@ async fn dispatch_inbound(
 }
 
 async fn handle_c2c(runner: &Arc<Runner>, d: &Value, msg_id: &str, content: &str, author: &Value) {
-    let user_openid = author.get("user_openid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let user_openid = author
+        .get("user_openid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if user_openid.is_empty() {
         return;
     }
@@ -1684,33 +1940,97 @@ async fn handle_c2c(runner: &Arc<Runner>, d: &Value, msg_id: &str, content: &str
         offer_pairing(runner, &user_openid, &user_openid).await;
         return;
     }
-    runner.handle.chat_type_map.lock().unwrap().insert(user_openid.clone(), "c2c".into());
-    dispatch_inbound(runner, &user_openid, &user_openid, &user_openid, &text, attachments, msg_id).await;
+    runner
+        .handle
+        .chat_type_map
+        .lock()
+        .unwrap()
+        .insert(user_openid.clone(), "c2c".into());
+    dispatch_inbound(
+        runner,
+        &user_openid,
+        &user_openid,
+        &user_openid,
+        &text,
+        attachments,
+        msg_id,
+    )
+    .await;
 }
 
-async fn handle_group(runner: &Arc<Runner>, d: &Value, msg_id: &str, content: &str, author: &Value) {
-    let group_openid = d.get("group_openid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+async fn handle_group(
+    runner: &Arc<Runner>,
+    d: &Value,
+    msg_id: &str,
+    content: &str,
+    author: &Value,
+) {
+    let group_openid = d
+        .get("group_openid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if group_openid.is_empty() {
         return;
     }
-    let member_openid = author.get("member_openid").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let member_openid = author
+        .get("member_openid")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if !group_allowed(&runner.cfg, &group_openid, &member_openid) {
         return;
     }
     let text = strip_at_mention(content);
     let (text, attachments) = collect_inbound(runner, d, &text).await;
-    runner.handle.chat_type_map.lock().unwrap().insert(group_openid.clone(), "group".into());
-    dispatch_inbound(runner, &group_openid, &member_openid, &member_openid, &text, attachments, msg_id).await;
+    runner
+        .handle
+        .chat_type_map
+        .lock()
+        .unwrap()
+        .insert(group_openid.clone(), "group".into());
+    dispatch_inbound(
+        runner,
+        &group_openid,
+        &member_openid,
+        &member_openid,
+        &text,
+        attachments,
+        msg_id,
+    )
+    .await;
 }
 
-async fn handle_guild(runner: &Arc<Runner>, d: &Value, msg_id: &str, content: &str, author: &Value) {
-    let channel_id = d.get("channel_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+async fn handle_guild(
+    runner: &Arc<Runner>,
+    d: &Value,
+    msg_id: &str,
+    content: &str,
+    author: &Value,
+) {
+    let channel_id = d
+        .get("channel_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if channel_id.is_empty() {
         return;
     }
-    let guild_id = d.get("guild_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let author_id = author.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let gate_id = if guild_id.is_empty() { channel_id.clone() } else { guild_id };
+    let guild_id = d
+        .get("guild_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let author_id = author
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let gate_id = if guild_id.is_empty() {
+        channel_id.clone()
+    } else {
+        guild_id
+    };
     if !group_allowed(&runner.cfg, &gate_id, &author_id) {
         return;
     }
@@ -1723,16 +2043,44 @@ async fn handle_guild(runner: &Arc<Runner>, d: &Value, msg_id: &str, content: &s
         .unwrap_or("")
         .to_string();
     let (text, attachments) = collect_inbound(runner, d, content).await;
-    runner.handle.chat_type_map.lock().unwrap().insert(channel_id.clone(), "guild".into());
-    dispatch_inbound(runner, &channel_id, &author_id, &nick, &text, attachments, msg_id).await;
+    runner
+        .handle
+        .chat_type_map
+        .lock()
+        .unwrap()
+        .insert(channel_id.clone(), "guild".into());
+    dispatch_inbound(
+        runner,
+        &channel_id,
+        &author_id,
+        &nick,
+        &text,
+        attachments,
+        msg_id,
+    )
+    .await;
 }
 
-async fn handle_guild_dm(runner: &Arc<Runner>, d: &Value, msg_id: &str, content: &str, author: &Value) {
-    let guild_id = d.get("guild_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+async fn handle_guild_dm(
+    runner: &Arc<Runner>,
+    d: &Value,
+    msg_id: &str,
+    content: &str,
+    author: &Value,
+) {
+    let guild_id = d
+        .get("guild_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if guild_id.is_empty() {
         return;
     }
-    let author_id = author.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let author_id = author
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if !dm_intake_allowed(&runner.cfg, &author_id) {
         return;
     }
@@ -1741,8 +2089,22 @@ async fn handle_guild_dm(runner: &Arc<Runner>, d: &Value, msg_id: &str, content:
         offer_pairing(runner, &author_id, &guild_id).await;
         return;
     }
-    runner.handle.chat_type_map.lock().unwrap().insert(guild_id.clone(), "dm".into());
-    dispatch_inbound(runner, &guild_id, &author_id, &author_id, &text, attachments, msg_id).await;
+    runner
+        .handle
+        .chat_type_map
+        .lock()
+        .unwrap()
+        .insert(guild_id.clone(), "dm".into());
+    dispatch_inbound(
+        runner,
+        &guild_id,
+        &author_id,
+        &author_id,
+        &text,
+        attachments,
+        msg_id,
+    )
+    .await;
 }
 
 // ---------------------------------------------------------------------------
@@ -1764,12 +2126,18 @@ fn dm_intake_allowed(cfg: &QQBotConfig, user_id: &str) -> bool {
     }
 }
 
-fn is_dm_fully_authorized(cfg: &QQBotConfig, pairing: Option<&Arc<PairingStore>>, user_id: &str) -> bool {
+fn is_dm_fully_authorized(
+    cfg: &QQBotConfig,
+    pairing: Option<&Arc<PairingStore>>,
+    user_id: &str,
+) -> bool {
     if cfg.dm_policy == "open" {
         return true;
     }
     entry_matches(&cfg.allow_from, user_id)
-        || pairing.map(|store| store.is_approved("qq", user_id)).unwrap_or(false)
+        || pairing
+            .map(|store| store.is_approved("qq", user_id))
+            .unwrap_or(false)
 }
 
 fn group_allowed(cfg: &QQBotConfig, group_id: &str, _user_id: &str) -> bool {
@@ -1872,10 +2240,7 @@ async fn handle_interaction(runner: &Arc<Runner>, d: &Value) {
         .into_iter()
         .find(|s| !s.is_empty())
         .unwrap_or("");
-    let group_openid = d
-        .get("group_openid")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let group_openid = d.get("group_openid").and_then(|v| v.as_str()).unwrap_or("");
     let guild_id = d.get("guild_id").and_then(|v| v.as_str()).unwrap_or("");
 
     if id.is_empty() {
@@ -1933,9 +2298,7 @@ async fn handle_interaction(runner: &Arc<Runner>, d: &Value) {
             .unwrap_or("");
         let update_session_key = format!("platform-qq-{chat}");
         if !interaction_authorized(runner, operator, group_openid, &update_session_key) {
-            eprintln!(
-                "[qqbot] rejected unauthorized update prompt click (operator={operator})"
-            );
+            eprintln!("[qqbot] rejected unauthorized update prompt click (operator={operator})");
             return;
         }
         write_update_response(&answer, operator);
@@ -1948,7 +2311,9 @@ async fn handle_interaction(runner: &Arc<Runner>, d: &Value) {
 async fn offer_pairing(runner: &Runner, sender_id: &str, chat_id: &str) {
     eprintln!("[qqbot] refusing message from {sender_id} — add it to messaging.qq.allow_from or approve a pairing code");
     if let Some(store) = &runner.pairing {
-        if let Some(reply) = crate::messaging::pairing_offer_public(store, "qq", sender_id, sender_id) {
+        if let Some(reply) =
+            crate::messaging::pairing_offer_public(store, "qq", sender_id, sender_id)
+        {
             runner.handle.send_text(chat_id, &reply).await;
         }
     }
@@ -2029,7 +2394,10 @@ pub fn decrypt_bind_secret(
         .decode(key_b64.trim())
         .map_err(|e| format!("bind key base64: {e}"))?;
     if key_bytes.len() != 32 {
-        return Err(format!("bind key must be 32 bytes, got {}", key_bytes.len()));
+        return Err(format!(
+            "bind key must be 32 bytes, got {}",
+            key_bytes.len()
+        ));
     }
     let raw = base64::engine::general_purpose::STANDARD
         .decode(encrypted_b64.trim())
@@ -2122,7 +2490,9 @@ async fn poll_bind_result(
             .to_string());
     }
     let status = BindStatus::from_code(
-        data.pointer("/data/status").and_then(|v| v.as_i64()).unwrap_or(0),
+        data.pointer("/data/status")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0),
     );
     let app_id = data
         .pointer("/data/bot_appid")
@@ -2295,7 +2665,10 @@ pub fn apply_setup_to_config(
         .as_table_mut()
         .ok_or_else(|| "[messaging.qq] is not a table".to_string())?;
     qq.insert("enabled".into(), toml::Value::Boolean(true));
-    qq.insert("dm_policy".into(), toml::Value::String(dm_policy.to_string()));
+    qq.insert(
+        "dm_policy".into(),
+        toml::Value::String(dm_policy.to_string()),
+    );
     qq.insert(
         "allow_from".into(),
         toml::Value::Array(
@@ -2383,12 +2756,15 @@ mod tests {
         let raw = std::fs::read_to_string(dir.path().join(".env")).unwrap();
         assert_eq!(raw, "QQBOT_HOME_CHANNEL=openid-1\n");
         // Replace in place, other lines untouched.
-        std::fs::write(dir.path().join(".env"), "OTHER=1\nQQBOT_HOME_CHANNEL=old\nTAIL=2\n").unwrap();
+        std::fs::write(
+            dir.path().join(".env"),
+            "OTHER=1\nQQBOT_HOME_CHANNEL=old\nTAIL=2\n",
+        )
+        .unwrap();
         upsert_env_value(dir.path(), "QQBOT_HOME_CHANNEL", "openid-2").unwrap();
         let raw = std::fs::read_to_string(dir.path().join(".env")).unwrap();
         assert_eq!(raw, "OTHER=1\nQQBOT_HOME_CHANNEL=openid-2\nTAIL=2\n");
     }
-
 
     use super::*;
 
@@ -2474,7 +2850,10 @@ mod tests {
     fn media_type_routing() {
         assert_eq!(media_type_for_path(Path::new("pic.png")), MEDIA_TYPE_IMAGE);
         assert_eq!(media_type_for_path(Path::new("clip.mp4")), MEDIA_TYPE_VIDEO);
-        assert_eq!(media_type_for_path(Path::new("note.silk")), MEDIA_TYPE_VOICE);
+        assert_eq!(
+            media_type_for_path(Path::new("note.silk")),
+            MEDIA_TYPE_VOICE
+        );
         assert_eq!(media_type_for_path(Path::new("doc.pdf")), MEDIA_TYPE_FILE);
     }
 
@@ -2558,7 +2937,10 @@ mod tests {
         assert!(dedup_check(&mut seen, "m1"));
         assert!(!dedup_check(&mut seen, "m2"));
         // Expired entries pass again.
-        seen.insert("m3".into(), Instant::now() - Duration::from_secs(DEDUP_WINDOW_SECS + 1));
+        seen.insert(
+            "m3".into(),
+            Instant::now() - Duration::from_secs(DEDUP_WINDOW_SECS + 1),
+        );
         assert!(!dedup_check(&mut seen, "m3"));
     }
 
@@ -2619,11 +3001,13 @@ mod tests {
     #[test]
     fn approval_button_data_parses_with_colons() {
         // Session keys may contain colons — the middle group is greedy.
-        let parsed =
-            parse_approval_button_data("approve:agent:main:qqbot:c2c:OPENID:allow-always");
+        let parsed = parse_approval_button_data("approve:agent:main:qqbot:c2c:OPENID:allow-always");
         assert_eq!(
             parsed,
-            Some(("agent:main:qqbot:c2c:OPENID".to_string(), "allow-always".to_string()))
+            Some((
+                "agent:main:qqbot:c2c:OPENID".to_string(),
+                "allow-always".to_string()
+            ))
         );
         assert_eq!(
             parse_approval_button_data("approve:platform-qq-XYZ:deny"),
@@ -2699,7 +3083,11 @@ mod tests {
         let iv = [9u8; 12];
         let mut blob = iv.to_vec();
         // AESGCM.encrypt appends the 16-byte auth tag (hermes layout).
-        blob.extend(cipher.encrypt(Nonce::from_slice(&iv), &b"super-secret-value"[..]).unwrap());
+        blob.extend(
+            cipher
+                .encrypt(Nonce::from_slice(&iv), &b"super-secret-value"[..])
+                .unwrap(),
+        );
         let encrypted_b64 = base64::engine::general_purpose::STANDARD.encode(&blob);
         assert_eq!(
             decrypt_bind_secret(&encrypted_b64, &key_b64).unwrap(),
@@ -2720,7 +3108,9 @@ mod tests {
     fn generate_bind_key_is_32_random_bytes() {
         use base64::Engine;
         let key = generate_bind_key();
-        let decoded = base64::engine::general_purpose::STANDARD.decode(&key).unwrap();
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(&key)
+            .unwrap();
         assert_eq!(decoded.len(), 32);
         assert_ne!(key, generate_bind_key());
     }

@@ -107,7 +107,10 @@ mod tests {
         // BEL-terminated window title.
         assert_eq!(strip_ansi("\x1b]0;title\x07body"), "body");
         // ST-terminated.
-        assert_eq!(strip_ansi("\x1b]8;;https://x\x1b\\link\x1b]8;;\x1b\\"), "link");
+        assert_eq!(
+            strip_ansi("\x1b]8;;https://x\x1b\\link\x1b]8;;\x1b\\"),
+            "link"
+        );
     }
 
     #[test]
@@ -126,7 +129,8 @@ mod tests {
 
     #[test]
     fn real_world_mixed_output() {
-        let raw = "\x1b[?2004h\x1b]0;user@host: ~\x07$ ls\r\n\x1b[0m\x1b[01;34mdir\x1b[0m\r\n$ \x1b[K";
+        let raw =
+            "\x1b[?2004h\x1b]0;user@host: ~\x07$ ls\r\n\x1b[0m\x1b[01;34mdir\x1b[0m\r\n$ \x1b[K";
         let clean = strip_ansi(raw);
         assert!(!clean.contains('\x1b'), "got: {clean:?}");
         assert!(clean.contains("dir"));

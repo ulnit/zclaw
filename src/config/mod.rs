@@ -571,13 +571,11 @@ impl Truthiness {
     pub fn resolve(&self, default: bool) -> bool {
         match self {
             Truthiness::Flag(flag) => *flag,
-            Truthiness::Text(text) => {
-                match text.trim().to_ascii_lowercase().as_str() {
-                    "1" | "true" | "yes" | "on" | "y" | "t" => true,
-                    "0" | "false" | "no" | "off" | "n" | "f" | "" => false,
-                    _ => default,
-                }
-            }
+            Truthiness::Text(text) => match text.trim().to_ascii_lowercase().as_str() {
+                "1" | "true" | "yes" | "on" | "y" | "t" => true,
+                "0" | "false" | "no" | "off" | "n" | "f" | "" => false,
+                _ => default,
+            },
         }
     }
 }
@@ -664,7 +662,10 @@ impl AuxiliaryTaskConfig {
     /// `title_generation` kill switch (hermes
     /// `auxiliary.title_generation.enabled`); defaults to true.
     pub fn enabled(&self) -> bool {
-        self.enabled.as_ref().map(|v| v.resolve(true)).unwrap_or(true)
+        self.enabled
+            .as_ref()
+            .map(|v| v.resolve(true))
+            .unwrap_or(true)
     }
 
     /// `title_generation` language pin (hermes
@@ -717,10 +718,20 @@ impl MoaSlot {
 
     /// Resolve the slot API key: literal, else `key_env`, else main key.
     pub fn resolved_api_key(&self, config: &UlncLawConfig) -> Option<String> {
-        if let Some(key) = self.api_key.as_ref().map(|k| k.trim()).filter(|k| !k.is_empty()) {
+        if let Some(key) = self
+            .api_key
+            .as_ref()
+            .map(|k| k.trim())
+            .filter(|k| !k.is_empty())
+        {
             return Some(key.to_string());
         }
-        if let Some(name) = self.key_env.as_ref().map(|k| k.trim()).filter(|k| !k.is_empty()) {
+        if let Some(name) = self
+            .key_env
+            .as_ref()
+            .map(|k| k.trim())
+            .filter(|k| !k.is_empty())
+        {
             if let Some(key) = get_env_value(name) {
                 return Some(key);
             }
@@ -849,7 +860,6 @@ impl MoaConfig {
         )))
     }
 }
-
 
 /// HTTP gateway settings (`[gateway]`) — port of hermes' api_server platform.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1607,7 +1617,11 @@ fn default_tool_output_max_line_length() -> usize {
 }
 
 fn positive_or(value: usize, default: usize) -> usize {
-    if value == 0 { default } else { value }
+    if value == 0 {
+        default
+    } else {
+        value
+    }
 }
 
 impl ToolOutputConfig {
@@ -1617,7 +1631,10 @@ impl ToolOutputConfig {
         ToolOutputConfig {
             max_bytes: positive_or(self.max_bytes, default_tool_output_max_bytes()),
             max_lines: positive_or(self.max_lines, default_tool_output_max_lines()),
-            max_line_length: positive_or(self.max_line_length, default_tool_output_max_line_length()),
+            max_line_length: positive_or(
+                self.max_line_length,
+                default_tool_output_max_line_length(),
+            ),
         }
     }
 }
@@ -1785,10 +1802,8 @@ impl UlncLawConfig {
                 return Some(key.clone());
             }
         }
-        let pooled = crate::credential_pool::resolve_pooled_key(
-            &ulnclaw_home(),
-            &self.model.provider,
-        );
+        let pooled =
+            crate::credential_pool::resolve_pooled_key(&ulnclaw_home(), &self.model.provider);
         if let Some(key) = pooled {
             return Some(key);
         }
@@ -1829,12 +1844,20 @@ mod tests {
 
     #[test]
     fn test_tool_output_limits_coercion() {
-        let cfg = ToolOutputConfig { max_bytes: 0, max_lines: 0, max_line_length: 0 };
+        let cfg = ToolOutputConfig {
+            max_bytes: 0,
+            max_lines: 0,
+            max_line_length: 0,
+        };
         let r = cfg.resolved();
         assert_eq!(r.max_bytes, 100_000);
         assert_eq!(r.max_lines, 2000);
         assert_eq!(r.max_line_length, 2000);
-        let cfg = ToolOutputConfig { max_bytes: 500, max_lines: 10, max_line_length: 80 };
+        let cfg = ToolOutputConfig {
+            max_bytes: 500,
+            max_lines: 10,
+            max_line_length: 80,
+        };
         let r = cfg.resolved();
         assert_eq!((r.max_bytes, r.max_lines, r.max_line_length), (500, 10, 80));
     }
@@ -1890,11 +1913,7 @@ description = "Speaks in poems"
     fn test_env_file_parsing() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(".env");
-        std::fs::write(
-            &path,
-            "# comment\nFOO=bar\nexport BAZ=\"qux\"\n\nEMPTY=\n",
-        )
-        .unwrap();
+        std::fs::write(&path, "# comment\nFOO=bar\nexport BAZ=\"qux\"\n\nEMPTY=\n").unwrap();
         let map = load_env_file(&path);
         assert_eq!(map.get("FOO").unwrap(), "bar");
         assert_eq!(map.get("BAZ").unwrap(), "qux");
@@ -1918,10 +1937,9 @@ description = "Speaks in poems"
         assert!(cfg.kanban.auto_decompose);
         assert_eq!(cfg.kanban.auto_decompose_per_tick, 3);
 
-        let parsed: crate::config::UlncLawConfig = toml::from_str(
-            "[kanban]\nauto_decompose = false\nauto_decompose_per_tick = 1\n",
-        )
-        .unwrap();
+        let parsed: crate::config::UlncLawConfig =
+            toml::from_str("[kanban]\nauto_decompose = false\nauto_decompose_per_tick = 1\n")
+                .unwrap();
         assert!(!parsed.kanban.auto_decompose);
         assert_eq!(parsed.kanban.auto_decompose_per_tick, 1);
     }

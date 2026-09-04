@@ -325,8 +325,7 @@ pub fn strip_markdown_preserving_urls(text: &str) -> String {
         .lines()
         .map(|line| {
             let trimmed = line.trim_start();
-            if trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ ")
-            {
+            if trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ ") {
                 format!("{}• {}", &line[..line.len() - trimmed.len()], &trimmed[2..])
             } else {
                 line.to_string()
@@ -466,7 +465,8 @@ struct Runtime {
     /// `_pending_buttons`).
     pending_buttons: Mutex<std::collections::HashMap<String, String>>,
     /// media token → (path, expiry) — hermes `_media_tokens`.
-    media_tokens: Mutex<std::collections::HashMap<String, (std::path::PathBuf, std::time::Instant)>>,
+    media_tokens:
+        Mutex<std::collections::HashMap<String, (std::path::PathBuf, std::time::Instant)>>,
 }
 
 static RUNTIME: std::sync::OnceLock<Arc<Runtime>> = std::sync::OnceLock::new();
@@ -635,10 +635,7 @@ async fn handle_event(
         .unwrap_or("")
         .to_string();
     let message = event.get("message").cloned().unwrap_or(json!({}));
-    let msg_type = message
-        .get("type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let msg_type = message.get("type").and_then(|v| v.as_str()).unwrap_or("");
     let message_id = message
         .get("id")
         .and_then(|v| v.as_str())
@@ -690,8 +687,14 @@ async fn handle_event(
         }
         "sticker" => text = "[sticker]".to_string(),
         "location" => {
-            let lat = message.get("latitude").map(|v| v.to_string()).unwrap_or_default();
-            let lng = message.get("longitude").map(|v| v.to_string()).unwrap_or_default();
+            let lat = message
+                .get("latitude")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+            let lng = message
+                .get("longitude")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
             text = format!("[location: {lat}, {lng}]");
         }
         _ => return,
@@ -780,9 +783,7 @@ async fn handle_event(
 
 /// Reply-token-first delivery with Push fallback (hermes core flow).
 async fn send_reply(runtime: &Runtime, chat_id: &str, content: &str) {
-    let reply_token = take_reply_token(runtime, chat_id)
-        .await
-        .unwrap_or_default();
+    let reply_token = take_reply_token(runtime, chat_id).await.unwrap_or_default();
     let formatted = strip_markdown_preserving_urls(content);
     let chunks = split_for_line(&formatted, LINE_SAFE_BUBBLE_CHARS);
     if chunks.is_empty() {
@@ -908,7 +909,10 @@ async fn stash_reply_token(runtime: &Runtime, chat_id: &str, reply_token: &str) 
     }
     runtime.reply_tokens.lock().await.insert(
         chat_id.to_string(),
-        (reply_token.to_string(), std::time::Instant::now() + LINE_REPLY_TOKEN_TTL),
+        (
+            reply_token.to_string(),
+            std::time::Instant::now() + LINE_REPLY_TOKEN_TTL,
+        ),
     );
 }
 
@@ -1036,7 +1040,12 @@ async fn find_pending_for_chat(runtime: &Runtime, chat_id: &str) -> Option<Strin
 /// hermes `_SYSTEM_BYPASS_PREFIXES` — busy-acks stay visible even with
 /// an outstanding postback button.
 fn is_system_bypass(content: &str) -> bool {
-    const PREFIXES: [&str; 4] = ["\u{26A1} Interrupting", "\u{23F3} Queued", "\u{23E9} Steered", "\u{1F4BE}"];
+    const PREFIXES: [&str; 4] = [
+        "\u{26A1} Interrupting",
+        "\u{23F3} Queued",
+        "\u{23E9} Steered",
+        "\u{1F4BE}",
+    ];
     !content.is_empty() && PREFIXES.iter().any(|p| content.starts_with(p))
 }
 
@@ -1058,9 +1067,17 @@ pub fn build_postback_button_message(text: &str, button_label: &str, request_id:
     } else {
         button_label.chars().take(20).collect()
     };
-    let label = if label.is_empty() { "Get answer".into() } else { label };
+    let label = if label.is_empty() {
+        "Get answer".into()
+    } else {
+        label
+    };
     let display: String = button_label.chars().take(300).collect();
-    let display = if display.is_empty() { "Get answer".into() } else { display };
+    let display = if display.is_empty() {
+        "Get answer".into()
+    } else {
+        display
+    };
     json!({
         "type": "template",
         "altText": alt,
@@ -1094,11 +1111,8 @@ async fn fire_slow_postback_button(runtime: &Runtime, chat_id: &str) {
         return;
     };
     let rid = register_pending(runtime, chat_id).await;
-    let message = build_postback_button_message(
-        &runtime.cfg.pending_text,
-        &runtime.cfg.button_label,
-        &rid,
-    );
+    let message =
+        build_postback_button_message(&runtime.cfg.pending_text, &runtime.cfg.button_label, &rid);
     match reply_raw(runtime, &token, &[message]).await {
         Ok(()) => {
             runtime
@@ -1197,7 +1211,12 @@ async fn handle_postback_event(runtime: &Runtime, event: &Value) {
                 payload
             };
             if !reply_token.is_empty() {
-                let _ = reply_raw(runtime, &reply_token, &[json!({ "type": "text", "text": text })]).await;
+                let _ = reply_raw(
+                    runtime,
+                    &reply_token,
+                    &[json!({ "type": "text", "text": text })],
+                )
+                .await;
             }
             mark_postback_delivered(runtime, &rid).await;
             runtime.pending_buttons.lock().await.remove(&chat_id);
@@ -1232,11 +1251,11 @@ async fn handle_postback_event(runtime: &Runtime, event: &Value) {
 /// 1×1 transparent PNG — fallback video preview (hermes
 /// `_FALLBACK_PNG_PREVIEW`, LINE requires `previewImageUrl`).
 const FALLBACK_PNG_PREVIEW: &[u8] = &[
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
-    0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f,
-    0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00,
-    0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x37, 0x7a, 0x7f, 0xf2, 0x00, 0x00, 0x00, 0x00,
-    0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x00, 0x37, 0x7a, 0x7f, 0xf2, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
+    0xae, 0x42, 0x60, 0x82,
 ];
 
 /// Register a local file for HTTPS serving; returns the URL token
@@ -1397,7 +1416,10 @@ pub async fn line_serve_media(token: &str) -> LineMediaResult {
             .unwrap_or(false)
     });
     if !allowed {
-        eprintln!("[line] refusing to serve media outside allowed roots: {}", canonical.display());
+        eprintln!(
+            "[line] refusing to serve media outside allowed roots: {}",
+            canonical.display()
+        );
         return LineMediaResult::Forbidden;
     }
     match std::fs::read(&canonical) {
@@ -1459,13 +1481,28 @@ mod tests {
             delivered_text: String::new(),
             interrupted_text: String::new(),
         };
-        assert!(allowed_for_source(&cfg, &json!({"type":"user","userId":"U1"})));
-        assert!(!allowed_for_source(&cfg, &json!({"type":"user","userId":"U2"})));
-        assert!(allowed_for_source(&cfg, &json!({"type":"group","groupId":"C1"})));
-        assert!(!allowed_for_source(&cfg, &json!({"type":"room","roomId":"R1"})));
+        assert!(allowed_for_source(
+            &cfg,
+            &json!({"type":"user","userId":"U1"})
+        ));
+        assert!(!allowed_for_source(
+            &cfg,
+            &json!({"type":"user","userId":"U2"})
+        ));
+        assert!(allowed_for_source(
+            &cfg,
+            &json!({"type":"group","groupId":"C1"})
+        ));
+        assert!(!allowed_for_source(
+            &cfg,
+            &json!({"type":"room","roomId":"R1"})
+        ));
         let mut open = cfg.clone();
         open.allow_all_users = true;
-        assert!(allowed_for_source(&open, &json!({"type":"room","roomId":"R1"})));
+        assert!(allowed_for_source(
+            &open,
+            &json!({"type":"room","roomId":"R1"})
+        ));
     }
 
     #[test]
@@ -1548,7 +1585,10 @@ mod tests {
         // Long text truncated to LINE limits (160 / 400 chars).
         let long = "x".repeat(500);
         let msg = build_postback_button_message(&long, "Get answer", "rid-2");
-        assert_eq!(msg["template"]["text"].as_str().unwrap().chars().count(), 160);
+        assert_eq!(
+            msg["template"]["text"].as_str().unwrap().chars().count(),
+            160
+        );
         assert_eq!(msg["altText"].as_str().unwrap().chars().count(), 400);
     }
 
@@ -1613,13 +1653,19 @@ mod tests {
             media_tokens: Mutex::new(std::collections::HashMap::new()),
         });
         stash_reply_token(&runtime, "U1", "tok-1").await;
-        assert_eq!(take_reply_token(&runtime, "U1").await.as_deref(), Some("tok-1"));
+        assert_eq!(
+            take_reply_token(&runtime, "U1").await.as_deref(),
+            Some("tok-1")
+        );
         // Consumed — second take is empty.
         assert!(take_reply_token(&runtime, "U1").await.is_none());
         // Expired tokens are dropped.
         runtime.reply_tokens.lock().await.insert(
             "U2".into(),
-            ("tok-2".into(), std::time::Instant::now() - Duration::from_secs(1)),
+            (
+                "tok-2".into(),
+                std::time::Instant::now() - Duration::from_secs(1),
+            ),
         );
         assert!(take_reply_token(&runtime, "U2").await.is_none());
     }

@@ -161,8 +161,10 @@ fn copy_table_bulk(
             .map(|i| row.get::<_, rusqlite::types::Value>(i))
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(|e| safety(format!("decode {}: {}", table, e)))?;
-        let refs: Vec<&dyn rusqlite::types::ToSql> =
-            values.iter().map(|v| v as &dyn rusqlite::types::ToSql).collect();
+        let refs: Vec<&dyn rusqlite::types::ToSql> = values
+            .iter()
+            .map(|v| v as &dyn rusqlite::types::ToSql)
+            .collect();
         dest.execute(&insert_sql, refs.as_slice())
             .map_err(|e| safety(format!("insert into {}: {}", table, e)))?;
         copied += 1;
@@ -203,10 +205,7 @@ fn copy_table_salvage(
     for rowid in min_rowid..=max_rowid {
         let row = source
             .query_row(
-                &format!(
-                    "SELECT {} FROM {} WHERE rowid = ?1",
-                    column_list, table
-                ),
+                &format!("SELECT {} FROM {} WHERE rowid = ?1", column_list, table),
                 params![rowid],
                 |row| {
                     (0..columns.len())
@@ -217,8 +216,10 @@ fn copy_table_salvage(
             .optional();
         match row {
             Ok(Some(values)) => {
-                let refs: Vec<&dyn rusqlite::types::ToSql> =
-                    values.iter().map(|v| v as &dyn rusqlite::types::ToSql).collect();
+                let refs: Vec<&dyn rusqlite::types::ToSql> = values
+                    .iter()
+                    .map(|v| v as &dyn rusqlite::types::ToSql)
+                    .collect();
                 match dest.execute(&insert_sql, refs.as_slice()) {
                     Ok(_) => copied += 1,
                     Err(_) => skipped += 1,
@@ -294,7 +295,10 @@ fn rebuild_fts(dest: &Connection) -> Result<bool> {
 /// the live database (hermes safety rules).
 pub fn recover_session_database(source: &Path, output: &Path) -> Result<RecoveryReport> {
     if !source.is_file() {
-        return Err(safety(format!("source database not found: {}", source.display())));
+        return Err(safety(format!(
+            "source database not found: {}",
+            source.display()
+        )));
     }
     let source = source
         .canonicalize()
@@ -306,14 +310,15 @@ pub fn recover_session_database(source: &Path, output: &Path) -> Result<Recovery
         )));
     }
     if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| safety(format!("create output dir: {}", e)))?;
+        std::fs::create_dir_all(parent).map_err(|e| safety(format!("create output dir: {}", e)))?;
     }
     let output = output
         .canonicalize()
         .unwrap_or_else(|_| output.to_path_buf());
     if output == source {
-        return Err(safety("output must differ from the source database".to_string()));
+        return Err(safety(
+            "output must differ from the source database".to_string(),
+        ));
     }
     let active = crate::config::ulnclaw_home().join("state.db");
     if let (Ok(active), Ok(output_check)) = (active.canonicalize(), output.canonicalize()) {
@@ -333,33 +338,28 @@ pub fn recover_session_database(source: &Path, output: &Path) -> Result<Recovery
             .map(|d| d.as_nanos())
             .unwrap_or(0)
     ));
-    std::fs::create_dir_all(&workdir)
-        .map_err(|e| safety(format!("create working dir: {}", e)))?;
+    std::fs::create_dir_all(&workdir).map_err(|e| safety(format!("create working dir: {}", e)))?;
     let scope_guard = WorkdirGuard(workdir.clone());
     let snapshot = copy_source_bundle(&source, &workdir)?;
 
     // 2. Inspect the snapshot (never the original file).
-    let source_conn = Connection::open_with_flags(
-        &snapshot,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
-    )
-    .map_err(|e| {
-        safety(format!(
-            "snapshot of {} cannot be opened even after copying: {}",
-            source.display(),
-            e
-        ))
-    })?;
+    let source_conn =
+        Connection::open_with_flags(&snapshot, rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE)
+            .map_err(|e| {
+                safety(format!(
+                    "snapshot of {} cannot be opened even after copying: {}",
+                    source.display(),
+                    e
+                ))
+            })?;
     // Damage is expected — do not let SQLite's integrity checks abort reads
     // early; salvage handles unreadable rows.
-    source_conn
-        .execute_batch("PRAGMA foreign_keys=OFF;")
-        .ok();
+    source_conn.execute_batch("PRAGMA foreign_keys=OFF;").ok();
     let source_tables = list_tables(&source_conn)?;
 
     // 3. Initialize a fresh current-schema destination.
-    let dest_conn = Connection::open(&output)
-        .map_err(|e| safety(format!("create output database: {}", e)))?;
+    let dest_conn =
+        Connection::open(&output).map_err(|e| safety(format!("create output database: {}", e)))?;
     dest_conn
         .execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=OFF;")
         .map_err(|e| safety(format!("output pragmas: {}", e)))?;
@@ -416,10 +416,14 @@ pub fn recover_session_database(source: &Path, output: &Path) -> Result<Recovery
         .map(|result| result == "ok")
         .unwrap_or(false);
     let sessions = dest_conn
-        .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get::<_, i64>(0))
+        .query_row("SELECT COUNT(*) FROM sessions", [], |row| {
+            row.get::<_, i64>(0)
+        })
         .unwrap_or(0) as usize;
     let messages = dest_conn
-        .query_row("SELECT COUNT(*) FROM messages", [], |row| row.get::<_, i64>(0))
+        .query_row("SELECT COUNT(*) FROM messages", [], |row| {
+            row.get::<_, i64>(0)
+        })
         .unwrap_or(0) as usize;
 
     drop(source_conn);
@@ -564,7 +568,8 @@ mod tests {
 
         // Damage: drop one session row, orphaning its messages.
         let conn = Connection::open(&source).expect("open source");
-        conn.execute_batch("PRAGMA foreign_keys=OFF;").expect("fk off");
+        conn.execute_batch("PRAGMA foreign_keys=OFF;")
+            .expect("fk off");
         let orphaned: String = conn
             .query_row("SELECT id FROM sessions LIMIT 1", [], |row| row.get(0))
             .expect("session id");

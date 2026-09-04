@@ -212,7 +212,9 @@ pub fn latest_activity_at(record: &Value) -> Option<String> {
         let Some(raw) = record.get(key).and_then(|v| v.as_str()) else {
             continue;
         };
-        let Some(dt) = parse_iso(Some(raw)) else { continue };
+        let Some(dt) = parse_iso(Some(raw)) else {
+            continue;
+        };
         match &latest {
             Some((prev, _)) if dt <= *prev => {}
             _ => latest = Some((dt, raw.to_string())),
@@ -255,10 +257,7 @@ pub fn usage_report(home: &Path) -> Vec<UsageReportRow> {
     let data = load_usage(home);
     let mut rows: Vec<UsageReportRow> = Vec::new();
     for skill in crate::skills::list_skills(&skills_dir) {
-        let record = data
-            .get(&skill.name)
-            .cloned()
-            .unwrap_or_else(empty_record);
+        let record = data.get(&skill.name).cloned().unwrap_or_else(empty_record);
         let created_by = record
             .get("created_by")
             .and_then(|v| v.as_str())
@@ -269,9 +268,18 @@ pub fn usage_report(home: &Path) -> Vec<UsageReportRow> {
             } else {
                 "user".to_string()
             },
-            use_count: record.get("use_count").and_then(|v| v.as_u64()).unwrap_or(0),
-            view_count: record.get("view_count").and_then(|v| v.as_u64()).unwrap_or(0),
-            patch_count: record.get("patch_count").and_then(|v| v.as_u64()).unwrap_or(0),
+            use_count: record
+                .get("use_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
+            view_count: record
+                .get("view_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
+            patch_count: record
+                .get("patch_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
             activity_count: activity_count(&record),
             last_activity_at: latest_activity_at(&record),
             state: record
@@ -279,7 +287,10 @@ pub fn usage_report(home: &Path) -> Vec<UsageReportRow> {
                 .and_then(|v| v.as_str())
                 .unwrap_or(STATE_ACTIVE)
                 .to_string(),
-            pinned: record.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false),
+            pinned: record
+                .get("pinned")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
             name: skill.name,
             created_by,
             record,
@@ -313,7 +324,10 @@ pub fn unmanaged_report(home: &Path) -> Vec<Value> {
     for skill in crate::skills::list_skills(&home.join("skills")) {
         match data.get(&skill.name) {
             Some(record) => {
-                let has_key = record.get("created_by").map(|v| !v.is_null()).unwrap_or(false);
+                let has_key = record
+                    .get("created_by")
+                    .map(|v| !v.is_null())
+                    .unwrap_or(false);
                 if has_key {
                     continue; // managed
                 }
@@ -341,7 +355,11 @@ pub fn unmanaged_report(home: &Path) -> Vec<Value> {
 pub fn list_unmanaged_skill_names(home: &Path) -> Vec<String> {
     unmanaged_report(home)
         .iter()
-        .filter_map(|r| r.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .filter_map(|r| {
+            r.get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        })
         .collect()
 }
 
@@ -355,7 +373,10 @@ pub fn adopt_skill(home: &Path, skill_name: &str) -> (bool, String) {
         return (false, format!("skill '{}' not found", skill_name));
     }
     mark_agent_created(home, skill_name);
-    (true, format!("adopted '{}' into curator management", skill_name))
+    (
+        true,
+        format!("adopted '{}' into curator management", skill_name),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -372,8 +393,15 @@ pub fn archive_skill(home: &Path, skill_name: &str) -> (bool, String) {
         None => return (false, format!("skill '{}' not found", skill_name)),
     };
     let record = get_record(home, skill_name);
-    if record.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false) {
-        return (false, format!("'{}' is pinned — unpin it first", skill_name));
+    if record
+        .get("pinned")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return (
+            false,
+            format!("'{}' is pinned — unpin it first", skill_name),
+        );
     }
     let root = archive_dir(home);
     if std::fs::create_dir_all(&root).is_err() {
@@ -428,11 +456,17 @@ pub fn restore_skill(home: &Path, skill_name: &str) -> (bool, String) {
     let mut candidates = exact;
     candidates.extend(timestamped);
     let Some(src) = candidates.into_iter().next() else {
-        return (false, format!("skill '{}' not found in archive", skill_name));
+        return (
+            false,
+            format!("skill '{}' not found in archive", skill_name),
+        );
     };
     let dest = home.join("skills").join(skill_name);
     if dest.exists() {
-        return (false, format!("destination already exists: {}", dest.display()));
+        return (
+            false,
+            format!("destination already exists: {}", dest.display()),
+        );
     }
     if std::fs::rename(&src, &dest).is_err() {
         return (false, "failed to restore".to_string());
@@ -440,7 +474,6 @@ pub fn restore_skill(home: &Path, skill_name: &str) -> (bool, String) {
     set_state(home, skill_name, STATE_ACTIVE);
     (true, format!("restored to {}", dest.display()))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -450,11 +483,8 @@ mod tests {
 
     fn temp_home() -> (PathBuf, PathBuf) {
         let n = HOME_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "ulnclaw-skill-usage-{}-{}",
-            std::process::id(),
-            n
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("ulnclaw-skill-usage-{}-{}", std::process::id(), n));
         std::fs::create_dir_all(dir.join("skills")).unwrap();
         (dir.clone(), dir)
     }

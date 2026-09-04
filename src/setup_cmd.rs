@@ -114,7 +114,14 @@ pub fn api_key_env_var(provider: &str) -> Option<&'static str> {
 pub fn needs_base_url(provider: &str) -> bool {
     !matches!(
         provider,
-        "openai" | "anthropic" | "ollama" | "llamacpp" | "llama_cpp" | "local" | "dashscope" | "moa"
+        "openai"
+            | "anthropic"
+            | "ollama"
+            | "llamacpp"
+            | "llama_cpp"
+            | "local"
+            | "dashscope"
+            | "moa"
     )
 }
 
@@ -176,7 +183,13 @@ fn chrono_stamp() -> String {
 /// Existing-install detection (hermes `get_active_provider` + env probe):
 /// any resolvable API key or an explicitly chosen model marks an install.
 pub fn is_existing_install(config: &UlncLawConfig, config_path: &Path) -> bool {
-    if config.model.api_key.as_deref().map(str::trim).map_or(false, |k| !k.is_empty()) {
+    if config
+        .model
+        .api_key
+        .as_deref()
+        .map(str::trim)
+        .map_or(false, |k| !k.is_empty())
+    {
         return true;
     }
     for var in ["ULNCLAW_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"] {
@@ -195,8 +208,7 @@ pub fn is_existing_install(config: &UlncLawConfig, config_path: &Path) -> bool {
         {
             return true;
         }
-        if !config.messaging.enabled_platform_names().is_empty()
-        {
+        if !config.messaging.enabled_platform_names().is_empty() {
             return true;
         }
     }
@@ -233,7 +245,11 @@ pub fn apply_model_answers(
     model: &str,
     base_url: Option<&str>,
 ) -> Result<(), String> {
-    config_cmd::set_nested(value, "model.provider", toml::Value::String(provider.to_string()))?;
+    config_cmd::set_nested(
+        value,
+        "model.provider",
+        toml::Value::String(provider.to_string()),
+    )?;
     config_cmd::set_nested(value, "model.model", toml::Value::String(model.to_string()))?;
     match base_url {
         Some(url) if !url.trim().is_empty() => config_cmd::set_nested(
@@ -289,7 +305,11 @@ pub fn render_summary(
     out.push_str(&format!("  Model:      {model}\n"));
     out.push_str(&format!(
         "  API key:    {}\n",
-        if has_key { "configured" } else { "MISSING — set one before chatting" }
+        if has_key {
+            "configured"
+        } else {
+            "MISSING — set one before chatting"
+        }
     ));
     out.push_str(&format!(
         "  Platforms:  {}\n",
@@ -327,7 +347,9 @@ pub fn noninteractive_guidance(reason: Option<&str>) -> String {
     out.push_str("    ulnclaw config set TELEGRAM_BOT_TOKEN ...     # lands in .env\n\n");
     out.push_str("  Or export credentials in the environment: OPENAI_API_KEY,\n");
     out.push_str("  ANTHROPIC_API_KEY, ULNCLAW_API_KEY, TELEGRAM_BOT_TOKEN, ...\n\n");
-    out.push_str("  Sections available interactively: ulnclaw setup model|terminal|gateway|tools|agent\n");
+    out.push_str(
+        "  Sections available interactively: ulnclaw setup model|terminal|gateway|tools|agent\n",
+    );
     out
 }
 
@@ -360,13 +382,14 @@ pub fn run_setup(
 
     let non_interactive = non_interactive_flag || !is_interactive_stdin();
     if non_interactive {
-        print!("{}", noninteractive_guidance(Some(
-            if non_interactive_flag {
+        print!(
+            "{}",
+            noninteractive_guidance(Some(if non_interactive_flag {
                 "--non-interactive requested."
             } else {
                 "Running in a non-interactive environment (no TTY detected)."
-            },
-        )));
+            },))
+        );
         return Ok(());
     }
 
@@ -374,7 +397,11 @@ pub fn run_setup(
         if section_label(key).is_none() {
             return Err(format!(
                 "Unknown setup section: {key}. Available: {}",
-                SECTIONS.iter().map(|(k, _)| *k).collect::<Vec<_>>().join(", ")
+                SECTIONS
+                    .iter()
+                    .map(|(k, _)| *k)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ));
         }
         let mut doc = config_cmd::load_toml(&config_path)?;
@@ -415,7 +442,9 @@ pub fn run_setup(
         println!("  ✓ You already have ulnclaw configured.");
         println!("  ℹ Running the full wizard — each prompt shows your current value.");
         println!("  ℹ Press Enter to keep it, or type a new value to change it.");
-        println!("  ℹ Tip: jump to a section with `ulnclaw setup model|terminal|gateway|tools|agent`,");
+        println!(
+            "  ℹ Tip: jump to a section with `ulnclaw setup model|terminal|gateway|tools|agent`,"
+        );
         println!("     or fill only missing items with --quick.");
     } else {
         println!();
@@ -526,7 +555,11 @@ fn section_model(doc: &mut toml::Value) -> Result<(), String> {
         })
         .collect();
     let label_refs: Vec<&str> = labels.iter().map(String::as_str).collect();
-    let pick = prompt_choice("Which provider should ulnclaw use?", &label_refs, default_idx)?;
+    let pick = prompt_choice(
+        "Which provider should ulnclaw use?",
+        &label_refs,
+        default_idx,
+    )?;
     let provider = choices[pick].0;
 
     let model_default = if current_model.is_empty() {
@@ -554,7 +587,15 @@ fn section_model(doc: &mut toml::Value) -> Result<(), String> {
         let masked = if existing.trim().is_empty() {
             "not set".to_string()
         } else {
-            format!("set ({}…)", &existing[..existing.chars().take(4).map(char::len_utf8).sum::<usize>().min(existing.len())])
+            format!(
+                "set ({}…)",
+                &existing[..existing
+                    .chars()
+                    .take(4)
+                    .map(char::len_utf8)
+                    .sum::<usize>()
+                    .min(existing.len())]
+            )
         };
         println!("  ℹ {var}: {masked}");
         let key = prompt_hidden(&format!("{var} (Enter to keep current)"))?;
@@ -574,7 +615,11 @@ fn section_terminal(doc: &mut toml::Value) -> Result<(), String> {
     println!();
     println!("  ─── Terminal Backend ───");
     let current = nested_str(doc, "terminal.backend").unwrap_or_default();
-    let current = if current.is_empty() { "local" } else { current.as_str() };
+    let current = if current.is_empty() {
+        "local"
+    } else {
+        current.as_str()
+    };
     let idx = match current {
         "docker" => 1,
         "ssh" => 2,
@@ -582,7 +627,11 @@ fn section_terminal(doc: &mut toml::Value) -> Result<(), String> {
     };
     let pick = prompt_choice(
         "Where should agent commands run?",
-        &["Local machine (default)", "Docker container", "Remote host over SSH"],
+        &[
+            "Local machine (default)",
+            "Docker container",
+            "Remote host over SSH",
+        ],
         idx,
     )?;
     match pick {
@@ -594,17 +643,33 @@ fn section_terminal(doc: &mut toml::Value) -> Result<(), String> {
             config_cmd::unset_nested(doc, "terminal.ssh_user");
         }
         1 => {
-            config_cmd::set_nested(doc, "terminal.backend", toml::Value::String("docker".into()))?;
-            let container = prompt_line("Container name", &nested_str(doc, "terminal.container").unwrap_or_else(|| "ulnclaw".into()))?;
+            config_cmd::set_nested(
+                doc,
+                "terminal.backend",
+                toml::Value::String("docker".into()),
+            )?;
+            let container = prompt_line(
+                "Container name",
+                &nested_str(doc, "terminal.container").unwrap_or_else(|| "ulnclaw".into()),
+            )?;
             config_cmd::set_nested(doc, "terminal.container", toml::Value::String(container))?;
-            let image = prompt_line("Image (auto-created when missing)", &nested_str(doc, "terminal.image").unwrap_or_else(|| "ubuntu:24.04".into()))?;
+            let image = prompt_line(
+                "Image (auto-created when missing)",
+                &nested_str(doc, "terminal.image").unwrap_or_else(|| "ubuntu:24.04".into()),
+            )?;
             config_cmd::set_nested(doc, "terminal.image", toml::Value::String(image))?;
         }
         _ => {
             config_cmd::set_nested(doc, "terminal.backend", toml::Value::String("ssh".into()))?;
-            let host = prompt_line("SSH host", &nested_str(doc, "terminal.ssh_host").unwrap_or_default())?;
+            let host = prompt_line(
+                "SSH host",
+                &nested_str(doc, "terminal.ssh_host").unwrap_or_default(),
+            )?;
             config_cmd::set_nested(doc, "terminal.ssh_host", toml::Value::String(host))?;
-            let user = prompt_line("SSH user", &nested_str(doc, "terminal.ssh_user").unwrap_or_default())?;
+            let user = prompt_line(
+                "SSH user",
+                &nested_str(doc, "terminal.ssh_user").unwrap_or_default(),
+            )?;
             if !user.trim().is_empty() {
                 config_cmd::set_nested(doc, "terminal.ssh_user", toml::Value::String(user))?;
             }
@@ -628,7 +693,12 @@ fn section_gateway(doc: &mut toml::Value) -> Result<(), String> {
     println!("  ℹ Connect platforms to chat with ulnclaw from anywhere.");
     let specs = platform_specs();
     let config = UlncLawConfig::load(None).map_err(|e| e.to_string())?;
-    let enabled_now: Vec<String> = config.messaging.enabled_platform_names().iter().map(|s| s.to_string()).collect();
+    let enabled_now: Vec<String> = config
+        .messaging
+        .enabled_platform_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
     for (i, spec) in specs.iter().enumerate() {
         let status = if enabled_now.iter().any(|p| p == spec.name) {
@@ -708,7 +778,13 @@ fn section_tools(doc: &mut toml::Value) -> Result<(), String> {
         } else {
             " "
         };
-        println!("    {:>2}. [{}] {:<14} {}", i + 1, mark, name, def.description);
+        println!(
+            "    {:>2}. [{}] {:<14} {}",
+            i + 1,
+            mark,
+            name,
+            def.description
+        );
     }
     println!("  ℹ Blank keeps the default \"coding\" set; mark additional toolsets to enable.");
     let answer = prompt_line("Toolsets to enable (comma-separated numbers)", "")?;
@@ -777,11 +853,19 @@ pub(crate) fn prompt_line(prompt: &str, default: &str) -> Result<String, String>
     }
     std::io::stdout().flush().ok();
     let mut line = String::new();
-    if std::io::stdin().read_line(&mut line).map_err(|e| e.to_string())? == 0 {
+    if std::io::stdin()
+        .read_line(&mut line)
+        .map_err(|e| e.to_string())?
+        == 0
+    {
         return Ok(default.to_string());
     }
     let trimmed = line.trim();
-    Ok(if trimmed.is_empty() { default.to_string() } else { trimmed.to_string() })
+    Ok(if trimmed.is_empty() {
+        default.to_string()
+    } else {
+        trimmed.to_string()
+    })
 }
 
 pub(crate) fn prompt_hidden(prompt: &str) -> Result<String, String> {
@@ -791,7 +875,9 @@ pub(crate) fn prompt_hidden(prompt: &str) -> Result<String, String> {
     std::io::stdout().flush().ok();
     if enable_raw_mode().is_err() {
         let mut line = String::new();
-        std::io::stdin().read_line(&mut line).map_err(|e| e.to_string())?;
+        std::io::stdin()
+            .read_line(&mut line)
+            .map_err(|e| e.to_string())?;
         println!();
         return Ok(line.trim().to_string());
     }
@@ -833,7 +919,11 @@ pub(crate) fn prompt_yes_no(prompt: &str, default: bool) -> Result<bool, String>
     })
 }
 
-pub(crate) fn prompt_choice(prompt: &str, choices: &[&str], default_index: usize) -> Result<usize, String> {
+pub(crate) fn prompt_choice(
+    prompt: &str,
+    choices: &[&str],
+    default_index: usize,
+) -> Result<usize, String> {
     println!();
     println!("  {}", prompt);
     for (idx, choice) in choices.iter().enumerate() {
@@ -878,7 +968,12 @@ fn announce_backup(backup: Option<&Path>, config_path: &Path) {
 
 fn print_final_summary(config_path: &Path) -> Result<(), String> {
     let config = UlncLawConfig::load(None).map_err(|e| e.to_string())?;
-    let platforms: Vec<String> = config.messaging.enabled_platform_names().iter().map(|s| s.to_string()).collect();
+    let platforms: Vec<String> = config
+        .messaging
+        .enabled_platform_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
     let has_key = config.resolve_api_key().is_some();
     print!(
         "{}",
@@ -933,9 +1028,21 @@ mod tests {
     #[test]
     fn apply_model_answers_sets_and_clears_base_url() {
         let mut doc: toml::Value = toml::from_str("").unwrap();
-        apply_model_answers(&mut doc, "openrouter", "openrouter/auto", Some("https://openrouter.ai/api/v1")).unwrap();
-        assert_eq!(nested_str(&doc, "model.provider").as_deref(), Some("openrouter"));
-        assert_eq!(nested_str(&doc, "model.model").as_deref(), Some("openrouter/auto"));
+        apply_model_answers(
+            &mut doc,
+            "openrouter",
+            "openrouter/auto",
+            Some("https://openrouter.ai/api/v1"),
+        )
+        .unwrap();
+        assert_eq!(
+            nested_str(&doc, "model.provider").as_deref(),
+            Some("openrouter")
+        );
+        assert_eq!(
+            nested_str(&doc, "model.model").as_deref(),
+            Some("openrouter/auto")
+        );
         assert_eq!(
             nested_str(&doc, "model.base_url").as_deref(),
             Some("https://openrouter.ai/api/v1")
@@ -955,7 +1062,9 @@ mod tests {
         assert!(platform_env("weixin").is_empty());
         let specs = platform_specs();
         assert!(specs.len() >= 25, "expected full platform roster");
-        assert!(specs.iter().all(|s| !s.name.is_empty() && !s.label.is_empty()));
+        assert!(specs
+            .iter()
+            .all(|s| !s.name.is_empty() && !s.label.is_empty()));
     }
 
     #[test]
@@ -1000,7 +1109,12 @@ mod tests {
         std::fs::write(&cfg, "x = 1").unwrap();
         let backup = backup_config(&cfg).expect("backup made");
         assert!(backup.exists());
-        assert!(backup.file_name().unwrap().to_str().unwrap().starts_with("config.toml.bak."));
+        assert!(backup
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("config.toml.bak."));
         assert_eq!(std::fs::read_to_string(&backup).unwrap(), "x = 1");
         // Missing file → no backup.
         assert!(backup_config(&dir.join("missing.toml")).is_none());

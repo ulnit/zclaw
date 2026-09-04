@@ -18,7 +18,13 @@ use crate::error::{AgentError, Result};
 
 /// Hermes task statuses (`_STATUS_ICONS` keys).
 pub const STATUSES: &[&str] = &[
-    "todo", "ready", "running", "scheduled", "blocked", "review", "done",
+    "todo",
+    "ready",
+    "running",
+    "scheduled",
+    "blocked",
+    "review",
+    "done",
     "archived",
 ];
 
@@ -32,12 +38,7 @@ pub const VALID_WORKSPACE_KINDS: &[&str] = &["scratch", "worktree", "dir"];
 pub const VALID_INITIAL_STATUSES: &[&str] = &["running", "blocked"];
 
 /// Typed block reasons (hermes `VALID_BLOCK_KINDS`).
-pub const VALID_BLOCK_KINDS: &[&str] = &[
-    "dependency",
-    "needs_input",
-    "capability",
-    "transient",
-];
+pub const VALID_BLOCK_KINDS: &[&str] = &["dependency", "needs_input", "capability", "transient"];
 
 /// Same-cause re-blocks after unblock route the task to triage once
 /// this many recurrences accumulate (hermes `BLOCK_RECURRENCE_LIMIT`).
@@ -61,10 +62,7 @@ pub fn worker_run_id_for(task_id: &str) -> Option<i64> {
     if env_task != task_id {
         return None;
     }
-    std::env::var("ULNCLAW_KANBAN_RUN_ID")
-        .ok()?
-        .parse()
-        .ok()
+    std::env::var("ULNCLAW_KANBAN_RUN_ID").ok()?.parse().ok()
 }
 
 /// Default per-task worker log rotation threshold — rotate at 2 MiB
@@ -98,13 +96,7 @@ pub fn rotate_worker_log(log_path: &Path, rotate_bytes: u64) -> std::io::Result<
 /// Terminal event kinds that wake the creator session (hermes
 /// `_WAKE_KINDS`). `archived` / `unblocked` are claimed by the
 /// notifier's terminal set but stay silent.
-pub const WAKE_KINDS: &[&str] = &[
-    "completed",
-    "gave_up",
-    "crashed",
-    "timed_out",
-    "blocked",
-];
+pub const WAKE_KINDS: &[&str] = &["completed", "gave_up", "crashed", "timed_out", "blocked"];
 
 /// Human status fragment per wake kind (hermes
 /// `gateway.kanban.wake.*`).
@@ -168,16 +160,14 @@ pub const SCRATCH_TIP_SENTINEL_NAME: &str = ".scratch_tip_shown";
 /// `_SCRATCH_TIP_MESSAGE`).
 pub const SCRATCH_TIP_MESSAGE: &str = "scratch workspaces are ephemeral \u{2014} they're deleted when the task completes. Use --workspace worktree: (git worktree) or --workspace dir:/abs/path (existing dir) to preserve worker output.";
 
-
 /// The default board seeded on first open (hermes `default`).
 pub const DEFAULT_BOARD: &str = "default";
 
 /// Valid per-task reasoning effort levels (hermes
 /// `VALID_REASONING_EFFORTS`); `"none"` (thinking off) is additionally
 /// accepted by [`normalize_reasoning_effort`].
-pub const VALID_REASONING_EFFORTS: &[&str] = &[
-    "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
-];
+pub const VALID_REASONING_EFFORTS: &[&str] =
+    &["minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 
 /// Normalize a per-task reasoning effort into a storable level (hermes
 /// `normalize_reasoning_effort`): accepts any [`VALID_REASONING_EFFORTS`]
@@ -505,7 +495,11 @@ fn relative_age(ts: i64, now: i64) -> String {
 
 fn ctx_timestamp(ts: i64, now: i64) -> String {
     let base = chrono::DateTime::from_timestamp(ts, 0)
-        .map(|dt| dt.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string())
+        .map(|dt| {
+            dt.with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M")
+                .to_string()
+        })
         .unwrap_or_else(|| ts.to_string());
     let age = relative_age(ts, now);
     if age.is_empty() {
@@ -570,15 +564,28 @@ pub fn default_spawn(home: &Path, task: &Task) -> std::result::Result<Option<i64
 /// is its own branch, not a nested one (hermes `_default_spawn`).
 pub fn worker_spawn_flags(task: &Task) -> Vec<String> {
     let mut flags = Vec::new();
-    if let Some(assignee) = task.assignee.as_deref().map(str::trim).filter(|a| !a.is_empty()) {
+    if let Some(assignee) = task
+        .assignee
+        .as_deref()
+        .map(str::trim)
+        .filter(|a| !a.is_empty())
+    {
         flags.push("--profile".to_string());
         flags.push(assignee.to_string());
     }
-    if let Some(model) = task.model.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
+    if let Some(model) = task
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+    {
         flags.push("--model".to_string());
         flags.push(model.to_string());
-        if let Some(provider) =
-            task.provider.as_deref().map(str::trim).filter(|p| !p.is_empty())
+        if let Some(provider) = task
+            .provider
+            .as_deref()
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
         {
             flags.push("--provider".to_string());
             flags.push(provider.to_string());
@@ -607,8 +614,7 @@ pub fn spawn_worker(
     use std::os::unix::process::CommandExt;
     let exe = std::env::current_exe().map_err(|e| format!("current exe: {e}"))?;
     let log_dir = home.join("kanban").join("worker-logs");
-    std::fs::create_dir_all(&log_dir)
-        .map_err(|e| format!("create {}: {e}", log_dir.display()))?;
+    std::fs::create_dir_all(&log_dir).map_err(|e| format!("create {}: {e}", log_dir.display()))?;
     let log_path = log_dir.join(format!("{}.log", task.id));
     // Rotate at the configured cap, keep one backup generation
     // (hermes worker_log_rotation_config); append so earlier attempts
@@ -795,7 +801,10 @@ fn backup_corrupt_db(path: &Path) -> Option<PathBuf> {
         .map(|b| format!("{b:02x}"))
         .collect();
     let parent = path.parent()?;
-    let backup = parent.join(format!("{}.corrupt-{fingerprint}", path.file_name()?.to_str()?));
+    let backup = parent.join(format!(
+        "{}.corrupt-{fingerprint}",
+        path.file_name()?.to_str()?
+    ));
     if !backup.exists() {
         std::fs::write(&backup, &bytes).ok()?;
         for suffix in ["-wal", "-shm"] {
@@ -970,7 +979,7 @@ pub fn run_slash(home: &std::path::Path, rest: &str) -> String {
                 Err(e) => return format!("(._.) kanban error: {e}\n"),
             };
             let Some(task) = store.get_task(&id).ok().flatten() else {
-                return format!("(._.) task '{id}' not found\n")
+                return format!("(._.) task '{id}' not found\n");
             };
             let mut out = format!(
                 "{} {}  [{}]  {}\n",
@@ -1013,7 +1022,14 @@ pub fn run_slash(home: &std::path::Path, rest: &str) -> String {
                 _ => return format!("(._.) task '{id}' not found\n"),
             };
             let joined = result.join(" ");
-            match store.complete_task(&id, if joined.is_empty() { None } else { Some(&joined) }) {
+            match store.complete_task(
+                &id,
+                if joined.is_empty() {
+                    None
+                } else {
+                    Some(&joined)
+                },
+            ) {
                 Ok(t) => format!("✓ {} done\n", t.id),
                 Err(e) => format!("(._.) kanban error: {e}\n"),
             }
@@ -1197,12 +1213,10 @@ pub fn run_slash(home: &std::path::Path, rest: &str) -> String {
                 Err(e) => format!("(._.) kanban error: {e}\n"),
             }
         }
-        _ => {
-            "(o_o) usage: /kanban [boards|list [status]|show <id>|create <title>|done <id> \
+        _ => "(o_o) usage: /kanban [boards|list [status]|show <id>|create <title>|done <id> \
              [result]|block <id> <reason>|unblock <id>|comment <id> <text>|promote <id> \
              [--force] [reason]|reclaim <id> [reason]|assign <id> <assignee>|runs <id>|stats]\n"
-                .to_string()
-        }
+            .to_string(),
     }
 }
 
@@ -1249,7 +1263,10 @@ pub fn worker_goal_max_turns_env() -> Option<u32> {
 /// `ULNCLAW_KANBAN_STOP_NUDGE` explicitly disables it.
 pub fn stop_nudge_enabled() -> bool {
     if let Some(flag) = crate::config::get_env_value("ULNCLAW_KANBAN_STOP_NUDGE") {
-        if matches!(flag.trim().to_lowercase().as_str(), "0" | "false" | "no" | "off") {
+        if matches!(
+            flag.trim().to_lowercase().as_str(),
+            "0" | "false" | "no" | "off"
+        ) {
             return false;
         }
     }
@@ -1265,7 +1282,11 @@ pub fn build_kanban_stop_nudge(task_id: &str, attempts: usize) -> Option<String>
     if !stop_nudge_enabled() || attempts >= STOP_NUDGE_MAX_ATTEMPTS {
         return None;
     }
-    let tid = if task_id.trim().is_empty() { "this task".to_string() } else { task_id.trim().to_string() };
+    let tid = if task_id.trim().is_empty() {
+        "this task".to_string()
+    } else {
+        task_id.trim().to_string()
+    };
     Some(format!(
         "[System: You are an ulnclaw kanban worker. A plain-text reply is NOT a \
          terminal state for the board.\n\n\
@@ -1350,7 +1371,9 @@ impl KanbanStore {
             return Err(AgentError::session("kanban swarm: goal is required"));
         }
         if workers.is_empty() {
-            return Err(AgentError::session("kanban swarm: at least one worker is required"));
+            return Err(AgentError::session(
+                "kanban swarm: at least one worker is required",
+            ));
         }
         for (i, spec) in workers.iter().enumerate() {
             if spec.assignee.trim().is_empty() || spec.title.trim().is_empty() {
@@ -1361,12 +1384,20 @@ impl KanbanStore {
             }
         }
         if verifier_assignee.trim().is_empty() {
-            return Err(AgentError::session("kanban swarm: verifier assignee is required"));
+            return Err(AgentError::session(
+                "kanban swarm: verifier assignee is required",
+            ));
         }
         if synthesizer_assignee.trim().is_empty() {
-            return Err(AgentError::session("kanban swarm: synthesizer assignee is required"));
+            return Err(AgentError::session(
+                "kanban swarm: synthesizer assignee is required",
+            ));
         }
-        let created_by = if created_by.trim().is_empty() { "swarm-orchestrator" } else { created_by };
+        let created_by = if created_by.trim().is_empty() {
+            "swarm-orchestrator"
+        } else {
+            created_by
+        };
 
         let first_line = goal.lines().next().unwrap_or(goal);
         let root_title = format!("Swarm: {}", first_line.chars().take(80).collect::<String>());
@@ -1576,7 +1607,11 @@ impl KanbanStore {
         if !root_is_triage {
             return Ok(None);
         }
-        let author = if author.trim().is_empty() { "decomposer" } else { author.trim() };
+        let author = if author.trim().is_empty() {
+            "decomposer"
+        } else {
+            author.trim()
+        };
 
         let mut child_ids = Vec::new();
         for child in children {
@@ -1776,9 +1811,7 @@ pub fn parse_duration(value: &str) -> std::result::Result<Option<i64>, String> {
 /// Expand a leading `~/` against $HOME (hermes `os.path.expanduser`).
 fn expand_tilde(raw: &str) -> PathBuf {
     if raw == "~" || raw.starts_with("~/") {
-        if let Some(home) = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-        {
+        if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
             return PathBuf::from(home).join(&raw[2..]);
         }
     }
@@ -1829,7 +1862,8 @@ fn discover_prose_artifacts(workspace: &Path, text: &str) -> Vec<String> {
             }
             end = idx + ch.len_utf8();
         }
-        let raw = rest[..end].trim_end_matches(|c| matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '}'));
+        let raw = rest[..end]
+            .trim_end_matches(|c| matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '}'));
         if raw.starts_with('/') || raw.starts_with('\\') {
             let candidate = format!("{prefix}{raw}");
             if Path::new(&candidate).is_file() && !discovered.contains(&candidate) {
@@ -1886,7 +1920,10 @@ fn copy_artifact(src: &Path, attachment_dir: &Path, used: &[PathBuf]) -> std::io
             let _ = std::fs::remove_file(&dest);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("artifact grew beyond the {}-byte limit", KANBAN_ATTACHMENT_MAX_BYTES),
+                format!(
+                    "artifact grew beyond the {}-byte limit",
+                    KANBAN_ATTACHMENT_MAX_BYTES
+                ),
             ));
         }
         std::io::Write::write_all(&mut target, &buffer[..read])?;
@@ -1922,8 +1959,7 @@ const RESPAWN_GUARD_PR_WINDOW: i64 = 86400;
 
 /// GitHub PR URL pattern in task comments (hermes
 /// `_RESPAWN_GUARD_PR_URL_RE`).
-const RESPAWN_GUARD_PR_URL_RE: &str =
-    r"https?://github\.com/[^/\s]+/[^/\s]+/pull/\d+";
+const RESPAWN_GUARD_PR_URL_RE: &str = r"https?://github\.com/[^/\s]+/[^/\s]+/pull/\d+";
 
 /// Default cooldown after a rate-limited requeue before the dispatcher
 /// re-probes (hermes `DEFAULT_RATE_LIMIT_COOLDOWN_SECONDS`); override
@@ -1966,12 +2002,22 @@ fn is_linked_worktree_checkout(dir: &Path) -> bool {
 /// Create (or reuse) a linked worktree `target` in `repo` on `branch`
 /// (hermes `_ensure_git_worktree`). Falls back to attaching an
 /// existing branch when `-b` loses the race.
-fn ensure_git_worktree(repo: &Path, target: &Path, branch: &str) -> std::result::Result<(), String> {
+fn ensure_git_worktree(
+    repo: &Path,
+    target: &Path,
+    branch: &str,
+) -> std::result::Result<(), String> {
     if target.is_dir() {
         return Ok(());
     }
     let status = std::process::Command::new("git")
-        .args(["worktree", "add", target.to_str().unwrap_or_default(), "-b", branch])
+        .args([
+            "worktree",
+            "add",
+            target.to_str().unwrap_or_default(),
+            "-b",
+            branch,
+        ])
         .current_dir(repo)
         .status()
         .map_err(|e| format!("git worktree add: {e}"))?;
@@ -1979,7 +2025,12 @@ fn ensure_git_worktree(repo: &Path, target: &Path, branch: &str) -> std::result:
         return Ok(());
     }
     let status = std::process::Command::new("git")
-        .args(["worktree", "add", target.to_str().unwrap_or_default(), branch])
+        .args([
+            "worktree",
+            "add",
+            target.to_str().unwrap_or_default(),
+            branch,
+        ])
         .current_dir(repo)
         .status()
         .map_err(|e| format!("git worktree add: {e}"))?;
@@ -1995,7 +2046,10 @@ fn ensure_git_worktree(repo: &Path, target: &Path, branch: &str) -> std::result:
 /// worktree workspaces). Returns the worktree path, or `None` when the
 /// dispatch cwd is not inside a git repo (the worker then runs in-place).
 /// Existing worktrees are reused.
-pub fn prepare_worktree(cwd: &Path, task: &Task) -> std::result::Result<Option<std::path::PathBuf>, String> {
+pub fn prepare_worktree(
+    cwd: &Path,
+    task: &Task,
+) -> std::result::Result<Option<std::path::PathBuf>, String> {
     let Some(repo) = git_toplevel(cwd) else {
         return Ok(None);
     };
@@ -2005,7 +2059,13 @@ pub fn prepare_worktree(cwd: &Path, task: &Task) -> std::result::Result<Option<s
     }
     let branch = format!("kanban/{}", task.id);
     let status = std::process::Command::new("git")
-        .args(["worktree", "add", dir.to_str().unwrap_or_default(), "-b", &branch])
+        .args([
+            "worktree",
+            "add",
+            dir.to_str().unwrap_or_default(),
+            "-b",
+            &branch,
+        ])
         .current_dir(&repo)
         .status()
         .map_err(|e| format!("git worktree add: {e}"))?;
@@ -2026,7 +2086,10 @@ pub fn prepare_worktree(cwd: &Path, task: &Task) -> std::result::Result<Option<s
 /// Remove worktrees of tasks that reached a terminal status (hermes
 /// dispatcher gc owns the `t_<hex>` trees). Branches are kept — that is
 /// where the finished work lives. Returns (removed, skipped) counts.
-pub fn gc_worktrees(cwd: &Path, store: &KanbanStore) -> std::result::Result<(usize, usize), String> {
+pub fn gc_worktrees(
+    cwd: &Path,
+    store: &KanbanStore,
+) -> std::result::Result<(usize, usize), String> {
     let Some(repo) = git_toplevel(cwd) else {
         return Ok((0, 0));
     };
@@ -2055,7 +2118,12 @@ pub fn gc_worktrees(cwd: &Path, store: &KanbanStore) -> std::result::Result<(usi
             continue;
         }
         let status = std::process::Command::new("git")
-            .args(["worktree", "remove", "--force", entry.path().to_str().unwrap_or_default()])
+            .args([
+                "worktree",
+                "remove",
+                "--force",
+                entry.path().to_str().unwrap_or_default(),
+            ])
             .current_dir(&repo)
             .status();
         match status {
@@ -2375,10 +2443,8 @@ impl KanbanStore {
         // Pre-P158 stores lack the workflow-template hooks (hermes
         // workflow_template_id / current_step_key).
         if !columns.contains("workflow_template_id") {
-            conn.execute_batch(
-                "ALTER TABLE tasks ADD COLUMN workflow_template_id TEXT;",
-            )
-            .map_err(db_error("migrate workflow_template_id"))?;
+            conn.execute_batch("ALTER TABLE tasks ADD COLUMN workflow_template_id TEXT;")
+                .map_err(db_error("migrate workflow_template_id"))?;
         }
         if !columns.contains("current_step_key") {
             conn.execute_batch("ALTER TABLE tasks ADD COLUMN current_step_key TEXT;")
@@ -2483,7 +2549,9 @@ impl KanbanStore {
     pub fn list_boards(&self) -> Result<Vec<Board>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare("SELECT slug, name, default_workdir, created_at FROM boards ORDER BY created_at")
+            .prepare(
+                "SELECT slug, name, default_workdir, created_at FROM boards ORDER BY created_at",
+            )
             .map_err(db_error("boards prepare"))?;
         let rows = stmt
             .query_map([], |row| {
@@ -2516,12 +2584,7 @@ impl KanbanStore {
             .execute(
                 "INSERT OR IGNORE INTO boards (slug, name, default_workdir, created_at) \
                  VALUES (?1, ?2, ?3, ?4)",
-                params![
-                    slug,
-                    name.unwrap_or(&slug),
-                    default_workdir,
-                    Self::now()
-                ],
+                params![slug, name.unwrap_or(&slug), default_workdir, Self::now()],
             )
             .map_err(db_error("create board"))?;
         if inserted == 0 {
@@ -2557,7 +2620,9 @@ impl KanbanStore {
 
     pub fn remove_board(&self, slug: &str) -> Result<()> {
         if slug == DEFAULT_BOARD {
-            return Err(AgentError::session("kanban: cannot remove the default board"));
+            return Err(AgentError::session(
+                "kanban: cannot remove the default board",
+            ));
         }
         let conn = self.conn.lock().unwrap();
         let tasks: i64 = conn
@@ -2603,7 +2668,9 @@ impl KanbanStore {
             )
             .map_err(db_error("boards rename"))?;
         if updated == 0 {
-            return Err(AgentError::session(format!("kanban: board {slug} not found")));
+            return Err(AgentError::session(format!(
+                "kanban: board {slug} not found"
+            )));
         }
         Ok(())
     }
@@ -2619,7 +2686,9 @@ impl KanbanStore {
             )
             .map_err(db_error("boards set-workdir"))?;
         if updated == 0 {
-            return Err(AgentError::session(format!("kanban: board {slug} not found")));
+            return Err(AgentError::session(format!(
+                "kanban: board {slug} not found"
+            )));
         }
         Ok(())
     }
@@ -2758,7 +2827,8 @@ impl KanbanStore {
                 ))
             })
             .map_err(db_error("watch"))?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(db_error("watch"))
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(db_error("watch"))
     }
 
     /// Per-status task counts of the current board (hermes `kanban stats`).
@@ -2773,7 +2843,8 @@ impl KanbanStore {
                 Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
             })
             .map_err(db_error("stats"))?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(db_error("stats"))
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(db_error("stats"))
     }
 
     pub fn board_task_counts(&self) -> Result<Vec<(String, i64, i64)>> {
@@ -2862,9 +2933,7 @@ impl KanbanStore {
         let reasoning_effort = normalize_reasoning_effort(task.reasoning_effort.as_deref())?;
         if let Some(turns) = task.goal_max_turns {
             if turns < 1 {
-                return Err(AgentError::session(
-                    "kanban: goal_max_turns must be >= 1",
-                ));
+                return Err(AgentError::session("kanban: goal_max_turns must be >= 1"));
             }
         }
         if branch_name.is_some() && workspace_kind != "worktree" {
@@ -2938,9 +3007,7 @@ impl KanbanStore {
         // repo keyed on the task id (hermes create_task project anchor).
         if workspace_path.is_none() && workspace_kind == "worktree" {
             if let Some(repo) = project_repo.as_deref() {
-                let dir = std::path::Path::new(repo)
-                    .join(".worktrees")
-                    .join(&id);
+                let dir = std::path::Path::new(repo).join(".worktrees").join(&id);
                 workspace_path = Some(dir.to_string_lossy().to_string());
             }
         }
@@ -3139,9 +3206,7 @@ impl KanbanStore {
                 .expect("pr url regex compiles")
         });
         let mut stmt = conn
-            .prepare(
-                "SELECT body FROM task_comments WHERE task_id = ?1 AND created_at >= ?2",
-            )
+            .prepare("SELECT body FROM task_comments WHERE task_id = ?1 AND created_at >= ?2")
             .ok()?;
         let bodies = stmt
             .query_map(params![task_id, now - RESPAWN_GUARD_PR_WINDOW], |row| {
@@ -3218,8 +3283,7 @@ impl KanbanStore {
                         task.id, raw
                     ));
                 }
-                std::fs::create_dir_all(&p)
-                    .map_err(|e| format!("create {}: {e}", p.display()))?;
+                std::fs::create_dir_all(&p).map_err(|e| format!("create {}: {e}", p.display()))?;
                 Ok((p, None))
             }
             "worktree" => self.resolve_worktree_workspace(task),
@@ -3327,10 +3391,7 @@ impl KanbanStore {
                     return Ok((fallback, Some(branch_name)));
                 }
             }
-            return Ok((
-                requested,
-                Some(actual_branch.unwrap_or(branch_name)),
-            ));
+            return Ok((requested, Some(actual_branch.unwrap_or(branch_name))));
         }
         if let Some(repo_root) = git_toplevel(&requested) {
             if requested == repo_root {
@@ -3483,7 +3544,10 @@ impl KanbanStore {
     pub fn get_task(&self, id: &str) -> Result<Option<Task>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare(&format!("SELECT {} FROM tasks WHERE id = ?1", Self::TASK_COLUMNS))
+            .prepare(&format!(
+                "SELECT {} FROM tasks WHERE id = ?1",
+                Self::TASK_COLUMNS
+            ))
             .map_err(db_error("get task"))?;
         let mut rows = stmt
             .query_map(params![id], Self::task_from_row)
@@ -3533,10 +3597,7 @@ impl KanbanStore {
             None => self.current_board()?,
         };
         let conn = self.conn.lock().unwrap();
-        let mut sql = format!(
-            "SELECT {} FROM tasks WHERE board = ?1",
-            Self::TASK_COLUMNS
-        );
+        let mut sql = format!("SELECT {} FROM tasks WHERE board = ?1", Self::TASK_COLUMNS);
         let mut bindings: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(board)];
         if let Some(status) = status {
             sql.push_str(" AND status = ?");
@@ -3629,10 +3690,8 @@ impl KanbanStore {
             "UPDATE tasks SET status = ?2 {} WHERE id = ?1 AND {status_clause}",
             extra_sets
         );
-        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
-            Box::new(id.to_string()),
-            Box::new(to.to_string()),
-        ];
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> =
+            vec![Box::new(id.to_string()), Box::new(to.to_string())];
         params.extend(extra_params);
         for status in from {
             params.push(Box::new(status.to_string()));
@@ -3647,7 +3706,9 @@ impl KanbanStore {
         drop(conn);
         if updated == 0 {
             let current = self.get_task(id)?;
-            let current_status = current.map(|t| t.status).unwrap_or_else(|| "missing".into());
+            let current_status = current
+                .map(|t| t.status)
+                .unwrap_or_else(|| "missing".into());
             return Err(AgentError::session(format!(
                 "kanban: task {id} is '{current_status}' — cannot move to '{to}'"
             )));
@@ -3714,12 +3775,9 @@ impl KanbanStore {
                 "kanban: task {id} not found or already terminal"
             )));
         }
-        self.append_event(
-            id,
-            "assigned",
-            serde_json::json!({ "assignee": assignee }),
-        )?;
-        self.get_task(id)?.ok_or_else(|| AgentError::session("kanban: task vanished"))
+        self.append_event(id, "assigned", serde_json::json!({ "assignee": assignee }))?;
+        self.get_task(id)?
+            .ok_or_else(|| AgentError::session("kanban: task vanished"))
     }
 
     /// Priority update for dashboard drag/patch (hermes `kanban edit
@@ -3738,7 +3796,11 @@ impl KanbanStore {
                 "kanban: task {id} not found or archived"
             )));
         }
-        self.append_event(id, "priority_set", serde_json::json!({ "priority": priority }))?;
+        self.append_event(
+            id,
+            "priority_set",
+            serde_json::json!({ "priority": priority }),
+        )?;
         self.get_task(id)?
             .ok_or_else(|| AgentError::session("kanban: task vanished"))
     }
@@ -3790,7 +3852,8 @@ impl KanbanStore {
             "claimed",
             serde_json::json!({ "lock": lock, "expires": expires, "claimer": claimer, "run_id": run_id }),
         )?;
-        self.get_task(id)?.ok_or_else(|| AgentError::session("kanban: task vanished"))
+        self.get_task(id)?
+            .ok_or_else(|| AgentError::session("kanban: task vanished"))
     }
 
     /// Worker parks a running task in the review column after opening
@@ -3854,7 +3917,8 @@ impl KanbanStore {
             "claimed",
             serde_json::json!({ "lock": lock, "expires": expires, "claimer": claimer, "run_id": run_id, "review": true }),
         )?;
-        self.get_task(id)?.ok_or_else(|| AgentError::session("kanban: task vanished"))
+        self.get_task(id)?
+            .ok_or_else(|| AgentError::session("kanban: task vanished"))
     }
 
     /// Extend a live claim (hermes `heartbeat_task`); only the lock
@@ -3885,7 +3949,8 @@ impl KanbanStore {
                 "kanban: task {id} has no live claim to heartbeat"
             )));
         }
-        self.get_task(id)?.ok_or_else(|| AgentError::session("kanban: task vanished"))
+        self.get_task(id)?
+            .ok_or_else(|| AgentError::session("kanban: task vanished"))
     }
 
     /// Move a task to done (hermes `complete_task` — allowed from any
@@ -3947,9 +4012,8 @@ impl KanbanStore {
         if text.is_empty() {
             return Ok(Vec::new());
         }
-        let re = regex::Regex::new(r"\bt_[a-f0-9]{8,}\b").map_err(|e| {
-            AgentError::session(format!("kanban: phantom-id regex: {e}"))
-        })?;
+        let re = regex::Regex::new(r"\bt_[a-f0-9]{8,}\b")
+            .map_err(|e| AgentError::session(format!("kanban: phantom-id regex: {e}")))?;
         let mut unique: Vec<String> = Vec::new();
         for found in re.find_iter(text) {
             let id = found.as_str().to_string();
@@ -4088,7 +4152,9 @@ impl KanbanStore {
             vec![Box::new(now), Box::new(result.map(|r| r.to_string()))],
             expected_run_id,
         )?;
-        let metadata_json = metadata.map(serde_json::to_string).transpose()
+        let metadata_json = metadata
+            .map(serde_json::to_string)
+            .transpose()
             .map_err(|e| AgentError::session(format!("kanban: metadata: {e}")))?;
         match self.close_active_run_full(
             id,
@@ -4157,17 +4223,15 @@ impl KanbanStore {
         } else {
             let (verified, phantom) = self.verify_created_cards(id, created_cards)?;
             if !phantom.is_empty() {
-                let preview = summary
-                    .or(result)
-                    .map(|raw| {
-                        raw.trim()
-                            .lines()
-                            .next()
-                            .unwrap_or_default()
-                            .chars()
-                            .take(200)
-                            .collect::<String>()
-                    });
+                let preview = summary.or(result).map(|raw| {
+                    raw.trim()
+                        .lines()
+                        .next()
+                        .unwrap_or_default()
+                        .chars()
+                        .take(200)
+                        .collect::<String>()
+                });
                 self.append_event(
                     id,
                     "completion_blocked_hallucination",
@@ -4222,9 +4286,7 @@ impl KanbanStore {
         // Stage scratch artifacts before cleanup can erase them.
         let mut staged: Vec<PathBuf> = Vec::new();
         let persisted: Vec<String> = if managed_scratch {
-            let workspace_root = workspace
-                .as_ref()
-                .and_then(|path| path.canonicalize().ok());
+            let workspace_root = workspace.as_ref().and_then(|path| path.canonicalize().ok());
             let attachment_dir = task_attachments_dir(home, id);
             let mut out = Vec::new();
             let mut used: Vec<PathBuf> = Vec::new();
@@ -4384,12 +4446,7 @@ impl KanbanStore {
     ///   instead (`block_loop_detected` event), breaking unblock loops.
     /// - `transient`: routed like a generic block but signals "may
     ///   clear on its own"; still participates in the loop breaker.
-    pub fn block_task_kind(
-        &self,
-        id: &str,
-        reason: &str,
-        kind: Option<&str>,
-    ) -> Result<Task> {
+    pub fn block_task_kind(&self, id: &str, reason: &str, kind: Option<&str>) -> Result<Task> {
         self.block_task_guarded(id, reason, kind, None)
     }
 
@@ -4455,10 +4512,7 @@ impl KanbanStore {
                 }),
                 ", claim_lock = NULL, claim_expires = NULL, worker_pid = NULL, \
                  block_kind = ?3, block_recurrences = ?4",
-                vec![
-                    Box::new(kind.map(str::to_string)),
-                    Box::new(recurrences),
-                ],
+                vec![Box::new(kind.map(str::to_string)), Box::new(recurrences)],
                 expected_run_id,
             )?
         } else {
@@ -4474,10 +4528,7 @@ impl KanbanStore {
                 }),
                 ", claim_lock = NULL, claim_expires = NULL, block_kind = ?3, \
                  block_recurrences = ?4",
-                vec![
-                    Box::new(kind.map(str::to_string)),
-                    Box::new(recurrences),
-                ],
+                vec![Box::new(kind.map(str::to_string)), Box::new(recurrences)],
                 expected_run_id,
             )?
         };
@@ -4559,9 +4610,7 @@ impl KanbanStore {
                 .parents_of(id)?
                 .into_iter()
                 .filter_map(|parent_id| match self.get_task(&parent_id) {
-                    Ok(Some(parent))
-                        if parent.status != "done" && parent.status != "archived" =>
-                    {
+                    Ok(Some(parent)) if parent.status != "done" && parent.status != "archived" => {
                         Some(parent_id)
                     }
                     _ => None,
@@ -4653,16 +4702,12 @@ impl KanbanStore {
             "reassigned",
             serde_json::json!({ "assignee": target, "reason": reason }),
         )?;
-        self.get_task(id)?.ok_or_else(|| AgentError::session("kanban: task vanished"))
+        self.get_task(id)?
+            .ok_or_else(|| AgentError::session("kanban: task vanished"))
     }
 
     /// Edit a task's title/body (hermes `kanban edit`).
-    pub fn edit_task(
-        &self,
-        id: &str,
-        title: Option<&str>,
-        body: Option<&str>,
-    ) -> Result<Task> {
+    pub fn edit_task(&self, id: &str, title: Option<&str>, body: Option<&str>) -> Result<Task> {
         if let Some(candidate) = title {
             if candidate.trim().is_empty() {
                 return Err(AgentError::session("kanban: title cannot be blank"));
@@ -4697,19 +4742,15 @@ impl KanbanStore {
             )));
         }
         self.append_event(id, "edited", serde_json::json!({}))?;
-        self.get_task(id)?.ok_or_else(|| AgentError::session("kanban: task vanished"))
+        self.get_task(id)?
+            .ok_or_else(|| AgentError::session("kanban: task vanished"))
     }
 
     /// Per-task model/provider override (hermes `kanban set-model
     /// [--provider]`): takes effect on the next dispatch. Clearing the
     /// model clears the provider with it; a provider without a model
     /// is rejected (hermes contract).
-    pub fn set_model(
-        &self,
-        id: &str,
-        model: Option<&str>,
-        provider: Option<&str>,
-    ) -> Result<Task> {
+    pub fn set_model(&self, id: &str, model: Option<&str>, provider: Option<&str>) -> Result<Task> {
         let model = model.map(str::trim).filter(|m| !m.is_empty());
         let provider = provider.map(str::trim).filter(|p| !p.is_empty());
         if provider.is_some() && model.is_none() {
@@ -4735,7 +4776,8 @@ impl KanbanStore {
             "model_set",
             serde_json::json!({ "model": model, "provider": provider }),
         )?;
-        self.get_task(id)?.ok_or_else(|| AgentError::session("kanban: task vanished"))
+        self.get_task(id)?
+            .ok_or_else(|| AgentError::session("kanban: task vanished"))
     }
 
     /// Set (or clear) the per-task reasoning effort (hermes
@@ -4778,7 +4820,8 @@ impl KanbanStore {
             "reasoning_effort_set",
             serde_json::json!({ "reasoning_effort": effort }),
         )?;
-        self.get_task(id)?.ok_or_else(|| AgentError::session("kanban: task vanished"))
+        self.get_task(id)?
+            .ok_or_else(|| AgentError::session("kanban: task vanished"))
     }
 
     pub fn archive_task(&self, id: &str) -> Result<Task> {
@@ -4930,16 +4973,10 @@ impl KanbanStore {
         if status.as_deref() != Some("archived") {
             return Ok(false);
         }
-        conn.execute(
-            "DELETE FROM task_comments WHERE task_id = ?1",
-            params![id],
-        )
-        .map_err(db_error("purge comments"))?;
-        conn.execute(
-            "DELETE FROM task_events WHERE task_id = ?1",
-            params![id],
-        )
-        .map_err(db_error("purge events"))?;
+        conn.execute("DELETE FROM task_comments WHERE task_id = ?1", params![id])
+            .map_err(db_error("purge comments"))?;
+        conn.execute("DELETE FROM task_events WHERE task_id = ?1", params![id])
+            .map_err(db_error("purge events"))?;
         conn.execute(
             "DELETE FROM task_links WHERE parent_id = ?1 OR child_id = ?1",
             params![id],
@@ -4950,11 +4987,8 @@ impl KanbanStore {
             params![id],
         )
         .map_err(db_error("purge attachments"))?;
-        conn.execute(
-            "DELETE FROM task_runs WHERE task_id = ?1",
-            params![id],
-        )
-        .map_err(db_error("purge runs"))?;
+        conn.execute("DELETE FROM task_runs WHERE task_id = ?1", params![id])
+            .map_err(db_error("purge runs"))?;
         conn.execute(
             "DELETE FROM kanban_notify_subs WHERE task_id = ?1",
             params![id],
@@ -5088,14 +5122,13 @@ impl KanbanStore {
     pub fn parents_of(&self, task_id: &str) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare(
-                "SELECT parent_id FROM task_links WHERE child_id = ?1 ORDER BY created_at ASC",
-            )
+            .prepare("SELECT parent_id FROM task_links WHERE child_id = ?1 ORDER BY created_at ASC")
             .map_err(db_error("parents"))?;
         let rows = stmt
             .query_map(params![task_id], |row| row.get::<_, String>(0))
             .map_err(db_error("parents"))?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(db_error("parents"))
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(db_error("parents"))
     }
 
     /// Attach a file path or URL to a task (hermes task_attachments).
@@ -5118,9 +5151,7 @@ impl KanbanStore {
     pub fn attachments(&self, task_id: &str) -> Result<Vec<(String, String)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare(
-                "SELECT kind, value FROM task_attachments WHERE task_id = ?1 ORDER BY id ASC",
-            )
+            .prepare("SELECT kind, value FROM task_attachments WHERE task_id = ?1 ORDER BY id ASC")
             .map_err(db_error("attachments"))?;
         let rows = stmt
             .query_map(params![task_id], |row| {
@@ -5248,13 +5279,15 @@ impl KanbanStore {
                 "SELECT task_id, platform, chat_id, chat_type, thread_id, user_id,
                         notifier_profile, delivery_metadata, created_at, last_event_id
                  FROM kanban_notify_subs WHERE task_id = ?1
-                 ORDER BY created_at ASC".into(),
+                 ORDER BY created_at ASC"
+                    .into(),
                 vec![Box::new(id.to_string())],
             ),
             None => (
                 "SELECT task_id, platform, chat_id, chat_type, thread_id, user_id,
                         notifier_profile, delivery_metadata, created_at, last_event_id
-                 FROM kanban_notify_subs ORDER BY created_at ASC".into(),
+                 FROM kanban_notify_subs ORDER BY created_at ASC"
+                    .into(),
                 Vec::new(),
             ),
         };
@@ -5319,7 +5352,13 @@ impl KanbanStore {
         conn.execute(
             "UPDATE kanban_notify_subs SET last_event_id = ?1
              WHERE task_id = ?2 AND platform = ?3 AND chat_id = ?4 AND thread_id = ?5",
-            params![new_cursor, task_id, platform, chat_id, thread_id.unwrap_or("")],
+            params![
+                new_cursor,
+                task_id,
+                platform,
+                chat_id,
+                thread_id.unwrap_or("")
+            ],
         )
         .map_err(db_error("notify-cursor"))?;
         Ok(())
@@ -5354,10 +5393,8 @@ impl KanbanStore {
             "SELECT id, task_id, kind, payload, created_at FROM task_events
              WHERE task_id = ?1 AND id > ?2 ",
         );
-        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = vec![
-            Box::new(task_id.to_string()),
-            Box::new(cursor),
-        ];
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> =
+            vec![Box::new(task_id.to_string()), Box::new(cursor)];
         if let Some(kinds) = kinds.filter(|k| !k.is_empty()) {
             sql.push_str("AND kind IN (");
             for (i, _) in kinds.iter().enumerate() {
@@ -5432,7 +5469,12 @@ impl KanbanStore {
     /// Close any still-open run left over from a previous attempt as
     /// `reclaimed` (hermes invariant recovery on re-claim / unblock).
     /// Caller must hold `conn`.
-    fn recover_stale_run_conn(conn: &Connection, task_id: &str, note: &str, now: i64) -> Result<()> {
+    fn recover_stale_run_conn(
+        conn: &Connection,
+        task_id: &str,
+        note: &str,
+        now: i64,
+    ) -> Result<()> {
         conn.execute(
             "UPDATE task_runs
                 SET status = 'reclaimed', outcome = 'reclaimed',
@@ -5604,7 +5646,8 @@ impl KanbanStore {
         let rows = stmt
             .query_map(refs.as_slice(), run_from_row)
             .map_err(db_error("runs"))?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(db_error("runs"))
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(db_error("runs"))
     }
 
     /// Most recent run regardless of outcome, active or closed (hermes
@@ -5726,7 +5769,10 @@ impl KanbanStore {
                     lines.push(format!("_error_: {}", cap_field(err, CTX_MAX_FIELD_BYTES)));
                 }
                 if let Some(meta) = &run.metadata {
-                    lines.push(format!("_metadata_: `{}`", cap_field(&meta.to_string(), CTX_MAX_FIELD_BYTES)));
+                    lines.push(format!(
+                        "_metadata_: `{}`",
+                        cap_field(&meta.to_string(), CTX_MAX_FIELD_BYTES)
+                    ));
                 }
                 lines.push(String::new());
             }
@@ -5824,7 +5870,11 @@ impl KanbanStore {
                         .map(|s| s.trim().lines().next().unwrap_or(""))
                         .unwrap_or("");
                     let first: String = first.chars().take(200).collect();
-                    let first = if first.is_empty() { "(no summary)".into() } else { first };
+                    let first = if first.is_empty() {
+                        "(no summary)".into()
+                    } else {
+                        first
+                    };
                     lines.push(format!(
                         "- {id} — {title} ({}): {first}",
                         ctx_timestamp(ended_at, now)
@@ -5878,14 +5928,13 @@ impl KanbanStore {
     pub fn children_of(&self, task_id: &str) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare(
-                "SELECT child_id FROM task_links WHERE parent_id = ?1 ORDER BY created_at ASC",
-            )
+            .prepare("SELECT child_id FROM task_links WHERE parent_id = ?1 ORDER BY created_at ASC")
             .map_err(db_error("children"))?;
         let rows = stmt
             .query_map(params![task_id], |row| row.get::<_, String>(0))
             .map_err(db_error("children"))?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(db_error("children"))
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(db_error("children"))
     }
 
     // ------------------------------------------------------------------
@@ -5922,7 +5971,8 @@ impl KanbanStore {
                     ))
                 })
                 .map_err(db_error("reap"))?;
-            rows.collect::<std::result::Result<Vec<_>, _>>().map_err(db_error("reap"))?
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(db_error("reap"))?
         };
         let mut reaped = Vec::new();
         for (id, worker_pid, started_at, limit) in candidates {
@@ -6019,7 +6069,8 @@ impl KanbanStore {
                     ))
                 })
                 .map_err(db_error("crashed"))?;
-            rows.collect::<std::result::Result<Vec<_>, _>>().map_err(db_error("crashed"))?
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(db_error("crashed"))?
         };
         let mut crashed = Vec::new();
         for (id, pid, started_at) in rows {
@@ -6091,7 +6142,8 @@ impl KanbanStore {
                     ))
                 })
                 .map_err(db_error("stale"))?;
-            rows.collect::<std::result::Result<Vec<_>, _>>().map_err(db_error("stale"))?
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(db_error("stale"))?
         };
         let mut reclaimed = Vec::new();
         for (id, worker_pid, last_heartbeat_at, active_started_at) in rows {
@@ -6178,7 +6230,8 @@ impl KanbanStore {
                     Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
                 })
                 .map_err(db_error("stale"))?;
-            let found = rows.collect::<std::result::Result<Vec<_>, _>>()
+            let found = rows
+                .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(db_error("stale"))?;
             found
         };
@@ -6215,7 +6268,11 @@ impl KanbanStore {
                     params![id],
                 )
                 .map_err(db_error("release claim"))?;
-            self.append_event(&id, "released", serde_json::json!({ "reason": "stale_claim" }))?;
+            self.append_event(
+                &id,
+                "released",
+                serde_json::json!({ "reason": "stale_claim" }),
+            )?;
             self.close_active_run(&id, "reclaimed", "reclaimed", None, None)?;
             reclaimed.push(id);
         }
@@ -6442,12 +6499,7 @@ impl KanbanStore {
             None,
             Some(&err_capped),
         )?;
-        self.record_task_failure_with_release(
-            task_id,
-            error,
-            "spawn_failed",
-            failure_limit,
-        )
+        self.record_task_failure_with_release(task_id, error, "spawn_failed", failure_limit)
     }
 
     /// Record the pid of a dispatcher-spawned worker.
@@ -6690,7 +6742,8 @@ impl KanbanStore {
             let rows = stmt
                 .query_map([], |row| row.get::<_, String>(0))
                 .map_err(db_error("dispatch"))?;
-            let found = rows.collect::<std::result::Result<Vec<_>, _>>()
+            let found = rows
+                .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(db_error("dispatch"))?;
             found
         };
@@ -6789,14 +6842,11 @@ impl KanbanStore {
             // spawn time, so the worker carries ULNCLAW_KANBAN_RUN_ID
             // and completions from a reclaimed attempt are refused via
             // the expected_run_id guard.
-            let claimed = match self.claim_task(
-                &id,
-                &KanbanStore::claimer_id(),
-                DEFAULT_CLAIM_TTL_SECS,
-            ) {
-                Ok(claimed) => claimed,
-                Err(_) => continue, // lost a claim race this tick
-            };
+            let claimed =
+                match self.claim_task(&id, &KanbanStore::claimer_id(), DEFAULT_CLAIM_TTL_SECS) {
+                    Ok(claimed) => claimed,
+                    Err(_) => continue, // lost a claim race this tick
+                };
             // Resolve the workspace BEFORE spawn (hermes dispatch); the
             // resolved path is persisted so retries reuse it.
             let spawn_outcome = match self.resolve_workspace(home, effective) {
@@ -6808,8 +6858,7 @@ impl KanbanStore {
                     self.maybe_emit_scratch_tip(home, &id, &effective.workspace_kind);
                     // Re-read the claimed row so the worker prompt +
                     // env see the fresh run id.
-                    let mut spawn_task =
-                        self.get_task(&id)?.unwrap_or_else(|| claimed.clone());
+                    let mut spawn_task = self.get_task(&id)?.unwrap_or_else(|| claimed.clone());
                     if effective.workspace_kind != spawn_task.workspace_kind {
                         spawn_task.workspace_kind = effective.workspace_kind.clone();
                     }
@@ -6834,16 +6883,8 @@ impl KanbanStore {
                     result.spawned.push((id, pid));
                 }
                 Err(err) => {
-                    self.append_event(
-                        &id,
-                        "spawn_failed",
-                        serde_json::json!({ "error": err }),
-                    )?;
-                    let gave_up = self.record_spawn_failure(
-                        &id,
-                        &err,
-                        failure_limit as i64,
-                    )?;
+                    self.append_event(&id, "spawn_failed", serde_json::json!({ "error": err }))?;
+                    let gave_up = self.record_spawn_failure(&id, &err, failure_limit as i64)?;
                     if gave_up {
                         result.auto_blocked.push(id);
                     } else {
@@ -6945,16 +6986,8 @@ impl KanbanStore {
                     result.spawned.push((id, pid));
                 }
                 Err(err) => {
-                    self.append_event(
-                        &id,
-                        "spawn_failed",
-                        serde_json::json!({ "error": err }),
-                    )?;
-                    let gave_up = self.record_spawn_failure(
-                        &id,
-                        &err,
-                        failure_limit as i64,
-                    )?;
+                    self.append_event(&id, "spawn_failed", serde_json::json!({ "error": err }))?;
+                    let gave_up = self.record_spawn_failure(&id, &err, failure_limit as i64)?;
                     if gave_up {
                         result.auto_blocked.push(id);
                     } else {
@@ -7024,11 +7057,15 @@ mod tests {
         let (_dir, store) = temp_store();
         let task = make_task(&store, "Ship it");
         store.ready_task(&task.id).unwrap();
-        let claimed = store.claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        let claimed = store
+            .claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         assert_eq!(claimed.status, "running");
         assert_eq!(claimed.assignee.as_deref(), Some("host:1"));
         assert!(claimed.started_at.is_some());
-        store.heartbeat_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .heartbeat_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         let done = store.complete_task(&task.id, Some("all green")).unwrap();
         assert_eq!(done.status, "done");
         assert_eq!(done.result.as_deref(), Some("all green"));
@@ -7092,7 +7129,9 @@ mod tests {
         assert_eq!(comments.len(), 2);
         assert_eq!(comments[0].author, "alice");
 
-        let alice_tasks = store.list_tasks(None, None, Some("alice"), None, 100).unwrap();
+        let alice_tasks = store
+            .list_tasks(None, None, Some("alice"), None, 100)
+            .unwrap();
         assert_eq!(alice_tasks.len(), 1);
         assert_eq!(alice_tasks[0].id, a.id);
         assert_ne!(a.id, b.id);
@@ -7108,7 +7147,9 @@ mod tests {
         let task = make_task(&store, "On the ops board");
         assert_eq!(task.board, "ops");
         // default board listing does not see the ops task.
-        let default_tasks = store.list_tasks(Some("default"), None, None, None, 100).unwrap();
+        let default_tasks = store
+            .list_tasks(Some("default"), None, None, None, 100)
+            .unwrap();
         assert!(default_tasks.is_empty());
         // Cannot remove a board with active tasks.
         assert!(store.remove_board("ops").is_err());
@@ -7152,7 +7193,18 @@ mod tests {
         store.ready_task(&second.id).unwrap();
 
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(1234)), Some(1), false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(1234)),
+                Some(1),
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.spawned.len(), 1);
         assert_eq!(result.spawned[0].0, first.id);
@@ -7163,7 +7215,18 @@ mod tests {
 
         // Second tick with a higher cap picks up the remaining task.
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(5678)), Some(2), false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(5678)),
+                Some(2),
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.spawned.len(), 1);
         assert_eq!(result.spawned[0].0, second.id);
@@ -7175,7 +7238,18 @@ mod tests {
         let task = make_task(&store, "probe");
         store.ready_task(&task.id).unwrap();
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| panic!("dry run must not spawn"), None, true, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| panic!("dry run must not spawn"),
+                None,
+                true,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.would_spawn, vec![task.id.clone()]);
         assert!(result.spawned.is_empty());
@@ -7190,14 +7264,36 @@ mod tests {
 
         // First failure: recorded, still ready-ish for retry.
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Err("boom".into()), None, false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Err("boom".into()),
+                None,
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.spawn_failed, vec![task.id.clone()]);
         assert!(result.auto_blocked.is_empty());
 
         // Second consecutive failure trips the limit → blocked.
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Err("boom again".into()), None, false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Err("boom again".into()),
+                None,
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.auto_blocked, vec![task.id.clone()]);
         let blocked = store.get_task(&task.id).unwrap().unwrap();
@@ -7336,8 +7432,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(result.skipped_nonspawnable, vec![lane.id.clone()]);
-        let mut spawned: Vec<String> =
-            result.spawned.into_iter().map(|(id, _)| id).collect();
+        let mut spawned: Vec<String> = result.spawned.into_iter().map(|(id, _)| id).collect();
         spawned.sort();
         let mut expected = vec![alice.id.clone(), unassigned.id.clone()];
         expected.sort();
@@ -7363,7 +7458,18 @@ mod tests {
             .unwrap();
         store.ready_task(&task.id).unwrap();
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(9)), None, false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(9)),
+                None,
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert!(result.skipped_nonspawnable.is_empty());
         assert_eq!(result.spawned.len(), 1);
@@ -7439,12 +7545,12 @@ mod tests {
         assert_eq!(done.status, "done");
 
         let staged_path = task_attachments_dir(dir.path(), &task.id).join("report.md");
-        assert_eq!(
-            std::fs::read_to_string(&staged_path).unwrap(),
-            "# done"
-        );
+        assert_eq!(std::fs::read_to_string(&staged_path).unwrap(), "# done");
         let attachments = store.attachments(&task.id).unwrap();
-        assert_eq!(attachments, vec![("artifact".into(), staged_path.to_string_lossy().to_string())]);
+        assert_eq!(
+            attachments,
+            vec![("artifact".into(), staged_path.to_string_lossy().to_string())]
+        );
 
         // The completed event + run metadata carry the staged path.
         let completed = store
@@ -7477,15 +7583,23 @@ mod tests {
         let missing = workspace.join("missing.txt").to_string_lossy().to_string();
         let keep = workspace.join("keep.md").to_string_lossy().to_string();
         let err = store
-            .complete_task_with_artifacts(dir.path(), &task.id, None, None, None, &[keep, missing], &[], None)
+            .complete_task_with_artifacts(
+                dir.path(),
+                &task.id,
+                None,
+                None,
+                None,
+                &[keep, missing],
+                &[],
+                None,
+            )
             .unwrap_err();
         assert!(err.to_string().contains("unavailable"), "{err}");
-        assert_eq!(
-            store.get_task(&task.id).unwrap().unwrap().status,
-            "ready"
-        );
+        assert_eq!(store.get_task(&task.id).unwrap().unwrap().status, "ready");
         // Staged copies rolled back.
-        assert!(!task_attachments_dir(dir.path(), &task.id).join("keep.md").exists());
+        assert!(!task_attachments_dir(dir.path(), &task.id)
+            .join("keep.md")
+            .exists());
     }
 
     #[test]
@@ -7534,7 +7648,16 @@ mod tests {
 
         let summary = format!("Deliverable: {}.", workspace.join("out.csv").display());
         let done = store
-            .complete_task_with_artifacts(dir.path(), &task.id, None, Some(&summary), None, &[], &[], None)
+            .complete_task_with_artifacts(
+                dir.path(),
+                &task.id,
+                None,
+                Some(&summary),
+                None,
+                &[],
+                &[],
+                None,
+            )
             .unwrap();
         assert_eq!(done.status, "done");
         let staged_path = task_attachments_dir(dir.path(), &task.id).join("out.csv");
@@ -7708,7 +7831,10 @@ mod tests {
         store.ready_task(&unassigned.id).unwrap();
         store.claim_task(&unassigned.id, "placeholder", 60).unwrap();
         store.request_review(&unassigned.id, "PR #3").unwrap();
-        store.conn.lock().unwrap()
+        store
+            .conn
+            .lock()
+            .unwrap()
             .execute(
                 "UPDATE tasks SET assignee = NULL WHERE id = ?1",
                 params![unassigned.id],
@@ -7730,7 +7856,18 @@ mod tests {
         let profiles: std::collections::HashSet<String> =
             ["alice".to_string()].into_iter().collect();
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(1)), None, false, 2, 0, Some(&profiles), None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(1)),
+                None,
+                false,
+                2,
+                0,
+                Some(&profiles),
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.spawned.len(), 0);
         assert_eq!(result.skipped_unassigned, vec![unassigned.id.clone()]);
@@ -7772,7 +7909,18 @@ mod tests {
         }
 
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(1)), None, false, 2, 0, None, Some(1), None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(1)),
+                None,
+                false,
+                2,
+                0,
+                None,
+                Some(1),
+                None,
+            )
             .unwrap();
         // alice: first task spawns, second hits the cap; bob unaffected.
         let spawned: Vec<String> = result.spawned.iter().map(|(id, _)| id.clone()).collect();
@@ -7786,7 +7934,18 @@ mod tests {
         // The seeded running column keeps the cap enforced next tick
         // (second stayed ready).
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(1)), None, false, 2, 0, None, Some(1), None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(1)),
+                None,
+                false,
+                2,
+                0,
+                None,
+                Some(1),
+                None,
+            )
             .unwrap();
         assert_eq!(result.spawned.len(), 0);
         assert_eq!(
@@ -7796,7 +7955,18 @@ mod tests {
 
         // No cap → the backlog spawns.
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(1)), None, false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(1)),
+                None,
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.spawned.len(), 1);
         assert!(result.skipped_per_profile_capped.is_empty());
@@ -7817,7 +7987,18 @@ mod tests {
             store.ready_task(&task.id).unwrap();
         }
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| panic!("dry run"), None, true, 2, 0, None, Some(1), None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| panic!("dry run"),
+                None,
+                true,
+                2,
+                0,
+                None,
+                Some(1),
+                None,
+            )
             .unwrap();
         // The would-be spawn counts against the cap for the second task.
         assert_eq!(result.would_spawn.len(), 1);
@@ -7881,20 +8062,53 @@ mod tests {
         // Cap 2 with one already running → exactly one new spawn even
         // though max_spawn is unset.
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(7)), None, false, 2, 0, None, None, Some(2))
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(7)),
+                None,
+                false,
+                2,
+                0,
+                None,
+                None,
+                Some(2),
+            )
             .unwrap();
         assert_eq!(result.spawned.len(), 1);
         assert_eq!(result.spawned[0].0, queued[0]);
 
         // Now saturated: the next tick returns early.
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(7)), None, false, 2, 0, None, None, Some(2))
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(7)),
+                None,
+                false,
+                2,
+                0,
+                None,
+                None,
+                Some(2),
+            )
             .unwrap();
         assert!(result.spawned.is_empty());
 
         // Cap 0 disables the check → the rest of the backlog spawns.
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(7)), None, false, 2, 0, None, None, Some(0))
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(7)),
+                None,
+                false,
+                2,
+                0,
+                None,
+                None,
+                Some(0),
+            )
             .unwrap();
         assert_eq!(result.spawned.len(), 2);
     }
@@ -7905,7 +8119,18 @@ mod tests {
         let first = make_task(&store, "tip-one");
         store.ready_task(&first.id).unwrap();
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(5)), Some(4), false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(5)),
+                Some(4),
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.spawned.len(), 1);
         let events = store.events(&first.id).unwrap();
@@ -7916,7 +8141,18 @@ mod tests {
         let second = make_task(&store, "tip-two");
         store.ready_task(&second.id).unwrap();
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(5)), Some(4), false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(5)),
+                Some(4),
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.spawned.len(), 1);
         let events = store.events(&second.id).unwrap();
@@ -7938,7 +8174,18 @@ mod tests {
             .unwrap();
         store.ready_task(&task.id).unwrap();
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(5)), Some(4), false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(5)),
+                Some(4),
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.spawned.len(), 1);
         let events = store.events(&task.id).unwrap();
@@ -8027,7 +8274,10 @@ mod tests {
         let err = store
             .block_task_guarded(&task.id, "stale block", None, Some(first_run))
             .unwrap_err();
-        assert!(err.to_string().contains("cannot move to 'blocked'"), "{err}");
+        assert!(
+            err.to_string().contains("cannot move to 'blocked'"),
+            "{err}"
+        );
         assert_eq!(store.get_task(&task.id).unwrap().unwrap().status, "running");
         let blocked = store
             .block_task_guarded(&task.id, "fresh block", None, second.current_run_id)
@@ -8261,7 +8511,18 @@ mod tests {
         // must skip the tick with zero writes.
         let held = KanbanStore::try_acquire_dispatch_tick_lock(&db_path).unwrap();
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(1)), None, false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(1)),
+                None,
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert!(result.skipped_locked);
         assert!(result.spawned.is_empty());
@@ -8270,7 +8531,18 @@ mod tests {
         // Released → the next tick proceeds.
         drop(held);
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Ok(Some(1)), None, false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Ok(Some(1)),
+                None,
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert!(!result.skipped_locked);
         assert_eq!(result.spawned.len(), 1);
@@ -8303,10 +8575,7 @@ mod tests {
             )
             .unwrap_err();
         assert!(err.to_string().contains("completion blocked"), "{err}");
-        assert_eq!(
-            store.get_task(&worker.id).unwrap().unwrap().status,
-            "ready"
-        );
+        assert_eq!(store.get_task(&worker.id).unwrap().unwrap().status, "ready");
         let blocked = store
             .events(&worker.id)
             .unwrap()
@@ -8377,7 +8646,16 @@ mod tests {
         store.ready_task(&task.id).unwrap();
         let summary = "Follow-up tracked in t_cafebabe42 (created earlier).";
         let done = store
-            .complete_task_with_artifacts(dir.path(), &task.id, None, Some(summary), None, &[], &[], None)
+            .complete_task_with_artifacts(
+                dir.path(),
+                &task.id,
+                None,
+                Some(summary),
+                None,
+                &[],
+                &[],
+                None,
+            )
             .unwrap();
         assert_eq!(done.status, "done");
         let flagged = store
@@ -8400,7 +8678,10 @@ mod tests {
         assert_eq!(claimed.status, "running");
 
         // Force-expire the claim and pin a dead worker pid.
-        store.conn.lock().unwrap()
+        store
+            .conn
+            .lock()
+            .unwrap()
             .execute(
                 "UPDATE tasks SET claim_expires = ?2, worker_pid = ?3 WHERE id = ?1",
                 params![task.id, 1i64, 999_999_999i64],
@@ -8469,7 +8750,9 @@ mod tests {
         }
         let promoted = store.recompute_ready().unwrap();
         assert_eq!(promoted, vec![created.verifier_id.clone()]);
-        store.complete_task(&created.verifier_id, Some("verified")).unwrap();
+        store
+            .complete_task(&created.verifier_id, Some("verified"))
+            .unwrap();
         let promoted = store.recompute_ready().unwrap();
         assert_eq!(promoted, vec![created.synthesizer_id.clone()]);
     }
@@ -8496,7 +8779,9 @@ mod tests {
         let task = make_task(&store, "worktree task");
 
         // Prepare creates the worktree; a second call reuses it.
-        let wt = prepare_worktree(repo, &task).unwrap().expect("in a git repo");
+        let wt = prepare_worktree(repo, &task)
+            .unwrap()
+            .expect("in a git repo");
         assert!(wt.ends_with(format!(".worktrees/{}", task.id)));
         assert!(wt.is_dir());
         let wt2 = prepare_worktree(repo, &task).unwrap();
@@ -8523,7 +8808,10 @@ mod tests {
             .unwrap();
         // Expired claim but our own (very much alive) pid.
         let live_pid = std::process::id() as i64;
-        store.conn.lock().unwrap()
+        store
+            .conn
+            .lock()
+            .unwrap()
             .execute(
                 "UPDATE tasks SET claim_expires = ?2, worker_pid = ?3 WHERE id = ?1",
                 params![task.id, 1i64, live_pid],
@@ -8597,7 +8885,10 @@ mod tests {
             .create_swarm("Ship a report", &swarm_specs(), "carol", "dave", "", None)
             .unwrap();
         let researcher = store.get_task(&created.worker_ids[0]).unwrap().unwrap();
-        assert_eq!(researcher.skills.as_deref(), Some(&["deep-research".to_string()][..]));
+        assert_eq!(
+            researcher.skills.as_deref(),
+            Some(&["deep-research".to_string()][..])
+        );
         let drafter = store.get_task(&created.worker_ids[1]).unwrap().unwrap();
         assert!(drafter.skills.is_none());
         let verifier = store.get_task(&created.verifier_id).unwrap().unwrap();
@@ -8606,18 +8897,35 @@ mod tests {
             Some(&["requesting-code-review".to_string()][..])
         );
         let synthesizer = store.get_task(&created.synthesizer_id).unwrap().unwrap();
-        assert_eq!(synthesizer.skills.as_deref(), Some(&["humanizer".to_string()][..]));
+        assert_eq!(
+            synthesizer.skills.as_deref(),
+            Some(&["humanizer".to_string()][..])
+        );
     }
 
     #[test]
     fn swarm_idempotency_key_recovers_topology() {
         let (_dir, store) = temp_store();
         let first = store
-            .create_swarm("Ship a report", &swarm_specs(), "carol", "dave", "", Some("swarm-42"))
+            .create_swarm(
+                "Ship a report",
+                &swarm_specs(),
+                "carol",
+                "dave",
+                "",
+                Some("swarm-42"),
+            )
             .unwrap();
         let before = store.list_tasks(None, None, None, None, 500).unwrap().len();
         let second = store
-            .create_swarm("Ship a report", &swarm_specs(), "carol", "dave", "", Some("swarm-42"))
+            .create_swarm(
+                "Ship a report",
+                &swarm_specs(),
+                "carol",
+                "dave",
+                "",
+                Some("swarm-42"),
+            )
             .unwrap();
         assert_eq!(first.root_id, second.root_id);
         assert_eq!(first.worker_ids, second.worker_ids);
@@ -8667,7 +8975,11 @@ mod tests {
         let home = dir.path();
         let skill_dir = home.join("skills").join("test-skill");
         std::fs::create_dir_all(&skill_dir).unwrap();
-        std::fs::write(skill_dir.join("SKILL.md"), "# Test Skill\nAlways sign off with DONE-SKILL.").unwrap();
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "# Test Skill\nAlways sign off with DONE-SKILL.",
+        )
+        .unwrap();
         let task = Task {
             id: "t_1".into(),
             board: "default".into(),
@@ -8695,7 +9007,7 @@ mod tests {
             consecutive_failures: 0,
             last_failure_error: None,
             max_retries: None,
-        
+
             workspace_kind: "scratch".into(),
             workspace_path: None,
             branch_name: None,
@@ -8866,7 +9178,9 @@ mod tests {
     fn schedule_unblock_roundtrip() {
         let (_dir, store) = temp_store();
         let task = make_task(&store, "wait for friday");
-        let scheduled = store.schedule_task(&task.id, "until the release train").unwrap();
+        let scheduled = store
+            .schedule_task(&task.id, "until the release train")
+            .unwrap();
         assert_eq!(scheduled.status, "scheduled");
         let comments = store.comments(&task.id).unwrap();
         assert!(comments.iter().any(|c| c.body.contains("release train")));
@@ -8974,9 +9288,12 @@ mod tests {
         assert_eq!(
             worker_spawn_flags(&task),
             vec![
-                "--profile", "alice",
-                "--model", "gpt-5.2",
-                "--provider", "openrouter",
+                "--profile",
+                "alice",
+                "--model",
+                "gpt-5.2",
+                "--provider",
+                "openrouter",
             ]
         );
 
@@ -9010,7 +9327,9 @@ mod tests {
             Some("none")
         );
         assert_eq!(
-            normalize_reasoning_effort(Some("ultra")).unwrap().as_deref(),
+            normalize_reasoning_effort(Some("ultra"))
+                .unwrap()
+                .as_deref(),
             Some("ultra")
         );
         // A typo'd level is rejected, listing the allowed set.
@@ -9047,9 +9366,7 @@ mod tests {
     fn set_reasoning_effort_roundtrip_and_rules() {
         let (_dir, store) = temp_store();
         let task = make_task(&store, "thinky");
-        let pinned = store
-            .set_reasoning_effort(&task.id, Some("low"))
-            .unwrap();
+        let pinned = store.set_reasoning_effort(&task.id, Some("low")).unwrap();
         assert_eq!(pinned.reasoning_effort.as_deref(), Some("low"));
         // `none` is a real pin (thinking off), not a clear.
         let off = store.set_reasoning_effort(&task.id, Some("none")).unwrap();
@@ -9144,7 +9461,9 @@ mod tests {
     #[test]
     fn board_rename_workdir_and_stats() {
         let (_dir, store) = temp_store();
-        store.create_board("ops", Some("Operations"), Some("/srv")).unwrap();
+        store
+            .create_board("ops", Some("Operations"), Some("/srv"))
+            .unwrap();
         store.rename_board("ops", "Ops Board").unwrap();
         store.set_board_workdir("ops", Some("/tmp/ops")).unwrap();
         let boards = store.list_boards().unwrap();
@@ -9179,11 +9498,23 @@ mod tests {
             .unwrap();
         store.ready_task(&a.id).unwrap();
         let stats = store.board_stats().unwrap();
-        let todo = stats.by_status.iter().find(|(s, _)| s == "todo").map(|(_, n)| *n);
-        let ready = stats.by_status.iter().find(|(s, _)| s == "ready").map(|(_, n)| *n);
+        let todo = stats
+            .by_status
+            .iter()
+            .find(|(s, _)| s == "todo")
+            .map(|(_, n)| *n);
+        let ready = stats
+            .by_status
+            .iter()
+            .find(|(s, _)| s == "ready")
+            .map(|(_, n)| *n);
         assert_eq!(todo, Some(1));
         assert_eq!(ready, Some(1));
-        let alice = stats.by_assignee.iter().find(|(name, _)| name == "alice").unwrap();
+        let alice = stats
+            .by_assignee
+            .iter()
+            .find(|(name, _)| name == "alice")
+            .unwrap();
         assert_eq!(alice.1.iter().map(|(_, n)| *n).sum::<i64>(), 2);
         assert!(stats.oldest_ready_age_seconds.unwrap() >= 0);
     }
@@ -9205,7 +9536,9 @@ mod tests {
         store.unblock_task(&task.id).unwrap();
 
         // No filters: everything since the start point, paired with titles.
-        let all = store.board_events_since(start, None, None, None, 100).unwrap();
+        let all = store
+            .board_events_since(start, None, None, None, 100)
+            .unwrap();
         assert!(all.len() >= 3);
         assert!(all.iter().all(|(_, title)| title == "watched"));
 
@@ -9218,15 +9551,21 @@ mod tests {
         assert_eq!(blocked_only[0].0.kind, "blocked");
 
         // Assignee filter: bob matches, carol sees nothing.
-        let bob = store.board_events_since(start, Some("bob"), None, None, 100).unwrap();
+        let bob = store
+            .board_events_since(start, Some("bob"), None, None, 100)
+            .unwrap();
         assert!(!bob.is_empty());
-        let carol = store.board_events_since(start, Some("carol"), None, None, 100).unwrap();
+        let carol = store
+            .board_events_since(start, Some("carol"), None, None, 100)
+            .unwrap();
         assert!(carol.is_empty());
 
         // Tenant filter (hermes watch --tenant): task has no tenant, so
         // a tenant filter sees nothing while an untyped filter still
         // matches.
-        let tenant = store.board_events_since(start, None, Some("acme"), None, 100).unwrap();
+        let tenant = store
+            .board_events_since(start, None, Some("acme"), None, 100)
+            .unwrap();
         assert!(tenant.is_empty());
     }
 
@@ -9303,10 +9642,7 @@ mod tests {
         let subs = store.list_notify_subs(Some(&task.id)).unwrap();
         assert_eq!(subs.len(), 2);
         let threaded = subs.iter().find(|s| s.thread_id == "t9").unwrap();
-        assert_eq!(
-            threaded.delivery_metadata.as_ref().unwrap()["reply_to"],
-            5
-        );
+        assert_eq!(threaded.delivery_metadata.as_ref().unwrap()["reply_to"], 5);
 
         // Unsubscribe: exact key match only.
         assert!(!store
@@ -9337,7 +9673,9 @@ mod tests {
             .unwrap();
 
         store.ready_task(&task.id).unwrap();
-        store.append_event(&task.id, "heartbeat", Value::Null).unwrap();
+        store
+            .append_event(&task.id, "heartbeat", Value::Null)
+            .unwrap();
         store.complete_task(&task.id, Some("done!")).unwrap();
 
         // Everything after the subscribe cursor, kind-filtered or not.
@@ -9406,7 +9744,9 @@ mod tests {
         assert!(store.latest_run(&task.id).unwrap().is_none());
 
         store.ready_task(&task.id).unwrap();
-        let claimed = store.claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        let claimed = store
+            .claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         let run = store.latest_run(&task.id).unwrap().unwrap();
         assert_eq!(run.status, "running");
         assert_eq!(run.profile.as_deref(), Some("host:1"));
@@ -9414,7 +9754,9 @@ mod tests {
         assert!(run.ended_at.is_none());
         assert_eq!(claimed.status, "running");
 
-        store.heartbeat_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .heartbeat_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         let run = store.latest_run(&task.id).unwrap().unwrap();
         assert!(run.last_heartbeat_at.is_some());
 
@@ -9436,11 +9778,16 @@ mod tests {
 
         // No active run remains: closing again is a no-op.
         assert_eq!(
-            store.close_active_run(&task.id, "done", "completed", None, None).unwrap(),
+            store
+                .close_active_run(&task.id, "done", "completed", None, None)
+                .unwrap(),
             None
         );
         // Closed runs survive the include_active=false view.
-        assert_eq!(store.list_runs(&task.id, false, None, None).unwrap().len(), 1);
+        assert_eq!(
+            store.list_runs(&task.id, false, None, None).unwrap().len(),
+            1
+        );
     }
 
     #[test]
@@ -9448,7 +9795,9 @@ mod tests {
         let (_dir, store) = temp_store();
         let task = make_task(&store, "retry me");
         store.ready_task(&task.id).unwrap();
-        store.claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         store.block_task(&task.id, "needs api key").unwrap();
         let run = store.latest_run(&task.id).unwrap().unwrap();
         assert_eq!(run.outcome.as_deref(), Some("blocked"));
@@ -9456,7 +9805,9 @@ mod tests {
 
         // Retry: unblock → re-claim opens run #2.
         store.unblock_task(&task.id).unwrap();
-        store.claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         store.reclaim_task(&task.id, "manual takeover").unwrap();
         let runs = store.list_runs(&task.id, true, None, None).unwrap();
         assert_eq!(runs.len(), 2);
@@ -9465,12 +9816,20 @@ mod tests {
         assert_eq!(runs[1].summary.as_deref(), Some("manual takeover"));
 
         // State filters.
-        let blocked = store.list_runs(&task.id, true, Some("outcome"), Some("blocked")).unwrap();
+        let blocked = store
+            .list_runs(&task.id, true, Some("outcome"), Some("blocked"))
+            .unwrap();
         assert_eq!(blocked.len(), 1);
-        let none = store.list_runs(&task.id, true, Some("outcome"), Some("completed")).unwrap();
+        let none = store
+            .list_runs(&task.id, true, Some("outcome"), Some("completed"))
+            .unwrap();
         assert!(none.is_empty());
-        assert!(store.list_runs(&task.id, true, Some("outcome"), None).is_err());
-        assert!(store.list_runs(&task.id, true, Some("bogus"), Some("x")).is_err());
+        assert!(store
+            .list_runs(&task.id, true, Some("outcome"), None)
+            .is_err());
+        assert!(store
+            .list_runs(&task.id, true, Some("bogus"), Some("x"))
+            .is_err());
     }
 
     #[test]
@@ -9486,8 +9845,12 @@ mod tests {
 
         // Dispatcher spawn failure records an instant spawn_failed run.
         let other = make_task(&store, "bad spawn");
-        store.synthesize_closed_run(&other.id, "spawn_failed", None, Some("exec format error")).unwrap();
-        let failed = store.list_runs(&other.id, true, Some("outcome"), Some("spawn_failed")).unwrap();
+        store
+            .synthesize_closed_run(&other.id, "spawn_failed", None, Some("exec format error"))
+            .unwrap();
+        let failed = store
+            .list_runs(&other.id, true, Some("outcome"), Some("spawn_failed"))
+            .unwrap();
         assert_eq!(failed.len(), 1);
         assert_eq!(failed[0].error.as_deref(), Some("exec format error"));
     }
@@ -9497,7 +9860,9 @@ mod tests {
         let (_dir, store) = temp_store();
         let task = make_task(&store, "stale run");
         store.ready_task(&task.id).unwrap();
-        store.claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         // Force-expire the claim so a second claimer can take over.
         {
             let conn = store.conn.lock().unwrap();
@@ -9507,7 +9872,9 @@ mod tests {
             )
             .unwrap();
         }
-        store.claim_task(&task.id, "host:2", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&task.id, "host:2", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         let runs = store.list_runs(&task.id, true, None, None).unwrap();
         assert_eq!(runs.len(), 2);
         assert_eq!(runs[0].outcome.as_deref(), Some("reclaimed"));
@@ -9523,19 +9890,29 @@ mod tests {
         // Parent completes with a result the child should inherit.
         let parent = make_task(&store, "Design schema");
         store.ready_task(&parent.id).unwrap();
-        store.claim_task(&parent.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
-        store.complete_task(&parent.id, Some("schema v2 shipped")).unwrap();
+        store
+            .claim_task(&parent.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
+        store
+            .complete_task(&parent.id, Some("schema v2 shipped"))
+            .unwrap();
 
         let child = make_task(&store, "Implement schema");
         store.link_tasks(&parent.id, &child.id).unwrap();
         store.assign_task(&child.id, "host:1").unwrap();
-        store.add_comment(&child.id, "host:1", "starting now").unwrap();
+        store
+            .add_comment(&child.id, "host:1", "starting now")
+            .unwrap();
 
         // Two attempts: first reclaimed, second running.
         store.ready_task(&child.id).unwrap();
-        store.claim_task(&child.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&child.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         store.reclaim_task(&child.id, "took too long").unwrap();
-        store.claim_task(&child.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&child.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
 
         let ctx = store.build_worker_context(&child.id).unwrap();
         assert!(ctx.contains(&format!("# Kanban task {}: Implement schema", child.id)));
@@ -9574,7 +9951,18 @@ mod tests {
 
         let tick = || {
             store
-                .dispatch_once(dir.path(), false, |_, _| Err("exec format error".to_string()), Some(4), false, 2, 0, None, None, None)
+                .dispatch_once(
+                    dir.path(),
+                    false,
+                    |_, _| Err("exec format error".to_string()),
+                    Some(4),
+                    false,
+                    2,
+                    0,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap()
         };
 
@@ -9616,7 +10004,18 @@ mod tests {
             .unwrap();
         store.ready_task(&task.id).unwrap();
         let result = store
-            .dispatch_once(dir.path(), false, |_, _| Err("boom".to_string()), Some(4), false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Err("boom".to_string()),
+                Some(4),
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.auto_blocked, vec![task.id.clone()]);
         assert!(result.spawn_failed.is_empty());
@@ -9638,15 +10037,32 @@ mod tests {
         let task = make_task(&store, "resilient");
         store.ready_task(&task.id).unwrap();
         store
-            .dispatch_once(dir.path(), false, |_, _| Err("flaky".to_string()), Some(4), false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Err("flaky".to_string()),
+                Some(4),
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(
-            store.get_task(&task.id).unwrap().unwrap().consecutive_failures,
+            store
+                .get_task(&task.id)
+                .unwrap()
+                .unwrap()
+                .consecutive_failures,
             1
         );
 
         // Successful run clears the budget.
-        store.claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         store.complete_task(&task.id, Some("ok")).unwrap();
         let t = store.get_task(&task.id).unwrap().unwrap();
         assert_eq!(t.consecutive_failures, 0);
@@ -9656,10 +10072,32 @@ mod tests {
         let other = make_task(&store, "blocked cycle");
         store.ready_task(&other.id).unwrap();
         store
-            .dispatch_once(dir.path(), false, |_, _| Err("flaky".to_string()), Some(4), false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Err("flaky".to_string()),
+                Some(4),
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         store
-            .dispatch_once(dir.path(), false, |_, _| Err("flaky".to_string()), Some(4), false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                false,
+                |_, _| Err("flaky".to_string()),
+                Some(4),
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         let t = store.get_task(&other.id).unwrap().unwrap();
         assert_eq!(t.status, "blocked");
@@ -9681,7 +10119,9 @@ mod tests {
             })
             .unwrap();
         store.ready_task(&task.id).unwrap();
-        store.claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         let reaped = store.reap_timed_out().unwrap();
         assert_eq!(reaped, vec![task.id.clone()]);
         let t = store.get_task(&task.id).unwrap().unwrap();
@@ -9717,9 +10157,16 @@ mod tests {
         let (_dir, store) = temp_store();
         let task = make_task(&store, "crashy");
         store.ready_task(&task.id).unwrap();
-        store.claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         // A pid that cannot exist + started well past the grace window.
-        backdate_task(&store, &task.id, KanbanStore::now() - 200, Some(2_147_483_647));
+        backdate_task(
+            &store,
+            &task.id,
+            KanbanStore::now() - 200,
+            Some(2_147_483_647),
+        );
 
         let crashed = store.detect_crashed_workers().unwrap();
         assert_eq!(crashed, vec![task.id.clone()]);
@@ -9744,12 +10191,16 @@ mod tests {
         // Freshly claimed (started now → inside grace): untouched.
         let fresh = make_task(&store, "fresh");
         store.ready_task(&fresh.id).unwrap();
-        store.claim_task(&fresh.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&fresh.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         backdate_task(&store, &fresh.id, KanbanStore::now(), Some(2_147_483_647));
         // Live pid (our own process): untouched regardless of age.
         let live = make_task(&store, "live");
         store.ready_task(&live.id).unwrap();
-        store.claim_task(&live.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&live.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         backdate_task(
             &store,
             &live.id,
@@ -9758,7 +10209,10 @@ mod tests {
         );
 
         assert!(store.detect_crashed_workers().unwrap().is_empty());
-        assert_eq!(store.get_task(&fresh.id).unwrap().unwrap().status, "running");
+        assert_eq!(
+            store.get_task(&fresh.id).unwrap().unwrap().status,
+            "running"
+        );
         assert_eq!(store.get_task(&live.id).unwrap().unwrap().status, "running");
     }
 
@@ -9767,7 +10221,9 @@ mod tests {
         let (_dir, store) = temp_store();
         let task = make_task(&store, "silent worker");
         store.ready_task(&task.id).unwrap();
-        store.claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         backdate_task(&store, &task.id, KanbanStore::now() - 500, None);
 
         // Disabled at 0; fresh thresholds skip it.
@@ -9795,8 +10251,12 @@ mod tests {
         let (_dir, store) = temp_store();
         let task = make_task(&store, "chatty worker");
         store.ready_task(&task.id).unwrap();
-        store.claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
-        store.heartbeat_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS).unwrap();
+        store
+            .claim_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
+        store
+            .heartbeat_task(&task.id, "host:1", DEFAULT_CLAIM_TTL_SECS)
+            .unwrap();
         backdate_task(&store, &task.id, KanbanStore::now() - 500, None);
         // Heartbeat is fresh → not stale even past the run timeout.
         assert!(store.detect_stale_running(100).unwrap().is_empty());
@@ -9986,10 +10446,7 @@ mod tests {
             })
             .unwrap();
         // create_task fills workspace_path from the board default_workdir.
-        assert_eq!(
-            task.workspace_path.as_deref(),
-            Some(repo.to_str().unwrap())
-        );
+        assert_eq!(task.workspace_path.as_deref(), Some(repo.to_str().unwrap()));
         let (path, branch) = store.resolve_workspace(dir.path(), &task).unwrap();
         assert_eq!(path, repo.join(".worktrees").join(&task.id));
         assert!(path.is_dir());
@@ -10023,10 +10480,12 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
-        let (first_path, first_branch) =
-            store.resolve_workspace(dir.path(), &first).unwrap();
+        let (first_path, first_branch) = store.resolve_workspace(dir.path(), &first).unwrap();
         assert_eq!(first_branch.as_deref(), Some("feat/shared"));
-        assert_eq!(git_current_branch(&first_path).as_deref(), Some("feat/shared"));
+        assert_eq!(
+            git_current_branch(&first_path).as_deref(),
+            Some("feat/shared")
+        );
 
         // A sibling inheriting the occupied checkout path must get its
         // own worktree instead of the other task's branch.
@@ -10124,7 +10583,18 @@ mod tests {
         let task = make_task(&store, "legacy worktrees");
         store.ready_task(&task.id).unwrap();
         let result = store
-            .dispatch_once(dir.path(), true, |_, _| Ok(Some(7)), Some(2), false, 2, 0, None, None, None)
+            .dispatch_once(
+                dir.path(),
+                true,
+                |_, _| Ok(Some(7)),
+                Some(2),
+                false,
+                2,
+                0,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(result.spawned.len(), 1);
         let t = store.get_task(&task.id).unwrap().unwrap();
@@ -10244,12 +10714,7 @@ mod tests {
         );
         // Past the default 300 s cooldown the probe is allowed again.
         let later = make_task(&store, "quota wall aged");
-        insert_closed_run(
-            &store,
-            &later.id,
-            "rate_limited",
-            KanbanStore::now() - 301,
-        );
+        insert_closed_run(&store, &later.id, "rate_limited", KanbanStore::now() - 301);
         assert_eq!(store.check_respawn_guard(&later.id), None);
     }
 
@@ -10317,10 +10782,7 @@ mod tests {
         assert_eq!(got.session_id.as_deref(), Some("sess_abc"));
 
         let message = wake_message(&task, &["completed".to_string()], "default");
-        assert!(message.starts_with(&format!(
-            "[kanban] Task {} completed.",
-            task.id
-        )));
+        assert!(message.starts_with(&format!("[kanban] Task {} completed.", task.id)));
         assert!(message.contains("Title: wake me"));
         assert!(message.contains("Assignee: @alice"));
         assert!(message.contains("Board: default"));
@@ -10441,7 +10903,10 @@ mod tests {
         let err = store
             .block_task_kind(&task.id, "x", Some("vibes"))
             .unwrap_err();
-        assert!(err.to_string().contains("block kind must be one of"), "{err}");
+        assert!(
+            err.to_string().contains("block kind must be one of"),
+            "{err}"
+        );
 
         // Untyped block behaves like before (kind NULL, recurrences 1).
         let blocked = store.block_task(&task.id, "generic").unwrap();
@@ -10495,7 +10960,10 @@ mod tests {
         // Closing run carries the FULL summary (NOT the raw result) +
         // metadata; only the event payload is capped to the first line.
         let runs = store.list_runs(&task.id, true, None, None).unwrap();
-        let closed = runs.iter().find(|r| r.outcome.as_deref() == Some("completed")).unwrap();
+        let closed = runs
+            .iter()
+            .find(|r| r.outcome.as_deref() == Some("completed"))
+            .unwrap();
         assert_eq!(
             closed.summary.as_deref(),
             Some("fixed the parser\nlonger second line")
@@ -10526,7 +10994,10 @@ mod tests {
             .complete_task_with(&task.id, Some("done and dusted"), None, None)
             .unwrap();
         let runs = store.list_runs(&task.id, true, None, None).unwrap();
-        let closed = runs.iter().find(|r| r.outcome.as_deref() == Some("completed")).unwrap();
+        let closed = runs
+            .iter()
+            .find(|r| r.outcome.as_deref() == Some("completed"))
+            .unwrap();
         assert_eq!(closed.summary.as_deref(), Some("done and dusted"));
     }
 
@@ -10641,10 +11112,7 @@ mod tests {
             .conn
             .lock()
             .unwrap()
-            .execute(
-                "DELETE FROM task_runs WHERE task_id = ?1",
-                params![task.id],
-            )
+            .execute("DELETE FROM task_runs WHERE task_id = ?1", params![task.id])
             .unwrap();
         assert!(store
             .edit_completed_task_result(&task.id, "res", Some("sum"), None)

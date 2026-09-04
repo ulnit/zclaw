@@ -255,13 +255,11 @@ impl PairingStore {
         self.cleanup_expired(&mut pending);
 
         // Request-id match first (hermes: id lookup is case-insensitive).
-        let id_hit = pending
-            .as_object()
-            .and_then(|map| {
-                map.keys()
-                    .find(|key| constant_time_eq(&key.to_lowercase(), &code_or_id.to_lowercase()))
-                    .cloned()
-            });
+        let id_hit = pending.as_object().and_then(|map| {
+            map.keys()
+                .find(|key| constant_time_eq(&key.to_lowercase(), &code_or_id.to_lowercase()))
+                .cloned()
+        });
         // Otherwise scan salted hashes.
         let mut code_hit: Option<String> = None;
         if id_hit.is_none() {
@@ -298,8 +296,16 @@ impl PairingStore {
         // consecutive-failure streak must not carry over (hermes).
         self.reset_failed_attempts(platform);
 
-        let user_id = entry.get("user_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let user_name = entry.get("user_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let user_id = entry
+            .get("user_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let user_name = entry
+            .get("user_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         self.approve_user(platform, &user_id, &user_name);
         Some(PairingGrant { user_id, user_name })
     }
@@ -336,11 +342,22 @@ impl PairingStore {
         let mut requests = Vec::new();
         if let Some(map) = pending.as_object() {
             for (entry_id, entry) in map {
-                let created_at = entry.get("created_at").and_then(|v| v.as_u64()).unwrap_or(0);
+                let created_at = entry
+                    .get("created_at")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
                 requests.push(PendingRequest {
                     request_id: entry_id.clone(),
-                    user_id: entry.get("user_id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    user_name: entry.get("user_name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    user_id: entry
+                        .get("user_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    user_name: entry
+                        .get("user_name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                     age_minutes: now_secs().saturating_sub(created_at) / 60,
                 });
             }
@@ -356,7 +373,11 @@ impl PairingStore {
             for (user_id, info) in map {
                 grants.push(PairingGrant {
                     user_id: user_id.clone(),
-                    user_name: info.get("user_name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    user_name: info
+                        .get("user_name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                 });
             }
         }
@@ -430,7 +451,9 @@ fn getrandom_fill(buf: &mut [u8]) {
     }
     let mut seed = now_secs();
     for slot in buf.iter_mut() {
-        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         *slot = (seed >> 33) as u8;
     }
 }
@@ -545,12 +568,17 @@ mod tests {
     fn max_pending_per_platform() {
         let (store, dir) = temp_store("maxpending");
         for idx in 0..MAX_PENDING_PER_PLATFORM {
-            assert!(store.generate_code("telegram", &format!("u{idx}"), "").is_some());
+            assert!(store
+                .generate_code("telegram", &format!("u{idx}"), "")
+                .is_some());
         }
         assert!(store
             .generate_code("telegram", "one-too-many", "")
             .is_none());
-        assert_eq!(store.list_pending("telegram").len(), MAX_PENDING_PER_PLATFORM);
+        assert_eq!(
+            store.list_pending("telegram").len(),
+            MAX_PENDING_PER_PLATFORM
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -594,7 +622,10 @@ mod tests {
         store.generate_code("telegram", "u1", "").unwrap();
         let code = store.generate_code("discord", "u2", "").unwrap();
         store.approve_code("discord", &code).unwrap();
-        assert_eq!(store.known_platforms(), vec!["discord".to_string(), "telegram".to_string()]);
+        assert_eq!(
+            store.known_platforms(),
+            vec!["discord".to_string(), "telegram".to_string()]
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }

@@ -168,7 +168,6 @@ pub fn pid_exists(pid: i32) -> bool {
     crate::process_ctl::alive(pid as u32)
 }
 
-
 /// Kernel start time (clock ticks since boot, field 22 of
 /// `/proc/<pid>/stat`) — the definitive identity for a PID.
 pub fn pid_start_time(pid: i32) -> Option<u64> {
@@ -213,8 +212,7 @@ pub fn bridge_pid_is_ours(pid: i32, session_path: &Path, expected_start: Option<
     }
     match read_process_cmdline(pid) {
         Some(cmdline) => {
-            cmdline.contains("node")
-                && cmdline.contains(session_path.to_string_lossy().as_ref())
+            cmdline.contains("node") && cmdline.contains(session_path.to_string_lossy().as_ref())
         }
         None => false,
     }
@@ -521,7 +519,11 @@ pub fn adoption_blocker(health: &Value, script_path: &Path, read_receipts: bool)
     if running_hash.is_empty() || disk_hash.is_empty() || running_hash != disk_hash {
         return Some(format!(
             "script hash mismatch (running={}, disk={})",
-            if running_hash.is_empty() { "unversioned" } else { running_hash },
+            if running_hash.is_empty() {
+                "unversioned"
+            } else {
+                running_hash
+            },
             disk_hash
         ));
     }
@@ -595,7 +597,9 @@ pub async fn ensure_and_spawn(
     let node = match find_node_executable("node") {
         Some(node) => node,
         None => {
-            eprintln!("[whatsapp] node not found on PATH — start a bridge externally or install Node.js");
+            eprintln!(
+                "[whatsapp] node not found on PATH — start a bridge externally or install Node.js"
+            );
             return None;
         }
     };
@@ -627,7 +631,10 @@ pub async fn ensure_and_spawn(
     if let Ok(resp) = client.get(format!("{base_url}/health")).send().await {
         if resp.status().is_success() {
             if let Ok(health) = resp.json::<Value>().await {
-                let status = health.get("status").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let status = health
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
                 if status == "connected" {
                     match adoption_blocker(&health, &script, read_receipts) {
                         None => {
@@ -639,7 +646,9 @@ pub async fn ensure_and_spawn(
                         }
                     }
                 } else {
-                    eprintln!("[whatsapp] bridge found but not connected (status: {status}); restarting");
+                    eprintln!(
+                        "[whatsapp] bridge found but not connected (status: {status}); restarting"
+                    );
                 }
             }
         }
@@ -776,7 +785,11 @@ mod tests {
         let start = pid_start_time(self_pid);
         assert!(bridge_pid_is_ours(self_pid, &session, start));
         // Wrong start time → recycled → not ours.
-        assert!(!bridge_pid_is_ours(self_pid, &session, start.map(|s| s.wrapping_add(1))));
+        assert!(!bridge_pid_is_ours(
+            self_pid,
+            &session,
+            start.map(|s| s.wrapping_add(1))
+        ));
         // Legacy path: cmdline lacks "node" + session → not ours.
         assert!(!bridge_pid_is_ours(self_pid, &session, None));
     }
@@ -789,11 +802,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let dir = temp.path().to_path_buf();
         let self_pid = std::process::id() as i32;
-        std::fs::write(
-            dir.join("bridge.pid"),
-            format!("{self_pid}\n999999999"),
-        )
-        .unwrap();
+        std::fs::write(dir.join("bridge.pid"), format!("{self_pid}\n999999999")).unwrap();
         kill_stale_bridge_by_pidfile(&dir);
         assert!(pid_exists(self_pid)); // untouched
         assert!(!dir.join("bridge.pid").exists());
@@ -843,9 +852,13 @@ mod tests {
         assert_eq!(
             args,
             vec![
-                "/b/bridge.js", "--port", "3001",
-                "--session", "/tmp/wa-session",
-                "--mode", "self-chat",
+                "/b/bridge.js",
+                "--port",
+                "3001",
+                "--session",
+                "/tmp/wa-session",
+                "--mode",
+                "self-chat",
             ]
         );
         let env = |key: &str| {
@@ -856,8 +869,14 @@ mod tests {
         };
         assert_eq!(env("WHATSAPP_SEND_READ_RECEIPTS").as_deref(), Some("true"));
         assert_eq!(env("WHATSAPP_MODE").as_deref(), Some("self-chat"));
-        assert_eq!(env("ULNCLAW_MEDIA_CACHE_DIR").as_deref(), Some("/tmp/media-cache"));
-        assert_eq!(env("WHATSAPP_FORWARD_OWNER_MESSAGES").as_deref(), Some("true"));
+        assert_eq!(
+            env("ULNCLAW_MEDIA_CACHE_DIR").as_deref(),
+            Some("/tmp/media-cache")
+        );
+        assert_eq!(
+            env("WHATSAPP_FORWARD_OWNER_MESSAGES").as_deref(),
+            Some("true")
+        );
         assert!(env("WHATSAPP_DEBUG").is_none()); // unset → not injected
         std::env::remove_var("WHATSAPP_FORWARD_OWNER_MESSAGES");
     }

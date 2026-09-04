@@ -133,7 +133,11 @@ pub fn format_hidden_line(count: u64) -> Option<String> {
     if count == 0 {
         return None;
     }
-    let noun = if count == 1 { "tool line" } else { "tool lines" };
+    let noun = if count == 1 {
+        "tool line"
+    } else {
+        "tool lines"
+    };
     Some(format!("⋯ {count} {noun} hidden · /focus off to show"))
 }
 
@@ -157,7 +161,10 @@ pub fn format_focus_status(enabled: bool, configured_mode: Option<&str>) -> Stri
         )
     } else {
         let mode = normalize_tool_progress_mode(configured_mode, "all");
-        format!("Focus view: {state} — tool progress: {}", mode.to_uppercase())
+        format!(
+            "Focus view: {state} — tool progress: {}",
+            mode.to_uppercase()
+        )
     }
 }
 
@@ -167,7 +174,10 @@ pub fn format_focus_toggle_message(enabled: bool, configured_mode: Option<&str>)
         "Focus view enabled — just your prompt and the final response".to_string()
     } else {
         let mode = normalize_tool_progress_mode(configured_mode, "all");
-        format!("Focus view disabled — tool progress: {}", mode.to_uppercase())
+        format!(
+            "Focus view disabled — tool progress: {}",
+            mode.to_uppercase()
+        )
     }
 }
 
@@ -207,8 +217,11 @@ impl DisplayState {
     /// should be printed under the effective mode, otherwise bumps the
     /// honest hidden counter when focus view is what suppressed it.
     pub fn on_tool_call(&mut self, function_name: &str) -> bool {
-        let display =
-            would_display_tool_line(Some(&self.effective_mode()), function_name, self.last_tool_name.as_deref());
+        let display = would_display_tool_line(
+            Some(&self.effective_mode()),
+            function_name,
+            self.last_tool_name.as_deref(),
+        );
         if display {
             self.last_tool_name = Some(function_name.to_string());
             return true;
@@ -242,7 +255,10 @@ mod tests {
         assert_eq!(normalize_tool_progress_mode(Some("false"), "all"), "off");
         assert_eq!(normalize_tool_progress_mode(Some("true"), "all"), "all");
         assert_eq!(normalize_tool_progress_mode(Some("OFF"), "all"), "off");
-        assert_eq!(normalize_tool_progress_mode(Some("verbose"), "all"), "verbose");
+        assert_eq!(
+            normalize_tool_progress_mode(Some("verbose"), "all"),
+            "verbose"
+        );
         assert_eq!(normalize_tool_progress_mode(Some("log"), "all"), "log");
         assert_eq!(normalize_tool_progress_mode(Some("bogus"), "all"), "all");
         assert_eq!(normalize_tool_progress_mode(None, "new"), "new");
@@ -263,7 +279,10 @@ mod tests {
     #[test]
     fn effective_mode_focus_wins_then_restores() {
         assert_eq!(effective_tool_progress_mode(true, Some("verbose")), "off");
-        assert_eq!(effective_tool_progress_mode(false, Some("verbose")), "verbose");
+        assert_eq!(
+            effective_tool_progress_mode(false, Some("verbose")),
+            "verbose"
+        );
         assert_eq!(effective_tool_progress_mode(false, None), "all");
     }
 
@@ -273,7 +292,11 @@ mod tests {
         assert!(!would_display_tool_line(Some("off"), "shell", None));
         // new mode skips consecutive repeats.
         assert!(would_display_tool_line(Some("new"), "shell", None));
-        assert!(!would_display_tool_line(Some("new"), "shell", Some("shell")));
+        assert!(!would_display_tool_line(
+            Some("new"),
+            "shell",
+            Some("shell")
+        ));
         assert!(would_display_tool_line(Some("all"), "shell", Some("shell")));
         assert!(!would_display_tool_line(Some("all"), "", None));
     }
@@ -294,7 +317,7 @@ mod tests {
     #[test]
     fn display_state_counts_only_when_focus_hides() {
         let mut state = DisplayState::default(); // configured "all"
-        // Focus OFF, mode all → lines display.
+                                                 // Focus OFF, mode all → lines display.
         assert!(state.on_tool_call("shell"));
         assert_eq!(state.hidden_this_turn, 0);
         // Focus ON → suppressed and counted.

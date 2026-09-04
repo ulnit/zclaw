@@ -77,7 +77,12 @@ pub fn available() -> bool {
 /// registration (hermes: `HERMES_DESKTOP`).
 pub fn desktop_env_enabled() -> bool {
     crate::config::get_env_value("ULNCLAW_DESKTOP")
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -126,13 +131,13 @@ pub fn normalize_preview_target(raw: &str) -> String {
     {
         return v.to_string();
     }
-    let localhost = regex::Regex::new(r"^(?i)(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(/|$)")
-        .expect("static regex");
+    let localhost =
+        regex::Regex::new(r"^(?i)(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(/|$)")
+            .expect("static regex");
     if localhost.is_match(v) {
         return format!("http://{v}");
     }
-    let domain =
-        regex::Regex::new(r"(?i)^[\w.-]+\.[a-z]{2,}(:\d+)?(/.*)?$").expect("static regex");
+    let domain = regex::Regex::new(r"(?i)^[\w.-]+\.[a-z]{2,}(:\d+)?(/.*)?$").expect("static regex");
     if domain.is_match(v) {
         return format!("https://{v}");
     }
@@ -171,12 +176,15 @@ mod tests {
         let cap = captured.clone();
         set_emitter(Some(Box::new(move |sid, event, payload| {
             COUNT.fetch_add(1, Ordering::SeqCst);
-            cap.lock().unwrap().push((sid.to_string(), event.to_string(), payload.clone()));
+            cap.lock()
+                .unwrap()
+                .push((sid.to_string(), event.to_string(), payload.clone()));
         })));
         assert!(available());
         assert!(emit("win-7", "preview.open", &json!({"url": "https://x"})));
         // close_terminal wiring: the registry sink now emits terminal.close
-        let result = crate::tools::builtin::terminal::request_close_terminal("win-7", "bg-deadbeef");
+        let result =
+            crate::tools::builtin::terminal::request_close_terminal("win-7", "bg-deadbeef");
         assert_eq!(result["status"], json!("ok"));
         let events = captured.lock().unwrap();
         assert_eq!(events.len(), 2);
@@ -208,15 +216,27 @@ mod tests {
 
     #[test]
     fn normalize_targets() {
-        assert_eq!(normalize_preview_target("www.cnn.com"), "https://www.cnn.com");
-        assert_eq!(normalize_preview_target("localhost:3000"), "http://localhost:3000");
-        assert_eq!(normalize_preview_target("127.0.0.1:8080/x"), "http://127.0.0.1:8080/x");
+        assert_eq!(
+            normalize_preview_target("www.cnn.com"),
+            "https://www.cnn.com"
+        );
+        assert_eq!(
+            normalize_preview_target("localhost:3000"),
+            "http://localhost:3000"
+        );
+        assert_eq!(
+            normalize_preview_target("127.0.0.1:8080/x"),
+            "http://127.0.0.1:8080/x"
+        );
         assert_eq!(
             normalize_preview_target("example.org:9000/a/b"),
             "https://example.org:9000/a/b"
         );
         assert_eq!(normalize_preview_target("https://x.y"), "https://x.y");
-        assert_eq!(normalize_preview_target("./out/report.html"), "./out/report.html");
+        assert_eq!(
+            normalize_preview_target("./out/report.html"),
+            "./out/report.html"
+        );
         assert_eq!(normalize_preview_target("~/notes.md"), "~/notes.md");
         assert_eq!(normalize_preview_target("`cnn.com`"), "https://cnn.com");
         assert_eq!(normalize_preview_target("  "), "");

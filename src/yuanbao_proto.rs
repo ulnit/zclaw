@@ -135,24 +135,33 @@ pub fn parse_fields(mut data: &[u8]) -> Vec<(u64, FieldValue)> {
     let mut fields = Vec::new();
     let mut pos = 0usize;
     while pos < data.len() {
-        let Some((tag, next)) = decode_varint(data, pos) else { break };
+        let Some((tag, next)) = decode_varint(data, pos) else {
+            break;
+        };
         pos = next;
         let field_number = tag >> 3;
         let wire_type = tag & 0x7;
         match wire_type {
             WT_VARINT => {
-                let Some((value, next)) = decode_varint(data, pos) else { break };
+                let Some((value, next)) = decode_varint(data, pos) else {
+                    break;
+                };
                 pos = next;
                 fields.push((field_number, FieldValue::Varint(value)));
             }
             WT_LEN => {
-                let Some((len, next)) = decode_varint(data, pos) else { break };
+                let Some((len, next)) = decode_varint(data, pos) else {
+                    break;
+                };
                 pos = next;
                 let len = len as usize;
                 if pos + len > data.len() {
                     break;
                 }
-                fields.push((field_number, FieldValue::Bytes(data[pos..pos + len].to_vec())));
+                fields.push((
+                    field_number,
+                    FieldValue::Bytes(data[pos..pos + len].to_vec()),
+                ));
                 pos += len;
             }
             WT_64BIT => {
@@ -311,7 +320,10 @@ pub fn decode_conn_msg(data: &[u8]) -> ConnMsg {
     } else {
         decode_head(&head_bytes)
     };
-    ConnMsg { head, data: payload }
+    ConnMsg {
+        head,
+        data: payload,
+    }
 }
 
 /// Business-layer view over a ConnMsg (hermes `decode_biz_msg`).
@@ -669,7 +681,10 @@ pub fn encode_forward_msg(msg: &ForwardMsg) -> Vec<u8> {
         buf.extend(encode_string_field(3, &msg.plain_text));
     }
     for content in &msg.msg_content {
-        buf.extend(encode_message_field(4, &encode_forward_msg_content(content)));
+        buf.extend(encode_message_field(
+            4,
+            &encode_forward_msg_content(content),
+        ));
     }
     buf
 }
@@ -807,7 +822,16 @@ pub fn encode_send_c2c_message(
     group_code: &str,
     trace_id: &str,
 ) -> Vec<u8> {
-    let biz = encode_send_c2c_req(to_account, from_account, msg_body, msg_id, msg_random, msg_seq, group_code, trace_id);
+    let biz = encode_send_c2c_req(
+        to_account,
+        from_account,
+        msg_body,
+        msg_id,
+        msg_random,
+        msg_seq,
+        group_code,
+        trace_id,
+    );
     let req_id = if msg_id.is_empty() {
         format!("c2c_{}", next_seq_no())
     } else {
@@ -879,7 +903,17 @@ pub fn encode_send_group_message(
     ref_msg_id: &str,
     trace_id: &str,
 ) -> Vec<u8> {
-    let biz = encode_send_group_req(group_code, from_account, msg_body, msg_id, to_account, random, msg_seq, ref_msg_id, trace_id);
+    let biz = encode_send_group_req(
+        group_code,
+        from_account,
+        msg_body,
+        msg_id,
+        to_account,
+        random,
+        msg_seq,
+        ref_msg_id,
+        trace_id,
+    );
     let req_id = if msg_id.is_empty() {
         format!("grp_{}", next_seq_no())
     } else {
@@ -985,7 +1019,11 @@ pub fn encode_push_ack(original_head: &ConnHead) -> Vec<u8> {
 }
 
 /// hermes `encode_send_private_heartbeat`.
-pub fn encode_send_private_heartbeat(from_account: &str, to_account: &str, heartbeat: u64) -> Vec<u8> {
+pub fn encode_send_private_heartbeat(
+    from_account: &str,
+    to_account: &str,
+    heartbeat: u64,
+) -> Vec<u8> {
     let mut buf = encode_string_field(1, from_account);
     buf.extend(encode_string_field(2, to_account));
     buf.extend(encode_varint_field(3, heartbeat));
@@ -1004,7 +1042,12 @@ pub fn encode_send_private_heartbeat(from_account: &str, to_account: &str, heart
 }
 
 /// hermes `encode_send_group_heartbeat`.
-pub fn encode_send_group_heartbeat(from_account: &str, group_code: &str, heartbeat: u64, send_time_ms: u64) -> Vec<u8> {
+pub fn encode_send_group_heartbeat(
+    from_account: &str,
+    group_code: &str,
+    heartbeat: u64,
+    send_time_ms: u64,
+) -> Vec<u8> {
     let ts = if send_time_ms == 0 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1039,7 +1082,9 @@ pub fn decode_auth_bind_rsp(data: &[u8]) -> std::result::Result<String, String> 
     let code = get_varint(&map, 1);
     if code != 0 {
         let message = get_string(&map, 2);
-        return Err(format!("AuthBindRsp error: code={code} message={message:?}"));
+        return Err(format!(
+            "AuthBindRsp error: code={code} message={message:?}"
+        ));
     }
     let connect_id = get_string(&map, 3);
     if connect_id.is_empty() {
@@ -1178,7 +1223,9 @@ pub fn decode_get_group_member_list_rsp(data: &[u8]) -> MemberListRsp {
     };
     if let Some(entries) = map.get(&3) {
         for entry in entries {
-            let FieldValue::Bytes(member_bytes) = entry else { continue };
+            let FieldValue::Bytes(member_bytes) = entry else {
+                continue;
+            };
             let m = fields_to_dict(parse_fields(member_bytes));
             rsp.members.push(MemberInfo {
                 user_id: get_string(&m, 1),
@@ -1365,7 +1412,17 @@ mod tests {
                 ..Default::default()
             },
         };
-        let bytes = encode_send_group_message("group-9", &[element], "bot-1", "m-2", "", "", Some(3), "ref-1", "trace-2");
+        let bytes = encode_send_group_message(
+            "group-9",
+            &[element],
+            "bot-1",
+            "m-2",
+            "",
+            "",
+            Some(3),
+            "ref-1",
+            "trace-2",
+        );
         let msg = decode_conn_msg(&bytes);
         assert_eq!(msg.head.cmd, "send_group_message");
 
@@ -1376,12 +1433,17 @@ mod tests {
         assert_eq!(get_string(&map, 7), "ref-1");
         assert_eq!(get_varint(&map, 8), 3);
         let body = get_repeated_bytes(&map, 6);
-        assert_eq!(decode_msg_body_element(&body[0]).msg_content.text, "hello group");
+        assert_eq!(
+            decode_msg_body_element(&body[0]).msg_content.text,
+            "hello group"
+        );
     }
 
     #[test]
     fn auth_bind_envelope() {
-        let bytes = encode_auth_bind("ybBot", "bot-1", "bot", "tok-1", "auth-1", "1.0", "linux", "1.0", "");
+        let bytes = encode_auth_bind(
+            "ybBot", "bot-1", "bot", "tok-1", "auth-1", "1.0", "linux", "1.0", "",
+        );
         let msg = decode_conn_msg(&bytes);
         assert_eq!(msg.head.cmd, CMD_AUTH_BIND);
         assert_eq!(msg.head.module, MODULE_CONN_ACCESS);
@@ -1435,11 +1497,20 @@ mod tests {
 
     #[test]
     fn heartbeat_encodes() {
-        let hb = decode_conn_msg(&encode_send_private_heartbeat("bot-1", "user-1", WS_HEARTBEAT_RUNNING));
+        let hb = decode_conn_msg(&encode_send_private_heartbeat(
+            "bot-1",
+            "user-1",
+            WS_HEARTBEAT_RUNNING,
+        ));
         assert_eq!(hb.head.cmd, "send_private_heartbeat");
         assert_eq!(hb.head.module, BIZ_PKG);
 
-        let ghb = decode_conn_msg(&encode_send_group_heartbeat("bot-1", "group-9", WS_HEARTBEAT_RUNNING, 0));
+        let ghb = decode_conn_msg(&encode_send_group_heartbeat(
+            "bot-1",
+            "group-9",
+            WS_HEARTBEAT_RUNNING,
+            0,
+        ));
         assert_eq!(ghb.head.cmd, "send_group_heartbeat");
     }
 

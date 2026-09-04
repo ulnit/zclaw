@@ -143,7 +143,10 @@ pub async fn force_refresh_credential(
     Ok(credential_from_tokens(&tokens, proxy_cfg))
 }
 
-fn credential_from_tokens(tokens: &crate::oauth::StoredTokens, proxy_cfg: &ProxyConfig) -> UpstreamCredential {
+fn credential_from_tokens(
+    tokens: &crate::oauth::StoredTokens,
+    proxy_cfg: &ProxyConfig,
+) -> UpstreamCredential {
     let expires_at = if tokens.expires_at > 0 {
         chrono::DateTime::from_timestamp(tokens.expires_at as i64, 0)
             .map(|dt| dt.to_rfc3339())
@@ -153,7 +156,11 @@ fn credential_from_tokens(tokens: &crate::oauth::StoredTokens, proxy_cfg: &Proxy
     };
     UpstreamCredential {
         bearer: tokens.access_token.clone(),
-        base_url: proxy_cfg.upstream_url.trim().trim_end_matches('/').to_string(),
+        base_url: proxy_cfg
+            .upstream_url
+            .trim()
+            .trim_end_matches('/')
+            .to_string(),
         expires_at,
     }
 }
@@ -164,9 +171,7 @@ pub fn path_allowed(allowed_paths: &[String], path: &str) -> bool {
 }
 
 /// Filter request headers for forwarding (hermes hop-by-hop strip).
-pub fn filter_request_headers(
-    headers: &[(String, String)],
-) -> Vec<(String, String)> {
+pub fn filter_request_headers(headers: &[(String, String)]) -> Vec<(String, String)> {
     headers
         .iter()
         .filter(|(name, _)| {
@@ -181,9 +186,7 @@ pub fn filter_request_headers(
 /// Filter upstream response headers before streaming back to the
 /// client: drop hop-by-hop plus framing headers whose values no longer
 /// match the re-chunked body.
-pub fn filter_response_headers(
-    headers: &[(String, String)],
-) -> Vec<(String, String)> {
+pub fn filter_response_headers(headers: &[(String, String)]) -> Vec<(String, String)> {
     const DROP: &[&str] = &[
         "connection",
         "keep-alive",
@@ -339,8 +342,8 @@ pub async fn run_server(
             response
         };
 
-        let status = StatusCode::from_u16(response.status().as_u16())
-            .unwrap_or(StatusCode::BAD_GATEWAY);
+        let status =
+            StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
         let resp_headers: Vec<(String, String)> = filter_response_headers(
             &response
                 .headers()
@@ -360,11 +363,13 @@ pub async fn run_server(
                 }
             }
         }
-        builder
-            .body(Body::from_stream(stream))
-            .unwrap_or_else(|_| {
-                (StatusCode::INTERNAL_SERVER_ERROR, "proxy response build failed").into_response()
-            })
+        builder.body(Body::from_stream(stream)).unwrap_or_else(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "proxy response build failed",
+            )
+                .into_response()
+        })
     }
 
     let app = Router::new()
@@ -413,7 +418,9 @@ mod tests {
         assert!(names.contains(&"x-request-id"));
         assert!(!names.contains(&"authorization"));
         assert!(!names.iter().any(|n| n.eq_ignore_ascii_case("host")));
-        assert!(!names.iter().any(|n| n.eq_ignore_ascii_case("accept-encoding")));
+        assert!(!names
+            .iter()
+            .any(|n| n.eq_ignore_ascii_case("accept-encoding")));
     }
 
     #[test]
@@ -481,12 +488,8 @@ mod tests {
         let server_cfg = proxy_cfg.clone();
         let home_path = home.path().to_path_buf();
         tokio::spawn(async move {
-            if let Err(e) = run_server(
-                crate::oauth::OAuthConfig::default(),
-                server_cfg,
-                home_path,
-            )
-            .await
+            if let Err(e) =
+                run_server(crate::oauth::OAuthConfig::default(), server_cfg, home_path).await
             {
                 eprintln!("proxy server exited: {e}");
             }

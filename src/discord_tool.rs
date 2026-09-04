@@ -289,16 +289,22 @@ fn save_caps_to_disk(token: &str, caps: &Caps) {
 /// `_fetch_capabilities`).
 async fn fetch_capabilities(token: &str) -> Caps {
     let mut caps = Caps::permissive();
-    match discord_request("GET", "/applications/@me", token, None, None, CAPABILITY_TIMEOUT_SECS)
-        .await
+    match discord_request(
+        "GET",
+        "/applications/@me",
+        token,
+        None,
+        None,
+        CAPABILITY_TIMEOUT_SECS,
+    )
+    .await
     {
         Ok(app) => {
             let flags = app.get("flags").and_then(|v| v.as_u64()).unwrap_or(0);
             caps.has_members_intent =
                 flags & (FLAG_GATEWAY_GUILD_MEMBERS | FLAG_GATEWAY_GUILD_MEMBERS_LIMITED) != 0;
-            caps.has_message_content = flags
-                & (FLAG_GATEWAY_MESSAGE_CONTENT | FLAG_GATEWAY_MESSAGE_CONTENT_LIMITED)
-                != 0;
+            caps.has_message_content =
+                flags & (FLAG_GATEWAY_MESSAGE_CONTENT | FLAG_GATEWAY_MESSAGE_CONTENT_LIMITED) != 0;
             caps.detected = true;
         }
         Err(e) => {
@@ -402,7 +408,15 @@ impl ActionArgs {
 }
 
 async fn list_guilds(token: &str, _args: &ActionArgs) -> Result<Value, DiscordApiError> {
-    let guilds = discord_request("GET", "/users/@me/guilds", token, None, None, REQUEST_TIMEOUT_SECS).await?;
+    let guilds = discord_request(
+        "GET",
+        "/users/@me/guilds",
+        token,
+        None,
+        None,
+        REQUEST_TIMEOUT_SECS,
+    )
+    .await?;
     let result: Vec<Value> = guilds
         .as_array()
         .map(|list| {
@@ -464,7 +478,11 @@ async fn list_channels(token: &str, args: &ActionArgs) -> Result<Value, DiscordA
     let mut uncategorized: Vec<Value> = Vec::new();
     for ch in &list {
         if ch.get("type").and_then(|v| v.as_i64()) == Some(4) {
-            let id = ch.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let id = ch
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             categories.insert(
                 id,
                 json!({
@@ -609,15 +627,16 @@ async fn member_info(token: &str, args: &ActionArgs) -> Result<Value, DiscordApi
 }
 
 async fn search_members(token: &str, args: &ActionArgs) -> Result<Value, DiscordApiError> {
-    let limit = if args.limit <= 0 { 20 } else { args.limit.min(100) };
+    let limit = if args.limit <= 0 {
+        20
+    } else {
+        args.limit.min(100)
+    };
     let members = discord_request(
         "GET",
         &format!("/guilds/{}/members/search", args.guild_id),
         token,
-        Some(&[
-            ("query", args.query.clone()),
-            ("limit", limit.to_string()),
-        ]),
+        Some(&[("query", args.query.clone()), ("limit", limit.to_string())]),
         None,
         REQUEST_TIMEOUT_SECS,
     )
@@ -630,7 +649,11 @@ async fn search_members(token: &str, args: &ActionArgs) -> Result<Value, Discord
 }
 
 async fn fetch_messages(token: &str, args: &ActionArgs) -> Result<Value, DiscordApiError> {
-    let limit = if args.limit <= 0 { 50 } else { args.limit.min(100) };
+    let limit = if args.limit <= 0 {
+        50
+    } else {
+        args.limit.min(100)
+    };
     let mut params: Vec<(&str, String)> = vec![("limit", limit.to_string())];
     if !args.before.is_empty() {
         params.push(("before", args.before.clone()));
@@ -795,7 +818,8 @@ async fn create_thread(token: &str, args: &ActionArgs) -> Result<Value, DiscordA
             }),
         )
     };
-    let thread = discord_request("POST", &path, token, None, Some(body), REQUEST_TIMEOUT_SECS).await?;
+    let thread =
+        discord_request("POST", &path, token, None, Some(body), REQUEST_TIMEOUT_SECS).await?;
     Ok(json!({
         "success": true,
         "thread_id": thread.get("id"),
@@ -816,7 +840,9 @@ async fn add_role(token: &str, args: &ActionArgs) -> Result<Value, DiscordApiErr
         REQUEST_TIMEOUT_SECS,
     )
     .await?;
-    Ok(json!({"success": true, "message": format!("Role {} added to user {}.", args.role_id, args.user_id)}))
+    Ok(
+        json!({"success": true, "message": format!("Role {} added to user {}.", args.role_id, args.user_id)}),
+    )
 }
 
 async fn remove_role(token: &str, args: &ActionArgs) -> Result<Value, DiscordApiError> {
@@ -832,7 +858,9 @@ async fn remove_role(token: &str, args: &ActionArgs) -> Result<Value, DiscordApi
         REQUEST_TIMEOUT_SECS,
     )
     .await?;
-    Ok(json!({"success": true, "message": format!("Role {} removed from user {}.", args.role_id, args.user_id)}))
+    Ok(
+        json!({"success": true, "message": format!("Role {} removed from user {}.", args.role_id, args.user_id)}),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -880,20 +908,56 @@ pub const ALL_ACTIONS: &[&str] = &[
 /// the schema description (hermes `_ACTION_MANIFEST`).
 const ACTION_MANIFEST: [(&str, &str, &str); 15] = [
     ("list_guilds", "()", "list servers the bot is in"),
-    ("server_info", "(guild_id)", "server details + member counts"),
-    ("list_channels", "(guild_id)", "all channels grouped by category"),
+    (
+        "server_info",
+        "(guild_id)",
+        "server details + member counts",
+    ),
+    (
+        "list_channels",
+        "(guild_id)",
+        "all channels grouped by category",
+    ),
     ("channel_info", "(channel_id)", "single channel details"),
     ("list_roles", "(guild_id)", "roles sorted by position"),
-    ("member_info", "(guild_id, user_id)", "lookup a specific member"),
-    ("search_members", "(guild_id, query)", "find members by name prefix"),
-    ("fetch_messages", "(channel_id)", "recent messages; optional before/after snowflakes"),
+    (
+        "member_info",
+        "(guild_id, user_id)",
+        "lookup a specific member",
+    ),
+    (
+        "search_members",
+        "(guild_id, query)",
+        "find members by name prefix",
+    ),
+    (
+        "fetch_messages",
+        "(channel_id)",
+        "recent messages; optional before/after snowflakes",
+    ),
     ("list_pins", "(channel_id)", "pinned messages in a channel"),
     ("pin_message", "(channel_id, message_id)", "pin a message"),
-    ("unpin_message", "(channel_id, message_id)", "unpin a message"),
-    ("delete_message", "(channel_id, message_id)", "delete a message"),
-    ("create_thread", "(channel_id, name)", "create a public thread; optional message_id anchor"),
+    (
+        "unpin_message",
+        "(channel_id, message_id)",
+        "unpin a message",
+    ),
+    (
+        "delete_message",
+        "(channel_id, message_id)",
+        "delete a message",
+    ),
+    (
+        "create_thread",
+        "(channel_id, name)",
+        "create a public thread; optional message_id anchor",
+    ),
     ("add_role", "(guild_id, user_id, role_id)", "assign a role"),
-    ("remove_role", "(guild_id, user_id, role_id)", "remove a role"),
+    (
+        "remove_role",
+        "(guild_id, user_id, role_id)",
+        "remove a role",
+    ),
 ];
 
 /// Actions that require the GUILD_MEMBERS privileged intent.
@@ -953,13 +1017,15 @@ pub fn load_allowed_actions_config() -> Option<Vec<String>> {
 
 /// Visible action list from intents + config allowlist, canonical order
 /// (hermes `_available_actions`).
-pub fn available_actions(caps: &Caps, allowlist: Option<&[String]>, subset: &[&str]) -> Vec<String> {
+pub fn available_actions(
+    caps: &Caps,
+    allowlist: Option<&[String]>,
+    subset: &[&str],
+) -> Vec<String> {
     ALL_ACTIONS
         .iter()
         .filter(|name| subset.contains(name))
-        .filter(|name| {
-            caps.has_members_intent || !INTENT_GATED_MEMBERS.contains(name)
-        })
+        .filter(|name| caps.has_members_intent || !INTENT_GATED_MEMBERS.contains(name))
         .filter(|name| {
             allowlist
                 .map(|allowed| allowed.iter().any(|a| a == *name))
@@ -1082,9 +1148,8 @@ pub async fn run_discord_action(
     subset: &[&str],
     tool_label: &str,
 ) -> Result<Value, AgentError> {
-    let token = bot_token().ok_or_else(|| {
-        AgentError::Tool("DISCORD_BOT_TOKEN not configured.".to_string())
-    })?;
+    let token = bot_token()
+        .ok_or_else(|| AgentError::Tool("DISCORD_BOT_TOKEN not configured.".to_string()))?;
     if !subset.contains(&action) {
         return Err(AgentError::Tool(format!(
             "Unknown action: {action}. Available actions: {}",
@@ -1210,17 +1275,15 @@ pub fn register(registry: &mut crate::tools::ToolRegistry) {
         tool("discord")
             .description(core_description)
             .parameters(core_params)
-            .handler(|args, _ctx| {
-                async move {
-                    let action = args
-                        .get("action")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    match run_discord_action(&action, &args, CORE_ACTIONS, "discord").await {
-                        Ok(value) => Ok(value),
-                        Err(e) => Ok(json!({"success": false, "error": e.to_string()})),
-                    }
+            .handler(|args, _ctx| async move {
+                let action = args
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                match run_discord_action(&action, &args, CORE_ACTIONS, "discord").await {
+                    Ok(value) => Ok(value),
+                    Err(e) => Ok(json!({"success": false, "error": e.to_string()})),
                 }
             })
             .toolset("discord")
@@ -1240,17 +1303,15 @@ pub fn register(registry: &mut crate::tools::ToolRegistry) {
         tool("discord_admin")
             .description(admin_description)
             .parameters(admin_params)
-            .handler(|args, _ctx| {
-                async move {
-                    let action = args
-                        .get("action")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    match run_discord_action(&action, &args, ADMIN_ACTIONS, "discord_admin").await {
-                        Ok(value) => Ok(value),
-                        Err(e) => Ok(json!({"success": false, "error": e.to_string()})),
-                    }
+            .handler(|args, _ctx| async move {
+                let action = args
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                match run_discord_action(&action, &args, ADMIN_ACTIONS, "discord_admin").await {
+                    Ok(value) => Ok(value),
+                    Err(e) => Ok(json!({"success": false, "error": e.to_string()})),
                 }
             })
             .toolset("discord_admin")
@@ -1347,7 +1408,10 @@ mod tests {
         // Allowlist keeps only listed actions.
         let allowlist = vec!["list_guilds".to_string(), "fetch_messages".to_string()];
         let actions = available_actions(&full, Some(&allowlist), ALL_ACTIONS);
-        assert_eq!(actions, vec!["list_guilds".to_string(), "fetch_messages".to_string()]);
+        assert_eq!(
+            actions,
+            vec!["list_guilds".to_string(), "fetch_messages".to_string()]
+        );
     }
 
     #[test]
@@ -1420,7 +1484,10 @@ mod tests {
         let err = run_discord_action("fetch_messages", &json!({}), CORE_ACTIONS, "discord")
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("Missing required parameters"), "{err}");
+        assert!(
+            err.to_string().contains("Missing required parameters"),
+            "{err}"
+        );
         assert!(err.to_string().contains("channel_id"), "{err}");
 
         // Config allowlist gates at call time too (defense in depth).

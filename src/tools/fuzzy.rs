@@ -44,7 +44,10 @@ pub fn fuzzy_find(content: &str, old: &str) -> FuzzyHit {
     for (name, strategy) in strategies {
         let matches = strategy(content, old);
         if !matches.is_empty() {
-            return FuzzyHit { matches, strategy: name };
+            return FuzzyHit {
+                matches,
+                strategy: name,
+            };
         }
     }
     FuzzyHit {
@@ -89,7 +92,12 @@ fn line_offsets(content: &str) -> Vec<usize> {
 
 /// hermes `_calculate_line_positions`: (start, end) byte positions for a
 /// window of lines [start_line, end_line).
-fn calculate_line_positions(line_starts: &[usize], start_line: usize, end_line: usize, content_len: usize) -> (usize, usize) {
+fn calculate_line_positions(
+    line_starts: &[usize],
+    start_line: usize,
+    end_line: usize,
+    content_len: usize,
+) -> (usize, usize) {
     let start_pos = line_starts[start_line.min(line_starts.len() - 1)];
     let mut end_pos = if end_line < line_starts.len() {
         line_starts[end_line]
@@ -117,7 +125,12 @@ fn find_line_windows(
     for i in 0..=(content_window_lines.len() - pattern_line_count) {
         let block = content_window_lines[i..i + pattern_line_count].join("\n");
         if block == pattern_normalized {
-            matches.push(calculate_line_positions(&line_starts, i, i + pattern_line_count, content.len()));
+            matches.push(calculate_line_positions(
+                &line_starts,
+                i,
+                i + pattern_line_count,
+                content.len(),
+            ));
         }
     }
     matches
@@ -173,7 +186,11 @@ fn strategy_whitespace_normalized(content: &str, pattern: &str) -> Vec<(usize, u
 
 /// hermes `_map_normalized_positions`: walk original/normalized char streams
 /// together to map normalized ranges back to original byte ranges.
-fn map_normalized_positions(original: &str, normalized: &str, normalized_matches: &[(usize, usize)]) -> Vec<(usize, usize)> {
+fn map_normalized_positions(
+    original: &str,
+    normalized: &str,
+    normalized_matches: &[(usize, usize)],
+) -> Vec<(usize, usize)> {
     let orig_chars: Vec<char> = original.chars().collect();
     let norm_chars: Vec<char> = normalized.chars().collect();
 
@@ -186,10 +203,15 @@ fn map_normalized_positions(original: &str, normalized: &str, normalized_matches
             orig_to_norm.push(norm_idx);
             orig_idx += 1;
             norm_idx += 1;
-        } else if (orig_chars[orig_idx] == ' ' || orig_chars[orig_idx] == '\t') && norm_chars[norm_idx] == ' ' {
+        } else if (orig_chars[orig_idx] == ' ' || orig_chars[orig_idx] == '\t')
+            && norm_chars[norm_idx] == ' '
+        {
             orig_to_norm.push(norm_idx);
             orig_idx += 1;
-            if orig_idx < orig_chars.len() && orig_chars[orig_idx] != ' ' && orig_chars[orig_idx] != '\t' {
+            if orig_idx < orig_chars.len()
+                && orig_chars[orig_idx] != ' '
+                && orig_chars[orig_idx] != '\t'
+            {
                 norm_idx += 1;
             }
         } else if orig_chars[orig_idx] == ' ' || orig_chars[orig_idx] == '\t' {
@@ -206,8 +228,10 @@ fn map_normalized_positions(original: &str, normalized: &str, normalized_matches
     }
 
     // Invert: first/last original char for each normalized position.
-    let mut norm_to_orig_start: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
-    let mut norm_to_orig_end: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    let mut norm_to_orig_start: std::collections::HashMap<usize, usize> =
+        std::collections::HashMap::new();
+    let mut norm_to_orig_end: std::collections::HashMap<usize, usize> =
+        std::collections::HashMap::new();
     for (orig_pos, &norm_pos) in orig_to_norm.iter().enumerate() {
         norm_to_orig_start.entry(norm_pos).or_insert(orig_pos);
         norm_to_orig_end.insert(norm_pos, orig_pos);
@@ -222,13 +246,17 @@ fn map_normalized_positions(original: &str, normalized: &str, normalized_matches
         let orig_start_char = if let Some(&pos) = norm_to_orig_start.get(&norm_start) {
             pos
         } else {
-            orig_to_norm.iter().position(|&n| n >= norm_start).unwrap_or(orig_chars.len())
+            orig_to_norm
+                .iter()
+                .position(|&n| n >= norm_start)
+                .unwrap_or(orig_chars.len())
         };
-        let mut orig_end_char = if let Some(&pos) = norm_to_orig_end.get(&(norm_end.saturating_sub(1))) {
-            pos + 1
-        } else {
-            orig_start_char + (norm_end - norm_start)
-        };
+        let mut orig_end_char =
+            if let Some(&pos) = norm_to_orig_end.get(&(norm_end.saturating_sub(1))) {
+                pos + 1
+            } else {
+                orig_start_char + (norm_end - norm_start)
+            };
         // Expand trailing whitespace only when the normalized match itself
         // ended with a space (hermes issue #52491).
         if norm_end < norm_chars.len() && norm_end > 0 && norm_chars[norm_end - 1] == ' ' {
@@ -313,7 +341,12 @@ fn strategy_trimmed_boundary(content: &str, pattern: &str) -> Vec<(usize, usize)
             check[last] = check[last].trim().to_string();
         }
         if check.join("\n") == modified_pattern {
-            matches.push(calculate_line_positions(&line_starts, i, i + pattern_line_count, content.len()));
+            matches.push(calculate_line_positions(
+                &line_starts,
+                i,
+                i + pattern_line_count,
+                content.len(),
+            ));
         }
     }
     matches
@@ -324,16 +357,26 @@ fn strategy_trimmed_boundary(content: &str, pattern: &str) -> Vec<(usize, usize)
 // ---------------------------------------------------------------------------
 
 const UNICODE_MAP: &[(char, &str)] = &[
-    ('\u{201c}', "\""), ('\u{201d}', "\""),
-    ('\u{2018}', "'"), ('\u{2019}', "'"),
-    ('\u{2014}', "--"), ('\u{2013}', "-"),
-    ('\u{2026}', "..."), ('\u{00a0}', " "),
+    ('\u{201c}', "\""),
+    ('\u{201d}', "\""),
+    ('\u{2018}', "'"),
+    ('\u{2019}', "'"),
+    ('\u{2014}', "--"),
+    ('\u{2013}', "-"),
+    ('\u{2026}', "..."),
+    ('\u{00a0}', " "),
     ('\u{2212}', "-"),
-    ('\u{2000}', " "), ('\u{2001}', " "),
-    ('\u{2002}', " "), ('\u{2003}', " "),
-    ('\u{2004}', " "), ('\u{2005}', " "), ('\u{2006}', " "),
-    ('\u{2007}', " "), ('\u{2008}', " "),
-    ('\u{2009}', " "), ('\u{200a}', " "),
+    ('\u{2000}', " "),
+    ('\u{2001}', " "),
+    ('\u{2002}', " "),
+    ('\u{2003}', " "),
+    ('\u{2004}', " "),
+    ('\u{2005}', " "),
+    ('\u{2006}', " "),
+    ('\u{2007}', " "),
+    ('\u{2008}', " "),
+    ('\u{2009}', " "),
+    ('\u{200a}', " "),
     ('\u{202f}', " "),
     ('\u{205f}', " "),
     ('\u{3000}', " "),
@@ -365,8 +408,12 @@ fn build_orig_to_norm_map(original: &str) -> Vec<usize> {
     result
 }
 
-fn map_norm_matches_to_orig(orig_to_norm: &[usize], norm_matches: &[(usize, usize)]) -> Vec<(usize, usize)> {
-    let mut norm_to_orig_start: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+fn map_norm_matches_to_orig(
+    orig_to_norm: &[usize],
+    norm_matches: &[(usize, usize)],
+) -> Vec<(usize, usize)> {
+    let mut norm_to_orig_start: std::collections::HashMap<usize, usize> =
+        std::collections::HashMap::new();
     for (orig_pos, &norm_pos) in orig_to_norm[..orig_to_norm.len() - 1].iter().enumerate() {
         norm_to_orig_start.entry(norm_pos).or_insert(orig_pos);
     }
@@ -403,8 +450,14 @@ fn strategy_unicode_normalized(content: &str, pattern: &str) -> Vec<(usize, usiz
     char_ranges
         .into_iter()
         .map(|(start_char, end_char)| {
-            let start_b: usize = orig_chars[..start_char.min(orig_chars.len())].iter().map(|c| c.len_utf8()).sum();
-            let end_b: usize = orig_chars[..end_char.min(orig_chars.len())].iter().map(|c| c.len_utf8()).sum();
+            let start_b: usize = orig_chars[..start_char.min(orig_chars.len())]
+                .iter()
+                .map(|c| c.len_utf8())
+                .sum();
+            let end_b: usize = orig_chars[..end_char.min(orig_chars.len())]
+                .iter()
+                .map(|c| c.len_utf8())
+                .sum();
             (start_b, end_b)
         })
         .collect()
@@ -496,7 +549,12 @@ fn strategy_block_anchor(content: &str, pattern: &str) -> Vec<(usize, usize)> {
             similarity(&content_middle, &pattern_middle)
         };
         if sim >= threshold {
-            matches.push(calculate_line_positions(&line_starts, i, i + pattern_line_count, content_len));
+            matches.push(calculate_line_positions(
+                &line_starts,
+                i,
+                i + pattern_line_count,
+                content_len,
+            ));
         }
     }
     matches
@@ -538,7 +596,12 @@ fn strategy_context_aware(content: &str, pattern: &str) -> Vec<(usize, usize)> {
             }
         }
         if all_match {
-            matches.push(calculate_line_positions(&line_starts, i, i + pattern_line_count, content.len()));
+            matches.push(calculate_line_positions(
+                &line_starts,
+                i,
+                i + pattern_line_count,
+                content.len(),
+            ));
         }
     }
     matches
@@ -596,7 +659,11 @@ pub fn reindent_replacement(file_region: &str, old_string: &str, new_string: &st
 /// Conditionally unescape `\\t`/`\\r` in `new_string` — only when the matched
 /// file region actually contains the real control character (hermes
 /// `_maybe_unescape_new_string`).
-pub fn maybe_unescape_new_string(new_string: &str, content: &str, matches: &[(usize, usize)]) -> String {
+pub fn maybe_unescape_new_string(
+    new_string: &str,
+    content: &str,
+    matches: &[(usize, usize)],
+) -> String {
     if !new_string.contains("\\t") && !new_string.contains("\\r") {
         return new_string.to_string();
     }
@@ -621,7 +688,10 @@ pub fn format_match_locations(content: &str, matches: &[(usize, usize)], cap: us
     for &(start, _end) in matches.iter().take(cap) {
         let line_no = content[..start].matches('\n').count() + 1;
         let line_start = content[..start].rfind('\n').map(|p| p + 1).unwrap_or(0);
-        let line_end = content[line_start..].find('\n').map(|p| line_start + p).unwrap_or(content.len());
+        let line_end = content[line_start..]
+            .find('\n')
+            .map(|p| line_start + p)
+            .unwrap_or(content.len());
         let mut snippet = content[line_start..line_end].trim().to_string();
         if snippet.chars().count() > 80 {
             let truncated: String = snippet.chars().take(77).collect();
@@ -637,7 +707,12 @@ pub fn format_match_locations(content: &str, matches: &[(usize, usize)], cap: us
 
 /// Detect tool-call escape-drift artifacts (`\'` / `\"`) in `new_string`
 /// (hermes `_detect_escape_drift`). Returns an error message when detected.
-pub fn detect_escape_drift(content: &str, matches: &[(usize, usize)], old_string: &str, new_string: &str) -> Option<String> {
+pub fn detect_escape_drift(
+    content: &str,
+    matches: &[(usize, usize)],
+    old_string: &str,
+    new_string: &str,
+) -> Option<String> {
     if !new_string.contains("\\'") && !new_string.contains("\\\"") {
         return None;
     }
@@ -646,7 +721,10 @@ pub fn detect_escape_drift(content: &str, matches: &[(usize, usize)], old_string
         .map(|&(start, end)| &content[start..end])
         .collect();
     for suspect in ["\\'", "\\\""] {
-        if new_string.contains(suspect) && old_string.contains(suspect) && !matched_regions.contains(suspect) {
+        if new_string.contains(suspect)
+            && old_string.contains(suspect)
+            && !matched_regions.contains(suspect)
+        {
             let plain = &suspect[1..];
             return Some(format!(
                 "Escape-drift detected: old_string and new_string contain the literal sequence {:?} \
@@ -664,7 +742,12 @@ pub fn detect_escape_drift(content: &str, matches: &[(usize, usize)], old_string
 /// Unicode-preserving replacement for strategy 7: diff norm(old) -> new and
 /// apply edits onto the original file region, keeping untouched Unicode
 /// spans intact.
-pub fn apply_unicode_preserving_replacement(content: &str, matches: &[(usize, usize)], old_string: &str, new_string: &str) -> String {
+pub fn apply_unicode_preserving_replacement(
+    content: &str,
+    matches: &[(usize, usize)],
+    old_string: &str,
+    new_string: &str,
+) -> String {
     let file_region: String = matches
         .iter()
         .map(|&(start, end)| &content[start..end])
@@ -676,8 +759,12 @@ pub fn apply_unicode_preserving_replacement(content: &str, matches: &[(usize, us
     }
 
     let file_orig_to_norm = build_orig_to_norm_map(&file_region);
-    let mut file_norm_to_orig: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
-    for (orig_pos, &norm_pos) in file_orig_to_norm[..file_orig_to_norm.len() - 1].iter().enumerate() {
+    let mut file_norm_to_orig: std::collections::HashMap<usize, usize> =
+        std::collections::HashMap::new();
+    for (orig_pos, &norm_pos) in file_orig_to_norm[..file_orig_to_norm.len() - 1]
+        .iter()
+        .enumerate()
+    {
         file_norm_to_orig.entry(norm_pos).or_insert(orig_pos);
     }
 
@@ -809,7 +896,12 @@ fn visualize_whitespace(line: &str) -> String {
 }
 
 /// hermes `find_closest_lines`: context-rich suggestions for no-match errors.
-pub fn find_closest_lines(old_string: &str, content: &str, context_lines: usize, max_results: usize) -> String {
+pub fn find_closest_lines(
+    old_string: &str,
+    content: &str,
+    context_lines: usize,
+    max_results: usize,
+) -> String {
     if old_string.is_empty() || content.is_empty() {
         return String::new();
     }
@@ -876,7 +968,12 @@ pub fn find_closest_lines(old_string: &str, content: &str, context_lines: usize,
 }
 
 /// Append a "Did you mean..." hint to plain no-match errors.
-pub fn format_no_match_hint(error: &str, match_count: usize, old_string: &str, content: &str) -> String {
+pub fn format_no_match_hint(
+    error: &str,
+    match_count: usize,
+    old_string: &str,
+    content: &str,
+) -> String {
     if match_count != 0 || !error.starts_with("Could not find") {
         return String::new();
     }
@@ -898,7 +995,10 @@ mod tests {
 
     #[test]
     fn test_exact() {
-        let hit = find("fn main() {\n    println!(\"hi\");\n}\n", "println!(\"hi\");");
+        let hit = find(
+            "fn main() {\n    println!(\"hi\");\n}\n",
+            "println!(\"hi\");",
+        );
         assert_eq!(hit.strategy, "exact");
         assert_eq!(hit.matches.len(), 1);
     }
@@ -974,7 +1074,10 @@ mod tests {
         let content = "fn compute(x: i64) -> i64 {\n    let y = x * 2;\n    y + 1\n}\n";
         // First line differs slightly so the exact-anchor block_anchor
         // strategy cannot fire; context_aware matches by similarity.
-        let hit = find(content, "fn compute(x : i64) -> i64 {\n    let y = x * 3;\n    y + 1\n}");
+        let hit = find(
+            content,
+            "fn compute(x : i64) -> i64 {\n    let y = x * 3;\n    y + 1\n}",
+        );
         assert_eq!(hit.strategy, "context_aware");
         assert_eq!(hit.matches.len(), 1);
     }
@@ -1003,7 +1106,8 @@ mod tests {
         let content = "a \u{2014} b";
         let hit = find(content, "a -- b");
         assert_eq!(hit.strategy, "unicode_normalized");
-        let replaced = apply_unicode_preserving_replacement(content, &hit.matches, "a -- b", "a -- c");
+        let replaced =
+            apply_unicode_preserving_replacement(content, &hit.matches, "a -- b", "a -- c");
         // The em dash must survive the replacement.
         assert_eq!(replaced, "a \u{2014} c");
     }

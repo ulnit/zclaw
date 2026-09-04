@@ -77,9 +77,9 @@ fn normalize_reference_images(value: &Value) -> Option<Vec<String>> {
 fn video_generate_check() -> ToolAvailability {
     // hermes check_video_generation_requirements: at least one registered
     // provider reports available.
-    let any = crate::video_gen::list_providers()
-        .iter()
-        .any(|p| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| p.is_available())).unwrap_or(false));
+    let any = crate::video_gen::list_providers().iter().any(|p| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| p.is_available())).unwrap_or(false)
+    });
     if any {
         ToolAvailability::available()
     } else {
@@ -382,7 +382,11 @@ fn looks_like_local_path(value: &str) -> bool {
         return true;
     }
     let bytes = value.as_bytes();
-    if bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/') {
+    if bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
+    {
         return true;
     }
     value.starts_with("\\\\")
@@ -415,7 +419,9 @@ async fn call_gateway(
     };
 
     let client = match reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(TRANSPORT_CONNECT_TIMEOUT_SECONDS))
+        .connect_timeout(std::time::Duration::from_secs(
+            TRANSPORT_CONNECT_TIMEOUT_SECONDS,
+        ))
         .timeout(std::time::Duration::from_secs(
             read_timeout_seconds.unwrap_or(TRANSPORT_READ_TIMEOUT_SECONDS),
         ))
@@ -452,7 +458,11 @@ async fn call_gateway(
             .unwrap_or_default();
     }
 
-    let payload: Option<Value> = response.json::<Value>().await.ok().filter(|v| v.is_object());
+    let payload: Option<Value> = response
+        .json::<Value>()
+        .await
+        .ok()
+        .filter(|v| v.is_object());
     let Some(mut payload) = payload else {
         // An edge or a proxy answering in HTML rather than the gateway
         // itself — what a 502/504 in front of it looks like from here.
@@ -487,7 +497,9 @@ async fn call_gateway(
     let guidance = payload
         .as_object_mut()
         .and_then(|obj| obj.remove("guidance"));
-    let result = guidance.filter(|g| !g.is_null()).unwrap_or(json!("Request accepted."));
+    let result = guidance
+        .filter(|g| !g.is_null())
+        .unwrap_or(json!("Request accepted."));
     serde_json::to_string(&json!({"result": result, "details": payload})).unwrap_or_default()
 }
 
@@ -586,9 +598,14 @@ async fn deliver_media(value: &str, kind: &str) -> std::result::Result<String, S
     let Some(endpoints) = bfl_endpoints() else {
         return Err("BFL video generation is not available in this build.".to_string());
     };
-    crate::managed_gateway::upload_managed_media(&endpoints.base_url, &endpoints.upload_path, &data, mime)
-        .await
-        .map_err(|e| format!("Could not upload {}: {}", display_path(value), e))
+    crate::managed_gateway::upload_managed_media(
+        &endpoints.base_url,
+        &endpoints.upload_path,
+        &data,
+        mime,
+    )
+    .await
+    .map_err(|e| format!("Could not upload {}: {}", display_path(value), e))
 }
 
 /// Replace local paths with upload references in every media field (hermes
@@ -630,7 +647,10 @@ async fn prepare_media(args: &Value) -> std::result::Result<Value, String> {
                 obj.insert(field.to_string(), Value::Array(uploaded));
             }
             Value::String(text) => {
-                obj.insert(field.to_string(), Value::String(deliver_media(&text, kind).await?));
+                obj.insert(
+                    field.to_string(),
+                    Value::String(deliver_media(&text, kind).await?),
+                );
             }
             _ => {}
         }
@@ -696,7 +716,11 @@ fn filename_from_url(url: &str) -> String {
             }
         })
         .collect();
-    let cleaned = cleaned.trim_start_matches('.').chars().take(120).collect::<String>();
+    let cleaned = cleaned
+        .trim_start_matches('.')
+        .chars()
+        .take(120)
+        .collect::<String>();
     if cleaned.is_empty() {
         "flux3-video.mp4".to_string()
     } else {
@@ -750,18 +774,27 @@ fn free_path(candidate: &Path) -> std::result::Result<PathBuf, String> {
 
 /// Where to write, honouring an explicit request and never overwriting
 /// (hermes `_resolve_destination`).
-fn resolve_destination(save_to: Option<&str>, filename: &str) -> std::result::Result<PathBuf, String> {
+fn resolve_destination(
+    save_to: Option<&str>,
+    filename: &str,
+) -> std::result::Result<PathBuf, String> {
     let (directory, name) = match save_to.map(|s| s.trim()).filter(|s| !s.is_empty()) {
         Some(requested) => {
             let requested = expand_tilde(requested);
-            if requested.is_dir() || requested.to_string_lossy().ends_with('/') || requested.to_string_lossy().ends_with('\\') {
+            if requested.is_dir()
+                || requested.to_string_lossy().ends_with('/')
+                || requested.to_string_lossy().ends_with('\\')
+            {
                 (requested, filename.to_string())
             } else {
                 let name = requested
                     .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| filename.to_string());
-                let parent = requested.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."));
+                let parent = requested
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| PathBuf::from("."));
                 (parent, name)
             }
         }
@@ -794,11 +827,15 @@ async fn download_video(
     // like a playable file behind.
     let partial = target.with_file_name(format!(
         "{}.part",
-        target.file_name().and_then(|n| n.to_str()).unwrap_or("video")
+        target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("video")
     ));
 
     let timeout_secs = download_read_timeout(started).max(1.0) as u64;
-    let client = crate::url_safety::ssrf_guarded_client(std::time::Duration::from_secs(timeout_secs));
+    let client =
+        crate::url_safety::ssrf_guarded_client(std::time::Duration::from_secs(timeout_secs));
     let download = async {
         let response = client
             .get(url)
@@ -946,7 +983,9 @@ async fn poll_until_done(url: &str, save_to: Option<&str>, started: Instant) -> 
             }
             // Never faster than our own cadence, however short a wait the
             // gateway names.
-            throttled_for.map(|t| t.max(POLL_GAP_SECONDS)).unwrap_or(POLL_GAP_SECONDS)
+            throttled_for
+                .map(|t| t.max(POLL_GAP_SECONDS))
+                .unwrap_or(POLL_GAP_SECONDS)
         };
 
         if gap <= 0.0 || spent + gap >= POLL_BUDGET_SECONDS {
@@ -1109,9 +1148,9 @@ fn flux3_text_to_video_tool() -> crate::tools::Tool {
             "required": ["prompt"],
             "additionalProperties": false
         }))
-        .handler(|args, _ctx| async move {
-            Ok(handle_submit_mode("text_to_video", &args, true).await)
-        })
+        .handler(
+            |args, _ctx| async move { Ok(handle_submit_mode("text_to_video", &args, true).await) },
+        )
         .toolset("bfl")
         .emoji("🎬")
         .check_fn(flux3_check_wrapper)
@@ -1428,7 +1467,9 @@ fn xai_video_tools_check() -> ToolAvailability {
 
 /// Require a public HTTP(S) MP4 URL (hermes `_normalize_public_video_url`).
 fn normalize_public_video_url(value: Option<&Value>) -> Option<String> {
-    let cleaned = value.and_then(|v| v.as_str()).map(|s| s.trim().to_string())?;
+    let cleaned = value
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())?;
     if cleaned.is_empty() {
         return None;
     }
@@ -1596,12 +1637,18 @@ mod tests {
         assert!(poll_is_finished("not json"));
         assert!(poll_is_finished(r#"{"error": "denied"}"#));
         assert!(poll_is_finished(r#"{"details": {"status": "Ready"}}"#));
-        assert!(poll_is_finished(r#"{"details": {"status": "Content Moderated"}}"#));
-        assert!(!poll_is_finished(r#"{"details": {"status": "Generating"}}"#));
+        assert!(poll_is_finished(
+            r#"{"details": {"status": "Content Moderated"}}"#
+        ));
+        assert!(!poll_is_finished(
+            r#"{"details": {"status": "Generating"}}"#
+        ));
         // No details / no status means nothing is pending — finished
         // (hermes `_poll_is_finished`).
         assert!(poll_is_finished(r#"{"result": "ok"}"#));
-        assert!(poll_is_finished(r#"{"result": "queued", "details": {"id": "x"}}"#));
+        assert!(poll_is_finished(
+            r#"{"result": "queued", "details": {"id": "x"}}"#
+        ));
     }
 
     #[test]
@@ -1610,7 +1657,10 @@ mod tests {
             retry_after_seconds(r#"{"error": "slow down", "details": {"retryAfterSeconds": 7}}"#),
             Some(7.0)
         );
-        assert_eq!(retry_after_seconds(r#"{"error": "x", "details": {}}"#), None);
+        assert_eq!(
+            retry_after_seconds(r#"{"error": "x", "details": {}}"#),
+            None
+        );
         assert_eq!(retry_after_seconds(r#"{"result": "ok"}"#), None);
     }
 

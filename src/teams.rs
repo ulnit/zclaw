@@ -119,8 +119,7 @@ impl TeamsConfig {
             client_secret: env_trim("TEAMS_CLIENT_SECRET")
                 .unwrap_or_else(|| self.client_secret.clone()),
             tenant_id: env_trim("TEAMS_TENANT_ID").unwrap_or_else(|| self.tenant_id.clone()),
-            service_url: env_trim("TEAMS_SERVICE_URL")
-                .unwrap_or_else(|| self.service_url.clone()),
+            service_url: env_trim("TEAMS_SERVICE_URL").unwrap_or_else(|| self.service_url.clone()),
             allowed_users: env_list("TEAMS_ALLOWED_USERS")
                 .unwrap_or_else(|| self.allowed_users.clone()),
             home_channel: env_trim("TEAMS_HOME_CHANNEL")
@@ -293,7 +292,10 @@ impl Runtime {
         if resp.status().as_u16() >= 400 {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            return Err(format!("activity post failed ({status}): {}", &body[..body.len().min(300)]));
+            return Err(format!(
+                "activity post failed ({status}): {}",
+                &body[..body.len().min(300)]
+            ));
         }
         Ok(())
     }
@@ -310,7 +312,10 @@ impl Runtime {
         if !resp.status().is_success() {
             return Err(format!("attachment HTTP {}", resp.status()));
         }
-        resp.bytes().await.map(|b| b.to_vec()).map_err(|e| e.to_string())
+        resp.bytes()
+            .await
+            .map(|b| b.to_vec())
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -319,7 +324,10 @@ static RUNTIME: std::sync::OnceLock<Arc<Runtime>> = std::sync::OnceLock::new();
 /// Register the adapter (called from `run_messaging` when enabled).
 pub fn register(cfg: &TeamsConfig) {
     let resolved = cfg.resolve();
-    if resolved.client_id.is_empty() || resolved.client_secret.is_empty() || resolved.tenant_id.is_empty() {
+    if resolved.client_id.is_empty()
+        || resolved.client_secret.is_empty()
+        || resolved.tenant_id.is_empty()
+    {
         eprintln!(
             "[teams] enabled but TEAMS_CLIENT_ID/TEAMS_CLIENT_SECRET/TEAMS_TENANT_ID are not all set — webhook route will 503"
         );
@@ -383,10 +391,7 @@ pub async fn teams_handle_webhook(
             }
         }
     };
-    let activity_type = activity
-        .get("type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let activity_type = activity.get("type").and_then(|v| v.as_str()).unwrap_or("");
     if activity_type == "invoke" {
         // adaptiveCard/action button taps resolve blocking approvals
         // (hermes `_on_card_action`); other invokes are acked.
@@ -459,7 +464,12 @@ pub async fn teams_handle_webhook(
         .unwrap_or("")
         .to_string();
     // Allowlist ∪ pairing gate.
-    if !runtime.cfg.allowed_users.iter().any(|u| u == &user_id || u == "*") {
+    if !runtime
+        .cfg
+        .allowed_users
+        .iter()
+        .any(|u| u == &user_id || u == "*")
+    {
         if let Some(store) = pairing {
             if !store.is_approved("teams", &user_id) {
                 if let Some(code_msg) =
@@ -593,12 +603,7 @@ pub async fn teams_handle_webhook(
     }
 }
 
-fn cache_into(
-    attachments: &mut Vec<MediaAttachment>,
-    data: &[u8],
-    name: &str,
-    mime: &str,
-) {
+fn cache_into(attachments: &mut Vec<MediaAttachment>, data: &[u8], name: &str, mime: &str) {
     let mime = if mime.is_empty() {
         "application/octet-stream"
     } else {
@@ -709,18 +714,25 @@ fn invoke_card_response(card: Value) -> Value {
 `_on_card_action`: default-deny allowlist gate, choice mapping,
 blocking-approval check, resolution, replacement card. */
 pub fn card_action_response(cfg: &ResolvedTeams, activity: &Value) -> Value {
-    let data = activity.pointer("/value/action/data").cloned().unwrap_or(json!({}));
-    let hermes_action = data.get("hermes_action").and_then(|v| v.as_str()).unwrap_or("");
-    let session_key = data.get("session_key").and_then(|v| v.as_str()).unwrap_or("");
+    let data = activity
+        .pointer("/value/action/data")
+        .cloned()
+        .unwrap_or(json!({}));
+    let hermes_action = data
+        .get("hermes_action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let session_key = data
+        .get("session_key")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     if hermes_action.is_empty() || session_key.is_empty() {
         return invoke_message_response("Unknown action.");
     }
     // Default-deny: an empty allowlist means nobody may click approval
     // buttons (hermes: TEAMS_ALLOWED_USERS not configured → reject).
     if cfg.allowed_users.is_empty() {
-        eprintln!(
-            "[teams] card action rejected: allowed_users not configured — default deny"
-        );
+        eprintln!("[teams] card action rejected: allowed_users not configured — default deny");
         return invoke_message_response(
             "⛔ Approval buttons require TEAMS_ALLOWED_USERS to be configured.",
         );
@@ -730,7 +742,11 @@ pub fn card_action_response(cfg: &ResolvedTeams, activity: &Value) -> Value {
         .and_then(|v| v.as_str())
         .or_else(|| activity.pointer("/from/id").and_then(|v| v.as_str()))
         .unwrap_or("");
-    if !cfg.allowed_users.iter().any(|u| u == "*" || u == clicker_id) {
+    if !cfg
+        .allowed_users
+        .iter()
+        .any(|u| u == "*" || u == clicker_id)
+    {
         eprintln!("[teams] unauthorized card action by {clicker_id} — ignoring");
         return invoke_message_response("⛔ Not authorized.");
     }
@@ -893,7 +909,10 @@ mod tests {
         };
         let resolved = cfg.resolve();
         assert_eq!(resolved.client_id, "env-id");
-        assert_eq!(resolved.allowed_users, vec!["u1".to_string(), "u2".to_string()]);
+        assert_eq!(
+            resolved.allowed_users,
+            vec!["u1".to_string(), "u2".to_string()]
+        );
         std::env::remove_var("TEAMS_CLIENT_ID");
         std::env::remove_var("TEAMS_ALLOWED_USERS");
     }
@@ -994,7 +1013,10 @@ mod tests {
             &resolved_with_users(&[]),
             &card_activity("approve_once", "teams-auth-1", "user-1"),
         );
-        assert!(resp["value"].as_str().unwrap().contains("TEAMS_ALLOWED_USERS"));
+        assert!(resp["value"]
+            .as_str()
+            .unwrap()
+            .contains("TEAMS_ALLOWED_USERS"));
         // Unknown clicker.
         let resp = card_action_response(
             &resolved_with_users(&["someone-else"]),

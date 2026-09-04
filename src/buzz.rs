@@ -284,7 +284,9 @@ pub fn resolve_private_key(cfg: &ResolvedBuzz) -> String {
         let Ok(data) = serde_json::from_str::<Value>(&raw) else {
             continue;
         };
-        let Some(obj) = data.as_object() else { continue };
+        let Some(obj) = data.as_object() else {
+            continue;
+        };
         for field in ["nsec", "private_key_hex", "private_key"] {
             if let Some(value) = obj.get(field).and_then(|v| v.as_str()) {
                 let trimmed = value.trim();
@@ -381,7 +383,11 @@ fn may_reclassify_as_dm(
             .iter()
             .any(|c| c == channel_id || c.trim_start_matches("dm:") == channel_id),
         Some(entry) => {
-            let name = entry.get("name").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let name = entry
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
             let description = entry
                 .get("description")
                 .and_then(|v| v.as_str())
@@ -490,7 +496,11 @@ pub fn strip_mention(content: &str) -> String {
 }
 
 /// Run one buzz CLI invocation, returning (exit_code, stdout).
-async fn run_cli(cli: &str, args: &[&str], stdin_body: Option<&str>) -> Result<(i32, String), String> {
+async fn run_cli(
+    cli: &str,
+    args: &[&str],
+    stdin_body: Option<&str>,
+) -> Result<(i32, String), String> {
     use tokio::io::AsyncWriteExt;
     use tokio::process::Command;
     let mut cmd = Command::new(cli);
@@ -574,7 +584,14 @@ async fn seed_channel(
     let limit_str = FETCH_LIMIT.to_string();
     let result = run_cli(
         &cfg.cli_path,
-        &["messages", "get", "--channel", channel_id, "--limit", &limit_str],
+        &[
+            "messages",
+            "get",
+            "--channel",
+            channel_id,
+            "--limit",
+            &limit_str,
+        ],
         None,
     )
     .await;
@@ -601,7 +618,10 @@ async fn seed_channel(
     };
     for event in parse_json_list(&out) {
         let event_id = event.get("id").and_then(|v| v.as_str()).unwrap_or("");
-        let created_at = event.get("created_at").and_then(|v| v.as_i64()).unwrap_or(0);
+        let created_at = event
+            .get("created_at")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
         if !event_id.is_empty() {
             state.remember(event_id);
         }
@@ -815,13 +835,12 @@ async fn start_websocket(
     let handle = tokio::spawn(async move {
         websocket_loop(session, Some(ready_tx)).await;
     });
-    let outcome = match tokio::time::timeout(WS_AUTH_TIMEOUT + Duration::from_secs(5), ready_rx)
-        .await
-    {
-        Ok(Ok(result)) => result,
-        Ok(Err(_)) => Err("websocket task ended before reporting".into()),
-        Err(_) => Err("WebSocket did not authenticate in time".into()),
-    };
+    let outcome =
+        match tokio::time::timeout(WS_AUTH_TIMEOUT + Duration::from_secs(5), ready_rx).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => Err("websocket task ended before reporting".into()),
+            Err(_) => Err("WebSocket did not authenticate in time".into()),
+        };
     if outcome.is_err() {
         // hermes cancels the WS task when the handshake fails.
         handle.abort();
@@ -896,8 +915,7 @@ async fn run_ws_session(
             continue;
         }
         let subscription_id = format!("hermes-buzz-dm-{}", subscriptions.len());
-        send_channel_subscription(&write, &session.registry, &subscription_id, &channel_id)
-            .await?;
+        send_channel_subscription(&write, &session.registry, &subscription_id, &channel_id).await?;
         subscriptions.insert(subscription_id, channel_id);
     }
     if !session.cfg.self_pubkey.is_empty() {
@@ -906,7 +924,7 @@ async fn run_ws_session(
             .membership_since
             .load(std::sync::atomic::Ordering::SeqCst) as i64
             - 1)
-            .max(0);
+        .max(0);
         let request = serde_json::json!([
             "REQ",
             WS_MEMBERSHIP_SUB_ID,
@@ -954,9 +972,11 @@ type WsWriteHalf = Arc<
 async fn send_ws(write: &WsWriteHalf, text: &str) -> Result<(), String> {
     use futures::SinkExt;
     let mut sink = write.lock().await;
-    sink.send(tokio_tungstenite::tungstenite::Message::Text(text.to_string()))
-        .await
-        .map_err(|e| format!("buzz WS send: {e}"))
+    sink.send(tokio_tungstenite::tungstenite::Message::Text(
+        text.to_string(),
+    ))
+    .await
+    .map_err(|e| format!("buzz WS send: {e}"))
 }
 
 /// hermes `_send_channel_subscription` — kind-9 `#h` subscription with
@@ -990,14 +1010,29 @@ async fn send_channel_subscription(
 /// `_authenticate_websocket`).
 async fn authenticate_websocket(
     session: &WsSession,
-    write: &Arc<tokio::sync::Mutex<futures::stream::SplitSink<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>, tokio_tungstenite::tungstenite::Message>>>,
-    read: &mut futures::stream::SplitStream<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>,
+    write: &Arc<
+        tokio::sync::Mutex<
+            futures::stream::SplitSink<
+                tokio_tungstenite::WebSocketStream<
+                    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+                >,
+                tokio_tungstenite::tungstenite::Message,
+            >,
+        >,
+    >,
+    read: &mut futures::stream::SplitStream<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    >,
 ) -> Result<(), String> {
     let raw = next_text(read, WS_AUTH_TIMEOUT)
         .await?
         .ok_or("buzz WS closed before AUTH challenge")?;
     let message: Value = serde_json::from_str(&raw).map_err(|_| "malformed AUTH frame")?;
-    let items = message.as_array().ok_or("Buzz relay did not send a NIP-42 AUTH challenge")?;
+    let items = message
+        .as_array()
+        .ok_or("Buzz relay did not send a NIP-42 AUTH challenge")?;
     if items.len() < 2 || items[0].as_str() != Some("AUTH") {
         return Err("Buzz relay did not send a NIP-42 AUTH challenge".into());
     }
@@ -1017,7 +1052,9 @@ async fn authenticate_websocket(
             .await?
             .ok_or("buzz WS closed during AUTH")?;
         let response: Value = serde_json::from_str(&raw).unwrap_or(Value::Null);
-        let Some(items) = response.as_array() else { continue };
+        let Some(items) = response.as_array() else {
+            continue;
+        };
         if items.is_empty() {
             continue;
         }
@@ -1045,7 +1082,11 @@ async fn authenticate_websocket(
 
 /// Read the next text frame within a timeout (skips binary/pings).
 async fn next_text(
-    read: &mut futures::stream::SplitStream<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>,
+    read: &mut futures::stream::SplitStream<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    >,
     timeout: Duration,
 ) -> Result<Option<String>, String> {
     use futures::StreamExt;
@@ -1070,7 +1111,11 @@ async fn next_text(
 async fn event_pump(
     session: &WsSession,
     write: &WsWriteHalf,
-    read: &mut futures::stream::SplitStream<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>,
+    read: &mut futures::stream::SplitStream<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    >,
     subscriptions: &mut HashMap<String, String>,
 ) -> Result<(), String> {
     use futures::StreamExt;
@@ -1085,7 +1130,9 @@ async fn event_pump(
                 continue;
             }
         };
-        let Some(items) = message.as_array() else { continue };
+        let Some(items) = message.as_array() else {
+            continue;
+        };
         if items.is_empty() {
             continue;
         }
@@ -1153,8 +1200,7 @@ async fn handle_membership_event(
         let subscription_id = format!("hermes-buzz-dm-{}", subscriptions.len());
         subscriptions.insert(subscription_id.clone(), channel_id.clone());
         if let Err(e) =
-            send_channel_subscription(write, &session.registry, &subscription_id, &channel_id)
-                .await
+            send_channel_subscription(write, &session.registry, &subscription_id, &channel_id).await
         {
             eprintln!("[buzz] subscribe to new conversation {channel_id}: {e}");
             continue;
@@ -1184,7 +1230,14 @@ async fn poll_channel(
     };
     let since = state.last_ts.to_string();
     let limit_str = FETCH_LIMIT.to_string();
-    let mut args: Vec<&str> = vec!["messages", "get", "--channel", channel_id, "--limit", &limit_str];
+    let mut args: Vec<&str> = vec![
+        "messages",
+        "get",
+        "--channel",
+        channel_id,
+        "--limit",
+        &limit_str,
+    ];
     if state.last_ts > 0 {
         args.push("--since");
         args.push(&since);
@@ -1200,7 +1253,10 @@ async fn poll_channel(
         return;
     }
     for event in parse_json_list(&out) {
-        handle_event(cfg, registry, dispatcher, pairing, channel_id, state, &event).await;
+        handle_event(
+            cfg, registry, dispatcher, pairing, channel_id, state, &event,
+        )
+        .await;
     }
 }
 
@@ -1213,8 +1269,15 @@ async fn handle_event(
     state: &mut ChannelState,
     event: &Value,
 ) {
-    let event_id = event.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let created_at = event.get("created_at").and_then(|v| v.as_i64()).unwrap_or(0);
+    let event_id = event
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let created_at = event
+        .get("created_at")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
     if event_id.is_empty() || !state.remember(&event_id) {
         return;
     }
@@ -1321,11 +1384,22 @@ async fn handle_event(
 }
 
 /// hermes send — `buzz messages send --channel <id> --content -`.
-pub async fn send_via_cli(cfg: &ResolvedBuzz, channel_id: &str, content: &str) -> Result<(), String> {
+pub async fn send_via_cli(
+    cfg: &ResolvedBuzz,
+    channel_id: &str,
+    content: &str,
+) -> Result<(), String> {
     let body: String = content.chars().take(MAX_MESSAGE_LENGTH).collect();
     let (code, out) = run_cli(
         &cfg.cli_path,
-        &["messages", "send", "--channel", channel_id, "--content", "-"],
+        &[
+            "messages",
+            "send",
+            "--channel",
+            channel_id,
+            "--content",
+            "-",
+        ],
         Some(&body),
     )
     .await?;
@@ -1360,7 +1434,10 @@ pub async fn send_reaction(cfg: &ResolvedBuzz, event_id: &str, emoji: &str) -> b
             false
         }
         Err(e) => {
-            eprintln!("[buzz] reaction add failed for message {}: {e}", &event_id[..event_id.len().min(12)]);
+            eprintln!(
+                "[buzz] reaction add failed for message {}: {e}",
+                &event_id[..event_id.len().min(12)]
+            );
             false
         }
     }
@@ -1408,10 +1485,7 @@ mod tests {
     #[test]
     fn mention_detection_and_strip() {
         assert!(is_mentioned("hey @chip help", ""));
-        assert!(is_mentioned(
-            "hello abc123",
-            "abc123def456"
-        ));
+        assert!(is_mentioned("hello abc123", "abc123def456"));
         assert!(!is_mentioned("plain message", "abc123def456"));
         assert_eq!(strip_mention("@Chip /whoami"), "/whoami");
         assert_eq!(strip_mention("no mention"), "no mention");
@@ -1444,7 +1518,10 @@ mod tests {
         std::env::set_var("BUZZ_REQUIRE_MENTION", "false");
         std::env::set_var("BUZZ_POLL_INTERVAL_MS", "200");
         let resolved = BuzzConfig::default().resolve();
-        assert_eq!(resolved.channels, vec!["chan1".to_string(), "chan2".to_string()]);
+        assert_eq!(
+            resolved.channels,
+            vec!["chan1".to_string(), "chan2".to_string()]
+        );
         assert!(!resolved.require_mention);
         assert_eq!(resolved.poll_interval_ms, MIN_POLL_INTERVAL_MS); // floor
         std::env::remove_var("BUZZ_CHANNELS");
@@ -1518,10 +1595,17 @@ mod tests {
         .unwrap();
         assert_eq!(event.get("id").and_then(|v| v.as_str()), Some("deadbeef"));
         assert_eq!(
-            event.get("pubkey").and_then(|v| v.as_str()).unwrap().to_lowercase(),
+            event
+                .get("pubkey")
+                .and_then(|v| v.as_str())
+                .unwrap()
+                .to_lowercase(),
             "ab12"
         );
-        assert_eq!(event.get("created_at").and_then(|v| v.as_i64()), Some(1700000000));
+        assert_eq!(
+            event.get("created_at").and_then(|v| v.as_i64()),
+            Some(1700000000)
+        );
     }
 
     #[tokio::test]
@@ -1635,7 +1719,9 @@ mod tests {
             "conv".into(),
             serde_json::json!({"name": "General", "description": "x"}),
         );
-        assert!(!is_direct_message_event(&cfg, &real_meta, "conv", &dm_event));
+        assert!(!is_direct_message_event(
+            &cfg, &real_meta, "conv", &dm_event
+        ));
     }
 
     #[test]
@@ -1695,7 +1781,10 @@ echo '[]'
         cfg.channels = vec!["general".into()];
         let registry = BuzzRegistry::new();
         let added = discover_dms(&cfg, &registry, false).await;
-        assert_eq!(added, vec!["dm-conv-1".to_string(), "dm-conv-2".to_string()]);
+        assert_eq!(
+            added,
+            vec!["dm-conv-1".to_string(), "dm-conv-2".to_string()]
+        );
         {
             let states = registry.states.lock().await;
             let dm = states.get("dm-conv-1").unwrap();

@@ -81,7 +81,10 @@ fn env_bool(key: &str, default: bool) -> bool {
 }
 
 fn env_int(key: &str, default: u64) -> u64 {
-    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 
 // ---------------------------------------------------------------------------
@@ -104,8 +107,7 @@ struct TirithState {
     warned: BTreeSet<String>,
 }
 
-static STATE: LazyLock<Mutex<TirithState>> =
-    LazyLock::new(|| Mutex::new(TirithState::default()));
+static STATE: LazyLock<Mutex<TirithState>> = LazyLock::new(|| Mutex::new(TirithState::default()));
 
 fn state() -> MutexGuard<'static, TirithState> {
     STATE.lock().unwrap_or_else(|e| e.into_inner())
@@ -188,7 +190,9 @@ fn read_failure_reason() -> Option<String> {
     if age.as_secs() >= MARKER_TTL_SECS {
         return None;
     }
-    std::fs::read_to_string(&path).ok().map(|s| s.trim().to_string())
+    std::fs::read_to_string(&path)
+        .ok()
+        .map(|s| s.trim().to_string())
 }
 
 fn system_time_as_instant(t: std::time::SystemTime) -> Instant {
@@ -334,9 +338,16 @@ fn verify_checksum(archive: &Path, checksums: &Path, archive_name: &str) -> bool
         }
         sha.update(&buffer[..n]);
     }
-    let actual: String = sha.finalize().iter().map(|b| format!("{:02x}", b)).collect();
+    let actual: String = sha
+        .finalize()
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect();
     if actual != expected {
-        eprintln!("[tirith] checksum mismatch: expected {}, got {}", expected, actual);
+        eprintln!(
+            "[tirith] checksum mismatch: expected {}, got {}",
+            expected, actual
+        );
         return false;
     }
     true
@@ -414,10 +425,14 @@ fn install_into(
         "[tirith] not found — downloading latest release for {}...",
         detect_target().unwrap_or("?")
     );
-    download_file(&format!("{}/{}", base_url, archive_name), &archive_path)
-        .map_err(|e| { log(format!("download failed: {}", e)); "download_failed".to_string() })?;
-    download_file(&format!("{}/checksums.txt", base_url), &checksums_path)
-        .map_err(|e| { log(format!("download failed: {}", e)); "download_failed".to_string() })?;
+    download_file(&format!("{}/{}", base_url, archive_name), &archive_path).map_err(|e| {
+        log(format!("download failed: {}", e));
+        "download_failed".to_string()
+    })?;
+    download_file(&format!("{}/checksums.txt", base_url), &checksums_path).map_err(|e| {
+        log(format!("download failed: {}", e));
+        "download_failed".to_string()
+    })?;
 
     // Cosign provenance verification — preferred but not mandatory.
     let mut cosign_verified = false;
@@ -462,8 +477,16 @@ fn install_into(
             std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(mode)).ok();
         }
     }
-    let verification = if cosign_verified { "cosign + SHA-256" } else { "SHA-256 only" };
-    eprintln!("[tirith] installed to {} ({})", dest.display(), verification);
+    let verification = if cosign_verified {
+        "cosign + SHA-256"
+    } else {
+        "SHA-256 only"
+    };
+    eprintln!(
+        "[tirith] installed to {} ({})",
+        dest.display(),
+        verification
+    );
     Ok(dest)
 }
 
@@ -503,7 +526,10 @@ fn resolve_tirith_path(cfg: &TirithConfig) -> String {
         warn_once(
             &mut state,
             "tirith_explicit_missing",
-            format!("configured tirith path {:?} not found; scanning disabled", cfg.path),
+            format!(
+                "configured tirith path {:?} not found; scanning disabled",
+                cfg.path
+            ),
         );
         state.install_failed = true;
         state.install_failure_reason = "explicit_path_missing".into();
@@ -640,7 +666,12 @@ pub fn ensure_installed(security: &SecurityConfig) {
         state.install_thread_active = true;
     }
     if STARTED
-        .compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst)
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        )
         .is_err()
     {
         return;
@@ -696,7 +727,15 @@ pub fn check_command_security(command: &str, security: &SecurityConfig) -> Tirit
     let tirith_path = resolve_tirith_path(&cfg);
 
     let mut child = match Command::new(&tirith_path)
-        .args(["check", "--json", "--non-interactive", "--shell", "posix", "--", command])
+        .args([
+            "check",
+            "--json",
+            "--non-interactive",
+            "--shell",
+            "posix",
+            "--",
+            command,
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -826,7 +865,11 @@ pub fn check_command_security(command: &str, security: &SecurityConfig) -> Tirit
         }
     }
 
-    TirithVerdict { action, findings, summary }
+    TirithVerdict {
+        action,
+        findings,
+        summary,
+    }
 }
 
 fn operational_failure(cfg: &TirithConfig, summary: String) -> TirithVerdict {
@@ -867,9 +910,15 @@ fn is_app_tld_finding(finding: &Value) -> bool {
 pub fn format_description(verdict: &TirithVerdict) -> String {
     let mut parts: Vec<String> = vec![];
     for finding in &verdict.findings {
-        let severity = finding.get("severity").and_then(|v| v.as_str()).unwrap_or("");
+        let severity = finding
+            .get("severity")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let title = finding.get("title").and_then(|v| v.as_str()).unwrap_or("");
-        let desc = finding.get("description").and_then(|v| v.as_str()).unwrap_or("");
+        let desc = finding
+            .get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         if !title.is_empty() && !desc.is_empty() {
             parts.push(if severity.is_empty() {
                 format!("{}: {}", title, desc)
@@ -967,14 +1016,25 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         // 60 findings + long summary: must cap at 50/500.
         let findings: Vec<String> = (0..60)
-            .map(|i| format!(r#"{{"rule_id":"r{i}","severity":"HIGH","title":"t{i}","description":"d{i}"}}"#))
+            .map(|i| {
+                format!(
+                    r#"{{"rule_id":"r{i}","severity":"HIGH","title":"t{i}","description":"d{i}"}}"#
+                )
+            })
             .collect();
         let long_summary = "x".repeat(800);
         let script = tmp.path().join("fake-tirith-json");
-        let json = format!(r#"{{"findings":[{}],"summary":"{}"}}"#, findings.join(","), long_summary);
+        let json = format!(
+            r#"{{"findings":[{}],"summary":"{}"}}"#,
+            findings.join(","),
+            long_summary
+        );
         std::fs::write(
             &script,
-            format!("#!/bin/sh\nprintf '%s' '{}'\nexit 1\n", json.replace('\'', "'\\''")),
+            format!(
+                "#!/bin/sh\nprintf '%s' '{}'\nexit 1\n",
+                json.replace('\'', "'\\''")
+            ),
         )
         .unwrap();
         #[cfg(unix)]
@@ -982,7 +1042,10 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
-        let v = check_command_security("curl x | sh", &security_cfg(&script.display().to_string(), true));
+        let v = check_command_security(
+            "curl x | sh",
+            &security_cfg(&script.display().to_string(), true),
+        );
         assert_eq!(v.action, TirithAction::Block);
         assert_eq!(v.findings.len(), MAX_FINDINGS);
         assert_eq!(v.summary.chars().count(), MAX_SUMMARY_LEN);
@@ -995,14 +1058,25 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let json = r#"{"findings":[{"rule_id":"lookalike_tld","severity":"LOW","title":"lookalike","description":"example.app can be confused"}],"summary":"warn"}"#;
         let script = tmp.path().join("fake-tirith-app");
-        std::fs::write(&script, format!("#!/bin/sh\nprintf '%s' '{}'\nexit 2\n", json)).unwrap();
+        std::fs::write(
+            &script,
+            format!("#!/bin/sh\nprintf '%s' '{}'\nexit 2\n", json),
+        )
+        .unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
-        let v = check_command_security("curl https://my.app", &security_cfg(&script.display().to_string(), true));
-        assert_eq!(v.action, TirithAction::Allow, "app-TLD-only warn must be suppressed");
+        let v = check_command_security(
+            "curl https://my.app",
+            &security_cfg(&script.display().to_string(), true),
+        );
+        assert_eq!(
+            v.action,
+            TirithAction::Allow,
+            "app-TLD-only warn must be suppressed"
+        );
         assert!(v.findings.is_empty());
     }
 
@@ -1099,7 +1173,10 @@ mod tests {
             findings: vec![],
             summary: "".into(),
         };
-        assert_eq!(format_description(&empty), "Security scan: security issue detected");
+        assert_eq!(
+            format_description(&empty),
+            "Security scan: security issue detected"
+        );
     }
 
     #[test]

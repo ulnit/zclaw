@@ -215,7 +215,10 @@ mod tests {
         seed_home(dir.path());
         let out = memory_status(dir.path());
         assert!(out.contains("MEMORY.md  (agent notes)  2 entries"), "{out}");
-        assert!(out.contains("USER.md    (user profile)  1 entries"), "{out}");
+        assert!(
+            out.contains("USER.md    (user profile)  1 entries"),
+            "{out}"
+        );
     }
 
     #[test]

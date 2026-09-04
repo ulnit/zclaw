@@ -145,7 +145,10 @@ impl Default for YuanbaoConfig {
 }
 
 fn env_or_none(name: &str) -> Option<String> {
-    std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 pub fn resolve_app_id(cfg: &YuanbaoConfig) -> String {
@@ -215,7 +218,10 @@ pub fn compute_signature(nonce: &str, timestamp: &str, app_key: &str, app_secret
 /// hermes `build_timestamp`: Beijing-time ISO-8601 without milliseconds.
 pub fn build_timestamp() -> String {
     let bj = chrono::FixedOffset::east_opt(8 * 3600).expect("+08:00 offset");
-    chrono::Utc::now().with_timezone(&bj).format("%Y-%m-%dT%H:%M:%S+08:00").to_string()
+    chrono::Utc::now()
+        .with_timezone(&bj)
+        .format("%Y-%m-%dT%H:%M:%S+08:00")
+        .to_string()
 }
 
 #[derive(Debug, Clone)]
@@ -267,9 +273,20 @@ impl SignManager {
         let duration = data.get("duration").and_then(|v| v.as_u64()).unwrap_or(0);
         let ttl = if duration > 0 { duration } else { 3600 };
         let entry = SignTokenEntry {
-            token: data.get("token").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            bot_id: data.get("bot_id").map(|v| v.to_string().trim_matches('"').to_string()).unwrap_or_default(),
-            source: data.get("source").and_then(|v| v.as_str()).unwrap_or("bot").to_string(),
+            token: data
+                .get("token")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            bot_id: data
+                .get("bot_id")
+                .map(|v| v.to_string().trim_matches('"').to_string())
+                .unwrap_or_default(),
+            source: data
+                .get("source")
+                .and_then(|v| v.as_str())
+                .unwrap_or("bot")
+                .to_string(),
             expire_ts: Instant::now() + Duration::from_secs(ttl),
         };
         if entry.token.is_empty() {
@@ -321,14 +338,21 @@ impl SignManager {
             let status = response.status();
             let raw = response.text().await.unwrap_or_default();
             if status.as_u16() != 200 {
-                return Err(format!("Sign token API returned {}: {}", status.as_u16(), truncate_str(&raw, 200)));
+                return Err(format!(
+                    "Sign token API returned {}: {}",
+                    status.as_u16(),
+                    truncate_str(&raw, 200)
+                ));
             }
-            let result: Value = serde_json::from_str(&raw).map_err(|e| format!("Sign token response parse error: {e}"))?;
+            let result: Value = serde_json::from_str(&raw)
+                .map_err(|e| format!("Sign token response parse error: {e}"))?;
             let code = result.get("code").and_then(|v| v.as_i64());
             if code == Some(0) {
-                let data = result.get("data").filter(|v| v.is_object()).cloned().ok_or_else(|| {
-                    format!("Sign token response missing 'data' field: {result}")
-                })?;
+                let data = result
+                    .get("data")
+                    .filter(|v| v.is_object())
+                    .cloned()
+                    .ok_or_else(|| format!("Sign token response missing 'data' field: {result}"))?;
                 return Ok(data);
             }
             if code == Some(SIGN_RETRYABLE_CODE) && attempt < SIGN_MAX_RETRIES {
@@ -339,7 +363,9 @@ impl SignManager {
             let msg = result.get("msg").and_then(|v| v.as_str()).unwrap_or("");
             return Err(format!("Sign token error: code={code:?}, msg={msg}"));
         }
-        Err(format!("Sign token failed: max retries exceeded ({last_error})"))
+        Err(format!(
+            "Sign token failed: max retries exceeded ({last_error})"
+        ))
     }
 }
 
@@ -355,7 +381,9 @@ fn getrandom_fill(bytes: &mut [u8]) {
         .map(|d| d.as_secs())
         .unwrap_or(0x9E3779B97F4A7C15);
     for slot in bytes.iter_mut() {
-        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         *slot = (seed >> 33) as u8;
     }
 }
@@ -408,7 +436,11 @@ fn dedup_check(seen: &mut HashMap<String, Instant>, key: &str) -> bool {
 
 /// Start the Yuanbao adapter (hermes `YuanbaoAdapter.connect` +
 /// ConnectionManager lifecycle).
-pub async fn run(cfg: YuanbaoConfig, dispatcher: Arc<Dispatcher>, pairing: Option<Arc<PairingStore>>) {
+pub async fn run(
+    cfg: YuanbaoConfig,
+    dispatcher: Arc<Dispatcher>,
+    pairing: Option<Arc<PairingStore>>,
+) {
     let app_id = resolve_app_id(&cfg);
     let app_secret = resolve_app_secret(&cfg);
     if app_id.is_empty() || app_secret.is_empty() {
@@ -478,7 +510,11 @@ async fn run_session(runner: &Arc<Runner>, ws_url: &str) -> std::result::Result<
     }
 
     // Step 2: WS connect.
-    let connect = tokio::time::timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS + 10), tokio_tungstenite::connect_async(ws_url)).await;
+    let connect = tokio::time::timeout(
+        Duration::from_secs(CONNECT_TIMEOUT_SECS + 10),
+        tokio_tungstenite::connect_async(ws_url),
+    )
+    .await;
     let (ws, _) = match connect {
         Ok(Ok(pair)) => pair,
         Ok(Err(e)) => {
@@ -498,7 +534,11 @@ async fn run_session(runner: &Arc<Runner>, ws_url: &str) -> std::result::Result<
     let auth_bytes = proto::encode_auth_bind(
         "ybBot",
         &runner.bot_id.lock().unwrap().clone(),
-        if token_entry.source.is_empty() { "bot" } else { &token_entry.source },
+        if token_entry.source.is_empty() {
+            "bot"
+        } else {
+            &token_entry.source
+        },
         &token_entry.token,
         &auth_msg_id,
         &app_version(),
@@ -516,9 +556,17 @@ async fn run_session(runner: &Arc<Runner>, ws_url: &str) -> std::result::Result<
             eprintln!("[yuanbao] AUTH_BIND timeout waiting for BIND_ACK");
             return Err(0);
         }
-        let next = tokio::time::timeout(deadline.saturating_duration_since(Instant::now()), stream.next()).await;
-        let Ok(Some(Ok(message))) = next else { return Err(0) };
-        let WsMessage::Binary(raw) = message else { continue };
+        let next = tokio::time::timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            stream.next(),
+        )
+        .await;
+        let Ok(Some(Ok(message))) = next else {
+            return Err(0);
+        };
+        let WsMessage::Binary(raw) = message else {
+            continue;
+        };
         let msg = proto::decode_conn_msg(&raw);
         if msg.head.cmd_type == proto::CMD_TYPE_RESPONSE && msg.head.cmd == proto::CMD_AUTH_BIND {
             match proto::decode_auth_bind_rsp(&msg.data) {
@@ -531,7 +579,10 @@ async fn run_session(runner: &Arc<Runner>, ws_url: &str) -> std::result::Result<
         }
     };
     runner.connected.store(true, Ordering::SeqCst);
-    eprintln!("[yuanbao] connected connectId={connect_id} botId={}", runner.bot_id.lock().unwrap());
+    eprintln!(
+        "[yuanbao] connected connectId={connect_id} botId={}",
+        runner.bot_id.lock().unwrap()
+    );
 
     // Step 4: heartbeat + receive loops.
     let (out_tx, mut out_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(64);
@@ -617,13 +668,18 @@ async fn handle_frame(
             runner.pong_pending.store(false, Ordering::SeqCst);
             FrameAction::Continue
         }
-        proto::CMD_TYPE_RESPONSE if head.cmd == "send_group_heartbeat" || head.cmd == "send_private_heartbeat" => {
+        proto::CMD_TYPE_RESPONSE
+            if head.cmd == "send_group_heartbeat" || head.cmd == "send_private_heartbeat" =>
+        {
             FrameAction::Continue
         }
         proto::CMD_TYPE_RESPONSE => {
             // Response to an outbound RPC (send_c2c/group_message): the
             // send path correlates by msg_id.
-            pending_responses().lock().unwrap().insert(head.msg_id.clone(), msg.data.clone());
+            pending_responses()
+                .lock()
+                .unwrap()
+                .insert(head.msg_id.clone(), msg.data.clone());
             FrameAction::Continue
         }
         proto::CMD_TYPE_PUSH => {
@@ -655,7 +711,8 @@ fn close_code_from_error(text: &str) -> u16 {
 }
 
 /// Outbound RPC response correlation (msg_id -> response payload).
-static PENDING_RESPONSES: std::sync::OnceLock<Mutex<HashMap<String, Vec<u8>>>> = std::sync::OnceLock::new();
+static PENDING_RESPONSES: std::sync::OnceLock<Mutex<HashMap<String, Vec<u8>>>> =
+    std::sync::OnceLock::new();
 
 fn pending_responses() -> &'static Mutex<HashMap<String, Vec<u8>>> {
     PENDING_RESPONSES.get_or_init(|| Mutex::new(HashMap::new()))
@@ -683,7 +740,11 @@ fn new_uuid() -> String {
 
 /// hermes `_push_to_inbound` debounce: aggregate frames per sender key
 /// within a short window, then run one merged pipeline pass.
-fn buffer_inbound(runner: &Arc<Runner>, out_tx: &tokio::sync::mpsc::Sender<Vec<u8>>, data: Vec<u8>) {
+fn buffer_inbound(
+    runner: &Arc<Runner>,
+    out_tx: &tokio::sync::mpsc::Sender<Vec<u8>>,
+    data: Vec<u8>,
+) {
     // Lightweight sender-key extraction (hermes `_extract_sender_key`).
     let key = proto::decode_inbound_push(&data)
         .map(|push| format!("{}:{}", push.from_account, push.group_code))
@@ -703,7 +764,9 @@ fn buffer_inbound(runner: &Arc<Runner>, out_tx: &tokio::sync::mpsc::Sender<Vec<u
         let frames = {
             let mut buffer = runner.inbound_buffer.lock().unwrap();
             match buffer.get(&key) {
-                Some((frames, gen)) if *gen == generation => buffer.remove(&key).map(|(frames, _)| frames),
+                Some((frames, gen)) if *gen == generation => {
+                    buffer.remove(&key).map(|(frames, _)| frames)
+                }
                 _ => None,
             }
         };
@@ -715,10 +778,16 @@ fn buffer_inbound(runner: &Arc<Runner>, out_tx: &tokio::sync::mpsc::Sender<Vec<u
 
 /// Decode + gate + dispatch one debounced batch of push frames (hermes
 /// pipeline essence).
-async fn handle_inbound_frames(runner: &Arc<Runner>, frames: &[Vec<u8>], out_tx: &tokio::sync::mpsc::Sender<Vec<u8>>) {
+async fn handle_inbound_frames(
+    runner: &Arc<Runner>,
+    frames: &[Vec<u8>],
+    out_tx: &tokio::sync::mpsc::Sender<Vec<u8>>,
+) {
     let mut merged: Option<proto::InboundPush> = None;
     for data in frames {
-        let Some(push) = proto::decode_inbound_push(data) else { continue };
+        let Some(push) = proto::decode_inbound_push(data) else {
+            continue;
+        };
         match merged.as_mut() {
             Some(into) => {
                 into.msg_body.extend(push.msg_body);
@@ -736,7 +805,11 @@ async fn handle_inbound_frames(runner: &Arc<Runner>, frames: &[Vec<u8>], out_tx:
     if push.from_account.is_empty() {
         return;
     }
-    let dedup_key = if push.msg_key.is_empty() { push.msg_id.clone() } else { push.msg_key.clone() };
+    let dedup_key = if push.msg_key.is_empty() {
+        push.msg_id.clone()
+    } else {
+        push.msg_key.clone()
+    };
     if !dedup_key.is_empty() && runner.is_duplicate(&dedup_key) {
         return;
     }
@@ -744,7 +817,11 @@ async fn handle_inbound_frames(runner: &Arc<Runner>, frames: &[Vec<u8>], out_tx:
     let is_group = !push.group_code.is_empty();
     let (chat_id, gated) = if is_group {
         let allowed = match runner.cfg.group_policy.as_str() {
-            "allowlist" => runner.cfg.group_allow_from.iter().any(|g| g.trim() == push.group_code),
+            "allowlist" => runner
+                .cfg
+                .group_allow_from
+                .iter()
+                .any(|g| g.trim() == push.group_code),
             "open" => open_opted_in(),
             _ => false, // disabled + pairing (hermes: group pairing closed)
         };
@@ -752,13 +829,25 @@ async fn handle_inbound_frames(runner: &Arc<Runner>, frames: &[Vec<u8>], out_tx:
     } else {
         let intake = match runner.cfg.dm_policy.as_str() {
             "disabled" => false,
-            "allowlist" => runner.cfg.allow_from.iter().any(|a| a.trim() == push.from_account),
+            "allowlist" => runner
+                .cfg
+                .allow_from
+                .iter()
+                .any(|a| a.trim() == push.from_account),
             "pairing" => true,
             "open" => open_opted_in(),
             _ => false,
         };
-        let authorized = runner.cfg.allow_from.iter().any(|a| a.trim() == push.from_account)
-            || runner.pairing.as_ref().map(|s| s.is_approved("yuanbao", &push.from_account)).unwrap_or(false)
+        let authorized = runner
+            .cfg
+            .allow_from
+            .iter()
+            .any(|a| a.trim() == push.from_account)
+            || runner
+                .pairing
+                .as_ref()
+                .map(|s| s.is_approved("yuanbao", &push.from_account))
+                .unwrap_or(false)
             || runner.cfg.dm_policy == "open";
         (push.from_account.clone(), intake && authorized)
     };
@@ -770,7 +859,12 @@ async fn handle_inbound_frames(runner: &Arc<Runner>, frames: &[Vec<u8>], out_tx:
         );
         if !is_group {
             if let Some(store) = &runner.pairing {
-                if let Some(reply) = crate::messaging::pairing_offer_public(store, "yuanbao", &push.from_account, &push.sender_nickname) {
+                if let Some(reply) = crate::messaging::pairing_offer_public(
+                    store,
+                    "yuanbao",
+                    &push.from_account,
+                    &push.sender_nickname,
+                ) {
                     send_text_via(runner, out_tx, &chat_id, "", &reply).await;
                 }
             }
@@ -811,10 +905,8 @@ async fn handle_inbound_frames(runner: &Arc<Runner>, frames: &[Vec<u8>], out_tx:
         return;
     }
     let mut text = patch_media_anchors(&raw_text, &media_refs, &resolved);
-    let mut attachments: Vec<crate::messaging::MediaAttachment> = resolved
-        .iter()
-        .filter_map(|entry| entry.clone())
-        .collect();
+    let mut attachments: Vec<crate::messaging::MediaAttachment> =
+        resolved.iter().filter_map(|entry| entry.clone()).collect();
 
     // hermes QuoteContextMiddleware + MediaResolveMiddleware sources 2/3:
     // quoted-media backfill (already-local anchors + leftover ybres refs
@@ -876,7 +968,11 @@ async fn handle_inbound_frames(runner: &Arc<Runner>, frames: &[Vec<u8>], out_tx:
     eprintln!(
         "[yuanbao] inbound from={} {} text_len={}",
         truncate_str(&push.from_account, 12),
-        if is_group { format!("group={}", push.group_code) } else { "dm".into() },
+        if is_group {
+            format!("group={}", push.group_code)
+        } else {
+            "dm".into()
+        },
         text.chars().count()
     );
 
@@ -929,7 +1025,10 @@ async fn handle_inbound_frames(runner: &Arc<Runner>, frames: &[Vec<u8>], out_tx:
 fn open_opted_in() -> bool {
     for var in ["GATEWAY_ALLOW_ALL_USERS", "YUANBAO_ALLOW_ALL_USERS"] {
         if matches!(
-            std::env::var(var).unwrap_or_default().to_lowercase().as_str(),
+            std::env::var(var)
+                .unwrap_or_default()
+                .to_lowercase()
+                .as_str(),
             "true" | "1" | "yes"
         ) {
             return true;
@@ -1130,7 +1229,9 @@ fn resource_cache() -> &'static Mutex<HashMap<String, (crate::messaging::MediaAt
 fn resource_cache_get(resource_id: &str) -> Option<crate::messaging::MediaAttachment> {
     let mut cache = resource_cache().lock().unwrap();
     let (attachment, cached_at) = cache.get(resource_id)?.clone();
-    if cached_at.elapsed() > Duration::from_secs(RESOURCE_CACHE_TTL_SECS) || !attachment.path.is_file() {
+    if cached_at.elapsed() > Duration::from_secs(RESOURCE_CACHE_TTL_SECS)
+        || !attachment.path.is_file()
+    {
         cache.remove(resource_id);
         return None;
     }
@@ -1159,7 +1260,10 @@ fn resource_cache_put(resource_id: &str, attachment: crate::messaging::MediaAtta
 /// hermes `_fetch_resource_url` — exchange a resourceId for a direct
 /// download URL via `/api/resource/v1/download`, retrying once on 401
 /// with a forced sign-token refresh.
-async fn fetch_resource_url(runner: &Arc<Runner>, resource_id: &str) -> std::result::Result<String, String> {
+async fn fetch_resource_url(
+    runner: &Arc<Runner>,
+    resource_id: &str,
+) -> std::result::Result<String, String> {
     let mut entry = runner.sign.get_token().await?;
     let bot_id = {
         let id = runner.bot_id.lock().unwrap().clone();
@@ -1172,7 +1276,11 @@ async fn fetch_resource_url(runner: &Arc<Runner>, resource_id: &str) -> std::res
     if entry.token.is_empty() || bot_id.is_empty() {
         return Err("missing token or bot_id for resource download".to_string());
     }
-    let api_url = format!("{}{}", resolve_api_domain(&runner.cfg), RESOURCE_DOWNLOAD_PATH);
+    let api_url = format!(
+        "{}{}",
+        resolve_api_domain(&runner.cfg),
+        RESOURCE_DOWNLOAD_PATH
+    );
     let client = reqwest::Client::new();
     for attempt in 0..2u32 {
         let response = client
@@ -1202,7 +1310,9 @@ async fn fetch_resource_url(runner: &Arc<Runner>, resource_id: &str) -> std::res
         if let Some(code) = payload.get("code").and_then(|v| v.as_i64()) {
             if code != 0 {
                 let msg = payload.get("msg").and_then(|v| v.as_str()).unwrap_or("");
-                return Err(format!("resource/v1/download failed: code={code}, msg={msg}"));
+                return Err(format!(
+                    "resource/v1/download failed: code={code}, msg={msg}"
+                ));
             }
         }
         let data = if payload.get("data").map(|v| v.is_object()).unwrap_or(false) {
@@ -1289,7 +1399,8 @@ async fn download_and_cache_media(
     }
     let (mime, filename_hint) = if reference.kind == "image" {
         let ext = guess_image_ext_from_url(fetch_url);
-        let mut mime = crate::media_cache::mime_for_ext(std::path::Path::new(&format!("image{ext}")));
+        let mut mime =
+            crate::media_cache::mime_for_ext(std::path::Path::new(&format!("image{ext}")));
         if !mime.starts_with("image/") {
             mime = if content_type.starts_with("image/") {
                 content_type.clone()
@@ -1495,7 +1606,8 @@ pub fn extract_quote_context(cloud_custom_data: &str) -> (Option<String>, Option
 /// every resolvable `[kind|ybres:RID]` anchor in the text (voice
 /// anchors are excluded by `RESOLVABLE_MEDIA_KINDS`).
 pub fn ybres_refs_from_text(text: &str) -> Vec<(String, String, String)> {
-    let Ok(re) = regex::Regex::new(r"\[(image|voice|video|file(?::[^|\]]*)?)\|ybres:([A-Za-z0-9_\-]+)\]")
+    let Ok(re) =
+        regex::Regex::new(r"\[(image|voice|video|file(?::[^|\]]*)?)\|ybres:([A-Za-z0-9_\-]+)\]")
     else {
         return Vec::new();
     };
@@ -1529,7 +1641,11 @@ pub fn local_media_from_text(text: &str) -> Vec<(std::path::PathBuf, String)> {
     let mut out = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for capture in re.captures_iter(text) {
-        let kind = capture.get(1).map(|g| g.as_str()).unwrap_or("").to_lowercase();
+        let kind = capture
+            .get(1)
+            .map(|g| g.as_str())
+            .unwrap_or("")
+            .to_lowercase();
         let path_str = capture.get(2).map(|g| g.as_str()).unwrap_or("").trim();
         if path_str.is_empty() {
             continue;
@@ -1586,8 +1702,8 @@ fn msg_content_cache_put(msg_id: &str, content: &str) {
 /// `_collect_observed_media`): one entry per inbound group message —
 /// the message's `(rid, kind, name)` refs — capped at the lookback
 /// window.
-fn observed_media_buffer()
--> &'static Mutex<HashMap<String, std::collections::VecDeque<Vec<(String, String, String)>>>> {
+fn observed_media_buffer(
+) -> &'static Mutex<HashMap<String, std::collections::VecDeque<Vec<(String, String, String)>>>> {
     static BUFFER: std::sync::OnceLock<
         Mutex<HashMap<String, std::collections::VecDeque<Vec<(String, String, String)>>>>,
     > = std::sync::OnceLock::new();
@@ -1692,7 +1808,11 @@ async fn resolve_backfill_refs(
 /// prefix (snippet capped at 500 chars) when both the quote id and
 /// text are present. The "replying to your own message" variant is not
 /// ported (ulnclaw does not track the bot's platform message ids).
-pub fn render_reply_to_prefix(text: &str, quote_id: Option<&str>, quote_text: Option<&str>) -> String {
+pub fn render_reply_to_prefix(
+    text: &str,
+    quote_id: Option<&str>,
+    quote_text: Option<&str>,
+) -> String {
     let (Some(_), Some(quote_text)) = (quote_id, quote_text) else {
         return text.to_string();
     };
@@ -1711,7 +1831,9 @@ pub fn render_reply_to_prefix(text: &str, quote_id: Option<&str>, quote_text: Op
 /// with `elem_type == 1009` whose `ext_map` carries a decodable
 /// `wexin_forward_msg_*` ForwardMsgData (`sub_type == 1`). Note the
 /// hermes quirk: a 1009 element with an empty ext_map stops the scan.
-pub(crate) fn extract_forwarded_records(msg_body: &[proto::MsgBodyElement]) -> Option<proto::ForwardMsgData> {
+pub(crate) fn extract_forwarded_records(
+    msg_body: &[proto::MsgBodyElement],
+) -> Option<proto::ForwardMsgData> {
     use base64::Engine;
     for element in msg_body {
         if element.msg_type != "TIMCustomElem" {
@@ -1751,7 +1873,10 @@ pub(crate) fn extract_forwarded_records(msg_body: &[proto::MsgBodyElement]) -> O
 /// text marker plus (when downloadable) a media ref. `media_id` is
 /// directly usable as a ybres RID (design §2.10.9); otherwise the
 /// resourceId parses out of the URL.
-fn forward_media_marker(media: &proto::ForwardMultimedia, plain_text: &str) -> (String, Option<MediaRef>) {
+fn forward_media_marker(
+    media: &proto::ForwardMultimedia,
+    plain_text: &str,
+) -> (String, Option<MediaRef>) {
     let media_type = media.media_type.trim().to_lowercase();
     let url = media.url.trim().to_string();
     let media_id = media.media_id.trim().to_string();
@@ -1764,39 +1889,75 @@ fn forward_media_marker(media: &proto::ForwardMultimedia, plain_text: &str) -> (
     if media_type == "image" {
         if !url.is_empty() && !rid.is_empty() {
             return (
-                format!("[image|ybres:{rid}] {file_name}").trim_end().to_string(),
-                Some(MediaRef { kind: "image", url, name: String::new() }),
+                format!("[image|ybres:{rid}] {file_name}")
+                    .trim_end()
+                    .to_string(),
+                Some(MediaRef {
+                    kind: "image",
+                    url,
+                    name: String::new(),
+                }),
             );
         }
-        let label = if !file_name.is_empty() { &file_name } else { plain_text };
+        let label = if !file_name.is_empty() {
+            &file_name
+        } else {
+            plain_text
+        };
         return (format!("[image] {label}").trim_end().to_string(), None);
     }
     if matches!(media_type.as_str(), "file" | "document" | "code") {
         if !url.is_empty() && !rid.is_empty() {
             return (
-                format!("[file|ybres:{rid}] {file_name}").trim_end().to_string(),
-                Some(MediaRef { kind: "file", url, name: file_name }),
+                format!("[file|ybres:{rid}] {file_name}")
+                    .trim_end()
+                    .to_string(),
+                Some(MediaRef {
+                    kind: "file",
+                    url,
+                    name: file_name,
+                }),
             );
         }
         return (format!("[file] {file_name}").trim_end().to_string(), None);
     }
     if media_type == "url" {
         // Link share (e.g. WeChat article) — keep the URL for the agent.
-        return (format!("[link] {file_name} {url}").trim_end().to_string(), None);
+        return (
+            format!("[link] {file_name} {url}").trim_end().to_string(),
+            None,
+        );
     }
     if media_type == "video" {
         if !url.is_empty() && !rid.is_empty() {
             return (
-                format!("[video|ybres:{rid}] {file_name}").trim_end().to_string(),
-                Some(MediaRef { kind: "video", url, name: String::new() }),
+                format!("[video|ybres:{rid}] {file_name}")
+                    .trim_end()
+                    .to_string(),
+                Some(MediaRef {
+                    kind: "video",
+                    url,
+                    name: String::new(),
+                }),
             );
         }
-        let label = if !file_name.is_empty() { &file_name } else { url.as_str() };
+        let label = if !file_name.is_empty() {
+            &file_name
+        } else {
+            url.as_str()
+        };
         return (format!("[video] {label}").trim_end().to_string(), None);
     }
-    let kind_label = if media_type.is_empty() { "media" } else { media_type.as_str() };
+    let kind_label = if media_type.is_empty() {
+        "media"
+    } else {
+        media_type.as_str()
+    };
     let label = if !url.is_empty() { &url } else { &file_name };
-    (format!("[{kind_label}] {label}").trim_end().to_string(), None)
+    (
+        format!("[{kind_label}] {label}").trim_end().to_string(),
+        None,
+    )
 }
 
 /// hermes `_walk_forward_msgs` + `build_forward_text` (dispatch flavor):
@@ -1809,7 +1970,11 @@ pub(crate) fn build_forward_text(
     raw_text: &str,
     refs_out: &mut Vec<MediaRef>,
 ) -> String {
-    let nickname = if sender_nickname.trim().is_empty() { "用户" } else { sender_nickname };
+    let nickname = if sender_nickname.trim().is_empty() {
+        "用户"
+    } else {
+        sender_nickname
+    };
     let mut lines: Vec<String> = vec![
         format!("当前用户的昵称为{nickname}"),
         "以下为用户的聊天记录".to_string(),
@@ -1838,9 +2003,17 @@ pub(crate) fn build_forward_text(
                     }
                 }
             }
-            let joined: Vec<&str> = parts.iter().filter(|p| !p.is_empty()).map(String::as_str).collect();
+            let joined: Vec<&str> = parts
+                .iter()
+                .filter(|p| !p.is_empty())
+                .map(String::as_str)
+                .collect();
             let combined = joined.join("  ");
-            rendered = if combined.is_empty() { msg.plain_text.clone() } else { combined };
+            rendered = if combined.is_empty() {
+                msg.plain_text.clone()
+            } else {
+                combined
+            };
         }
         if rendered.chars().count() > FORWARD_MSG_TEXT_MAX_CHARS {
             let truncated: String = rendered.chars().take(FORWARD_MSG_TEXT_MAX_CHARS).collect();
@@ -2190,20 +2363,37 @@ async fn send_msg_body_ws_ref(
     let bytes = if group_code.is_empty() {
         proto::encode_send_c2c_message(chat_id, elements, &from_account, &msg_id, 0, None, "", "")
     } else {
-        proto::encode_send_group_message(group_code, elements, &from_account, &msg_id, "", "", None, ref_msg_id, "")
+        proto::encode_send_group_message(
+            group_code,
+            elements,
+            &from_account,
+            &msg_id,
+            "",
+            "",
+            None,
+            ref_msg_id,
+            "",
+        )
     };
-    out_tx.send(bytes).await.map_err(|e| format!("send channel closed: {e}"))?;
+    out_tx
+        .send(bytes)
+        .await
+        .map_err(|e| format!("send channel closed: {e}"))?;
 
     let deadline = Instant::now() + Duration::from_secs(DEFAULT_SEND_TIMEOUT_SECS);
     loop {
         if Instant::now() >= deadline {
-            return Err(format!("yuanbao send timeout waiting for response (req_id={msg_id})"));
+            return Err(format!(
+                "yuanbao send timeout waiting for response (req_id={msg_id})"
+            ));
         }
         if let Some(data) = pending_responses().lock().unwrap().remove(&msg_id) {
             // SendC2CMessageRsp/SendGroupMessageRsp: field 1 = code.
             let code = proto::decode_send_rsp_code(&data);
             if code != 0 {
-                return Err(format!("yuanbao send response code={code} (req_id={msg_id})"));
+                return Err(format!(
+                    "yuanbao send response code={code} (req_id={msg_id})"
+                ));
             }
             return Ok(());
         }
@@ -2230,7 +2420,13 @@ async fn send_text_chunk_ws(
 }
 
 /// Send text with chunking + retries (hermes send_text semantics).
-async fn send_text_via(runner: &Arc<Runner>, out_tx: &tokio::sync::mpsc::Sender<Vec<u8>>, chat_id: &str, group_code: &str, content: &str) {
+async fn send_text_via(
+    runner: &Arc<Runner>,
+    out_tx: &tokio::sync::mpsc::Sender<Vec<u8>>,
+    chat_id: &str,
+    group_code: &str,
+    content: &str,
+) {
     let chunks = chunk_markdown_text(content, MAX_TEXT_CHUNK);
     for chunk in chunks {
         let mut last_error = String::new();
@@ -2256,7 +2452,10 @@ async fn send_text_via(runner: &Arc<Runner>, out_tx: &tokio::sync::mpsc::Sender<
 }
 
 /// hermes `get_cos_credentials` — `genUploadInfo` temporary COS keys.
-async fn get_cos_credentials(runner: &Arc<Runner>, filename: &str) -> std::result::Result<Value, String> {
+async fn get_cos_credentials(
+    runner: &Arc<Runner>,
+    filename: &str,
+) -> std::result::Result<Value, String> {
     let entry = runner.sign.get_token().await?;
     let bot_id = runner.bot_id.lock().unwrap().clone();
     let id = if bot_id.is_empty() {
@@ -2282,13 +2481,19 @@ async fn get_cos_credentials(runner: &Arc<Runner>, filename: &str) -> std::resul
     if !route_env.is_empty() {
         request = request.header("X-Route-Env", &route_env);
     }
-    let resp = request.send().await.map_err(|e| format!("genUploadInfo: {e}"))?;
+    let resp = request
+        .send()
+        .await
+        .map_err(|e| format!("genUploadInfo: {e}"))?;
     let status = resp.status().as_u16();
     if status >= 400 {
         let body = resp.text().await.unwrap_or_default();
         return Err(format!("genUploadInfo HTTP {status}: {body}"));
     }
-    let result: Value = resp.json().await.map_err(|e| format!("genUploadInfo JSON: {e}"))?;
+    let result: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("genUploadInfo JSON: {e}"))?;
     let code = result.get("code").and_then(|v| v.as_i64());
     if let Some(code) = code {
         if code != 0 {
@@ -2302,7 +2507,12 @@ async fn get_cos_credentials(runner: &Arc<Runner>, filename: &str) -> std::resul
         .cloned()
         .unwrap_or(result);
     for field in ["bucketName", "location"] {
-        if data.get(field).and_then(|v| v.as_str()).unwrap_or("").is_empty() {
+        if data
+            .get(field)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .is_empty()
+        {
             return Err(format!("genUploadInfo missing field {field}"));
         }
     }
@@ -2412,7 +2622,11 @@ async fn upload_to_cos(
         let body = resp.text().await.unwrap_or_default();
         return Err(format!("COS PUT HTTP {status}: {body}"));
     }
-    Ok(if resource_url.is_empty() { cos_url } else { resource_url })
+    Ok(if resource_url.is_empty() {
+        cos_url
+    } else {
+        resource_url
+    })
 }
 
 /// hermes MediaSendHandler.handle (local file): read → validate (≤50 MB)
@@ -2441,8 +2655,7 @@ async fn send_media_checked(
     caption: &str,
 ) -> std::result::Result<(), String> {
     let file_path = path;
-    let file_bytes = std::fs::read(file_path)
-        .map_err(|e| format!("media read failed: {e}"))?;
+    let file_bytes = std::fs::read(file_path).map_err(|e| format!("media read failed: {e}"))?;
     if file_bytes.is_empty() {
         return Err("empty media file".to_string());
     }
@@ -2471,7 +2684,14 @@ async fn send_media_checked(
         .map_err(|e| format!("COS upload failed: {e}"))?;
     let uuid = media_md5_hex(&file_bytes);
     let element = if is_image {
-        image_msg_body_element(&url, &uuid, file_bytes.len() as u64, width, height, &mime_type)
+        image_msg_body_element(
+            &url,
+            &uuid,
+            file_bytes.len() as u64,
+            width,
+            height,
+            &mime_type,
+        )
     } else {
         file_msg_body_element(&url, &filename, &uuid, file_bytes.len() as u64)
     };
@@ -2508,8 +2728,14 @@ async fn send_sticker_via(
     let element = crate::yuanbao_sticker::build_sticker_msg_body(sticker);
     let mut last_error = String::new();
     for _attempt in 0..3u32 {
-        match send_msg_body_ws(runner, out_tx, chat_id, group_code, std::slice::from_ref(&element))
-            .await
+        match send_msg_body_ws(
+            runner,
+            out_tx,
+            chat_id,
+            group_code,
+            std::slice::from_ref(&element),
+        )
+        .await
         {
             Ok(()) => return,
             Err(e) => last_error = e,
@@ -2567,7 +2793,9 @@ pub fn parse_chat_target(chat_id: &str) -> (String, String) {
 
 /// Resolve a sticker by id, name, or random when empty (hermes
 /// `send_sticker` lookup order).
-fn resolve_sticker(raw: &str) -> std::result::Result<&'static crate::yuanbao_sticker::Sticker, String> {
+fn resolve_sticker(
+    raw: &str,
+) -> std::result::Result<&'static crate::yuanbao_sticker::Sticker, String> {
     if raw.is_empty() {
         return Ok(crate::yuanbao_sticker::get_random_sticker(None));
     }
@@ -2591,7 +2819,11 @@ impl YuanbaoHandle {
 
     /// Send one encoded biz request and await the correlated response
     /// payload (hermes `send_biz_request`).
-    pub async fn send_biz_request(&self, bytes: Vec<u8>, req_id: &str) -> std::result::Result<Vec<u8>, String> {
+    pub async fn send_biz_request(
+        &self,
+        bytes: Vec<u8>,
+        req_id: &str,
+    ) -> std::result::Result<Vec<u8>, String> {
         self.out_tx
             .send(bytes)
             .await
@@ -2609,7 +2841,10 @@ impl YuanbaoHandle {
     }
 
     /// Group name/owner/member count (hermes `query_group_info_raw`).
-    pub async fn query_group_info(&self, group_code: &str) -> std::result::Result<proto::QueryGroupInfoRsp, String> {
+    pub async fn query_group_info(
+        &self,
+        group_code: &str,
+    ) -> std::result::Result<proto::QueryGroupInfoRsp, String> {
         let req_id = format!("qgi_{}", proto::next_seq_no());
         let bytes = proto::encode_query_group_info(group_code, &req_id);
         let data = self.send_biz_request(bytes, &req_id).await?;
@@ -2617,7 +2852,10 @@ impl YuanbaoHandle {
     }
 
     /// Group member list (hermes `get_group_member_list_raw`).
-    pub async fn get_group_member_list(&self, group_code: &str) -> std::result::Result<proto::MemberListRsp, String> {
+    pub async fn get_group_member_list(
+        &self,
+        group_code: &str,
+    ) -> std::result::Result<proto::MemberListRsp, String> {
         let req_id = format!("gml_{}", proto::next_seq_no());
         let bytes = proto::encode_get_group_member_list(group_code, 0, 200, &req_id);
         let data = self.send_biz_request(bytes, &req_id).await?;
@@ -2626,7 +2864,12 @@ impl YuanbaoHandle {
 
     /// DM text to a member (hermes `adapter.send_dm`) — a C2C message
     /// carrying the source group context, chunked like send_text_via.
-    pub async fn send_dm(&self, user_id: &str, message: &str, group_code: &str) -> std::result::Result<(), String> {
+    pub async fn send_dm(
+        &self,
+        user_id: &str,
+        message: &str,
+        group_code: &str,
+    ) -> std::result::Result<(), String> {
         let from_account = self.runner.bot_id.lock().unwrap().clone();
         for chunk in chunk_markdown_text(message, MAX_TEXT_CHUNK) {
             let element = proto::MsgBodyElement {
@@ -2694,9 +2937,21 @@ impl YuanbaoHandle {
 
     /// Upload + send a local media file (hermes `send_image_file` /
     /// `send_document` — type chosen by mime).
-    pub async fn send_media(&self, chat_id: &str, path: &std::path::Path) -> std::result::Result<(), String> {
+    pub async fn send_media(
+        &self,
+        chat_id: &str,
+        path: &std::path::Path,
+    ) -> std::result::Result<(), String> {
         let (target_chat, target_group) = parse_chat_target(chat_id);
-        send_media_checked(&self.runner, &self.out_tx, &target_chat, &target_group, path, "").await
+        send_media_checked(
+            &self.runner,
+            &self.out_tx,
+            &target_chat,
+            &target_group,
+            path,
+            "",
+        )
+        .await
     }
 }
 
@@ -2720,7 +2975,10 @@ impl crate::messaging::PlatformSender for YuanbaoSender {
 }
 
 fn register_sender(runner: Arc<Runner>, ws_url: String) {
-    crate::messaging::register_platform_sender("yuanbao", Arc::new(YuanbaoSender { runner, ws_url }));
+    crate::messaging::register_platform_sender(
+        "yuanbao",
+        Arc::new(YuanbaoSender { runner, ws_url }),
+    );
 }
 
 /// One-shot direct send (own ephemeral session).
@@ -2735,7 +2993,11 @@ async fn send_direct(runner: &Arc<Runner>, ws_url: &str, chat_id: &str, text: &s
     if !token_entry.bot_id.is_empty() {
         *runner.bot_id.lock().unwrap() = token_entry.bot_id.clone();
     }
-    let Ok(Ok((ws, _))) = tokio::time::timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS + 10), tokio_tungstenite::connect_async(ws_url)).await
+    let Ok(Ok((ws, _))) = tokio::time::timeout(
+        Duration::from_secs(CONNECT_TIMEOUT_SECS + 10),
+        tokio_tungstenite::connect_async(ws_url),
+    )
+    .await
     else {
         eprintln!("[yuanbao] direct send: WS connect failed");
         return;
@@ -2745,7 +3007,11 @@ async fn send_direct(runner: &Arc<Runner>, ws_url: &str, chat_id: &str, text: &s
     let auth_bytes = proto::encode_auth_bind(
         "ybBot",
         &runner.bot_id.lock().unwrap().clone(),
-        if token_entry.source.is_empty() { "bot" } else { &token_entry.source },
+        if token_entry.source.is_empty() {
+            "bot"
+        } else {
+            &token_entry.source
+        },
         &token_entry.token,
         &auth_msg_id,
         &app_version(),
@@ -2762,11 +3028,17 @@ async fn send_direct(runner: &Arc<Runner>, ws_url: &str, chat_id: &str, text: &s
         if Instant::now() >= deadline {
             return;
         }
-        let Ok(Some(Ok(message))) = tokio::time::timeout(deadline.saturating_duration_since(Instant::now()), stream.next()).await
+        let Ok(Some(Ok(message))) = tokio::time::timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            stream.next(),
+        )
+        .await
         else {
             return;
         };
-        let WsMessage::Binary(raw) = message else { continue };
+        let WsMessage::Binary(raw) = message else {
+            continue;
+        };
         let msg = proto::decode_conn_msg(&raw);
         if msg.head.cmd_type == proto::CMD_TYPE_RESPONSE && msg.head.cmd == proto::CMD_AUTH_BIND {
             if proto::decode_auth_bind_rsp(&msg.data).is_err() {
@@ -2784,7 +3056,16 @@ async fn send_direct(runner: &Arc<Runner>, ws_url: &str, chat_id: &str, text: &s
             ..Default::default()
         },
     };
-    let bytes = proto::encode_send_c2c_message(chat_id, &[element], &from_account, &msg_id, 0, None, "", "");
+    let bytes = proto::encode_send_c2c_message(
+        chat_id,
+        &[element],
+        &from_account,
+        &msg_id,
+        0,
+        None,
+        "",
+        "",
+    );
     sink.send(WsMessage::Binary(bytes)).await.ok();
     // Give the server a moment to ack before closing.
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -2801,12 +3082,8 @@ mod tests {
     #[test]
     fn signature_matches_hmac_sha256_vector() {
         // HMAC-SHA256(key=app_secret, msg=nonce+timestamp+app_key+app_secret)
-        let signature = compute_signature(
-            "abc",
-            "2026-08-06T10:00:00+08:00",
-            "appkey",
-            "secret123",
-        );
+        let signature =
+            compute_signature("abc", "2026-08-06T10:00:00+08:00", "appkey", "secret123");
         assert_eq!(
             signature,
             "0806db561aa469139a2a2c249268026bbf9ea4304331590db060496a2ddc9999"
@@ -2927,7 +3204,10 @@ mod tests {
             "/chatbot-upload/test.png",
             &[],
             &[
-                ("host".to_string(), "chatbot-123.cos.accelerate.myqcloud.com".to_string()),
+                (
+                    "host".to_string(),
+                    "chatbot-123.cos.accelerate.myqcloud.com".to_string(),
+                ),
                 ("content-type".to_string(), "image/png".to_string()),
                 ("x-cos-security-token".to_string(), "tok123".to_string()),
             ],
@@ -2973,7 +3253,10 @@ mod tests {
         let element = proto::encode_msg_body_element(&image);
         let decoded = proto::decode_msg_body_element(&element);
         assert_eq!(decoded.msg_content.image_info_array.len(), 1);
-        assert_eq!(decoded.msg_content.image_info_array[0].url, "https://cos.example/img.png");
+        assert_eq!(
+            decoded.msg_content.image_info_array[0].url,
+            "https://cos.example/img.png"
+        );
         assert_eq!(decoded.msg_content.image_format, 3);
     }
 
@@ -2988,7 +3271,9 @@ mod tests {
     #[test]
     fn parse_resource_id_variants() {
         assert_eq!(
-            parse_resource_id("https://hunyuan.tencent.com/api/resource/download?resourceId=abc123"),
+            parse_resource_id(
+                "https://hunyuan.tencent.com/api/resource/download?resourceId=abc123"
+            ),
             "abc123"
         );
         assert_eq!(
@@ -3072,15 +3357,26 @@ mod tests {
     fn skippable_placeholders_match_hermes() {
         assert_eq!(
             SKIPPABLE_PLACEHOLDERS,
-            &["[image]", "[图片]", "[file]", "[文件]", "[video]", "[视频]", "[voice]", "[语音]"]
+            &[
+                "[image]", "[图片]", "[file]", "[文件]", "[video]", "[视频]", "[voice]", "[语音]"
+            ]
         );
     }
 
     #[test]
     fn guess_image_ext_from_url_variants() {
-        assert_eq!(guess_image_ext_from_url("https://cdn.example/a/b.PNG"), ".png");
-        assert_eq!(guess_image_ext_from_url("https://cdn.example/a/b.webp?x=1"), ".webp");
-        assert_eq!(guess_image_ext_from_url("https://cdn.example/a/b.exe"), ".jpg");
+        assert_eq!(
+            guess_image_ext_from_url("https://cdn.example/a/b.PNG"),
+            ".png"
+        );
+        assert_eq!(
+            guess_image_ext_from_url("https://cdn.example/a/b.webp?x=1"),
+            ".webp"
+        );
+        assert_eq!(
+            guess_image_ext_from_url("https://cdn.example/a/b.exe"),
+            ".jpg"
+        );
         assert_eq!(guess_image_ext_from_url("https://cdn.example/a/b"), ".jpg");
     }
 
@@ -3157,10 +3453,14 @@ mod tests {
     #[test]
     fn quote_context_extraction_variants() {
         // Full quote: id + sender nickname + desc.
-        let data = r#"{"quote": {"id": "msg-123", "desc": "look at this", "sender_nickname": "Alice"}}"#;
+        let data =
+            r#"{"quote": {"id": "msg-123", "desc": "look at this", "sender_nickname": "Alice"}}"#;
         assert_eq!(
             extract_quote_context(data),
-            (Some("msg-123".to_string()), Some("Alice: look at this".to_string()))
+            (
+                Some("msg-123".to_string()),
+                Some("Alice: look at this".to_string())
+            )
         );
         // sender_id fallback, no nickname.
         let data = r#"{"quote": {"id": 42, "desc": "hi", "sender_id": "u9"}}"#;
@@ -3191,9 +3491,22 @@ mod tests {
                     clip [video|ybres:rid-3] note [voice|ybres:rid-4] bare [image]";
         let refs = ybres_refs_from_text(text);
         assert_eq!(refs.len(), 3);
-        assert_eq!(refs[0], ("rid-1".to_string(), "image".to_string(), String::new()));
-        assert_eq!(refs[1], ("rid_2".to_string(), "file".to_string(), "report.pdf".to_string()));
-        assert_eq!(refs[2], ("rid-3".to_string(), "video".to_string(), String::new()));
+        assert_eq!(
+            refs[0],
+            ("rid-1".to_string(), "image".to_string(), String::new())
+        );
+        assert_eq!(
+            refs[1],
+            (
+                "rid_2".to_string(),
+                "file".to_string(),
+                "report.pdf".to_string()
+            )
+        );
+        assert_eq!(
+            refs[2],
+            ("rid-3".to_string(), "video".to_string(), String::new())
+        );
         assert!(ybres_refs_from_text("no anchors here").is_empty());
     }
 
@@ -3236,10 +3549,16 @@ mod tests {
             msg_content_cache_get(&format!("{prefix}-{}", MSG_CONTENT_CACHE_MAX - 1)),
             Some(format!("content-{}", MSG_CONTENT_CACHE_MAX - 1))
         );
-        assert_eq!(msg_content_cache_get(&format!("{prefix}-new")), Some("newest".to_string()));
+        assert_eq!(
+            msg_content_cache_get(&format!("{prefix}-new")),
+            Some("newest".to_string())
+        );
         // Update in place keeps the entry.
         msg_content_cache_put(&format!("{prefix}-new"), "updated");
-        assert_eq!(msg_content_cache_get(&format!("{prefix}-new")), Some("updated".to_string()));
+        assert_eq!(
+            msg_content_cache_get(&format!("{prefix}-new")),
+            Some("updated".to_string())
+        );
     }
 
     #[test]
@@ -3257,7 +3576,10 @@ mod tests {
         };
         // Three messages: oldest has rid-a (image) + rid-b (file); middle
         // re-sends rid-a plus rid-c (voice — unresolvable); newest rid-d.
-        record_observed(&chat, &[mk("image", "rid-a", ""), mk("file", "rid-b", "b.pdf")]);
+        record_observed(
+            &chat,
+            &[mk("image", "rid-a", ""), mk("file", "rid-b", "b.pdf")],
+        );
         record_observed(&chat, &[mk("image", "rid-a", ""), mk("voice", "rid-c", "")]);
         record_observed(&chat, &[mk("video", "rid-d", "")]);
         let refs = collect_observed_refs(&chat);
@@ -3278,7 +3600,10 @@ mod tests {
         // Missing id or text → unchanged; blank text → unchanged.
         assert_eq!(render_reply_to_prefix("hello", None, Some("q")), "hello");
         assert_eq!(render_reply_to_prefix("hello", Some("m1"), None), "hello");
-        assert_eq!(render_reply_to_prefix("hello", Some("m1"), Some("  ")), "hello");
+        assert_eq!(
+            render_reply_to_prefix("hello", Some("m1"), Some("  ")),
+            "hello"
+        );
         // Snippet truncates at 500 chars.
         let long = "x".repeat(600);
         let rendered = render_reply_to_prefix("hi", Some("m1"), Some(&long));
@@ -3322,7 +3647,10 @@ mod tests {
         }
     }
 
-    fn custom_elem_with_forward(forward: &proto::ForwardMsgData, sub_type_override: Option<u64>) -> proto::MsgBodyElement {
+    fn custom_elem_with_forward(
+        forward: &proto::ForwardMsgData,
+        sub_type_override: Option<u64>,
+    ) -> proto::MsgBodyElement {
         use base64::Engine;
         let mut data = forward.clone();
         if let Some(sub) = sub_type_override {
@@ -3439,9 +3767,8 @@ mod tests {
         let forward = sample_forward_data();
         let mut refs = Vec::new();
         let text = build_forward_text(&forward, "小明", "请看看", &mut refs);
-        assert!(text.starts_with(
-            "当前用户的昵称为小明\n以下为用户的聊天记录\nAlice：hello world\nBob："
-        ));
+        assert!(text
+            .starts_with("当前用户的昵称为小明\n以下为用户的聊天记录\nAlice：hello world\nBob："));
         assert!(text.contains("[image|ybres:fw-rid-1] pic.jpg"));
         assert!(text.ends_with("用户附言：请看看"));
         assert_eq!(refs.len(), 1);

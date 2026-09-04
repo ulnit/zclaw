@@ -130,7 +130,9 @@ pub fn list_fallbacks(home: &Path) -> String {
         out.push_str(&format!("    {}. {}\n", i + 1, format_entry(spec)));
     }
     out.push('\n');
-    out.push_str("  Tried in order when the primary fails (rate-limit, 5xx, connection errors).\n\n");
+    out.push_str(
+        "  Tried in order when the primary fails (rate-limit, 5xx, connection errors).\n\n",
+    );
     out
 }
 
@@ -138,9 +140,7 @@ pub fn list_fallbacks(home: &Path) -> String {
 /// specs carry provider+model only).
 fn same_deployment(a: &str, b: &str) -> bool {
     match (parse_fallback_spec(a), parse_fallback_spec(b)) {
-        (Some((pa, ma)), Some((pb, mb))) => {
-            pa.eq_ignore_ascii_case(&pb) && ma == mb
-        }
+        (Some((pa, ma)), Some((pb, mb))) => pa.eq_ignore_ascii_case(&pb) && ma == mb,
         _ => a.trim() == b.trim(),
     }
 }
@@ -183,8 +183,14 @@ pub fn add_fallback(home: &Path, spec: &str) -> Result<String, String> {
 
     out.push_str(&format!("  Added fallback: {}\n", format_entry(spec)));
     let word = if chain.len() == 1 { "entry" } else { "entries" };
-    out.push_str(&format!("  Chain is now {} {} long.\n\n", chain.len(), word));
-    out.push_str("  Run 'ulnclaw fallback list' to view, or 'ulnclaw fallback remove' to delete.\n");
+    out.push_str(&format!(
+        "  Chain is now {} {} long.\n\n",
+        chain.len(),
+        word
+    ));
+    out.push_str(
+        "  Run 'ulnclaw fallback list' to view, or 'ulnclaw fallback remove' to delete.\n",
+    );
     Ok(out)
 }
 
@@ -245,7 +251,11 @@ pub fn clear_fallbacks(home: &Path) -> Result<String, String> {
 }
 
 /// Shared dispatch for the CLI (mirrors hermes `cmd_fallback`).
-pub fn handle_fallback_command(home: &Path, args: &[String], assume_yes: bool) -> Result<String, String> {
+pub fn handle_fallback_command(
+    home: &Path,
+    args: &[String],
+    assume_yes: bool,
+) -> Result<String, String> {
     let sub = args.first().map(|s| s.as_str()).unwrap_or("list");
     match sub {
         "" | "list" | "ls" => Ok(list_fallbacks(home)),
@@ -267,7 +277,9 @@ pub fn handle_fallback_command(home: &Path, args: &[String], assume_yes: bool) -
                 use std::io::Write;
                 let _ = std::io::stdout().flush();
                 let mut line = String::new();
-                std::io::stdin().read_line(&mut line).map_err(|e| e.to_string())?;
+                std::io::stdin()
+                    .read_line(&mut line)
+                    .map_err(|e| e.to_string())?;
                 if !matches!(line.trim().to_lowercase().as_str(), "y" | "yes") {
                     return Ok("\n  Cancelled — no change.\n".to_string());
                 }
@@ -296,8 +308,14 @@ mod tests {
 
     #[test]
     fn format_entry_renders_provider_and_model() {
-        assert_eq!(format_entry("openrouter:openai/gpt-4o"), "openai/gpt-4o  (via openrouter)");
-        assert_eq!(format_entry("ollama:qwen3:1.7b"), "qwen3:1.7b  (via ollama)");
+        assert_eq!(
+            format_entry("openrouter:openai/gpt-4o"),
+            "openai/gpt-4o  (via openrouter)"
+        );
+        assert_eq!(
+            format_entry("ollama:qwen3:1.7b"),
+            "qwen3:1.7b  (via ollama)"
+        );
         assert_eq!(format_entry("not-a-spec"), "not-a-spec");
     }
 
@@ -343,7 +361,10 @@ mod tests {
         // Valid add.
         let out = add_fallback(dir.path(), "openrouter:openai/gpt-4o").unwrap();
         assert!(out.contains("Added fallback"));
-        assert_eq!(read_chain(dir.path()), vec!["openrouter:openai/gpt-4o".to_string()]);
+        assert_eq!(
+            read_chain(dir.path()),
+            vec!["openrouter:openai/gpt-4o".to_string()]
+        );
 
         // Duplicate → skipped (case-insensitive provider match).
         let out = add_fallback(dir.path(), "OpenRouter:openai/gpt-4o").unwrap();
@@ -357,11 +378,17 @@ mod tests {
     #[test]
     fn remove_by_index_and_spec() {
         let dir = tempfile::tempdir().unwrap();
-        write_config(dir.path(), Some("fallbacks = [\"a:m1\", \"b:m2\", \"c:m3\"]"));
+        write_config(
+            dir.path(),
+            Some("fallbacks = [\"a:m1\", \"b:m2\", \"c:m3\"]"),
+        );
 
         let out = remove_fallback(dir.path(), "2").unwrap();
         assert!(out.contains("m2"));
-        assert_eq!(read_chain(dir.path()), vec!["a:m1".to_string(), "c:m3".to_string()]);
+        assert_eq!(
+            read_chain(dir.path()),
+            vec!["a:m1".to_string(), "c:m3".to_string()]
+        );
 
         let out = remove_fallback(dir.path(), "c:m3").unwrap();
         assert!(out.contains("m3"));

@@ -30,7 +30,11 @@ fn parse_frontmatter(content: &str) -> (String, String) {
                 break;
             }
             if let Some((key, value)) = line.split_once(':') {
-                let value = value.trim().trim_matches('"').trim_matches('\'').to_string();
+                let value = value
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string();
                 match key.trim() {
                     "name" => name = value,
                     "description" => description = value,
@@ -93,7 +97,9 @@ pub fn required_env_vars(content: &str) -> Vec<String> {
         if line == "---" {
             break;
         }
-        let Some((key, value)) = line.split_once(':') else { continue };
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
         if key.trim() != "required_environment_variables" {
             continue;
         }
@@ -104,7 +110,13 @@ pub fn required_env_vars(content: &str) -> Vec<String> {
             .unwrap_or(value);
         return inner
             .split(',')
-            .map(|item| item.trim().trim_matches('"').trim_matches('\'').trim().to_string())
+            .map(|item| {
+                item.trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .trim()
+                    .to_string()
+            })
             .filter(|item| !item.is_empty())
             .collect();
     }
@@ -250,7 +262,10 @@ mod tests {
             vec!["A_KEY".to_string(), "B_KEY".to_string()]
         );
         // Absent.
-        assert_eq!(required_env_vars("---\nname: x\n---\n"), Vec::<String>::new());
+        assert_eq!(
+            required_env_vars("---\nname: x\n---\n"),
+            Vec::<String>::new()
+        );
         // No frontmatter.
         assert_eq!(required_env_vars("plain body"), Vec::<String>::new());
     }

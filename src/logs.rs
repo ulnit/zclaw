@@ -31,7 +31,10 @@ pub const LOG_FILES: &[(&str, &str)] = &[
 /// Component name -> logger-target prefixes (`hermes_logging.COMPONENT_PREFIXES`,
 /// adapted to ulnclaw module paths).
 pub const COMPONENT_PREFIXES: &[(&str, &[&str])] = &[
-    ("gateway", &["ulnclaw::gateway", "gateway", "managed_gateway"]),
+    (
+        "gateway",
+        &["ulnclaw::gateway", "gateway", "managed_gateway"],
+    ),
     ("agent", &["ulnclaw::agent", "agent"]),
     ("tools", &["ulnclaw::tools", "tools"]),
     ("cli", &["ulnclaw::main", "main", "cli"]),
@@ -109,10 +112,8 @@ fn level_regex() -> Regex {
 fn logger_name_regex() -> Regex {
     // Rust targets contain `::` (hermes uses dots), so capture lazily up to
     // the ": " that separates the logger name from the message.
-    Regex::new(
-        r"\s(?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR|CRITICAL)(?:\s+\[[^\]]*\])?\s+(\S+?):\s",
-    )
-    .expect("static regex")
+    Regex::new(r"\s(?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR|CRITICAL)(?:\s+\[[^\]]*\])?\s+(\S+?):\s")
+        .expect("static regex")
 }
 
 /// Extract the leading timestamp of a log line.
@@ -181,7 +182,10 @@ pub fn matches_filters(line: &str, filters: &LogFilters) -> bool {
     if let Some(prefixes) = &filters.component_prefixes {
         match extract_logger_name(line) {
             Some(name) => {
-                if !prefixes.iter().any(|prefix| name.starts_with(prefix.as_str())) {
+                if !prefixes
+                    .iter()
+                    .any(|prefix| name.starts_with(prefix.as_str()))
+                {
                     return false;
                 }
             }
@@ -226,7 +230,8 @@ pub fn read_last_n_lines(path: &Path, n: usize) -> io::Result<Vec<String>> {
         file.seek(SeekFrom::Start(pos as u64))?;
         let mut buf = vec![0u8; read_size];
         file.read_exact(&mut buf)?;
-        let mut chunk_lines: Vec<Vec<u8>> = buf.split(|b| *b == b'\n').map(|s| s.to_vec()).collect();
+        let mut chunk_lines: Vec<Vec<u8>> =
+            buf.split(|b| *b == b'\n').map(|s| s.to_vec()).collect();
         if !lines.is_empty() {
             // Merge the trailing partial line of this chunk with the leading
             // partial line already collected.
@@ -279,9 +284,7 @@ pub fn list_logs() -> String {
         .map(|rd| {
             rd.filter_map(|e| e.ok())
                 .map(|e| e.path())
-                .filter(|p| {
-                    p.is_file() && p.extension().map(|ext| ext == "log").unwrap_or(false)
-                })
+                .filter(|p| p.is_file() && p.extension().map(|ext| ext == "log").unwrap_or(false))
                 .collect()
         })
         .unwrap_or_default();
@@ -321,7 +324,10 @@ pub fn list_logs() -> String {
         } else {
             crate::status::relative_time(mtime)
         };
-        let name = entry.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = entry
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         out.push_str(&format!("  {:<25} {:>8}   {}\n", name, size_str, age_str));
         found = true;
     }
@@ -378,12 +384,19 @@ pub fn tail_log(log_name: &str, opts: &TailOptions) -> Result<String, String> {
     }
     if let Some(level) = &opts.level {
         let upper = level.to_uppercase();
-        if !matches!(upper.as_str(), "DEBUG" | "INFO" | "WARNING" | "WARN" | "ERROR" | "CRITICAL") {
+        if !matches!(
+            upper.as_str(),
+            "DEBUG" | "INFO" | "WARNING" | "WARN" | "ERROR" | "CRITICAL"
+        ) {
             return Err(format!(
                 "Invalid --level: '{level}'. Use DEBUG, INFO, WARNING, ERROR, or CRITICAL."
             ));
         }
-        filters.min_level = Some(if upper == "WARN" { "WARNING".to_string() } else { upper });
+        filters.min_level = Some(if upper == "WARN" {
+            "WARNING".to_string()
+        } else {
+            upper
+        });
     }
     if let Some(session) = &opts.session {
         filters.session = Some(session.clone());
@@ -393,11 +406,11 @@ pub fn tail_log(log_name: &str, opts: &TailOptions) -> Result<String, String> {
         let entry = COMPONENT_PREFIXES.iter().find(|(name, _)| *name == lower);
         match entry {
             Some((_, prefixes)) => {
-                filters.component_prefixes =
-                    Some(prefixes.iter().map(|p| p.to_string()).collect());
+                filters.component_prefixes = Some(prefixes.iter().map(|p| p.to_string()).collect());
             }
             None => {
-                let available: Vec<&str> = COMPONENT_PREFIXES.iter().map(|(name, _)| *name).collect();
+                let available: Vec<&str> =
+                    COMPONENT_PREFIXES.iter().map(|(name, _)| *name).collect();
                 return Err(format!(
                     "Unknown component: '{component}'. Available: {}",
                     available.join(", ")
@@ -406,8 +419,12 @@ pub fn tail_log(log_name: &str, opts: &TailOptions) -> Result<String, String> {
         }
     }
 
-    let lines = read_tail(&log_path, opts.num_lines.max(1), &filters)
-        .map_err(|e| format!("Permission denied or read error: {} ({e})", log_path.display()))?;
+    let lines = read_tail(&log_path, opts.num_lines.max(1), &filters).map_err(|e| {
+        format!(
+            "Permission denied or read error: {} ({e})",
+            log_path.display()
+        )
+    })?;
 
     let mut filter_parts: Vec<String> = Vec::new();
     if let Some(level) = &filters.min_level {
@@ -475,8 +492,8 @@ pub fn follow_log(log_name: &str, opts: &TailOptions) -> Result<(), String> {
         }
     }
 
-    let file = File::open(&log_path)
-        .map_err(|e| format!("Cannot open {}: {e}", log_path.display()))?;
+    let file =
+        File::open(&log_path).map_err(|e| format!("Cannot open {}: {e}", log_path.display()))?;
     let mut reader = BufReader::new(file);
     use std::io::Seek;
     let _ = reader.seek(io::SeekFrom::End(0));
@@ -518,7 +535,13 @@ impl RotatingFile {
         }
         let file = OpenOptions::new().create(true).append(true).open(&path)?;
         let written = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-        Ok(Self { path, max_bytes, backup_count, file, written })
+        Ok(Self {
+            path,
+            max_bytes,
+            backup_count,
+            file,
+            written,
+        })
     }
 
     fn rotate(&mut self) -> io::Result<()> {
@@ -537,7 +560,10 @@ impl RotatingFile {
             let first = backup_path(&self.path, 1);
             let _ = std::fs::rename(&self.path, &first);
         }
-        self.file = OpenOptions::new().create(true).append(true).open(&self.path)?;
+        self.file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
         self.written = 0;
         Ok(())
     }
@@ -546,7 +572,9 @@ impl RotatingFile {
 fn backup_path(path: &Path, index: u32) -> PathBuf {
     let name = format!(
         "{}.{index}",
-        path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+        path.file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
     );
     path.with_file_name(name)
 }
@@ -573,7 +601,9 @@ pub struct RotatingFileHandle(Arc<Mutex<RotatingFile>>);
 impl RotatingFileHandle {
     pub fn open(path: impl Into<PathBuf>, max_bytes: u64, backup_count: u32) -> io::Result<Self> {
         Ok(Self(Arc::new(Mutex::new(RotatingFile::open(
-            path, max_bytes, backup_count,
+            path,
+            max_bytes,
+            backup_count,
         )?))))
     }
 }
@@ -638,7 +668,10 @@ where
         mut writer: tracing_subscriber::fmt::format::Writer<'_>,
         event: &tracing::Event<'_>,
     ) -> std::fmt::Result {
-        let mut collector = FieldCollector { message: String::new(), session: None };
+        let mut collector = FieldCollector {
+            message: String::new(),
+            session: None,
+        };
         event.record(&mut collector);
         let now = Local::now();
         let level = match *event.metadata().level() {
@@ -711,9 +744,7 @@ where
             .event_format(HermesLogFormat)
             .with_ansi(false)
             .with_writer(handle)
-            .with_filter(
-                tracing_subscriber::filter::LevelFilter::INFO.and(gateway_filter),
-            );
+            .with_filter(tracing_subscriber::filter::LevelFilter::INFO.and(gateway_filter));
         layers.push(layer.boxed());
     }
 
@@ -752,7 +783,10 @@ mod tests {
         assert_eq!(extract_logger_name(line).as_deref(), Some("ulnclaw::agent"));
         let tagged = "2026-08-05 22:35:00 WARNING [sess_1] ulnclaw::tools::shell: boom";
         assert_eq!(extract_level(tagged).as_deref(), Some("WARNING"));
-        assert_eq!(extract_logger_name(tagged).as_deref(), Some("ulnclaw::tools::shell"));
+        assert_eq!(
+            extract_logger_name(tagged).as_deref(),
+            Some("ulnclaw::tools::shell")
+        );
         assert!(parse_line_timestamp("no timestamp here").is_none());
     }
 
@@ -778,9 +812,18 @@ mod tests {
             since: None,
             component_prefixes: None,
         };
-        assert!(matches_filters("2026-08-05 10:00:00 ERROR [abc] x: fail", &filters));
-        assert!(!matches_filters("2026-08-05 10:00:00 INFO [abc] x: fine", &filters));
-        assert!(!matches_filters("2026-08-05 10:00:00 ERROR [xyz] x: other", &filters));
+        assert!(matches_filters(
+            "2026-08-05 10:00:00 ERROR [abc] x: fail",
+            &filters
+        ));
+        assert!(!matches_filters(
+            "2026-08-05 10:00:00 INFO [abc] x: fine",
+            &filters
+        ));
+        assert!(!matches_filters(
+            "2026-08-05 10:00:00 ERROR [xyz] x: other",
+            &filters
+        ));
 
         let component = LogFilters {
             min_level: None,
@@ -788,8 +831,14 @@ mod tests {
             since: None,
             component_prefixes: Some(vec!["ulnclaw::tools".to_string()]),
         };
-        assert!(matches_filters("2026-08-05 10:00:00 INFO ulnclaw::tools::shell: ran", &component));
-        assert!(!matches_filters("2026-08-05 10:00:00 INFO ulnclaw::agent: ran", &component));
+        assert!(matches_filters(
+            "2026-08-05 10:00:00 INFO ulnclaw::tools::shell: ran",
+            &component
+        ));
+        assert!(!matches_filters(
+            "2026-08-05 10:00:00 INFO ulnclaw::agent: ran",
+            &component
+        ));
     }
 
     #[test]
@@ -843,10 +892,22 @@ mod tests {
         let prev = std::env::var("ULNCLAW_HOME").ok();
         std::env::set_var("ULNCLAW_HOME", dir.path());
 
-        let err = tail_log("nope", &TailOptions { num_lines: 10, ..Default::default() });
+        let err = tail_log(
+            "nope",
+            &TailOptions {
+                num_lines: 10,
+                ..Default::default()
+            },
+        );
         assert!(err.unwrap_err().contains("Unknown log"));
 
-        let err = tail_log("agent", &TailOptions { num_lines: 10, ..Default::default() });
+        let err = tail_log(
+            "agent",
+            &TailOptions {
+                num_lines: 10,
+                ..Default::default()
+            },
+        );
         assert!(err.unwrap_err().contains("not found"));
 
         std::fs::create_dir_all(logs_dir()).unwrap();
@@ -854,25 +915,44 @@ mod tests {
             &logs_dir().join("agent.log"),
             &["2026-08-05 10:00:00 INFO t: hello"],
         );
-        let out = tail_log("agent", &TailOptions { num_lines: 10, ..Default::default() }).unwrap();
+        let out = tail_log(
+            "agent",
+            &TailOptions {
+                num_lines: 10,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert!(out.contains("(last 10)"));
         assert!(out.contains("hello"));
 
         let err = tail_log(
             "agent",
-            &TailOptions { num_lines: 10, since: Some("bogus".into()), ..Default::default() },
+            &TailOptions {
+                num_lines: 10,
+                since: Some("bogus".into()),
+                ..Default::default()
+            },
         );
         assert!(err.unwrap_err().contains("Invalid --since"));
 
         let err = tail_log(
             "agent",
-            &TailOptions { num_lines: 10, level: Some("LOUD".into()), ..Default::default() },
+            &TailOptions {
+                num_lines: 10,
+                level: Some("LOUD".into()),
+                ..Default::default()
+            },
         );
         assert!(err.unwrap_err().contains("Invalid --level"));
 
         let err = tail_log(
             "agent",
-            &TailOptions { num_lines: 10, component: Some("warp".into()), ..Default::default() },
+            &TailOptions {
+                num_lines: 10,
+                component: Some("warp".into()),
+                ..Default::default()
+            },
         );
         assert!(err.unwrap_err().contains("Unknown component"));
 

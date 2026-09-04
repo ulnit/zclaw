@@ -75,7 +75,11 @@ fn memory_local_index(home: &Path, source: &str, global_index: usize) -> Result<
 ///
 /// Entries come from the memory tool's parser so journey indices stay
 /// aligned with what the graph renders.
-fn locate_memory(home: &Path, source: &str, gidx: usize) -> Result<(PathBuf, Vec<String>, usize), String> {
+fn locate_memory(
+    home: &Path,
+    source: &str,
+    gidx: usize,
+) -> Result<(PathBuf, Vec<String>, usize), String> {
     let file = memory_file_name(source).expect("validated source");
     let path = home.join("memory").join(file);
     if !path.exists() {
@@ -214,7 +218,6 @@ fn edit_memory(home: &Path, node_id: &str, content: &str) -> Result<Value, Strin
     Ok(json!({"ok": true, "message": format!("updated memory in {}", file)}))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,7 +271,10 @@ mod tests {
         assert_eq!(edited["ok"], true);
         let content = std::fs::read_to_string(home.join("skills/demo/SKILL.md")).unwrap();
         assert!(content.contains("new body"));
-        assert_eq!(crate::skill_usage::get_record(&home, "demo")["patch_count"], 1);
+        assert_eq!(
+            crate::skill_usage::get_record(&home, "demo")["patch_count"],
+            1
+        );
 
         // Delete archives (skill dir disappears, archive holds it).
         let deleted = delete_node(&home, "demo");

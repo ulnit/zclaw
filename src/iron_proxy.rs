@@ -177,7 +177,7 @@ const PROXY_SUBPROCESS_ENV_ALLOWLIST: &[&str] = &[
     "NO_COLOR",
     "SSL_CERT_DIR",
     "SSL_CERT_FILE",
-    "SYSTEMROOT", // Windows
+    "SYSTEMROOT",  // Windows
     "USERPROFILE", // Windows
 ];
 
@@ -240,12 +240,22 @@ pub struct ProxyStatus {
 
 impl ProxyStatus {
     pub fn installed(&self) -> bool {
-        self.binary_path.as_ref().map(|p| p.exists()).unwrap_or(false)
+        self.binary_path
+            .as_ref()
+            .map(|p| p.exists())
+            .unwrap_or(false)
     }
 
     pub fn configured(&self) -> bool {
-        self.config_path.as_ref().map(|p| p.exists()).unwrap_or(false)
-            && self.ca_cert_path.as_ref().map(|p| p.exists()).unwrap_or(false)
+        self.config_path
+            .as_ref()
+            .map(|p| p.exists())
+            .unwrap_or(false)
+            && self
+                .ca_cert_path
+                .as_ref()
+                .map(|p| p.exists())
+                .unwrap_or(false)
     }
 }
 
@@ -306,7 +316,9 @@ fn platform_asset_name() -> Result<String, String> {
             ))
         }
     };
-    Ok(format!("iron-proxy_{IRON_PROXY_VERSION}_{os}_{arch}.tar.gz"))
+    Ok(format!(
+        "iron-proxy_{IRON_PROXY_VERSION}_{os}_{arch}.tar.gz"
+    ))
 }
 
 /// PATH lookup (hermes `shutil.which`).
@@ -339,7 +351,10 @@ fn is_executable(path: &Path) -> bool {
 
 /// Subprocess probe with a hard timeout (hermes guards every CLI
 /// interaction; a hung binary must not wedge status probes).
-fn output_with_timeout(mut cmd: std::process::Command, timeout: Duration) -> Option<std::process::Output> {
+fn output_with_timeout(
+    mut cmd: std::process::Command,
+    timeout: Duration,
+) -> Option<std::process::Output> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let result = cmd.output();
@@ -379,8 +394,7 @@ pub fn find_iron_proxy(install_if_missing: bool) -> Option<PathBuf> {
 /// `install_iron_proxy`). Returns the installed executable path.
 pub fn install_iron_proxy(force: bool) -> Result<PathBuf, String> {
     let bin_dir = bin_dir();
-    std::fs::create_dir_all(&bin_dir)
-        .map_err(|e| format!("create {}: {e}", bin_dir.display()))?;
+    std::fs::create_dir_all(&bin_dir).map_err(|e| format!("create {}: {e}", bin_dir.display()))?;
     let target = bin_dir.join(platform_binary_name());
     if target.exists() && !force {
         return Ok(target);
@@ -392,7 +406,14 @@ pub fn install_iron_proxy(force: bool) -> Result<PathBuf, String> {
 
     let tmp = std::env::temp_dir().join(format!("ulnclaw-iron-proxy-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&tmp).map_err(|e| format!("tempdir: {e}"))?;
-    let result = install_into(&tmp, &bin_dir, &target, &asset_name, &asset_url, &checksum_url);
+    let result = install_into(
+        &tmp,
+        &bin_dir,
+        &target,
+        &asset_name,
+        &asset_url,
+        &checksum_url,
+    );
     let _ = std::fs::remove_dir_all(&tmp);
     result
 }
@@ -427,7 +448,13 @@ fn install_into(
 
     let member = pick_tar_member(&archive_path, platform_binary_name())?;
     let status = std::process::Command::new("tar")
-        .args(["-xzf", &archive_path.to_string_lossy(), "-C", &tmp.to_string_lossy(), &member])
+        .args([
+            "-xzf",
+            &archive_path.to_string_lossy(),
+            "-C",
+            &tmp.to_string_lossy(),
+            &member,
+        ])
         .status()
         .map_err(|e| format!("spawn tar: {e}"))?;
     if !status.success() {
@@ -438,8 +465,7 @@ fn install_into(
     // Stage into the final directory then atomically rename so the new
     // binary is never visible half-written.
     let staged = bin_dir.join(format!(".iron-proxy_{}", uuid::Uuid::new_v4()));
-    std::fs::copy(&extracted, &staged)
-        .map_err(|e| format!("stage binary: {e}"))?;
+    std::fs::copy(&extracted, &staged).map_err(|e| format!("stage binary: {e}"))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -458,7 +484,10 @@ fn install_into(
         }
     }
 
-    eprintln!("[egress] installed iron-proxy {IRON_PROXY_VERSION} at {}", target.display());
+    eprintln!(
+        "[egress] installed iron-proxy {IRON_PROXY_VERSION} at {}",
+        target.display()
+    );
     Ok(target.to_path_buf())
 }
 
@@ -472,7 +501,10 @@ fn http_download(url: &str, dest: &Path) -> Result<(), String> {
         .send()
         .map_err(|e| format!("Failed to download {url}: {e}"))?;
     if !response.status().is_success() {
-        return Err(format!("Failed to download {url}: HTTP {}", response.status()));
+        return Err(format!(
+            "Failed to download {url}: HTTP {}",
+            response.status()
+        ));
     }
     let bytes = response
         .bytes()
@@ -498,7 +530,9 @@ fn verify_checksums_signature(tmp: &Path, checksum_path: &Path) -> Result<bool, 
     let pubkey_url = format!("{IRON_PROXY_RELEASE_BASE}/{PUBKEY_NAME}");
     let sig_path = tmp.join(CHECKSUM_SIG_NAME);
     let pubkey_path = tmp.join(PUBKEY_NAME);
-    if http_download(&sig_url, &sig_path).is_err() || http_download(&pubkey_url, &pubkey_path).is_err() {
+    if http_download(&sig_url, &sig_path).is_err()
+        || http_download(&pubkey_url, &pubkey_path).is_err()
+    {
         eprintln!(
             "[egress] iron-proxy release signature assets unavailable — skipping GPG \
              verification (SHA-256 checksum check still enforced)."
@@ -541,7 +575,11 @@ fn verify_checksums_signature(tmp: &Path, checksum_path: &Path) -> Result<bool, 
     }
 
     let verified = output_with_timeout(
-        base(&["--verify", &sig_path.to_string_lossy(), &checksum_path.to_string_lossy()]),
+        base(&[
+            "--verify",
+            &sig_path.to_string_lossy(),
+            &checksum_path.to_string_lossy(),
+        ]),
         Duration::from_secs(60),
     );
     match verified {
@@ -574,7 +612,10 @@ fn expected_sha256(checksum_file: &Path, asset_name: &str) -> Result<String, Str
     }
     Err(format!(
         "No checksum entry for {asset_name} in {}",
-        checksum_file.file_name().unwrap_or_default().to_string_lossy()
+        checksum_file
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
     ))
 }
 
@@ -650,14 +691,12 @@ pub fn iron_proxy_version(binary: &Path) -> String {
         },
         RUN_TIMEOUT,
     )
-    .map(|out| {
-        String::from_utf8_lossy(&out.stdout)
-            .trim()
-            .to_string()
-    })
+    .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
     .unwrap_or_default();
     if let Ok(mut guard) = VERSION_CACHE.lock() {
-        guard.get_or_insert_with(HashMap::new).insert(key, version.clone());
+        guard
+            .get_or_insert_with(HashMap::new)
+            .insert(key, version.clone());
     }
     version
 }
@@ -718,13 +757,23 @@ fn generate_ca(tmp: &Path, ca_crt: &Path, ca_key: &Path) -> Result<(), String> {
         {
             let mut cmd = std::process::Command::new("openssl");
             cmd.args([
-                "req", "-x509", "-new", "-nodes",
-                "-key", &tmp_key.to_string_lossy(),
-                "-sha256", "-days", "3650",
-                "-subj", "/CN=ulnclaw iron-proxy CA",
-                "-addext", "basicConstraints=critical,CA:TRUE",
-                "-addext", "keyUsage=critical,keyCertSign",
-                "-out", &tmp_crt.to_string_lossy(),
+                "req",
+                "-x509",
+                "-new",
+                "-nodes",
+                "-key",
+                &tmp_key.to_string_lossy(),
+                "-sha256",
+                "-days",
+                "3650",
+                "-subj",
+                "/CN=ulnclaw iron-proxy CA",
+                "-addext",
+                "basicConstraints=critical,CA:TRUE",
+                "-addext",
+                "keyUsage=critical,keyCertSign",
+                "-out",
+                &tmp_crt.to_string_lossy(),
             ])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
@@ -834,7 +883,11 @@ fn read_management_listen_from_config(config_path: Option<&Path>) -> Option<(Str
     let listen = value.get("management")?.get("listen")?.as_str()?;
     let (host, port) = listen.rsplit_once(':')?;
     Some((
-        if host.is_empty() { "127.0.0.1".into() } else { host.to_string() },
+        if host.is_empty() {
+            "127.0.0.1".into()
+        } else {
+            host.to_string()
+        },
         port.parse().ok()?,
     ))
 }
@@ -846,8 +899,7 @@ pub fn reload_proxy() -> Result<(), String> {
     let pid = read_pid();
     if pid.is_none() || !pid_alive(pid.unwrap_or(0)) {
         return Err(
-            "iron-proxy is not running — nothing to reload.  Run `ulnclaw egress start`."
-                .into(),
+            "iron-proxy is not running — nothing to reload.  Run `ulnclaw egress start`.".into(),
         );
     }
     let Some((host, port)) = read_management_listen_from_config(None) else {
@@ -994,8 +1046,12 @@ pub fn build_proxy_config(
     upstream_deny_cidrs: Option<Vec<String>>,
     http_listen: Option<Vec<String>>,
 ) -> serde_yaml::Value {
-    let mut hosts: Vec<String> = allowed_hosts
-        .unwrap_or_else(|| DEFAULT_ALLOWED_HOSTS.iter().map(|s| s.to_string()).collect());
+    let mut hosts: Vec<String> = allowed_hosts.unwrap_or_else(|| {
+        DEFAULT_ALLOWED_HOSTS
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    });
     for m in mappings {
         for h in &m.upstream_hosts {
             if !hosts.contains(h) {
@@ -1031,8 +1087,12 @@ pub fn build_proxy_config(
         .unwrap_or(serde_yaml::Value::Null));
     }
 
-    let deny_cidrs: Vec<String> = upstream_deny_cidrs
-        .unwrap_or_else(|| DEFAULT_UPSTREAM_DENY_CIDRS.iter().map(|s| s.to_string()).collect());
+    let deny_cidrs: Vec<String> = upstream_deny_cidrs.unwrap_or_else(|| {
+        DEFAULT_UPSTREAM_DENY_CIDRS
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    });
 
     // iron-proxy v0.39 takes ONE bind per listener field. tunnel_listen
     // is the CONNECT/MITM listener sandboxes hit via HTTPS_PROXY;
@@ -1191,7 +1251,12 @@ fn load_mappings_from(path: &Path) -> Vec<TokenMapping> {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for item in payload.get("tokens").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+    for item in payload
+        .get("tokens")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+    {
         let Some(proxy_token) = item.get("proxy_token").and_then(|v| v.as_str()) else {
             continue;
         };
@@ -1425,7 +1490,10 @@ fn pid_alive(pid: u32) -> bool {
         if let Ok(env_bytes) = std::fs::read(format!("/proc/{pid}/environ")) {
             for nonce in &nonce_candidates {
                 let needle = format!("{NONCE_ENV}={nonce}");
-                if env_bytes.windows(needle.len()).any(|w| w == needle.as_bytes()) {
+                if env_bytes
+                    .windows(needle.len())
+                    .any(|w| w == needle.as_bytes())
+                {
                     return true;
                 }
             }
@@ -1607,10 +1675,8 @@ pub fn build_proxy_subprocess_env(
     if refresh_from_bitwarden {
         match bitwarden_cfg {
             Some(cfg) => {
-                let result = crate::secrets::fetch_bitwarden_source(
-                    cfg,
-                    &crate::config::ulnclaw_home(),
-                );
+                let result =
+                    crate::secrets::fetch_bitwarden_source(cfg, &crate::config::ulnclaw_home());
                 if !result.ok {
                     let detail = result.error.unwrap_or_else(|| "unknown error".into());
                     if !allow_env_fallback {
@@ -1747,7 +1813,10 @@ pub fn start_proxy(opts: &StartOptions) -> Result<ProxyStatus, String> {
     // Management API: the daemon validates api_key_env is non-empty at
     // startup when management.listen is set.
     if read_management_listen_from_config(Some(&cfg)).is_some() {
-        env.insert(MGMT_API_KEY_ENV.to_string(), ensure_management_token(false)?);
+        env.insert(
+            MGMT_API_KEY_ENV.to_string(),
+            ensure_management_token(false)?,
+        );
     }
 
     // Per-start nonce for PID-recycling defense.
@@ -2004,7 +2073,11 @@ fn read_http_listen_from_config() -> Option<(String, u16)> {
         .as_str()?;
     let (host, port) = listen.rsplit_once(':')?;
     Some((
-        if host.is_empty() { "127.0.0.1".into() } else { host.to_string() },
+        if host.is_empty() {
+            "127.0.0.1".into()
+        } else {
+            host.to_string()
+        },
         port.parse().ok()?,
     ))
 }
@@ -2111,7 +2184,10 @@ mod tests {
             .status()
             .unwrap();
         assert!(status.success());
-        assert_eq!(pick_tar_member(&archive, "iron-proxy").unwrap(), "iron-proxy");
+        assert_eq!(
+            pick_tar_member(&archive, "iron-proxy").unwrap(),
+            "iron-proxy"
+        );
         assert!(pick_tar_member(&archive, "no-such-bin").is_err());
     }
 
@@ -2120,17 +2196,20 @@ mod tests {
         let names: Vec<String> = vec!["OPENAI_API_KEY".into(), "GOOGLE_API_KEY".into()];
         let mappings = discover_provider_mappings(Some(&names));
         assert_eq!(mappings.len(), 2);
-        let openai = mappings.iter().find(|m| m.real_env_name == "OPENAI_API_KEY").unwrap();
+        let openai = mappings
+            .iter()
+            .find(|m| m.real_env_name == "OPENAI_API_KEY")
+            .unwrap();
         assert_eq!(openai.upstream_hosts, vec!["api.openai.com".to_string()]);
         assert_eq!(openai.match_headers, vec!["Authorization".to_string()]);
         assert!(openai.proxy_token.starts_with("openai-"));
         // Alias GOOGLE_API_KEY collapses into the canonical GEMINI mapping.
-        let gemini = mappings.iter().find(|m| m.real_env_name == "GEMINI_API_KEY").unwrap();
+        let gemini = mappings
+            .iter()
+            .find(|m| m.real_env_name == "GEMINI_API_KEY")
+            .unwrap();
         assert_eq!(gemini.alias_env_names, vec!["GOOGLE_API_KEY".to_string()]);
-        assert_eq!(
-            gemini.match_headers,
-            vec!["x-goog-api-key".to_string()]
-        );
+        assert_eq!(gemini.match_headers, vec!["x-goog-api-key".to_string()]);
         assert!(gemini.proxy_token.starts_with("gemini-"));
     }
 
@@ -2144,7 +2223,10 @@ mod tests {
         let uncovered = discover_uncovered_providers(Some(&names));
         assert_eq!(
             uncovered,
-            vec!["AWS_ACCESS_KEY_ID".to_string(), "GOOGLE_APPLICATION_CREDENTIALS".to_string()]
+            vec![
+                "AWS_ACCESS_KEY_ID".to_string(),
+                "GOOGLE_APPLICATION_CREDENTIALS".to_string()
+            ]
         );
     }
 
@@ -2174,7 +2256,11 @@ mod tests {
         let rotated = merge_mappings(&existing, discovered.clone(), true);
         assert_eq!(rotated[0].proxy_token, "fresh-openai");
         // Providers no longer discovered are dropped.
-        let merged = merge_mappings(&existing, vec![mapping("GROQ_API_KEY", "fresh-groq")], false);
+        let merged = merge_mappings(
+            &existing,
+            vec![mapping("GROQ_API_KEY", "fresh-groq")],
+            false,
+        );
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].real_env_name, "GROQ_API_KEY");
     }
@@ -2205,8 +2291,14 @@ mod tests {
         assert!(deny.contains(&"169.254.0.0/16"));
         assert!(deny.contains(&"::ffff:0:0/96"));
         // Management listener: loopback, tunnel_port + 2.
-        assert_eq!(config["management"]["listen"].as_str().unwrap(), "127.0.0.1:9092");
-        assert_eq!(config["management"]["api_key_env"].as_str().unwrap(), MGMT_API_KEY_ENV);
+        assert_eq!(
+            config["management"]["listen"].as_str().unwrap(),
+            "127.0.0.1:9092"
+        );
+        assert_eq!(
+            config["management"]["api_key_env"].as_str().unwrap(),
+            MGMT_API_KEY_ENV
+        );
         // Allowlist transform carries defaults plus mapping hosts.
         let domains: Vec<&str> = config["transforms"][0]["config"]["domains"]
             .as_sequence()
@@ -2220,10 +2312,16 @@ mod tests {
         let secret = &config["transforms"][1]["config"]["secrets"][0];
         assert_eq!(secret["source"]["type"].as_str().unwrap(), "env");
         assert_eq!(secret["source"]["var"].as_str().unwrap(), "anthropic");
-        assert_eq!(secret["replace"]["proxy_value"].as_str().unwrap(), "tok-123");
+        assert_eq!(
+            secret["replace"]["proxy_value"].as_str().unwrap(),
+            "tok-123"
+        );
         assert_eq!(secret["replace"]["require"].as_bool().unwrap(), true);
         assert_eq!(secret["replace"]["match_body"].as_bool().unwrap(), false);
-        assert_eq!(secret["rules"][0]["host"].as_str().unwrap(), "api.anthropic.example");
+        assert_eq!(
+            secret["rules"][0]["host"].as_str().unwrap(),
+            "api.anthropic.example"
+        );
         // TLS block references the CA pair.
         assert_eq!(config["tls"]["ca_cert"].as_str().unwrap(), "/state/ca.crt");
         // Explicit empty deny list opts out (hermetic tests).
@@ -2237,7 +2335,10 @@ mod tests {
             Some(Vec::new()),
             None,
         );
-        assert!(no_deny["proxy"]["upstream_deny_cidrs"].as_sequence().unwrap().is_empty());
+        assert!(no_deny["proxy"]["upstream_deny_cidrs"]
+            .as_sequence()
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

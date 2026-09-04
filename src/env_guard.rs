@@ -30,37 +30,83 @@ pub fn provider_env_blocklist() -> &'static HashSet<&'static str> {
     LIST.get_or_init(|| {
         HashSet::from([
             // LLM provider credentials
-            "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_API_BASE", "OPENAI_ORG_ID",
-            "OPENAI_ORGANIZATION", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY",
-            "ANTHROPIC_BASE_URL", "ANTHROPIC_TOKEN", "GOOGLE_API_KEY",
-            "VERTEX_CREDENTIALS_PATH", "GOOGLE_APPLICATION_CREDENTIALS",
-            "DEEPSEEK_API_KEY", "MISTRAL_API_KEY", "GROQ_API_KEY",
-            "TOGETHER_API_KEY", "PERPLEXITY_API_KEY", "COHERE_API_KEY",
-            "FIREWORKS_API_KEY", "XAI_API_KEY", "HELICONE_API_KEY",
-            "PARALLEL_API_KEY", "OLLAMA_BASE_URL",
+            "OPENAI_API_KEY",
+            "OPENAI_BASE_URL",
+            "OPENAI_API_BASE",
+            "OPENAI_ORG_ID",
+            "OPENAI_ORGANIZATION",
+            "OPENROUTER_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_TOKEN",
+            "GOOGLE_API_KEY",
+            "VERTEX_CREDENTIALS_PATH",
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            "DEEPSEEK_API_KEY",
+            "MISTRAL_API_KEY",
+            "GROQ_API_KEY",
+            "TOGETHER_API_KEY",
+            "PERPLEXITY_API_KEY",
+            "COHERE_API_KEY",
+            "FIREWORKS_API_KEY",
+            "XAI_API_KEY",
+            "HELICONE_API_KEY",
+            "PARALLEL_API_KEY",
+            "OLLAMA_BASE_URL",
             // ulnclaw-managed keys
-            "ULNCLAW_API_KEY", "ULNCLAW_GATEWAY_KEY", "ULNCLAW_TTS_KEY",
+            "ULNCLAW_API_KEY",
+            "ULNCLAW_GATEWAY_KEY",
+            "ULNCLAW_TTS_KEY",
             // Tool backends
-            "TAVILY_API_KEY", "BRAVE_API_KEY", "FIRECRAWL_API_KEY",
-            "FIRECRAWL_API_URL", "HASS_TOKEN", "HASS_URL",
+            "TAVILY_API_KEY",
+            "BRAVE_API_KEY",
+            "FIRECRAWL_API_KEY",
+            "FIRECRAWL_API_URL",
+            "HASS_TOKEN",
+            "HASS_URL",
             // Messaging platforms (parity with hermes)
-            "TELEGRAM_HOME_CHANNEL", "TELEGRAM_HOME_CHANNEL_NAME",
-            "DISCORD_HOME_CHANNEL", "DISCORD_HOME_CHANNEL_NAME",
-            "DISCORD_REQUIRE_MENTION", "DISCORD_FREE_RESPONSE_CHANNELS",
-            "DISCORD_AUTO_THREAD", "SLACK_HOME_CHANNEL", "SLACK_HOME_CHANNEL_NAME",
-            "SLACK_ALLOWED_USERS", "WHATSAPP_ENABLED", "WHATSAPP_MODE",
-            "WHATSAPP_ALLOWED_USERS", "SIGNAL_HTTP_URL", "SIGNAL_ACCOUNT",
-            "SIGNAL_ALLOWED_USERS", "SIGNAL_GROUP_ALLOWED_USERS",
-            "SIGNAL_HOME_CHANNEL", "SIGNAL_HOME_CHANNEL_NAME",
+            "TELEGRAM_HOME_CHANNEL",
+            "TELEGRAM_HOME_CHANNEL_NAME",
+            "DISCORD_HOME_CHANNEL",
+            "DISCORD_HOME_CHANNEL_NAME",
+            "DISCORD_REQUIRE_MENTION",
+            "DISCORD_FREE_RESPONSE_CHANNELS",
+            "DISCORD_AUTO_THREAD",
+            "SLACK_HOME_CHANNEL",
+            "SLACK_HOME_CHANNEL_NAME",
+            "SLACK_ALLOWED_USERS",
+            "WHATSAPP_ENABLED",
+            "WHATSAPP_MODE",
+            "WHATSAPP_ALLOWED_USERS",
+            "SIGNAL_HTTP_URL",
+            "SIGNAL_ACCOUNT",
+            "SIGNAL_ALLOWED_USERS",
+            "SIGNAL_GROUP_ALLOWED_USERS",
+            "SIGNAL_HOME_CHANNEL",
+            "SIGNAL_HOME_CHANNEL_NAME",
             "SIGNAL_IGNORE_STORIES",
             // Email / infra credentials
-            "EMAIL_ADDRESS", "EMAIL_PASSWORD", "EMAIL_IMAP_HOST",
-            "EMAIL_SMTP_HOST", "EMAIL_HOME_ADDRESS", "EMAIL_HOME_ADDRESS_NAME",
-            "GH_TOKEN", "GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY_PATH",
-            "GITHUB_APP_INSTALLATION_ID", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET",
-            "DAYTONA_API_KEY", "GATEWAY_RELAY_ID", "GATEWAY_RELAY_SECRET",
-            "GATEWAY_RELAY_DELIVERY_KEY", "VERCEL_OIDC_TOKEN", "VERCEL_TOKEN",
-            "VERCEL_PROJECT_ID", "VERCEL_TEAM_ID", "GATEWAY_ALLOWED_USERS",
+            "EMAIL_ADDRESS",
+            "EMAIL_PASSWORD",
+            "EMAIL_IMAP_HOST",
+            "EMAIL_SMTP_HOST",
+            "EMAIL_HOME_ADDRESS",
+            "EMAIL_HOME_ADDRESS_NAME",
+            "GH_TOKEN",
+            "GITHUB_APP_ID",
+            "GITHUB_APP_PRIVATE_KEY_PATH",
+            "GITHUB_APP_INSTALLATION_ID",
+            "MODAL_TOKEN_ID",
+            "MODAL_TOKEN_SECRET",
+            "DAYTONA_API_KEY",
+            "GATEWAY_RELAY_ID",
+            "GATEWAY_RELAY_SECRET",
+            "GATEWAY_RELAY_DELIVERY_KEY",
+            "VERCEL_OIDC_TOKEN",
+            "VERCEL_TOKEN",
+            "VERCEL_PROJECT_ID",
+            "VERCEL_TEAM_ID",
+            "GATEWAY_ALLOWED_USERS",
         ])
     })
 }
@@ -82,7 +128,8 @@ pub fn is_internal_secret(name: &str) -> bool {
 /// True if `name` is a protected credential that skills must never be
 /// able to register as passthrough. Fails closed (hermes GHSA fix).
 pub fn is_protected_credential(name: &str) -> bool {
-    is_internal_secret(name) || provider_env_blocklist().contains(name.to_ascii_uppercase().as_str())
+    is_internal_secret(name)
+        || provider_env_blocklist().contains(name.to_ascii_uppercase().as_str())
 }
 
 /// Register env var names as allowed in sandboxed environments.
@@ -148,7 +195,13 @@ mod tests {
     #[test]
     fn blocklist_covers_known_credentials() {
         let list = provider_env_blocklist();
-        for key in ["OPENAI_API_KEY", "ANTHROPIC_TOKEN", "TAVILY_API_KEY", "ULNCLAW_GATEWAY_KEY", "GH_TOKEN"] {
+        for key in [
+            "OPENAI_API_KEY",
+            "ANTHROPIC_TOKEN",
+            "TAVILY_API_KEY",
+            "ULNCLAW_GATEWAY_KEY",
+            "GH_TOKEN",
+        ] {
             assert!(list.contains(key), "missing {key}");
         }
     }
@@ -168,11 +221,11 @@ mod tests {
         let accepted = register_env_passthrough(
             &mut allow,
             &[
-                "TENOR_API_KEY".to_string(),      // third-party: fine
-                "OPENAI_API_KEY".to_string(),     // provider credential: refused
-                "AUXILIARY_X_API_KEY".to_string(),// dynamic internal secret: refused
-                "  ".to_string(),                 // blank: skipped
-                "NOTION_TOKEN".to_string(),       // third-party: fine
+                "TENOR_API_KEY".to_string(),       // third-party: fine
+                "OPENAI_API_KEY".to_string(),      // provider credential: refused
+                "AUXILIARY_X_API_KEY".to_string(), // dynamic internal secret: refused
+                "  ".to_string(),                  // blank: skipped
+                "NOTION_TOKEN".to_string(),        // third-party: fine
             ],
         );
         assert_eq!(accepted, vec!["TENOR_API_KEY", "NOTION_TOKEN"]);
@@ -207,7 +260,10 @@ mod tests {
         let mut allow = HashSet::new();
         // A user-config passthrough for a blocked var is honored only for
         // non-protected names; HASS_TOKEN stays blocked at registration.
-        register_env_passthrough(&mut allow, &["ULNCLAW_TEST_GATED_VAR".into(), "HASS_TOKEN".into()]);
+        register_env_passthrough(
+            &mut allow,
+            &["ULNCLAW_TEST_GATED_VAR".into(), "HASS_TOKEN".into()],
+        );
         let env = scrubbed_env(&allow);
         let keys: HashSet<&str> = env.iter().map(|(k, _)| k.as_str()).collect();
         assert!(keys.contains("ULNCLAW_TEST_GATED_VAR"));

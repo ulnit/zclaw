@@ -150,7 +150,11 @@ fn write_watchdog_dump(dump_path: &Path, delay_s: f64, snapshot: Option<Value>) 
         "fired_at": chrono::Utc::now().to_rfc3339(),
         "snapshot": snapshot.unwrap_or_else(|| json!({})),
     });
-    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(dump_path) {
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dump_path)
+    {
         use std::io::Write;
         let _ = writeln!(file, "{}", header);
         // Stable Rust has no faulthandler-style all-thread dump; record
@@ -273,7 +277,14 @@ pub fn start_loop_liveness_watchdog(
     max_strikes: u32,
     exit_code: i32,
 ) -> Option<LoopWatchdogHandle> {
-    start_loop_liveness_watchdog_with(runtime, probe_interval, probe_timeout, max_strikes, exit_code, None)
+    start_loop_liveness_watchdog_with(
+        runtime,
+        probe_interval,
+        probe_timeout,
+        max_strikes,
+        exit_code,
+        None,
+    )
 }
 
 /// Test-friendly variant with an injectable exit action.
@@ -410,10 +421,7 @@ mod tests {
     #[test]
     fn delay_resolution_clamps() {
         assert_eq!(resolve_shutdown_watchdog_delay(60.0, 30.0), 90.0);
-        assert_eq!(
-            resolve_shutdown_watchdog_delay(-5.0, 30.0),
-            30.0
-        );
+        assert_eq!(resolve_shutdown_watchdog_delay(-5.0, 30.0), 30.0);
         assert_eq!(
             resolve_shutdown_watchdog_delay(60.0, f64::NAN),
             60.0 + DEFAULT_SHUTDOWN_WATCHDOG_GRACE_S
@@ -423,13 +431,10 @@ mod tests {
     #[test]
     fn heartbeat_write_roundtrip() {
         let temp = tempfile::tempdir().unwrap();
-        let path = write_loop_heartbeat(
-            Some(temp.path()),
-            Some(json!({"extra_key": "extra_value"})),
-        );
+        let path =
+            write_loop_heartbeat(Some(temp.path()), Some(json!({"extra_key": "extra_value"})));
         assert_eq!(path, temp.path().join("state").join("gateway.heartbeat"));
-        let body: Value =
-            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let body: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(body["pid"], std::process::id());
         assert!(body["updated_at"].as_str().unwrap().contains('T'));
         assert!(body["monotonic"].as_f64().unwrap() >= 0.0);
@@ -437,8 +442,7 @@ mod tests {
         assert_eq!(body["extra_key"], "extra_value");
         // Rewrite overwrites atomically.
         write_loop_heartbeat(Some(temp.path()), None);
-        let body2: Value =
-            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let body2: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert!(body2.get("extra_key").is_none());
     }
 

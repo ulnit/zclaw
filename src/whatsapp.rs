@@ -214,7 +214,10 @@ pub fn should_process(data: &Value) -> bool {
     {
         return false;
     }
-    let from_me = data.get("fromMe").and_then(|v| v.as_bool()).unwrap_or(false);
+    let from_me = data
+        .get("fromMe")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let from_owner = data
         .get("fromOwner")
         .and_then(|v| v.as_bool())
@@ -375,7 +378,10 @@ async fn run_session(
                 return Err(format!("health check HTTP {}", resp.status()));
             }
             Err(e) => {
-                return Err(format!("bridge unreachable at {}: {e}", runtime.cfg.bridge_url));
+                return Err(format!(
+                    "bridge unreachable at {}: {e}",
+                    runtime.cfg.bridge_url
+                ));
             }
         }
         tokio::time::sleep(Duration::from_secs(5)).await;
@@ -433,7 +439,10 @@ async fn handle_bridge_message(
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let is_group = data.get("isGroup").and_then(|v| v.as_bool()).unwrap_or(false);
+    let is_group = data
+        .get("isGroup")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let raw_sender_id = data
         .get("senderId")
         .and_then(|v| v.as_str())
@@ -486,7 +495,11 @@ async fn handle_bridge_message(
 
     if is_group {
         if !runtime.cfg.allowed_channels.is_empty()
-            && !runtime.cfg.allowed_channels.iter().any(|c| c == &chat_id || c == "*")
+            && !runtime
+                .cfg
+                .allowed_channels
+                .iter()
+                .any(|c| c == &chat_id || c == "*")
         {
             return;
         }
@@ -507,12 +520,12 @@ async fn handle_bridge_message(
 
     // Media: bridge-cached local paths or URLs → media cache.
     let mut attachments = Vec::new();
-    let has_media = data.get("hasMedia").and_then(|v| v.as_bool()).unwrap_or(false);
+    let has_media = data
+        .get("hasMedia")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     if has_media {
-        let media_type = data
-            .get("mediaType")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let media_type = data.get("mediaType").and_then(|v| v.as_str()).unwrap_or("");
         let mime = data
             .get("mime")
             .and_then(|v| v.as_str())
@@ -524,7 +537,9 @@ async fn handle_bridge_message(
             .cloned()
             .unwrap_or_default();
         for url_value in urls {
-            let Some(url) = url_value.as_str() else { continue };
+            let Some(url) = url_value.as_str() else {
+                continue;
+            };
             if let Some(att) = fetch_media(runtime, url, &mime, media_type).await {
                 attachments.push(att);
             }
@@ -682,7 +697,12 @@ async fn fetch_media(
 
 async fn send_read_receipt(runtime: &Arc<Runtime>, key: &Value) {
     let url = format!("{}/read", runtime.cfg.bridge_url);
-    let result = runtime.client.post(&url).json(&json!({ "key": key })).send().await;
+    let result = runtime
+        .client
+        .post(&url)
+        .json(&json!({ "key": key }))
+        .send()
+        .await;
     match result {
         Ok(resp) if resp.status().is_success() => {}
         Ok(resp) => eprintln!("[whatsapp] read receipt HTTP {}", resp.status()),
@@ -714,12 +734,7 @@ async fn send_text(runtime: &Arc<Runtime>, chat_id: &str, text: &str) -> Result<
 }
 
 /// hermes `/send-media` — `{to, path, mediaType, caption}`.
-async fn send_media(
-    runtime: &Arc<Runtime>,
-    chat_id: &str,
-    path: &std::path::Path,
-    caption: &str,
-) {
+async fn send_media(runtime: &Arc<Runtime>, chat_id: &str, path: &std::path::Path, caption: &str) {
     let url = format!("{}/send-media", runtime.cfg.bridge_url);
     let payload = json!({
         "to": crate::whatsapp_identity::to_whatsapp_jid(chat_id),
@@ -794,7 +809,12 @@ async fn send_poll(
     let resp = runtime
         .client
         .post(&url)
-        .json(&send_poll_payload(chat_id, question, options, selectable_count))
+        .json(&send_poll_payload(
+            chat_id,
+            question,
+            options,
+            selectable_count,
+        ))
         .timeout(Duration::from_secs(30))
         .send()
         .await
@@ -826,7 +846,9 @@ async fn send_location(
     let resp = runtime
         .client
         .post(&url)
-        .json(&send_location_payload(chat_id, latitude, longitude, name, address))
+        .json(&send_location_payload(
+            chat_id, latitude, longitude, name, address,
+        ))
         .timeout(Duration::from_secs(30))
         .send()
         .await
@@ -966,9 +988,7 @@ impl crate::messaging::PlatformSender for WhatsappSender {
         match send_poll(&self.runtime, chat_id, question.trim(), &clean, 1).await {
             Ok(_) => true,
             Err(e) => {
-                eprintln!(
-                    "[whatsapp] native clarify poll failed; falling back to text: {e}"
-                );
+                eprintln!("[whatsapp] native clarify poll failed; falling back to text: {e}");
                 false
             }
         }
@@ -1033,10 +1053,16 @@ pub async fn whatsapp_status(config: &crate::config::UlncLawConfig) -> String {
     if config.messaging.whatsapp.enabled {
         out.push_str(&format!(
             "  Platform:   enabled (mode: {})\n",
-            if cfg.mode.is_empty() { "self-chat" } else { cfg.mode.as_str() }
+            if cfg.mode.is_empty() {
+                "self-chat"
+            } else {
+                cfg.mode.as_str()
+            }
         ));
     } else {
-        out.push_str("  Platform:   disabled — `ulnclaw config set messaging.whatsapp.enabled true`\n");
+        out.push_str(
+            "  Platform:   disabled — `ulnclaw config set messaging.whatsapp.enabled true`\n",
+        );
     }
 
     // Bridge target.
@@ -1072,7 +1098,11 @@ pub async fn whatsapp_status(config: &crate::config::UlncLawConfig) -> String {
             out.push_str(&format!(
                 "  Script dir: {} (deps {})\n",
                 bridge_dir.display(),
-                if fresh { "fresh" } else { "stale — gateway reinstalls on next start" }
+                if fresh {
+                    "fresh"
+                } else {
+                    "stale — gateway reinstalls on next start"
+                }
             ));
         } else {
             out.push_str(&format!(
@@ -1096,7 +1126,9 @@ pub async fn whatsapp_status(config: &crate::config::UlncLawConfig) -> String {
                 ));
             }
             Some((pid, _)) => {
-                out.push_str(&format!("  Process:    stale pidfile (pid {pid} not running)\n"));
+                out.push_str(&format!(
+                    "  Process:    stale pidfile (pid {pid} not running)\n"
+                ));
             }
             None => out.push_str("  Process:    not running (gateway starts it on demand)\n"),
         }
@@ -1134,7 +1166,9 @@ mod tests {
     #[test]
     fn health_summary_variants() {
         assert_eq!(
-            health_summary(&msg(r#"{"status":"connected","botJid":"123@s.whatsapp.net"}"#)),
+            health_summary(&msg(
+                r#"{"status":"connected","botJid":"123@s.whatsapp.net"}"#
+            )),
             "connected as 123@s.whatsapp.net"
         );
         assert!(health_summary(&msg(r#"{"status":"connected"}"#)).contains("unknown JID"));
@@ -1146,28 +1180,32 @@ mod tests {
 
     #[test]
     fn process_drops_from_me_and_status() {
-        assert!(!should_process(&msg(r#"{"chatId":"123@s.whatsapp.net","fromMe":true}"#)));
+        assert!(!should_process(&msg(
+            r#"{"chatId":"123@s.whatsapp.net","fromMe":true}"#
+        )));
         assert!(!should_process(&msg(r#"{"chatId":"status@broadcast"}"#)));
         assert!(!should_process(&msg(r#"{"chatId":"abc@newsletter"}"#)));
         assert!(!should_process(&msg(r#"{"chatId":"xyz@broadcast"}"#)));
         assert!(!should_process(&msg(r#"{"chatId":""}"#)));
         assert!(should_process(&msg(r#"{"chatId":"123@s.whatsapp.net"}"#)));
-        assert!(should_process(&msg(r#"{"chatId":"456@g.us","isGroup":true}"#)));
+        assert!(should_process(&msg(
+            r#"{"chatId":"456@g.us","isGroup":true}"#
+        )));
     }
 
     #[test]
     fn owner_flagged_from_me_passes_intake() {
         // hermes self-chat: bridge flags owner-typed fromMe messages
         // (not echoes of our own /send) with fromOwner.
-        assert!(should_process(
-            &msg(r#"{"chatId":"123@s.whatsapp.net","fromMe":true,"fromOwner":true}"#)
-        ));
-        assert!(!should_process(
-            &msg(r#"{"chatId":"123@s.whatsapp.net","fromMe":true,"fromOwner":false}"#)
-        ));
-        assert!(!should_process(
-            &msg(r#"{"chatId":"status@broadcast","fromMe":true,"fromOwner":true}"#)
-        ));
+        assert!(should_process(&msg(
+            r#"{"chatId":"123@s.whatsapp.net","fromMe":true,"fromOwner":true}"#
+        )));
+        assert!(!should_process(&msg(
+            r#"{"chatId":"123@s.whatsapp.net","fromMe":true,"fromOwner":false}"#
+        )));
+        assert!(!should_process(&msg(
+            r#"{"chatId":"status@broadcast","fromMe":true,"fromOwner":true}"#
+        )));
     }
 
     #[test]

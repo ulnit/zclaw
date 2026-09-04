@@ -125,7 +125,10 @@ impl ServerState {
         }))
         .await;
         let result = rx.await.ok();
-        self.pending_client_requests.lock().unwrap().remove(&request_id);
+        self.pending_client_requests
+            .lock()
+            .unwrap()
+            .remove(&request_id);
         result
     }
 }
@@ -138,28 +141,27 @@ async fn build_agent(state: Arc<ServerState>) -> Result<Arc<crate::agent::Agent>
     let config = crate::config::UlncLawConfig::load(None).unwrap_or_default();
     let api_key = config.resolve_api_key();
     let base_url = config.resolve_base_url();
-    let provider: Arc<dyn crate::provider::Provider> =
-        if config.model.provider == "anthropic" {
-            let mut builder = crate::provider::anthropic::AnthropicProvider::builder()
-                .endpoint(&base_url)
-                .model(&config.model.model)
-                .name(&config.model.provider)
-                .max_retries(config.model.max_retries);
-            if let Some(ref key) = api_key {
-                builder = builder.api_key(key);
-            }
-            Arc::new(builder.build().map_err(|e| e.to_string())?)
-        } else {
-            let mut builder = crate::provider::openai::OpenAiProvider::builder()
-                .endpoint(&base_url)
-                .model(&config.model.model)
-                .name(&config.model.provider)
-                .max_retries(config.model.max_retries);
-            if let Some(ref key) = api_key {
-                builder = builder.api_key(key);
-            }
-            Arc::new(builder.build().map_err(|e| e.to_string())?)
-        };
+    let provider: Arc<dyn crate::provider::Provider> = if config.model.provider == "anthropic" {
+        let mut builder = crate::provider::anthropic::AnthropicProvider::builder()
+            .endpoint(&base_url)
+            .model(&config.model.model)
+            .name(&config.model.provider)
+            .max_retries(config.model.max_retries);
+        if let Some(ref key) = api_key {
+            builder = builder.api_key(key);
+        }
+        Arc::new(builder.build().map_err(|e| e.to_string())?)
+    } else {
+        let mut builder = crate::provider::openai::OpenAiProvider::builder()
+            .endpoint(&base_url)
+            .model(&config.model.model)
+            .name(&config.model.provider)
+            .max_retries(config.model.max_retries);
+        if let Some(ref key) = api_key {
+            builder = builder.api_key(key);
+        }
+        Arc::new(builder.build().map_err(|e| e.to_string())?)
+    };
 
     let mut registry = crate::tools::ToolRegistry::new();
     crate::tools::builtin::register_builtin_tools(&mut registry);
@@ -248,7 +250,10 @@ async fn request_permission(state: &Arc<ServerState>, reason: &str, command: &st
             {"optionId": "reject_once", "kind": "reject_once", "name": "Reject"},
         ],
     });
-    match state.request_from_client("session/request_permission", params).await {
+    match state
+        .request_from_client("session/request_permission", params)
+        .await
+    {
         Some(response) => {
             let option = response
                 .pointer("/outcome/optionId")
@@ -448,7 +453,9 @@ async fn handle_load_session(state: &Arc<ServerState>, id: Value, params: Value)
         .unwrap_or("")
         .to_string();
     if session_id.is_empty() {
-        state.respond_error(id, -32602, "sessionId is required").await;
+        state
+            .respond_error(id, -32602, "sessionId is required")
+            .await;
         return;
     }
     let store_key = format!("acp-{session_id}");
@@ -795,7 +802,11 @@ async fn handle_line(state: &Arc<ServerState>, line: &str) {
                 // Liveness probes (ping/health/healthcheck) get the same
                 // -32601 treatment as hermes (_BENIGN_PROBE_METHODS).
                 state
-                    .respond_error(id.unwrap_or(Value::Null), -32601, &format!("Method not found: {method}"))
+                    .respond_error(
+                        id.unwrap_or(Value::Null),
+                        -32601,
+                        &format!("Method not found: {method}"),
+                    )
                     .await;
             }
         }
@@ -836,7 +847,10 @@ mod tests {
             {"type": "image", "url": "https://example.com/x.png"},
             {"type": "resource_link", "uri": "file:///tmp/a.txt", "name": "a.txt"},
         ]));
-        assert_eq!(text, "hello\nworld\n[Attached resource: a.txt — file:///tmp/a.txt]");
+        assert_eq!(
+            text,
+            "hello\nworld\n[Attached resource: a.txt — file:///tmp/a.txt]"
+        );
         assert_eq!(images.len(), 2);
         assert!(images[0].url.starts_with("data:image/png;base64,"));
         assert_eq!(images[1].url, "https://example.com/x.png");
@@ -853,7 +867,9 @@ mod tests {
 
     #[test]
     fn plan_update_from_todo() {
-        let result = json!(r#"{"todos":[{"content":"step one","status":"completed"},{"content":"step two","status":"pending"},{"content":"gone","status":"cancelled"}]}"#);
+        let result = json!(
+            r#"{"todos":[{"content":"step one","status":"completed"},{"content":"step two","status":"pending"},{"content":"gone","status":"cancelled"}]}"#
+        );
         let plan = plan_update_from_todo_result(&result).unwrap();
         assert_eq!(plan["sessionUpdate"], "plan");
         let entries = plan["entries"].as_array().unwrap();

@@ -245,8 +245,8 @@ fn rule_stranded_in_ready(
     if task.status != "ready" || task.claim_lock.is_some() {
         return Vec::new();
     }
-    let ready_at = last_event_ts(events, &["ready", "promoted", "reclaimed"])
-        .unwrap_or(task.created_at);
+    let ready_at =
+        last_event_ts(events, &["ready", "promoted", "reclaimed"]).unwrap_or(task.created_at);
     let age = now - ready_at;
     if age < cfg.stranded_ready_secs {
         return Vec::new();
@@ -265,7 +265,11 @@ fn rule_stranded_in_ready(
     }]
 }
 
-fn rule_block_unblock_cycling(task: &Task, events: &[TaskEvent], cfg: &DiagnosticsConfig) -> Vec<Diagnostic> {
+fn rule_block_unblock_cycling(
+    task: &Task,
+    events: &[TaskEvent],
+    cfg: &DiagnosticsConfig,
+) -> Vec<Diagnostic> {
     let recent: Vec<&TaskEvent> = events
         .iter()
         .filter(|event| event.kind == "blocked" || event.kind == "unblocked")
@@ -472,11 +476,17 @@ mod tests {
         let diagnostics = diagnose_task(&store, &task.id).unwrap();
         let kinds: Vec<&str> = diagnostics.iter().map(|d| d.kind.as_str()).collect();
         assert!(kinds.contains(&"repeated_failures"), "{kinds:?}");
-        let failure = diagnostics.iter().find(|d| d.kind == "repeated_failures").unwrap();
+        let failure = diagnostics
+            .iter()
+            .find(|d| d.kind == "repeated_failures")
+            .unwrap();
         assert_eq!(failure.severity, SEVERITY_WARNING);
         assert!(failure.title.contains("2 consecutive"), "{}", failure.title);
         assert!(failure.detail.contains("boom two"), "{}", failure.detail);
-        assert!(failure.actions.iter().any(|a| a.kind == "reclaim" && a.suggested));
+        assert!(failure
+            .actions
+            .iter()
+            .any(|a| a.kind == "reclaim" && a.suggested));
     }
 
     #[test]
@@ -515,7 +525,10 @@ mod tests {
             .find(|d| d.kind == "repeated_crashes")
             .expect("repeated_crashes fires");
         assert_eq!(crash.severity, SEVERITY_ERROR);
-        assert!(crash.actions.iter().any(|a| a.kind == "reclaim" && a.suggested));
+        assert!(crash
+            .actions
+            .iter()
+            .any(|a| a.kind == "reclaim" && a.suggested));
     }
 
     #[test]
@@ -561,9 +574,17 @@ mod tests {
             .iter()
             .find(|d| d.kind == "hallucinated_cards")
             .expect("hallucinated_cards fires");
-        assert!(hallucinated.detail.contains("t_missingcard12"), "{}", hallucinated.detail);
+        assert!(
+            hallucinated.detail.contains("t_missingcard12"),
+            "{}",
+            hallucinated.detail
+        );
         // The real reference does not count as missing.
-        assert!(!hallucinated.detail.contains(&real.id), "{}", hallucinated.detail);
+        assert!(
+            !hallucinated.detail.contains(&real.id),
+            "{}",
+            hallucinated.detail
+        );
     }
 
     #[test]
@@ -575,12 +596,16 @@ mod tests {
         // loop-breaker (triage + block_loop_detected) instead of a
         // plain blocked event.
         for kind in ["needs_input", "capability"] {
-            store.block_task_kind(&task.id, "again", Some(kind)).unwrap();
+            store
+                .block_task_kind(&task.id, "again", Some(kind))
+                .unwrap();
             store.unblock_task(&task.id).unwrap();
         }
         let diagnostics = diagnose_task(&store, &task.id).unwrap();
         assert!(
-            diagnostics.iter().any(|d| d.kind == "block_unblock_cycling"),
+            diagnostics
+                .iter()
+                .any(|d| d.kind == "block_unblock_cycling"),
             "{diagnostics:?}"
         );
     }

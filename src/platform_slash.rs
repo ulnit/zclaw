@@ -78,9 +78,7 @@ pub async fn resolve(
                 Some(PlatformSlashOutcome::Direct(out.trim_end().to_string()))
             }
         }
-        "/tools" => Some(PlatformSlashOutcome::Direct(
-            agent.tool_names().join(", "),
-        )),
+        "/tools" => Some(PlatformSlashOutcome::Direct(agent.tool_names().join(", "))),
         "/recap" => {
             let row = store.get_session_row(session_id).ok().flatten();
             let messages = store.load_messages(session_id).unwrap_or_default();
@@ -103,9 +101,7 @@ pub async fn resolve(
                 Some(PlatformSlashOutcome::Direct(format!("title: {title}")))
             } else {
                 match store.set_session_title(session_id, rest) {
-                    Ok(()) => Some(PlatformSlashOutcome::Direct(format!(
-                        "title set: {rest}"
-                    ))),
+                    Ok(()) => Some(PlatformSlashOutcome::Direct(format!("title set: {rest}"))),
                     Err(e) => Some(PlatformSlashOutcome::Direct(format!(
                         "title set failed: {e}"
                     ))),
@@ -306,13 +302,17 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    fn setup() -> (tempfile::TempDir, std::path::PathBuf, Arc<Agent>, Arc<SqliteSessionStore>) {
+    fn setup() -> (
+        tempfile::TempDir,
+        std::path::PathBuf,
+        Arc<Agent>,
+        Arc<SqliteSessionStore>,
+    ) {
         let dir = tempfile::tempdir().expect("tempdir");
         let home = dir.path().to_path_buf();
         std::fs::create_dir_all(home.join("skills")).ok();
-        let store = Arc::new(
-            SqliteSessionStore::open(dir.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(dir.path().join("state.db")).expect("store opens"));
         let provider = Arc::new(
             crate::provider::openai::OpenAiProvider::builder()
                 .endpoint("http://127.0.0.1:9/v1")
@@ -362,13 +362,19 @@ mod tests {
         named_session(&store, "s1");
 
         let outcome = resolve(&agent, &store, &home, "s1", "/title").await;
-        assert!(matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("(untitled)")));
+        assert!(
+            matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("(untitled)"))
+        );
 
         let outcome = resolve(&agent, &store, &home, "s1", "/title My chat").await;
-        assert!(matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("title set: My chat")));
+        assert!(
+            matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("title set: My chat"))
+        );
 
         let outcome = resolve(&agent, &store, &home, "s1", "/title").await;
-        assert!(matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("title: My chat")));
+        assert!(
+            matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("title: My chat"))
+        );
     }
 
     #[tokio::test]
@@ -387,14 +393,20 @@ mod tests {
     async fn usage_missing_session_reports_not_found() {
         let (_dir, home, agent, store) = setup();
         let outcome = resolve(&agent, &store, &home, "ghost", "/usage").await;
-        assert!(matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t == "session not found."));
+        assert!(
+            matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t == "session not found.")
+        );
     }
 
     #[tokio::test]
     async fn unknown_slash_falls_through() {
         let (_dir, home, agent, store) = setup();
-        assert!(resolve(&agent, &store, &home, "s1", "/usr/bin/foo").await.is_none());
-        assert!(resolve(&agent, &store, &home, "s1", "plain text").await.is_none());
+        assert!(resolve(&agent, &store, &home, "s1", "/usr/bin/foo")
+            .await
+            .is_none());
+        assert!(resolve(&agent, &store, &home, "s1", "plain text")
+            .await
+            .is_none());
         assert!(resolve(&agent, &store, &home, "s1", "/").await.is_none());
     }
 
@@ -402,7 +414,9 @@ mod tests {
     async fn skills_listing_empty_home() {
         let (_dir, home, agent, store) = setup();
         let outcome = resolve(&agent, &store, &home, "s1", "/skills").await;
-        assert!(matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("no skills installed")));
+        assert!(
+            matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("no skills installed"))
+        );
     }
 
     #[tokio::test]
@@ -471,14 +485,21 @@ mod tests {
         };
         assert!(reply.contains("fresh session"), "{reply}");
         let remapped = crate::messaging::effective_session_id_for("platform-telegram-chat-9");
-        assert!(remapped.starts_with("platform-telegram-chat-9-"), "{remapped}");
+        assert!(
+            remapped.starts_with("platform-telegram-chat-9-"),
+            "{remapped}"
+        );
         assert!(store.get_session_row(&remapped).unwrap().is_some());
         // Alias behaves identically.
         let outcome = resolve(&agent, &store, &home, "platform-telegram-chat-9", "/reset").await;
-        assert!(matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("fresh session")));
+        assert!(
+            matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("fresh session"))
+        );
         // Non-platform session keys are rejected.
         let outcome = resolve(&agent, &store, &home, "s1", "/new").await;
-        assert!(matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("not a platform chat")));
+        assert!(
+            matches!(outcome, Some(PlatformSlashOutcome::Direct(ref t)) if t.contains("not a platform chat"))
+        );
         crate::messaging::clear_session_remappings_for_tests();
     }
 
@@ -486,7 +507,14 @@ mod tests {
     async fn learn_expands_to_agent_turn() {
         // P687: /learn rewrites the turn into the skill-authoring prompt.
         let (_dir, home, agent, store) = setup();
-        let outcome = resolve(&agent, &store, &home, "s1", "/learn docs/api.md focus on auth").await;
+        let outcome = resolve(
+            &agent,
+            &store,
+            &home,
+            "s1",
+            "/learn docs/api.md focus on auth",
+        )
+        .await;
         let Some(PlatformSlashOutcome::AgentTurn(message)) = outcome else {
             panic!("expected agent turn expansion");
         };
@@ -498,7 +526,10 @@ mod tests {
         let Some(PlatformSlashOutcome::AgentTurn(message)) = outcome else {
             panic!("expected agent turn expansion");
         };
-        assert!(message.contains("the workflow we just went through"), "{message}");
+        assert!(
+            message.contains("the workflow we just went through"),
+            "{message}"
+        );
     }
 
     #[test]
@@ -526,7 +557,11 @@ mod tests {
         std::env::set_var("ULNCLAW_HOME", dir.path());
         crate::channel_directory::reset_for_tests();
         crate::channel_directory::record_channel(
-            "telegram", "chat-123", "Team Chat", "group", "m1",
+            "telegram",
+            "chat-123",
+            "Team Chat",
+            "group",
+            "m1",
         );
 
         let outcome = resolve(
@@ -584,9 +619,15 @@ mod tests {
         let (dir, home, agent, store) = setup();
         std::env::set_var("ULNCLAW_HOME", dir.path());
 
-        let outcome = resolve(&agent, &store, &home, "platform-telegram-chat-1", "/footer status")
-            .await
-            .expect("footer status resolves");
+        let outcome = resolve(
+            &agent,
+            &store,
+            &home,
+            "platform-telegram-chat-1",
+            "/footer status",
+        )
+        .await
+        .expect("footer status resolves");
         match outcome {
             PlatformSlashOutcome::Direct(reply) => {
                 assert!(reply.contains("runtime footer: off"), "{reply}");
@@ -596,9 +637,15 @@ mod tests {
             other => panic!("expected Direct, got {other:?}"),
         }
 
-        let outcome = resolve(&agent, &store, &home, "platform-telegram-chat-1", "/footer on")
-            .await
-            .expect("footer on resolves");
+        let outcome = resolve(
+            &agent,
+            &store,
+            &home,
+            "platform-telegram-chat-1",
+            "/footer on",
+        )
+        .await
+        .expect("footer on resolves");
         match outcome {
             PlatformSlashOutcome::Direct(reply) => {
                 assert!(reply.starts_with("runtime footer enabled"), "{reply}");
@@ -607,9 +654,15 @@ mod tests {
         }
         assert_eq!(crate::runtime_footer::enabled_latch(), Some(true));
 
-        let outcome = resolve(&agent, &store, &home, "platform-telegram-chat-1", "/footer sideways")
-            .await
-            .expect("footer bad arg resolves");
+        let outcome = resolve(
+            &agent,
+            &store,
+            &home,
+            "platform-telegram-chat-1",
+            "/footer sideways",
+        )
+        .await
+        .expect("footer bad arg resolves");
         match outcome {
             PlatformSlashOutcome::Direct(reply) => {
                 assert_eq!(reply, "usage: /footer [on|off|status]")
@@ -621,4 +674,3 @@ mod tests {
         crate::runtime_footer::clear_enabled_latch_for_tests();
     }
 }
-

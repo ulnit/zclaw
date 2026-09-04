@@ -48,7 +48,12 @@ fn load_dataset(path: &Path) -> Result<Vec<Value>, String> {
                 path.display()
             )
         })?;
-        if value.get("prompt").and_then(Value::as_str).unwrap_or("").is_empty() {
+        if value
+            .get("prompt")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .is_empty()
+        {
             return Err(format!(
                 "line {} of {} is missing a 'prompt' field",
                 lineno + 1,
@@ -122,37 +127,34 @@ fn scan_completed_prompts_by_content(output_dir: &Path) -> std::collections::BTr
 // workers run with save_trajectories=False / skip_memory=True)
 // ---------------------------------------------------------------------------
 
-async fn build_batch_agent(
-    opts: &BatchOptions,
-) -> Result<Arc<crate::agent::Agent>, String> {
+async fn build_batch_agent(opts: &BatchOptions) -> Result<Arc<crate::agent::Agent>, String> {
     let mut config = crate::config::UlncLawConfig::load(None).unwrap_or_default();
     if let Some(model) = &opts.model {
         config.model.model = model.clone();
     }
     let api_key = config.resolve_api_key();
     let base_url = config.resolve_base_url();
-    let provider: Arc<dyn crate::provider::Provider> =
-        if config.model.provider == "anthropic" {
-            let mut builder = crate::provider::anthropic::AnthropicProvider::builder()
-                .endpoint(&base_url)
-                .model(&config.model.model)
-                .name(&config.model.provider)
-                .max_retries(config.model.max_retries);
-            if let Some(ref key) = api_key {
-                builder = builder.api_key(key);
-            }
-            Arc::new(builder.build().map_err(|e| e.to_string())?)
-        } else {
-            let mut builder = crate::provider::openai::OpenAiProvider::builder()
-                .endpoint(&base_url)
-                .model(&config.model.model)
-                .name(&config.model.provider)
-                .max_retries(config.model.max_retries);
-            if let Some(ref key) = api_key {
-                builder = builder.api_key(key);
-            }
-            Arc::new(builder.build().map_err(|e| e.to_string())?)
-        };
+    let provider: Arc<dyn crate::provider::Provider> = if config.model.provider == "anthropic" {
+        let mut builder = crate::provider::anthropic::AnthropicProvider::builder()
+            .endpoint(&base_url)
+            .model(&config.model.model)
+            .name(&config.model.provider)
+            .max_retries(config.model.max_retries);
+        if let Some(ref key) = api_key {
+            builder = builder.api_key(key);
+        }
+        Arc::new(builder.build().map_err(|e| e.to_string())?)
+    } else {
+        let mut builder = crate::provider::openai::OpenAiProvider::builder()
+            .endpoint(&base_url)
+            .model(&config.model.model)
+            .name(&config.model.provider)
+            .max_retries(config.model.max_retries);
+        if let Some(ref key) = api_key {
+            builder = builder.api_key(key);
+        }
+        Arc::new(builder.build().map_err(|e| e.to_string())?)
+    };
 
     let mut registry = crate::tools::ToolRegistry::new();
     crate::tools::builtin::register_builtin_tools(&mut registry);
@@ -168,14 +170,14 @@ async fn build_batch_agent(
         .with_provider(provider.clone());
     context.set_tool_definitions(registry.definitions());
 
-    let agent = crate::agent::Agent::new(provider, registry).with_config(
-        crate::agent::AgentConfig {
+    let agent =
+        crate::agent::Agent::new(provider, registry).with_config(crate::agent::AgentConfig {
             max_iterations: opts.max_iterations.unwrap_or(config.agent.max_iterations),
             concurrent_tool_execution: config.agent.concurrent_tool_execution,
             max_concurrent_tools: config.agent.max_concurrent_tools,
             approval: false, // autonomous dataset runs (hermes batch semantics)
             context_budget_tokens: config.agent.context_budget_tokens,
-            persist: false,  // trajectories are saved by the runner itself
+            persist: false, // trajectories are saved by the runner itself
             source: "batch".to_string(),
             environment_probe: false,
             terminal_backend: config
@@ -184,9 +186,10 @@ async fn build_batch_agent(
                 .clone()
                 .unwrap_or_else(|| "local".to_string()),
             ..Default::default()
-        },
-    );
-    let agent = agent.with_tool_context(context).with_fallback_specs(&config.model.fallbacks);
+        });
+    let agent = agent
+        .with_tool_context(context)
+        .with_fallback_specs(&config.model.fallbacks);
     let agent = Arc::new(agent);
     agent.wire_runners();
     Ok(agent)
@@ -249,11 +252,19 @@ fn tool_result_is_success(content: &str) -> bool {
     if trimmed.starts_with('{') || trimmed.starts_with('[') {
         if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
             if let Some(object) = value.as_object() {
-                if object.get("error").map(|error| !error.is_null()).unwrap_or(false) {
+                if object
+                    .get("error")
+                    .map(|error| !error.is_null())
+                    .unwrap_or(false)
+                {
                     return false;
                 }
                 if let Some(inner) = object.get("content").and_then(Value::as_object) {
-                    if inner.get("error").map(|error| !error.is_null()).unwrap_or(false) {
+                    if inner
+                        .get("error")
+                        .map(|error| !error.is_null())
+                        .unwrap_or(false)
+                    {
                         return false;
                     }
                 }
@@ -319,8 +330,8 @@ pub fn convert_to_trajectory(
     let mut i = 0;
     // Skip the system prompt + the first user turn (already emitted above).
     while i < messages.len() {
-        let is_first_user = messages[i].role == Role::User
-            && messages[..i].iter().all(|m| m.role == Role::System);
+        let is_first_user =
+            messages[i].role == Role::User && messages[..i].iter().all(|m| m.role == Role::System);
         if is_first_user {
             i += 1;
             break;
@@ -526,7 +537,10 @@ pub async fn run(opts: BatchOptions) -> Result<(), String> {
         });
         println!("\n📊 RESUME SUMMARY");
         println!("   Original dataset size:     {before} prompts");
-        println!("   Already completed:         {} prompts", before - entries.len());
+        println!(
+            "   Already completed:         {} prompts",
+            before - entries.len()
+        );
         println!("   🎯 RESUMING WITH:          {} prompts", entries.len());
         if entries.is_empty() {
             println!("\n✅ All prompts have already been processed!");
@@ -550,10 +564,11 @@ pub async fn run(opts: BatchOptions) -> Result<(), String> {
     );
 
     let agent = build_batch_agent(&opts).await?;
-    let model = opts
-        .model
-        .clone()
-        .unwrap_or_else(|| crate::config::UlncLawConfig::load(None).map(|c| c.model.model).unwrap_or_default());
+    let model = opts.model.clone().unwrap_or_else(|| {
+        crate::config::UlncLawConfig::load(None)
+            .map(|c| c.model.model)
+            .unwrap_or_default()
+    });
     let start = std::time::Instant::now();
 
     // Parallel batches (hermes Pool over batch tasks); prompts inside a
@@ -613,7 +628,11 @@ pub async fn run(opts: BatchOptions) -> Result<(), String> {
         }
         let mut batch_ok = 0usize;
         for result in results {
-            if result.get("success").and_then(Value::as_bool).unwrap_or(false) {
+            if result
+                .get("success")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
                 total_succeeded += 1;
                 batch_ok += 1;
                 if let Some(index) = result.get("prompt_index").and_then(Value::as_u64) {
@@ -621,7 +640,9 @@ pub async fn run(opts: BatchOptions) -> Result<(), String> {
                 }
                 if let Some(stats) = result.get("tool_stats").and_then(Value::as_object) {
                     for (name, entry) in stats {
-                        let agg = aggregate_tool_stats.entry(name.clone()).or_insert((0, 0, 0));
+                        let agg = aggregate_tool_stats
+                            .entry(name.clone())
+                            .or_insert((0, 0, 0));
                         agg.0 += entry.get("count").and_then(Value::as_u64).unwrap_or(0);
                         agg.1 += entry.get("success").and_then(Value::as_u64).unwrap_or(0);
                         agg.2 += entry.get("failure").and_then(Value::as_u64).unwrap_or(0);
@@ -678,7 +699,7 @@ pub async fn run(opts: BatchOptions) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::{Message, Role, ToolCall, FunctionCall};
+    use crate::provider::{FunctionCall, Message, Role, ToolCall};
 
     fn msg(role: Role, content: &str) -> Message {
         Message {
@@ -797,7 +818,10 @@ mod tests {
     fn reasoning_stats_counts_scratchpads() {
         let messages = vec![
             msg(Role::Assistant, "plain"),
-            msg(Role::Assistant, "<REASONING_SCRATCHPAD>hmm</REASONING_SCRATCHPAD>"),
+            msg(
+                Role::Assistant,
+                "<REASONING_SCRATCHPAD>hmm</REASONING_SCRATCHPAD>",
+            ),
         ];
         let stats = extract_reasoning_stats(&messages);
         assert_eq!(stats["total_assistant_turns"], 2);

@@ -75,7 +75,11 @@ fn apply_aliases(dir: &mut Directory) {
             if let Some(entry) = entries.iter_mut().find(|entry| entry.id == chat_id) {
                 entry.name = friendly;
             } else {
-                let chat_type = if chat_id.ends_with("@g.us") { "group" } else { "dm" };
+                let chat_type = if chat_id.ends_with("@g.us") {
+                    "group"
+                } else {
+                    "dm"
+                };
                 entries.push(ChannelEntry {
                     id: chat_id,
                     name: friendly,
@@ -378,7 +382,10 @@ mod tests {
         // Exact name beats prefix.
         assert_eq!(resolve_by_name("slack", "Engineering"), Some("C222".into()));
         // '#' normalization (display label form).
-        assert_eq!(resolve_by_name("slack", "#engineering"), Some("C222".into()));
+        assert_eq!(
+            resolve_by_name("slack", "#engineering"),
+            Some("C222".into())
+        );
         // Ambiguous prefix falls back to unique substring.
         assert_eq!(resolve_by_name("slack", "team"), Some("C111".into()));
         assert_eq!(resolve_by_name("slack", "missing"), None);
@@ -401,10 +408,16 @@ mod tests {
         // A record after the alias file exists re-applies the overlay.
         record_channel("whatsapp", "123@g.us", "", "", "");
         let entries = list_channels(Some("whatsapp"));
-        let names: Vec<&str> = entries.iter().map(|(_, entry)| entry.name.as_str()).collect();
+        let names: Vec<&str> = entries
+            .iter()
+            .map(|(_, entry)| entry.name.as_str())
+            .collect();
         assert!(names.contains(&"Family"));
         assert!(names.contains(&"Pre-named"));
-        assert_eq!(resolve_by_name("whatsapp", "family"), Some("123@g.us".into()));
+        assert_eq!(
+            resolve_by_name("whatsapp", "family"),
+            Some("123@g.us".into())
+        );
     }
 
     #[test]

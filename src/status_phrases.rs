@@ -148,7 +148,12 @@ impl StatusPhrasesSection {
     }
 }
 
-fn merge_cleaned(catalog: &mut StatusPhraseCatalog, surface: &str, phrases: Vec<String>, replace: bool) {
+fn merge_cleaned(
+    catalog: &mut StatusPhraseCatalog,
+    surface: &str,
+    phrases: Vec<String>,
+    replace: bool,
+) {
     if phrases.is_empty() {
         return;
     }
@@ -183,7 +188,11 @@ fn merge_phrase_lists(
 
 /// Merge one config section into `catalog` (hermes
 /// `_merge_phrase_config`): files first, then inline phrases.
-fn merge_section(catalog: &mut StatusPhraseCatalog, section: &StatusPhrasesSection, home: Option<&Path>) {
+fn merge_section(
+    catalog: &mut StatusPhraseCatalog,
+    section: &StatusPhrasesSection,
+    home: Option<&Path>,
+) {
     let mode = section.mode.as_deref();
     if let Some(home) = home {
         for raw in section.path.iter().chain(section.paths.iter()) {
@@ -213,13 +222,9 @@ fn relative_path_under(base: &Path, raw: &str) -> Option<PathBuf> {
     }) {
         return None;
     }
-    let base = base
-        .canonicalize()
-        .unwrap_or_else(|_| base.to_path_buf());
+    let base = base.canonicalize().unwrap_or_else(|_| base.to_path_buf());
     let resolved = base.join(candidate);
-    let resolved = resolved
-        .canonicalize()
-        .unwrap_or_else(|_| resolved.clone());
+    let resolved = resolved.canonicalize().unwrap_or_else(|_| resolved.clone());
     if resolved.starts_with(&base) {
         Some(resolved)
     } else {
@@ -232,7 +237,10 @@ fn relative_path_under(base: &Path, raw: &str) -> Option<PathBuf> {
 fn iter_phrase_files(path: &Path) -> Vec<PathBuf> {
     let is_yaml = |p: &Path| {
         matches!(
-            p.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).as_deref(),
+            p.extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase())
+                .as_deref(),
             Some("yaml") | Some("yml")
         )
     };
@@ -290,10 +298,21 @@ fn merge_phrase_file(catalog: &mut StatusPhraseCatalog, path: &Path, inherited_m
             })
             .unwrap_or_default()
     };
-    merge_phrase_lists(catalog, &list_for("status"), &list_for("generic"), mode, None);
+    merge_phrase_lists(
+        catalog,
+        &list_for("status"),
+        &list_for("generic"),
+        mode,
+        None,
+    );
 }
 
-fn merge_phrase_paths(catalog: &mut StatusPhraseCatalog, raw: &str, home: &Path, inherited_mode: Option<&str>) {
+fn merge_phrase_paths(
+    catalog: &mut StatusPhraseCatalog,
+    raw: &str,
+    home: &Path,
+    inherited_mode: Option<&str>,
+) {
     let Some(resolved) = relative_path_under(home, raw) else {
         return;
     };
@@ -386,7 +405,11 @@ pub fn choose_status_phrase(
     let fallback = StatusPhraseCatalog::fallback();
     let catalog = catalog.unwrap_or(&fallback);
     let category = classify_status_context(kind);
-    let mut candidates: Vec<String> = if !catalog.surface(category).map(|v| v.is_empty()).unwrap_or(true) {
+    let mut candidates: Vec<String> = if !catalog
+        .surface(category)
+        .map(|v| v.is_empty())
+        .unwrap_or(true)
+    {
         catalog.surface(category).cloned().unwrap_or_default()
     } else if !catalog.generic.is_empty() {
         catalog.generic.clone()
@@ -402,7 +425,11 @@ pub fn choose_status_phrase(
             candidates = fresh;
         } else {
             // Everything was recent — fall back to the full list.
-            candidates = if !catalog.surface(category).map(|v| v.is_empty()).unwrap_or(true) {
+            candidates = if !catalog
+                .surface(category)
+                .map(|v| v.is_empty())
+                .unwrap_or(true)
+            {
                 catalog.surface(category).cloned().unwrap_or_default()
             } else {
                 catalog.generic.clone()
@@ -579,9 +606,7 @@ mod tests {
             status: vec!["platform status".into()],
             ..Default::default()
         });
-        display
-            .platforms
-            .insert("telegram".into(), override_cfg);
+        display.platforms.insert("telegram".into(), override_cfg);
 
         // Platform-less resolution keeps legacy + global lines.
         let catalog = resolve_catalog(&display, None, temp.path());

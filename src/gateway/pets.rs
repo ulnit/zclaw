@@ -84,7 +84,10 @@ pub async fn spritesheet(Path(slug): Path<String>) -> Response {
         "image/webp"
     };
     (
-        [(header::CONTENT_TYPE, mime), (header::CACHE_CONTROL, "max-age=300")],
+        [
+            (header::CONTENT_TYPE, mime),
+            (header::CACHE_CONTROL, "max-age=300"),
+        ],
         bytes,
     )
         .into_response()
@@ -187,7 +190,10 @@ fn lookup_job(id: &str) -> Option<Arc<Mutex<HatchJob>>> {
 fn encode_png(image: &RgbaImage) -> Option<Vec<u8>> {
     let mut buffer: Vec<u8> = Vec::new();
     image
-        .write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageFormat::Png)
+        .write_to(
+            &mut std::io::Cursor::new(&mut buffer),
+            image::ImageFormat::Png,
+        )
         .ok()?;
     Some(buffer)
 }
@@ -196,7 +202,9 @@ fn encode_png(image: &RgbaImage) -> Option<Vec<u8>> {
 /// name/slug, records progress events on the job, adopts the pet on success
 /// (hermes CLI parity: hatch ⇒ set active).
 fn begin_hatch_phase(job_id: &str, base: RgbaImage, endpoint: ImageGenEndpoint) {
-    let Some(job) = lookup_job(job_id) else { return };
+    let Some(job) = lookup_job(job_id) else {
+        return;
+    };
     let (prompt, style, name, cancel) = {
         let Ok(mut guard) = job.lock() else { return };
         let name = if guard.name.trim().is_empty() {
@@ -307,12 +315,7 @@ pub async fn start_hatch(Json(body): Json<StartHatchRequest>) -> Response {
     let job = Arc::new(Mutex::new(HatchJob {
         prompt: prompt.clone(),
         style: body.style.clone(),
-        name: body
-            .name
-            .as_deref()
-            .unwrap_or("")
-            .trim()
-            .to_string(),
+        name: body.name.as_deref().unwrap_or("").trim().to_string(),
         status: HatchStatus::GeneratingDrafts,
         drafts: Vec::new(),
         progress: VecDeque::new(),
@@ -486,7 +489,11 @@ pub async fn pick_draft(Path(id): Path<String>, Json(body): Json<PickDraftReques
                 None,
             );
         };
-        if let Some(name) = body.name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty()) {
+        if let Some(name) = body
+            .name
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty())
+        {
             guard.name = name;
         }
         bytes

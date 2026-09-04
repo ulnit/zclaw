@@ -58,9 +58,7 @@ impl ConfirmChoice {
 /// Handler run when a confirm resolves: receives the choice, returns an
 /// optional follow-up message for the platform.
 pub type ConfirmHandler = Box<
-    dyn Fn(ConfirmChoice) -> Pin<Box<dyn Future<Output = Option<String>> + Send>>
-        + Send
-        + Sync,
+    dyn Fn(ConfirmChoice) -> Pin<Box<dyn Future<Output = Option<String>> + Send>> + Send + Sync,
 >;
 
 struct PendingEntry {
@@ -81,12 +79,7 @@ fn pending() -> MutexGuard<'static, HashMap<String, PendingEntry>> {
 /// Register a pending slash-command confirmation. Overwrites any prior
 /// pending confirm for the same session — a new confirmable command
 /// supersedes the stale one (hermes `register`).
-pub fn register(
-    session_key: &str,
-    confirm_id: &str,
-    command: &str,
-    handler: ConfirmHandler,
-) {
+pub fn register(session_key: &str, confirm_id: &str, command: &str, handler: ConfirmHandler) {
     pending().insert(
         session_key.to_string(),
         PendingEntry {
@@ -236,9 +229,20 @@ mod tests {
         let _guard = confirm_test_lock();
         clear_all_for_tests();
         let counter = Arc::new(AtomicUsize::new(0));
-        register("sess3", "newer", "reload-mcp", echo_handler(counter.clone()));
+        register(
+            "sess3",
+            "newer",
+            "reload-mcp",
+            echo_handler(counter.clone()),
+        );
         // Stale button from a superseded prompt.
-        let out = resolve("sess3", "older", ConfirmChoice::Once, Duration::from_secs(300)).await;
+        let out = resolve(
+            "sess3",
+            "older",
+            ConfirmChoice::Once,
+            Duration::from_secs(300),
+        )
+        .await;
         assert!(out.is_none());
         assert_eq!(counter.load(Ordering::SeqCst), 0);
         // But the mismatch consumed nothing? hermes returns None WITHOUT
@@ -266,9 +270,14 @@ mod tests {
         register("sess5", "c2", "reload-mcp", echo_handler(counter.clone()));
         let info = get_pending("sess5").unwrap();
         assert_eq!(info.confirm_id, "c2");
-        let out = resolve("sess5", "c2", ConfirmChoice::Always, Duration::from_secs(300))
-            .await
-            .unwrap();
+        let out = resolve(
+            "sess5",
+            "c2",
+            ConfirmChoice::Always,
+            Duration::from_secs(300),
+        )
+        .await
+        .unwrap();
         assert_eq!(out, "handled:always");
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
@@ -292,7 +301,10 @@ mod tests {
     #[test]
     fn choice_parsing() {
         assert_eq!(ConfirmChoice::parse("once"), Some(ConfirmChoice::Once));
-        assert_eq!(ConfirmChoice::parse(" ALWAYS "), Some(ConfirmChoice::Always));
+        assert_eq!(
+            ConfirmChoice::parse(" ALWAYS "),
+            Some(ConfirmChoice::Always)
+        );
         assert_eq!(ConfirmChoice::parse("cancel"), Some(ConfirmChoice::Cancel));
         assert_eq!(ConfirmChoice::parse("maybe"), None);
     }

@@ -84,9 +84,7 @@ fn suggest_similar(dir: &Path, filename: &str) -> Vec<String> {
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         let lower = name.to_lowercase();
-        if lower.contains(&needle)
-            || needle.contains(&lower)
-            || levenshtein_close(&lower, &needle)
+        if lower.contains(&needle) || needle.contains(&lower) || levenshtein_close(&lower, &needle)
         {
             suggestions.push(name);
         }
@@ -135,7 +133,11 @@ fn read_file_impl(
         let hint = if suggestions.is_empty() {
             String::new()
         } else {
-            format!(" Similar files in {}: {}", dir.display(), suggestions.join(", "))
+            format!(
+                " Similar files in {}: {}",
+                dir.display(),
+                suggestions.join(", ")
+            )
         };
         return Ok(json!({
             "success": false,
@@ -197,7 +199,10 @@ fn read_file_impl(
     for (idx, line) in lines.iter().enumerate().skip(start).take(limit) {
         // Long lines get clamped with a marker (hermes file_operations).
         let display: String = if line.chars().count() > limits.max_line_length {
-            line.chars().take(limits.max_line_length).collect::<String>() + "... [truncated]"
+            line.chars()
+                .take(limits.max_line_length)
+                .collect::<String>()
+                + "... [truncated]"
         } else {
             (*line).to_string()
         };
@@ -215,7 +220,10 @@ fn read_file_impl(
     // file_read semantics).
     let out = crate::redact::redact_sensitive_text(
         &out,
-        crate::redact::RedactOpts { file_read: true, ..Default::default() },
+        crate::redact::RedactOpts {
+            file_read: true,
+            ..Default::default()
+        },
     );
     let mut result = json!({
         "success": true,
@@ -264,7 +272,11 @@ fn write_file_tool() -> crate::tools::Tool {
         .expect("write_file builds")
 }
 
-fn write_file_impl(ctx: &Arc<ToolContext>, raw_path: &str, content: &str) -> Result<serde_json::Value> {
+fn write_file_impl(
+    ctx: &Arc<ToolContext>,
+    raw_path: &str,
+    content: &str,
+) -> Result<serde_json::Value> {
     let path = ctx.resolve_path(raw_path);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).ok();
@@ -353,8 +365,12 @@ fn patch_tool() -> crate::tools::Tool {
 /// Check whether an edit was already applied (hermes is_already_applied).
 fn already_applied(content: &str, old: &str, new: &str) -> bool {
     !new.is_empty()
-        && !crate::tools::fuzzy::fuzzy_find(content, new).matches.is_empty()
-        && crate::tools::fuzzy::fuzzy_find(content, old).matches.is_empty()
+        && !crate::tools::fuzzy::fuzzy_find(content, new)
+            .matches
+            .is_empty()
+        && crate::tools::fuzzy::fuzzy_find(content, old)
+            .matches
+            .is_empty()
 }
 
 fn make_diff(path: &str, before: &str, after: &str) -> String {
@@ -403,7 +419,9 @@ fn patch_replace(
 ) -> Result<serde_json::Value> {
     let path = ctx.resolve_path(raw_path);
     if !path.exists() {
-        return Ok(json!({"success": false, "error": format!("File not found: {}", path.display())}));
+        return Ok(
+            json!({"success": false, "error": format!("File not found: {}", path.display())}),
+        );
     }
     let content = std::fs::read_to_string(&path)
         .map_err(|e| crate::error::AgentError::tool(format!("read failed: {}", e)))?;
@@ -462,12 +480,9 @@ fn patch_replace(
     }
     // Escape-drift guard on any non-exact match.
     if hit.strategy != "exact" {
-        if let Some(drift) = crate::tools::fuzzy::detect_escape_drift(
-            &content,
-            &hit.matches,
-            old_string,
-            new_string,
-        ) {
+        if let Some(drift) =
+            crate::tools::fuzzy::detect_escape_drift(&content, &hit.matches, old_string, new_string)
+        {
             return Ok(json!({"success": false, "error": drift}));
         }
     }
@@ -490,7 +505,11 @@ fn patch_replace(
         let replacement = if hit.strategy == "exact" || hit.strategy == "unicode_normalized" {
             effective_new.clone()
         } else {
-            crate::tools::fuzzy::reindent_replacement(&content[start..end], old_string, &effective_new)
+            crate::tools::fuzzy::reindent_replacement(
+                &content[start..end],
+                old_string,
+                &effective_new,
+            )
         };
         updated.replace_range(start..end, &replacement);
     }
@@ -568,7 +587,9 @@ fn apply_v4a_patch(ctx: &Arc<ToolContext>, patch: &str) -> Result<serde_json::Va
         ops.push(op);
     }
     if ops.is_empty() {
-        return Ok(json!({"success": false, "error": "No operations found in patch. Expected '*** Begin Patch' ... '*** End Patch' with '*** Update File:' sections."}));
+        return Ok(
+            json!({"success": false, "error": "No operations found in patch. Expected '*** Begin Patch' ... '*** End Patch' with '*** Update File:' sections."}),
+        );
     }
 
     let mut applied = Vec::new();
@@ -577,7 +598,9 @@ fn apply_v4a_patch(ctx: &Arc<ToolContext>, patch: &str) -> Result<serde_json::Va
         match op.kind.as_str() {
             "add" => {
                 if path.exists() {
-                    return Ok(json!({"success": false, "error": format!("Add File failed: {} already exists", op.path)}));
+                    return Ok(
+                        json!({"success": false, "error": format!("Add File failed: {} already exists", op.path)}),
+                    );
                 }
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent).ok();
@@ -594,7 +617,9 @@ fn apply_v4a_patch(ctx: &Arc<ToolContext>, patch: &str) -> Result<serde_json::Va
             }
             "delete" => {
                 if !path.exists() {
-                    return Ok(json!({"success": false, "error": format!("Delete File failed: {} not found", op.path)}));
+                    return Ok(
+                        json!({"success": false, "error": format!("Delete File failed: {} not found", op.path)}),
+                    );
                 }
                 std::fs::remove_file(&path)
                     .map_err(|e| crate::error::AgentError::tool(format!("delete file: {}", e)))?;
@@ -603,7 +628,9 @@ fn apply_v4a_patch(ctx: &Arc<ToolContext>, patch: &str) -> Result<serde_json::Va
             _ => {
                 // update: hunks of context(-/+/ ) lines
                 if !path.exists() {
-                    return Ok(json!({"success": false, "error": format!("Update File failed: {} not found", op.path)}));
+                    return Ok(
+                        json!({"success": false, "error": format!("Update File failed: {} not found", op.path)}),
+                    );
                 }
                 let mut content = std::fs::read_to_string(&path)
                     .map_err(|e| crate::error::AgentError::tool(format!("read: {}", e)))?;
@@ -726,7 +753,9 @@ fn search_files_impl(
 ) -> Result<serde_json::Value> {
     let root = ctx.resolve_path(raw_path);
     if !root.exists() {
-        return Ok(json!({"success": false, "error": format!("Path not found: {}", root.display())}));
+        return Ok(
+            json!({"success": false, "error": format!("Path not found: {}", root.display())}),
+        );
     }
 
     if target == "files" {
@@ -744,7 +773,16 @@ fn search_files_impl(
     let mut total_matches = 0usize;
 
     if root.is_file() {
-        collect_file_matches(&root, &root, &re, output_mode, context_lines, limit, &mut results, &mut total_matches);
+        collect_file_matches(
+            &root,
+            &root,
+            &re,
+            output_mode,
+            context_lines,
+            limit,
+            &mut results,
+            &mut total_matches,
+        );
     } else {
         'walk: for entry in walkdir::WalkDir::new(&root)
             .follow_links(false)
@@ -760,7 +798,10 @@ fn search_files_impl(
             }
             let path = entry.path();
             if let Some(ref glob_pat) = file_glob {
-                let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
                 if let Ok(pat) = glob::Pattern::new(glob_pat) {
                     if !pat.matches(&name) {
                         continue;
@@ -773,7 +814,16 @@ fn search_files_impl(
                     continue;
                 }
             }
-            collect_file_matches(&root, path, &re, output_mode, context_lines, limit, &mut results, &mut total_matches);
+            collect_file_matches(
+                &root,
+                path,
+                &re,
+                output_mode,
+                context_lines,
+                limit,
+                &mut results,
+                &mut total_matches,
+            );
             if results.len() >= limit + offset {
                 break 'walk;
             }
@@ -820,7 +870,12 @@ fn collect_file_matches(
                 let start = idx.saturating_sub(context_lines);
                 let end = (idx + context_lines + 1).min(lines.len());
                 for i in start..end {
-                    block.push(format!("{}{}|{}", if i == idx { ">" } else { " " }, i + 1, lines[i]));
+                    block.push(format!(
+                        "{}{}|{}",
+                        if i == idx { ">" } else { " " },
+                        i + 1,
+                        lines[i]
+                    ));
                 }
                 results.push(json!({
                     "file": rel,
@@ -840,7 +895,12 @@ fn collect_file_matches(
     let _ = matched_lines;
 }
 
-fn file_search(root: &Path, pattern: &str, limit: usize, offset: usize) -> Result<serde_json::Value> {
+fn file_search(
+    root: &Path,
+    pattern: &str,
+    limit: usize,
+    offset: usize,
+) -> Result<serde_json::Value> {
     let pat = match glob::Pattern::new(pattern) {
         Ok(p) => p,
         Err(e) => return Ok(json!({"success": false, "error": format!("Invalid glob: {}", e)})),
@@ -871,12 +931,7 @@ fn file_search(root: &Path, pattern: &str, limit: usize, offset: usize) -> Resul
         .into_iter()
         .skip(offset)
         .take(limit)
-        .map(|(_, p)| {
-            p.strip_prefix(root)
-                .unwrap_or(&p)
-                .display()
-                .to_string()
-        })
+        .map(|(_, p)| p.strip_prefix(root).unwrap_or(&p).display().to_string())
         .collect();
     Ok(json!({
         "success": true,
@@ -913,7 +968,10 @@ mod tests {
         );
         let result = apply_v4a_patch(&ctx, &patch).unwrap();
         assert_eq!(result["success"], json!(true));
-        assert_eq!(std::fs::read_to_string(&file).unwrap(), "alpha\nBETA\ngamma\n");
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "alpha\nBETA\ngamma\n"
+        );
     }
 
     #[test]

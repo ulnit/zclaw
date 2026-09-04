@@ -636,7 +636,10 @@ pub fn provider_to_models_dev(provider: &str) -> Option<&'static str> {
 // Raw-entry helpers
 // ---------------------------------------------------------------------------
 
-fn provider_models<'a>(data: &'a Value, mdev_id: &str) -> Option<&'a serde_json::Map<String, Value>> {
+fn provider_models<'a>(
+    data: &'a Value,
+    mdev_id: &str,
+) -> Option<&'a serde_json::Map<String, Value>> {
     data.get(mdev_id)?.get("models")?.as_object()
 }
 
@@ -740,7 +743,10 @@ pub fn get_model_capabilities(provider: &str, model: &str) -> Option<ModelCapabi
     let models = provider_models(&data, &mdev_id)?;
     let (_, entry) = find_model_entry(models, model)?;
 
-    let supports_tools = entry.get("tool_call").and_then(|v| v.as_bool()).unwrap_or(false);
+    let supports_tools = entry
+        .get("tool_call")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     // Vision: prefer explicit modalities.input; the older `attachment` flag
     // can be stale or too broad for image routing.
     let input_mods = entry
@@ -749,9 +755,15 @@ pub fn get_model_capabilities(provider: &str, model: &str) -> Option<ModelCapabi
         .and_then(|m| m.as_array());
     let supports_vision = match input_mods {
         Some(mods) => mods.iter().any(|m| m.as_str() == Some("image")),
-        None => entry.get("attachment").and_then(|v| v.as_bool()).unwrap_or(false),
+        None => entry
+            .get("attachment")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
     };
-    let supports_reasoning = entry.get("reasoning").and_then(|v| v.as_bool()).unwrap_or(false);
+    let supports_reasoning = entry
+        .get("reasoning")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     let limit = entry.get("limit");
     let context_window = positive_int(limit.and_then(|l| l.get("context"))).unwrap_or(200_000);
@@ -850,7 +862,11 @@ pub fn list_agentic_models(provider: &str) -> Vec<String> {
         if should_hide_from_provider_catalog(provider, id) {
             continue;
         }
-        if !entry.get("tool_call").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if !entry
+            .get("tool_call")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
             continue;
         }
         if noise_patterns().is_match(id) {
@@ -940,22 +956,43 @@ pub fn parse_model_info(model_id: &str, raw: &Value, provider_id: &str) -> Model
             .unwrap_or("")
             .to_string(),
         provider_id: provider_id.to_string(),
-        reasoning: raw.get("reasoning").and_then(|v| v.as_bool()).unwrap_or(false),
-        tool_call: raw.get("tool_call").and_then(|v| v.as_bool()).unwrap_or(false),
-        attachment: raw.get("attachment").and_then(|v| v.as_bool()).unwrap_or(false),
-        temperature: raw.get("temperature").and_then(|v| v.as_bool()).unwrap_or(false),
+        reasoning: raw
+            .get("reasoning")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        tool_call: raw
+            .get("tool_call")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        attachment: raw
+            .get("attachment")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        temperature: raw
+            .get("temperature")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
         structured_output: raw
             .get("structured_output")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
-        open_weights: raw.get("open_weights").and_then(|v| v.as_bool()).unwrap_or(false),
+        open_weights: raw
+            .get("open_weights")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
         input_modalities: string_list(modalities.and_then(|m| m.get("input"))),
         output_modalities: string_list(modalities.and_then(|m| m.get("output"))),
         context_window: positive_int(limit.and_then(|l| l.get("context"))).unwrap_or(0),
         max_output: positive_int(limit.and_then(|l| l.get("output"))).unwrap_or(0),
         max_input: positive_int(limit.and_then(|l| l.get("input"))),
-        cost_input: cost.and_then(|c| c.get("input")).and_then(|v| v.as_f64()).unwrap_or(0.0),
-        cost_output: cost.and_then(|c| c.get("output")).and_then(|v| v.as_f64()).unwrap_or(0.0),
+        cost_input: cost
+            .and_then(|c| c.get("input"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0),
+        cost_output: cost
+            .and_then(|c| c.get("output"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0),
         cost_cache_read: cost_f64("cache_read"),
         cost_cache_write: cost_f64("cache_write"),
         knowledge_cutoff: raw
@@ -1109,10 +1146,16 @@ mod tests {
         for clean in ["gpt-5", "gpt-5-mini", "claude-4-opus", "imagegen-pro"] {
             assert!(!re.is_match(clean), "should not be noise: {clean}");
         }
-        assert!(should_hide_from_provider_catalog("google", "gemini-2.0-flash"));
+        assert!(should_hide_from_provider_catalog(
+            "google",
+            "gemini-2.0-flash"
+        ));
         assert!(should_hide_from_provider_catalog("Gemini", "gemma-3-4b-it"));
         assert!(!should_hide_from_provider_catalog("google", "gemini-3-pro"));
-        assert!(!should_hide_from_provider_catalog("openai", "gemini-2.0-flash"));
+        assert!(!should_hide_from_provider_catalog(
+            "openai",
+            "gemini-2.0-flash"
+        ));
     }
 
     #[test]
@@ -1222,7 +1265,13 @@ mod tests {
             assert!(agentic.contains(&"gpt-5".to_string()));
             assert!(agentic.contains(&"GPT-5-Mini".to_string()));
             assert!(!agentic.contains(&"no-tools-model".to_string()));
-            for noisy in ["gpt-5-tts", "gpt-embedding-2", "gpt-live-preview", "gpt-5-image", "gpt-preview-2401-x"] {
+            for noisy in [
+                "gpt-5-tts",
+                "gpt-embedding-2",
+                "gpt-live-preview",
+                "gpt-5-image",
+                "gpt-preview-2401-x",
+            ] {
                 assert!(!agentic.contains(&noisy.to_string()), "{noisy} leaked");
             }
 
@@ -1231,8 +1280,10 @@ mod tests {
             assert!(goog.contains(&"gemini-3-pro".to_string()));
             assert!(!goog.contains(&"gemini-2.0-flash".to_string()));
             assert!(!goog.contains(&"gemma-3-4b-it".to_string()));
-            assert!(list_agentic_models("gemini").is_empty() ||
-                !list_agentic_models("gemini").contains(&"gemini-2.0-flash".to_string()));
+            assert!(
+                list_agentic_models("gemini").is_empty()
+                    || !list_agentic_models("gemini").contains(&"gemini-2.0-flash".to_string())
+            );
 
             // Provider info: mapped name + unmapped identity fallback.
             let openai_info = get_provider_info("openai", false).unwrap();
@@ -1246,7 +1297,10 @@ mod tests {
             // Model info: cost/capability formatting + case-insensitive match
             // through an unmapped provider ID.
             let info = get_model_info("openai", "gpt-5").unwrap();
-            assert_eq!(info.format_cost(), "$1.25/M in, $10.00/M out, cache read $0.12/M");
+            assert_eq!(
+                info.format_cost(),
+                "$1.25/M in, $10.00/M out, cache read $0.12/M"
+            );
             assert!(info.format_capabilities().contains("reasoning"));
             let ci = get_model_info("acme-custom", "ACME-CHAT").unwrap();
             assert_eq!(ci.id, "acme-chat");

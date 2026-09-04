@@ -49,25 +49,63 @@ const MAX_FILES: u64 = 50_000;
 /// Default excludes written to `store/info/exclude`.
 pub const DEFAULT_EXCLUDES: &[&str] = &[
     // Dependency / build output
-    "node_modules/", "dist/", "build/", "target/", "out/", ".next/", ".nuxt/",
+    "node_modules/",
+    "dist/",
+    "build/",
+    "target/",
+    "out/",
+    ".next/",
+    ".nuxt/",
     // Caches
-    "__pycache__/", "*.pyc", "*.pyo", ".cache/", ".pytest_cache/", ".mypy_cache/",
-    ".ruff_cache/", "coverage/", ".coverage",
+    "__pycache__/",
+    "*.pyc",
+    "*.pyo",
+    ".cache/",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    ".ruff_cache/",
+    "coverage/",
+    ".coverage",
     // Virtualenvs
-    ".venv/", "venv/", "env/",
+    ".venv/",
+    "venv/",
+    "env/",
     // VCS
-    ".git/", ".hg/", ".svn/",
+    ".git/",
+    ".hg/",
+    ".svn/",
     // Worktrees (don't recursively snapshot siblings)
     ".worktrees/",
     // Native / compiled binaries
-    "*.so", "*.dylib", "*.dll", "*.o", "*.a", "*.jar", "*.class", "*.exe", "*.obj",
+    "*.so",
+    "*.dylib",
+    "*.dll",
+    "*.o",
+    "*.a",
+    "*.jar",
+    "*.class",
+    "*.exe",
+    "*.obj",
     // Media / large binaries
-    "*.mp4", "*.mov", "*.mkv", "*.webm", "*.zip", "*.tar", "*.tar.gz", "*.tgz",
-    "*.7z", "*.rar", "*.iso",
+    "*.mp4",
+    "*.mov",
+    "*.mkv",
+    "*.webm",
+    "*.zip",
+    "*.tar",
+    "*.tar.gz",
+    "*.tgz",
+    "*.7z",
+    "*.rar",
+    "*.iso",
     // Secrets
-    ".env", ".env.*", ".env.local", ".env.*.local",
+    ".env",
+    ".env.*",
+    ".env.local",
+    ".env.*.local",
     // OS junk
-    ".DS_Store", "Thumbs.db",
+    ".DS_Store",
+    "Thumbs.db",
     // Logs
     "*.log",
 ];
@@ -169,7 +207,10 @@ fn project_hash(working_dir: &str) -> String {
     let abs = normalize_path(working_dir);
     let mut hasher = Sha256::new();
     hasher.update(abs.to_string_lossy().as_bytes());
-    hasher.finalize()[..8].iter().map(|b| format!("{:02x}", b)).collect()
+    hasher.finalize()[..8]
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect()
 }
 
 fn store_path(base: &Path) -> PathBuf {
@@ -185,7 +226,9 @@ fn ref_name(dir_hash: &str) -> String {
 }
 
 fn project_meta_path(store: &Path, dir_hash: &str) -> PathBuf {
-    store.join(PROJECTS_DIRNAME).join(format!("{}.json", dir_hash))
+    store
+        .join(PROJECTS_DIRNAME)
+        .join(format!("{}.json", dir_hash))
 }
 
 fn valid_commit_hash(hash: &str) -> bool {
@@ -207,7 +250,12 @@ fn now_secs_f64() -> f64 {
 /// Isolate git from the user's global/system config.  Settings like
 /// `commit.gpgsign` or credential helpers would break background snapshots
 /// or spawn interactive prompts mid-session.
-fn apply_git_env(cmd: &mut tokio::process::Command, store: &Path, workdir: &Path, index_file: Option<&Path>) {
+fn apply_git_env(
+    cmd: &mut tokio::process::Command,
+    store: &Path,
+    workdir: &Path,
+    index_file: Option<&Path>,
+) {
     cmd.env("GIT_DIR", store);
     cmd.env("GIT_WORK_TREE", workdir);
     cmd.env_remove("GIT_NAMESPACE");
@@ -242,7 +290,11 @@ async fn run_git(
     if !workdir.is_dir() {
         let msg = format!("working directory not found: {}", workdir.display());
         debug!("git skipped: {} ({})", args.join(" "), msg);
-        return GitResult { ok: false, stdout: String::new(), stderr: msg };
+        return GitResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: msg,
+        };
     }
     let mut cmd = tokio::process::Command::new("git");
     cmd.args(args)
@@ -264,11 +316,19 @@ async fn run_git(
             }
             GitResult { ok, stdout, stderr }
         }
-        Ok(Err(e)) => GitResult { ok: false, stdout: String::new(), stderr: e.to_string() },
+        Ok(Err(e)) => GitResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: e.to_string(),
+        },
         Err(_) => GitResult {
             ok: false,
             stdout: String::new(),
-            stderr: format!("git timed out after {}s: {}", GIT_TIMEOUT_SECS, args.join(" ")),
+            stderr: format!(
+                "git timed out after {}s: {}",
+                GIT_TIMEOUT_SECS,
+                args.join(" ")
+            ),
         },
     }
 }
@@ -482,7 +542,9 @@ impl CheckpointManager {
 
         // Skip root, home, and other overly broad directories.
         let too_broad = abs_str == "/"
-            || dirs::home_dir().map(|h| abs_str == h.to_string_lossy()).unwrap_or(false);
+            || dirs::home_dir()
+                .map(|h| abs_str == h.to_string_lossy())
+                .unwrap_or(false);
         if too_broad {
             debug!("checkpoint skipped: directory too broad ({})", abs_str);
             return false;
@@ -506,11 +568,20 @@ impl CheckpointManager {
         let candidate = if path.is_dir() {
             path.clone()
         } else {
-            path.parent().map(Path::to_path_buf).unwrap_or_else(|| path.clone())
+            path.parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| path.clone())
         };
         const MARKERS: &[&str] = &[
-            ".git", "pyproject.toml", "package.json", "Cargo.toml", "go.mod",
-            "Makefile", "pom.xml", ".hg", "Gemfile",
+            ".git",
+            "pyproject.toml",
+            "package.json",
+            "Cargo.toml",
+            "go.mod",
+            "Makefile",
+            "pom.xml",
+            ".hg",
+            "Gemfile",
         ];
         let mut check = candidate.clone();
         while check != check.parent().unwrap_or(Path::new("")) {
@@ -537,7 +608,10 @@ impl CheckpointManager {
         let limit = self.max_snapshots.to_string();
         let res = run_git(
             &["log", &git_ref, "--format=%H|%h|%aI|%s", "-n", &limit],
-            &store, &abs_dir, None, &[128, 129],
+            &store,
+            &abs_dir,
+            None,
+            &[128, 129],
         )
         .await;
         if !res.ok || res.stdout.is_empty() {
@@ -561,7 +635,10 @@ impl CheckpointManager {
             let from = format!("{}~1", parts[0]);
             let stat = run_git(
                 &["diff", "--shortstat", &from, parts[0]],
-                &store, &abs_dir, None, &[128, 129],
+                &store,
+                &abs_dir,
+                None,
+                &[128, 129],
             )
             .await;
             if stat.ok && !stat.stdout.is_empty() {
@@ -589,21 +666,37 @@ impl CheckpointManager {
         if !store.join("HEAD").exists() {
             return Err("no checkpoints exist for this directory".into());
         }
-        let probe = run_git(&["cat-file", "-t", commit_hash], &store, &abs_dir, None, &[]).await;
+        let probe = run_git(
+            &["cat-file", "-t", commit_hash],
+            &store,
+            &abs_dir,
+            None,
+            &[],
+        )
+        .await;
         if !probe.ok {
             return Err(format!("checkpoint '{}' not found", commit_hash));
         }
 
         // Pre-rollback snapshot so you can undo the undo.
-        self.take(&abs_str, &format!("pre-rollback snapshot (restoring to {})", &commit_hash[..commit_hash.len().min(8)]))
-            .await;
+        self.take(
+            &abs_str,
+            &format!(
+                "pre-rollback snapshot (restoring to {})",
+                &commit_hash[..commit_hash.len().min(8)]
+            ),
+        )
+        .await;
 
         let dir_hash = project_hash(&abs_str);
         let idx = index_path(&store, &dir_hash);
         let target = file_path.unwrap_or(".");
         let res = run_git(
             &["checkout", commit_hash, "--", target],
-            &store, &abs_dir, Some(&idx), &[],
+            &store,
+            &abs_dir,
+            Some(&idx),
+            &[],
         )
         .await;
         if !res.ok {
@@ -611,10 +704,17 @@ impl CheckpointManager {
         }
         let reason_res = run_git(
             &["log", "--format=%s", "-1", commit_hash],
-            &store, &abs_dir, None, &[],
+            &store,
+            &abs_dir,
+            None,
+            &[],
         )
         .await;
-        let reason = if reason_res.ok { reason_res.stdout } else { "unknown".into() };
+        let reason = if reason_res.ok {
+            reason_res.stdout
+        } else {
+            "unknown".into()
+        };
         let mut result = serde_json::json!({
             "success": true,
             "restored_to": &commit_hash[..commit_hash.len().min(8)],
@@ -628,7 +728,11 @@ impl CheckpointManager {
     }
 
     /// Diff the working tree against a checkpoint (powers rollback preview).
-    pub async fn diff(&self, working_dir: &str, commit_hash: &str) -> Result<serde_json::Value, String> {
+    pub async fn diff(
+        &self,
+        working_dir: &str,
+        commit_hash: &str,
+    ) -> Result<serde_json::Value, String> {
         if !valid_commit_hash(commit_hash) {
             return Err("invalid commit hash (expected 4-64 hex chars)".into());
         }
@@ -641,17 +745,23 @@ impl CheckpointManager {
         let idx = index_path(&store, &dir_hash);
         let git_ref = ref_name(&dir_hash);
         // Refresh the index from the checkpoint so the diff sees the right base.
-        run_git(&["read-tree", commit_hash], &store, &abs_dir, Some(&idx), &[128]).await;
+        run_git(
+            &["read-tree", commit_hash],
+            &store,
+            &abs_dir,
+            Some(&idx),
+            &[128],
+        )
+        .await;
         let stat = run_git(
             &["diff", "--stat", commit_hash],
-            &store, &abs_dir, Some(&idx), &[128],
+            &store,
+            &abs_dir,
+            Some(&idx),
+            &[128],
         )
         .await;
-        let diff = run_git(
-            &["diff", commit_hash],
-            &store, &abs_dir, Some(&idx), &[128],
-        )
-        .await;
+        let diff = run_git(&["diff", commit_hash], &store, &abs_dir, Some(&idx), &[128]).await;
         if !stat.ok && !diff.ok {
             let _ = git_ref; // ref kept for future ref-based diffs
             return Err("could not generate diff".into());
@@ -701,19 +811,32 @@ impl CheckpointManager {
             out.store_size_bytes = dir_size_bytes(&store);
             if store.join("HEAD").exists() {
                 for (dir_hash, meta) in list_projects(&store) {
-                    let workdir = meta.get("workdir").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let workdir = meta
+                        .get("workdir")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
                     let git_ref = ref_name(&dir_hash);
                     let count_res = run_git(
                         &["rev-list", "--count", &git_ref],
-                        &store, &self.base, None, &[128],
+                        &store,
+                        &self.base,
+                        None,
+                        &[128],
                     )
                     .await;
                     let commits = count_res.stdout.parse::<u64>().unwrap_or(0);
                     out.projects.push(ProjectStatus {
                         hash: dir_hash,
                         exists: !workdir.is_empty() && Path::new(&workdir).exists(),
-                        created_at: meta.get("created_at").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                        last_touch: meta.get("last_touch").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                        created_at: meta
+                            .get("created_at")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0),
+                        last_touch: meta
+                            .get("last_touch")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0),
                         workdir,
                         commits,
                     });
@@ -744,8 +867,15 @@ impl CheckpointManager {
         };
         for (dir_hash, meta) in list_projects(&store) {
             stats.scanned += 1;
-            let workdir = meta.get("workdir").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let last_touch = meta.get("last_touch").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let workdir = meta
+                .get("workdir")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let last_touch = meta
+                .get("last_touch")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             let orphan = delete_orphans && !workdir.is_empty() && !Path::new(&workdir).exists();
             let stale = retention_days > 0 && last_touch > 0.0 && last_touch < cutoff;
             if !orphan && !stale {
@@ -753,7 +883,14 @@ impl CheckpointManager {
             }
             // Drop the per-project ref, index, and metadata.
             let git_ref = ref_name(&dir_hash);
-            let res = run_git(&["update-ref", "-d", &git_ref], &store, &self.base, None, &[128]).await;
+            let res = run_git(
+                &["update-ref", "-d", &git_ref],
+                &store,
+                &self.base,
+                None,
+                &[128],
+            )
+            .await;
             if !res.ok {
                 stats.errors += 1;
                 continue;
@@ -770,8 +907,22 @@ impl CheckpointManager {
             }
         }
         // Reclaim objects from dropped refs.
-        run_git(&["reflog", "expire", "--expire=now", "--all"], &store, &self.base, None, &[]).await;
-        run_git(&["gc", "--prune=now", "--quiet"], &store, &self.base, None, &[]).await;
+        run_git(
+            &["reflog", "expire", "--expire=now", "--all"],
+            &store,
+            &self.base,
+            None,
+            &[],
+        )
+        .await;
+        run_git(
+            &["gc", "--prune=now", "--quiet"],
+            &store,
+            &self.base,
+            None,
+            &[],
+        )
+        .await;
         repair_bare_repo_dirs(&store);
         let size_after = dir_size_bytes(&self.base);
         stats.bytes_freed = size_before.saturating_sub(size_after);
@@ -822,7 +973,10 @@ impl CheckpointManager {
 
         // Quick size guard — don't snapshot enormous directories.
         if dir_file_count(&workdir) > MAX_FILES {
-            debug!("checkpoint skipped: >{} files in {}", MAX_FILES, working_dir);
+            debug!(
+                "checkpoint skipped: >{} files in {}",
+                MAX_FILES, working_dir
+            );
             return false;
         }
 
@@ -835,11 +989,21 @@ impl CheckpointManager {
         if idx.exists() {
             let ref_probe = run_git(
                 &["rev-parse", "--verify", &format!("{}^{{commit}}", git_ref)],
-                &store, &workdir, None, &[128],
+                &store,
+                &workdir,
+                None,
+                &[128],
             )
             .await;
             if ref_probe.ok && !ref_probe.stdout.is_empty() {
-                run_git(&["read-tree", &ref_probe.stdout], &store, &workdir, Some(&idx), &[128]).await;
+                run_git(
+                    &["read-tree", &ref_probe.stdout],
+                    &store,
+                    &workdir,
+                    Some(&idx),
+                    &[128],
+                )
+                .await;
             } else {
                 std::fs::remove_file(&idx).ok();
             }
@@ -862,7 +1026,10 @@ impl CheckpointManager {
         // branch that doesn't exist on a bare store).
         let ref_probe = run_git(
             &["rev-parse", "--verify", &format!("{}^{{commit}}", git_ref)],
-            &store, &workdir, None, &[128],
+            &store,
+            &workdir,
+            None,
+            &[128],
         )
         .await;
         let has_ref = ref_probe.ok && !ref_probe.stdout.is_empty();
@@ -871,7 +1038,10 @@ impl CheckpointManager {
         if has_ref {
             let diff_check = run_git(
                 &["diff-index", "--cached", "--quiet", &ref_commit],
-                &store, &workdir, Some(&idx), &[1],
+                &store,
+                &workdir,
+                Some(&idx),
+                &[1],
             )
             .await;
             if diff_check.ok {
@@ -922,7 +1092,12 @@ impl CheckpointManager {
             return false;
         }
 
-        debug!("checkpoint taken in {}: {} ({})", working_dir, reason, &new_sha[..8]);
+        debug!(
+            "checkpoint taken in {}: {} ({})",
+            working_dir,
+            reason,
+            &new_sha[..8]
+        );
 
         // Drop old commits beyond max_snapshots, then enforce the size cap.
         self.prune_ref(&store, &workdir, &git_ref).await;
@@ -934,13 +1109,22 @@ impl CheckpointManager {
     /// Remove any staged file larger than `max_file_size_mb` from the index.
     async fn drop_oversize_from_index(&self, store: &Path, workdir: &Path, idx: &Path) {
         let cap = self.max_file_size_mb * 1024 * 1024;
-        let ls = run_git(&["ls-files", "--cached", "-z"], store, workdir, Some(idx), &[]).await;
+        let ls = run_git(
+            &["ls-files", "--cached", "-z"],
+            store,
+            workdir,
+            Some(idx),
+            &[],
+        )
+        .await;
         if !ls.ok || ls.stdout.is_empty() {
             return;
         }
         let mut oversize: Vec<String> = Vec::new();
         for rel in ls.stdout.split('\0').filter(|p| !p.is_empty()) {
-            let size = std::fs::metadata(workdir.join(rel)).map(|m| m.len()).unwrap_or(0);
+            let size = std::fs::metadata(workdir.join(rel))
+                .map(|m| m.len())
+                .unwrap_or(0);
             if size > cap {
                 oversize.push(rel.to_string());
             }
@@ -963,7 +1147,14 @@ impl CheckpointManager {
     /// Keep only the last `max_snapshots` commits on the per-project ref by
     /// rebuilding a linear chain from the kept trees.
     async fn prune_ref(&self, store: &Path, workdir: &Path, git_ref: &str) {
-        let count_res = run_git(&["rev-list", "--count", git_ref], store, workdir, None, &[128]).await;
+        let count_res = run_git(
+            &["rev-list", "--count", git_ref],
+            store,
+            workdir,
+            None,
+            &[128],
+        )
+        .await;
         let count = match count_res.stdout.parse::<usize>() {
             Ok(c) if count_res.ok => c,
             _ => return,
@@ -971,7 +1162,14 @@ impl CheckpointManager {
         if count <= self.max_snapshots {
             return;
         }
-        let list = run_git(&["rev-list", "--reverse", git_ref], store, workdir, None, &[]).await;
+        let list = run_git(
+            &["rev-list", "--reverse", git_ref],
+            store,
+            workdir,
+            None,
+            &[],
+        )
+        .await;
         if !list.ok || list.stdout.is_empty() {
             return;
         }
@@ -980,7 +1178,14 @@ impl CheckpointManager {
         match self.rebuild_chain(store, workdir, keep).await {
             Some(tip) => {
                 run_git(&["update-ref", git_ref, &tip], store, workdir, None, &[]).await;
-                run_git(&["reflog", "expire", "--expire=now", "--all"], store, workdir, None, &[]).await;
+                run_git(
+                    &["reflog", "expire", "--expire=now", "--all"],
+                    store,
+                    workdir,
+                    None,
+                    &[],
+                )
+                .await;
                 run_git(&["gc", "--prune=now", "--quiet"], store, workdir, None, &[]).await;
                 repair_bare_repo_dirs(store);
             }
@@ -989,14 +1194,33 @@ impl CheckpointManager {
     }
 
     /// Rebuild a linear commit chain from existing commits' trees.
-    async fn rebuild_chain(&self, store: &Path, workdir: &Path, commits: &[&str]) -> Option<String> {
+    async fn rebuild_chain(
+        &self,
+        store: &Path,
+        workdir: &Path,
+        commits: &[&str],
+    ) -> Option<String> {
         let mut new_parent: Option<String> = None;
         for sha in commits {
-            let tree = run_git(&["rev-parse", &format!("{}^{{tree}}", sha)], store, workdir, None, &[]).await;
+            let tree = run_git(
+                &["rev-parse", &format!("{}^{{tree}}", sha)],
+                store,
+                workdir,
+                None,
+                &[],
+            )
+            .await;
             if !tree.ok || tree.stdout.is_empty() {
                 return None;
             }
-            let msg_res = run_git(&["log", "--format=%s", "-1", sha], store, workdir, None, &[]).await;
+            let msg_res = run_git(
+                &["log", "--format=%s", "-1", sha],
+                store,
+                workdir,
+                None,
+                &[],
+            )
+            .await;
             let msg = if msg_res.ok && !msg_res.stdout.is_empty() {
                 msg_res.stdout
             } else {
@@ -1031,13 +1255,22 @@ impl CheckpointManager {
         }
         let refs_res = run_git(
             &["for-each-ref", "--format=%(refname)", REFS_PREFIX],
-            store, &self.base, None, &[128],
+            store,
+            &self.base,
+            None,
+            &[128],
         )
         .await;
         if !refs_res.ok || refs_res.stdout.is_empty() {
             return;
         }
-        let refs: Vec<String> = refs_res.stdout.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect();
+        let refs: Vec<String> = refs_res
+            .stdout
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(String::from)
+            .collect();
 
         for _ in 0..20 {
             if dir_size_bytes(store) <= cap_bytes {
@@ -1045,12 +1278,26 @@ impl CheckpointManager {
             }
             let mut any_dropped = false;
             for git_ref in &refs {
-                let count_res = run_git(&["rev-list", "--count", git_ref], store, &self.base, None, &[128]).await;
+                let count_res = run_git(
+                    &["rev-list", "--count", git_ref],
+                    store,
+                    &self.base,
+                    None,
+                    &[128],
+                )
+                .await;
                 let count = count_res.stdout.parse::<usize>().unwrap_or(0);
                 if count <= 1 {
                     continue; // keep at least one snapshot per project
                 }
-                let list = run_git(&["rev-list", "--reverse", git_ref], store, &self.base, None, &[]).await;
+                let list = run_git(
+                    &["rev-list", "--reverse", git_ref],
+                    store,
+                    &self.base,
+                    None,
+                    &[],
+                )
+                .await;
                 if !list.ok || list.stdout.is_empty() {
                     continue;
                 }
@@ -1064,8 +1311,22 @@ impl CheckpointManager {
                 break;
             }
         }
-        run_git(&["reflog", "expire", "--expire=now", "--all"], store, &self.base, None, &[]).await;
-        run_git(&["gc", "--prune=now", "--quiet"], store, &self.base, None, &[]).await;
+        run_git(
+            &["reflog", "expire", "--expire=now", "--all"],
+            store,
+            &self.base,
+            None,
+            &[],
+        )
+        .await;
+        run_git(
+            &["gc", "--prune=now", "--quiet"],
+            store,
+            &self.base,
+            None,
+            &[],
+        )
+        .await;
         repair_bare_repo_dirs(store);
     }
 }
@@ -1118,7 +1379,14 @@ pub fn format_checkpoint_list(checkpoints: &[CheckpointEntry], directory: &str) 
         } else {
             String::new()
         };
-        lines.push(format!("  {}. {}  {}  {}{}", i + 1, cp.short_hash, ts, cp.reason, stat));
+        lines.push(format!(
+            "  {}. {}  {}  {}{}",
+            i + 1,
+            cp.short_hash,
+            ts,
+            cp.reason,
+            stat
+        ));
     }
     lines.push("\n  ulnclaw checkpoints restore <N|hash>   restore to checkpoint".to_string());
     lines.join("\n")
@@ -1150,7 +1418,9 @@ mod tests {
     #[test]
     fn test_valid_commit_hash() {
         assert!(valid_commit_hash("abcd"));
-        assert!(valid_commit_hash("0123456789abcdef0123456789abcdef01234567"));
+        assert!(valid_commit_hash(
+            "0123456789abcdef0123456789abcdef01234567"
+        ));
         assert!(!valid_commit_hash("abc")); // too short
         assert!(!valid_commit_hash("xyz1"));
         assert!(!valid_commit_hash(""));
@@ -1160,10 +1430,18 @@ mod tests {
     #[test]
     fn test_parse_shortstat() {
         let mut entry = CheckpointEntry {
-            hash: "h".into(), short_hash: "h".into(), timestamp: "t".into(),
-            reason: "r".into(), files_changed: 0, insertions: 0, deletions: 0,
+            hash: "h".into(),
+            short_hash: "h".into(),
+            timestamp: "t".into(),
+            reason: "r".into(),
+            files_changed: 0,
+            insertions: 0,
+            deletions: 0,
         };
-        parse_shortstat(" 3 files changed, 12 insertions(+), 4 deletions(-)", &mut entry);
+        parse_shortstat(
+            " 3 files changed, 12 insertions(+), 4 deletions(-)",
+            &mut entry,
+        );
         assert_eq!(entry.files_changed, 3);
         assert_eq!(entry.insertions, 12);
         assert_eq!(entry.deletions, 4);
@@ -1215,7 +1493,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(result["success"], true);
-        assert_eq!(std::fs::read_to_string(project.join("a.txt")).unwrap(), "one\n");
+        assert_eq!(
+            std::fs::read_to_string(project.join("a.txt")).unwrap(),
+            "one\n"
+        );
 
         // Pre-rollback snapshot captured the "three" state → 3 checkpoints.
         let list = manager.list_checkpoints(&project.to_string_lossy()).await;
@@ -1237,10 +1518,18 @@ mod tests {
         let manager = CheckpointManager::new(base, &test_config(true));
         for i in 0..6 {
             std::fs::write(project.join("f.txt"), format!("v{}\n", i)).unwrap();
-            assert!(manager.take(&project.to_string_lossy(), &format!("snap {}", i)).await);
+            assert!(
+                manager
+                    .take(&project.to_string_lossy(), &format!("snap {}", i))
+                    .await
+            );
         }
         let list = manager.list_checkpoints(&project.to_string_lossy()).await;
-        assert!(list.len() <= 3, "expected pruning to cap at 3, got {}", list.len());
+        assert!(
+            list.len() <= 3,
+            "expected pruning to cap at 3, got {}",
+            list.len()
+        );
         assert_eq!(list[0].reason, "snap 5");
     }
 
@@ -1259,7 +1548,11 @@ mod tests {
         std::fs::write(project.join("big.bin"), vec![0u8; 2 * 1024 * 1024]).unwrap();
 
         let manager = CheckpointManager::new(base.clone(), &test_config(true));
-        assert!(manager.take(&project.to_string_lossy(), "with big file").await);
+        assert!(
+            manager
+                .take(&project.to_string_lossy(), "with big file")
+                .await
+        );
 
         // Verify big.bin is not in the checkpoint tree.
         let store = base.join(STORE_DIRNAME);

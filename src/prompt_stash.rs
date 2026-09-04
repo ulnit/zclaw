@@ -347,7 +347,10 @@ mod tests {
         // Empty buffer + empty stash → noop.
         assert_eq!(resolve_ctrl_s(&mut stash, "", &[]).0, StashAction::Noop);
         // Content → stashed.
-        assert_eq!(resolve_ctrl_s(&mut stash, "wip", &[]).0, StashAction::Stashed);
+        assert_eq!(
+            resolve_ctrl_s(&mut stash, "wip", &[]).0,
+            StashAction::Stashed
+        );
         // Empty buffer + 1 item → restored verbatim.
         let (action, payload) = resolve_ctrl_s(&mut stash, "  ", &[]);
         assert_eq!(action, StashAction::Restored);
@@ -355,9 +358,15 @@ mod tests {
         // Two items → panel opens; another press closes it.
         stash.stash("one", &[]);
         stash.stash("two", &[]);
-        assert_eq!(resolve_ctrl_s(&mut stash, "", &[]).0, StashAction::OpenPanel);
+        assert_eq!(
+            resolve_ctrl_s(&mut stash, "", &[]).0,
+            StashAction::OpenPanel
+        );
         assert!(stash.panel_open);
-        assert_eq!(resolve_ctrl_s(&mut stash, "", &[]).0, StashAction::ClosePanel);
+        assert_eq!(
+            resolve_ctrl_s(&mut stash, "", &[]).0,
+            StashAction::ClosePanel
+        );
     }
 
     #[test]

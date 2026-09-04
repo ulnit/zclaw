@@ -101,9 +101,7 @@ pub fn to_whatsapp_jid(value: &str) -> String {
 /// identities — canonicalisation must leave them alone.
 pub fn is_user_identifier(value: &str) -> bool {
     let lower = value.to_lowercase();
-    !(lower.ends_with("@g.us")
-        || lower.ends_with("@broadcast")
-        || lower.ends_with("@newsletter"))
+    !(lower.ends_with("@g.us") || lower.ends_with("@broadcast") || lower.ends_with("@newsletter"))
 }
 
 /// Resolve WhatsApp phone/LID aliases via the bridge's
@@ -126,8 +124,7 @@ pub fn expand_whatsapp_aliases(identifier: &str, session_dir: &Path) -> HashSet<
         }
         resolved.insert(current.clone());
         for suffix in ["", "_reverse"] {
-            let mapping_path =
-                session_dir.join(format!("lid-mapping-{current}{suffix}.json"));
+            let mapping_path = session_dir.join(format!("lid-mapping-{current}{suffix}.json"));
             if !mapping_path.exists() {
                 continue;
             }
@@ -186,15 +183,24 @@ mod tests {
 
     #[test]
     fn to_jid_builds_and_preserves() {
-        assert_eq!(to_whatsapp_jid("+50766715226"), "50766715226@s.whatsapp.net");
+        assert_eq!(
+            to_whatsapp_jid("+50766715226"),
+            "50766715226@s.whatsapp.net"
+        );
         assert_eq!(to_whatsapp_jid("50766715226"), "50766715226@s.whatsapp.net");
-        assert_eq!(to_whatsapp_jid("(507) 667-15226"), "50766715226@s.whatsapp.net");
+        assert_eq!(
+            to_whatsapp_jid("(507) 667-15226"),
+            "50766715226@s.whatsapp.net"
+        );
         assert_eq!(
             to_whatsapp_jid("50766715226@s.whatsapp.net"),
             "50766715226@s.whatsapp.net"
         );
         assert_eq!(to_whatsapp_jid("group-id@g.us"), "group-id@g.us");
-        assert_eq!(to_whatsapp_jid("130631430344750@lid"), "130631430344750@lid");
+        assert_eq!(
+            to_whatsapp_jid("130631430344750@lid"),
+            "130631430344750@lid"
+        );
         assert_eq!(
             to_whatsapp_jid("50766715226:3@s.whatsapp.net"),
             "50766715226@s.whatsapp.net"
@@ -231,7 +237,10 @@ mod tests {
         assert_eq!(canonical_whatsapp_identifier("222@lid", dir), "111");
         // No mapping files → normalized input.
         let empty = tempfile::tempdir().expect("tempdir");
-        assert_eq!(canonical_whatsapp_identifier("444@s.whatsapp.net", empty.path()), "444");
+        assert_eq!(
+            canonical_whatsapp_identifier("444@s.whatsapp.net", empty.path()),
+            "444"
+        );
         assert_eq!(canonical_whatsapp_identifier("", empty.path()), "");
     }
 

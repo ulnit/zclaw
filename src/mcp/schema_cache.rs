@@ -227,11 +227,17 @@ mod tests {
         let mut sse_cfg = http_cfg.clone();
         sse_cfg.transport = Some("sse".into());
         // url and transport both participate in the fingerprint.
-        assert_ne!(config_fingerprint(&stdio_cfg), config_fingerprint(&http_cfg));
+        assert_ne!(
+            config_fingerprint(&stdio_cfg),
+            config_fingerprint(&http_cfg)
+        );
         assert_ne!(config_fingerprint(&http_cfg), config_fingerprint(&sse_cfg));
         // Same url but different command stays distinct too.
         stdio_cfg.url = Some("https://mcp.example.com/sse".into());
-        assert_ne!(config_fingerprint(&stdio_cfg), config_fingerprint(&http_cfg));
+        assert_ne!(
+            config_fingerprint(&stdio_cfg),
+            config_fingerprint(&http_cfg)
+        );
     }
 
     #[test]
@@ -329,9 +335,17 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let home = tmp.path();
         write_cache_entry_in(home, "srv", "fp", &[tool("a")], &[]).unwrap();
-        let mode = std::fs::metadata(cache_path_in(home)).unwrap().permissions().mode() & 0o777;
+        let mode = std::fs::metadata(cache_path_in(home))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
         assert_eq!(mode, 0o600);
-        let dir_mode = std::fs::metadata(home.join("cache")).unwrap().permissions().mode() & 0o777;
+        let dir_mode = std::fs::metadata(home.join("cache"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
         assert_eq!(dir_mode, 0o700);
     }
 }

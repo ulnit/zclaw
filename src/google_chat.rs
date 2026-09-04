@@ -228,8 +228,12 @@ pub fn build_jwt_assertion_scoped(key: &ServiceAccountKey, scope: &str) -> Resul
     });
     let encoding = EncodingKey::from_rsa_pem(key.private_key_pem.as_bytes())
         .map_err(|e| format!("private key parse: {e}"))?;
-    jsonwebtoken::encode(&Header::new(jsonwebtoken::Algorithm::RS256), &claims, &encoding)
-        .map_err(|e| format!("jwt encode: {e}"))
+    jsonwebtoken::encode(
+        &Header::new(jsonwebtoken::Algorithm::RS256),
+        &claims,
+        &encoding,
+    )
+    .map_err(|e| format!("jwt encode: {e}"))
 }
 
 struct Runtime {
@@ -327,7 +331,12 @@ impl Runtime {
     }
 
     /// hermes `_create_message` — POST /v1/{space}/messages.
-    async fn create_message(&self, space_name: &str, text: &str, thread_name: Option<&str>) -> Result<(), String> {
+    async fn create_message(
+        &self,
+        space_name: &str,
+        text: &str,
+        thread_name: Option<&str>,
+    ) -> Result<(), String> {
         self.create_message_returning_name(space_name, text, thread_name)
             .await
             .map(|_| ())
@@ -359,7 +368,10 @@ impl Runtime {
         if resp.status().as_u16() >= 400 {
             let status = resp.status();
             let err = resp.text().await.unwrap_or_default();
-            return Err(format!("message create failed ({status}): {}", &err[..err.len().min(300)]));
+            return Err(format!(
+                "message create failed ({status}): {}",
+                &err[..err.len().min(300)]
+            ));
         }
         let payload: Value = resp.json().await.unwrap_or(json!({}));
         Ok(payload
@@ -386,7 +398,10 @@ impl Runtime {
         if resp.status().as_u16() >= 400 {
             let status = resp.status();
             let err = resp.text().await.unwrap_or_default();
-            return Err(format!("message patch failed ({status}): {}", &err[..err.len().min(300)]));
+            return Err(format!(
+                "message patch failed ({status}): {}",
+                &err[..err.len().min(300)]
+            ));
         }
         Ok(())
     }
@@ -699,10 +714,7 @@ async fn process_envelope(
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let space_type = space
-        .get("type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let space_type = space.get("type").and_then(|v| v.as_str()).unwrap_or("");
     if space_name.is_empty() {
         return ack();
     }
@@ -738,11 +750,11 @@ async fn process_envelope(
     let _is_dm = matches!(space_type, "DIRECT_MESSAGE" | "DM");
 
     // Allowlist ∪ pairing gate (email or user resource name).
-    let authorized = runtime
-        .cfg
-        .allowed_users
-        .iter()
-        .any(|u| u == "*" || (!sender_email.is_empty() && u.eq_ignore_ascii_case(&sender_email)) || u == &sender_id);
+    let authorized = runtime.cfg.allowed_users.iter().any(|u| {
+        u == "*"
+            || (!sender_email.is_empty() && u.eq_ignore_ascii_case(&sender_email))
+            || u == &sender_id
+    });
     if !authorized {
         if let Some(store) = pairing {
             let key = if sender_email.is_empty() {
@@ -751,9 +763,12 @@ async fn process_envelope(
                 sender_email.clone()
             };
             if !store.is_approved("google_chat", &key) {
-                if let Some(code_msg) =
-                    crate::messaging::pairing_offer_public(store, "google_chat", &key, &sender_display)
-                {
+                if let Some(code_msg) = crate::messaging::pairing_offer_public(
+                    store,
+                    "google_chat",
+                    &key,
+                    &sender_display,
+                ) {
                     let _ = runtime.create_message(&space_name, &code_msg, None).await;
                 }
                 return ack();
@@ -815,7 +830,9 @@ async fn process_envelope(
     // can patch it in-place (hermes send_typing before processing).
     {
         let thread = runtime.threads.lock().await.get(&space_name).cloned();
-        runtime.send_typing_marker(&space_name, thread.as_deref()).await;
+        runtime
+            .send_typing_marker(&space_name, thread.as_deref())
+            .await;
     }
     let outcome = match dispatcher.handle_event(event).await {
         Ok(o) => o,
@@ -942,7 +959,11 @@ pub fn attachment_message_body(
 
 /// Text notice when user OAuth is unavailable (hermes
 /// `_post_attachment_fallback`; English rendering of the original).
-pub fn attachment_fallback_text(path: &std::path::Path, filename: &str, caption: Option<&str>) -> String {
+pub fn attachment_fallback_text(
+    path: &std::path::Path,
+    filename: &str,
+    caption: Option<&str>,
+) -> String {
     let mut lines: Vec<String> = Vec::new();
     if let Some(caption) = caption.filter(|c| !c.is_empty()) {
         lines.push(caption.to_string());
@@ -1163,13 +1184,9 @@ async fn handle_setup_files(
     if arg.is_empty() {
         // Status: what's configured and what to do next.
         if crate::google_chat_oauth::token_path(&home, sender_key).exists()
-            && crate::google_chat_oauth::load_user_credentials(
-                &home,
-                &runtime.client,
-                sender_key,
-            )
-            .await
-            .is_some()
+            && crate::google_chat_oauth::load_user_credentials(&home, &runtime.client, sender_key)
+                .await
+                .is_some()
         {
             let who = sender_key.unwrap_or("shared (legacy)");
             let path = crate::google_chat_oauth::token_path(&home, sender_key);
@@ -1380,7 +1397,11 @@ pub fn extract_message_payload(envelope: &Value, ce_type: &str) -> Option<(Value
         return Some((msg, space));
     }
     // Format 2 — native Chat API Pub/Sub.
-    if envelope.get("message").map(|v| v.is_object()).unwrap_or(false) {
+    if envelope
+        .get("message")
+        .map(|v| v.is_object())
+        .unwrap_or(false)
+    {
         if envelope.get("type").and_then(|v| v.as_str()) != Some("MESSAGE") {
             return None;
         }
@@ -1421,7 +1442,9 @@ pub fn extract_message_payload(envelope: &Value, ce_type: &str) -> Option<(Value
             });
         let surrogate = format!(
             "users/relay-{}",
-            if sender_email.is_empty() { "unknown".to_string() } else {
+            if sender_email.is_empty() {
+                "unknown".to_string()
+            } else {
                 sender_email.replace('@', "_at_").replace('.', "_")
             }
         );
@@ -1481,7 +1504,8 @@ async fn process_pubsub_message(
         .to_string();
     if ce_type.contains("membership") || ce_type.contains("MEMBERSHIP") {
         if ce_type.contains("created") {
-            if let Some(name) = envelope.pointer("/chat/membershipPayload/membership/member/name")
+            if let Some(name) = envelope
+                .pointer("/chat/membershipPayload/membership/member/name")
                 .and_then(|v| v.as_str())
             {
                 let member_type = envelope
@@ -1604,7 +1628,10 @@ async fn pull_batch(
             .await;
         if let Ok(resp) = resp {
             if !resp.status().is_success() {
-                eprintln!("[google_chat] pubsub acknowledge failed: HTTP {}", resp.status());
+                eprintln!(
+                    "[google_chat] pubsub acknowledge failed: HTTP {}",
+                    resp.status()
+                );
             }
         }
     }
@@ -1665,9 +1692,7 @@ pub async fn run_pubsub(
                     "[google_chat] pub/sub pull failed (attempt {attempt}/{MAX_RECONNECT_ATTEMPTS}): {e}"
                 );
                 if attempt >= MAX_RECONNECT_ATTEMPTS {
-                    eprintln!(
-                        "[google_chat] pub/sub reconnect failed {attempt} times; giving up"
-                    );
+                    eprintln!("[google_chat] pub/sub reconnect failed {attempt} times; giving up");
                     return;
                 }
                 let delay_ms = RECONNECT_MAX_DELAY_MS
@@ -1761,10 +1786,9 @@ mod tests {
 
     #[test]
     fn sender_bot_skip_and_text_preference() {
-        let msg: Value = serde_json::from_str(
-            r#"{"sender":{"type":"BOT"},"text":"echo","argumentText":"arg"}"#,
-        )
-        .unwrap();
+        let msg: Value =
+            serde_json::from_str(r#"{"sender":{"type":"BOT"},"text":"echo","argumentText":"arg"}"#)
+                .unwrap();
         assert!(msg.pointer("/sender/type").and_then(|v| v.as_str()) == Some("BOT"));
         let text = msg
             .get("argumentText")
@@ -1790,7 +1814,10 @@ mod tests {
     fn resolve_env_precedence() {
         let _guard = crate::models_dev::test_env_lock();
         std::env::set_var("GOOGLE_CHAT_ALLOWED_USERS", "a@x.com, b@x.com");
-        std::env::set_var("GOOGLE_CHAT_HTTP_EVENTS_AUDIENCE", "https://gw.example.com/webhooks/googlechat");
+        std::env::set_var(
+            "GOOGLE_CHAT_HTTP_EVENTS_AUDIENCE",
+            "https://gw.example.com/webhooks/googlechat",
+        );
         let cfg = GoogleChatConfig::default();
         let resolved = cfg.resolve();
         assert_eq!(
@@ -1824,7 +1851,8 @@ mod tests {
                 },
             },
         });
-        let (msg, space) = extract_message_payload(&envelope, "google.workspace.chat.message.v1.created").unwrap();
+        let (msg, space) =
+            extract_message_payload(&envelope, "google.workspace.chat.message.v1.created").unwrap();
         assert_eq!(msg["text"], "hi");
         assert_eq!(space["name"], "spaces/X");
     }
@@ -1917,7 +1945,10 @@ mod tests {
     #[test]
     fn attachment_message_body_assembly() {
         let body = attachment_message_body(json!({"resourceName": "r1"}), None, None);
-        assert_eq!(body["attachment"][0]["attachmentDataRef"]["resourceName"], "r1");
+        assert_eq!(
+            body["attachment"][0]["attachmentDataRef"]["resourceName"],
+            "r1"
+        );
         assert!(body.get("text").is_none());
         assert!(body.get("thread").is_none());
         let body = attachment_message_body(
@@ -1954,7 +1985,10 @@ mod tests {
         assert_eq!(guess_mime(Path::new("a.mp4")), "video/mp4");
         assert_eq!(guess_mime(Path::new("a.ogg")), "audio/ogg");
         assert_eq!(guess_mime(Path::new("a.pdf")), "application/pdf");
-        assert_eq!(guess_mime(Path::new("a.unknown")), "application/octet-stream");
+        assert_eq!(
+            guess_mime(Path::new("a.unknown")),
+            "application/octet-stream"
+        );
         assert_eq!(guess_mime(Path::new("noext")), "application/octet-stream");
     }
 
@@ -1982,9 +2016,7 @@ mod tests {
 
     /// axum mock of the Chat API — logs (method, path, body); POST
     /// returns a deterministic message name for the typing-card patch.
-    async fn spawn_chat_api(
-        log: Arc<std::sync::Mutex<Vec<(String, String, Value)>>>,
-    ) -> String {
+    async fn spawn_chat_api(log: Arc<std::sync::Mutex<Vec<(String, String, Value)>>>) -> String {
         use axum::extract::State;
         use axum::routing::post;
         type Log = Arc<std::sync::Mutex<Vec<(String, String, Value)>>>;
@@ -1993,17 +2025,21 @@ mod tests {
                 "/v1/*rest",
                 post(
                     move |State(log): State<Log>,
-                     axum::extract::Path(rest): axum::extract::Path<String>,
-                     axum::Json(body): axum::Json<Value>| async move {
-                        log.lock().unwrap().push(("POST".into(), rest.clone(), body));
+                          axum::extract::Path(rest): axum::extract::Path<String>,
+                          axum::Json(body): axum::Json<Value>| async move {
+                        log.lock()
+                            .unwrap()
+                            .push(("POST".into(), rest.clone(), body));
                         axum::Json(json!({"name": "spaces/x/messages/m-1"}))
                     },
                 )
                 .patch(
                     move |State(log): State<Log>,
-                     axum::extract::Path(rest): axum::extract::Path<String>,
-                     axum::Json(body): axum::Json<Value>| async move {
-                        log.lock().unwrap().push(("PATCH".into(), rest.clone(), body));
+                          axum::extract::Path(rest): axum::extract::Path<String>,
+                          axum::Json(body): axum::Json<Value>| async move {
+                        log.lock()
+                            .unwrap()
+                            .push(("PATCH".into(), rest.clone(), body));
                         axum::Json(json!({}))
                     },
                 ),

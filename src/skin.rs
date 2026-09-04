@@ -90,18 +90,18 @@ const BUILTIN_SKINS: &[BuiltinSkin] = &[
         ],
         branding: &[
             ("agent_name", "Hermes Agent"),
-            ("welcome", "Welcome to Hermes Agent! Type your message or /help for commands."),
+            (
+                "welcome",
+                "Welcome to Hermes Agent! Type your message or /help for commands.",
+            ),
             ("goodbye", "Goodbye! ⚕"),
             ("response_label", " ⚕ Hermes "),
             ("prompt_symbol", "❯"),
             ("help_header", "(^_^)? Available Commands"),
         ],
-        spinner_waiting_faces: &[
-        ],
-        spinner_thinking_faces: &[
-        ],
-        spinner_thinking_verbs: &[
-        ],
+        spinner_waiting_faces: &[],
+        spinner_thinking_faces: &[],
+        spinner_thinking_verbs: &[],
     },
     BuiltinSkin {
         name: "ares",
@@ -137,30 +137,20 @@ const BUILTIN_SKINS: &[BuiltinSkin] = &[
             ("shell_dollar", "#DD4A3A"),
             ("voice_status_bg", "#2A1212"),
         ],
-        light_colors: &[
-        ],
+        light_colors: &[],
         branding: &[
             ("agent_name", "Ares Agent"),
-            ("welcome", "Welcome to Ares Agent! Type your message or /help for commands."),
+            (
+                "welcome",
+                "Welcome to Ares Agent! Type your message or /help for commands.",
+            ),
             ("goodbye", "Farewell, warrior! ⚔"),
             ("response_label", " ⚔ Ares "),
             ("prompt_symbol", "⚔"),
             ("help_header", "(⚔) Available Commands"),
         ],
-        spinner_waiting_faces: &[
-            "(⚔)",
-            "(⛨)",
-            "(▲)",
-            "(<>)",
-            "(/)",
-        ],
-        spinner_thinking_faces: &[
-            "(⚔)",
-            "(⛨)",
-            "(▲)",
-            "(⌁)",
-            "(<>)",
-        ],
+        spinner_waiting_faces: &["(⚔)", "(⛨)", "(▲)", "(<>)", "(/)"],
+        spinner_thinking_faces: &["(⚔)", "(⛨)", "(▲)", "(⌁)", "(<>)"],
         spinner_thinking_verbs: &[
             "forging",
             "marching",
@@ -206,22 +196,21 @@ const BUILTIN_SKINS: &[BuiltinSkin] = &[
             ("shell_dollar", "#aaaaaa"),
             ("voice_status_bg", "#1F1F1F"),
         ],
-        light_colors: &[
-        ],
+        light_colors: &[],
         branding: &[
             ("agent_name", "Hermes Agent"),
-            ("welcome", "Welcome to Hermes Agent! Type your message or /help for commands."),
+            (
+                "welcome",
+                "Welcome to Hermes Agent! Type your message or /help for commands.",
+            ),
             ("goodbye", "Goodbye! ⚕"),
             ("response_label", " ⚕ Hermes "),
             ("prompt_symbol", "❯"),
             ("help_header", "[?] Available Commands"),
         ],
-        spinner_waiting_faces: &[
-        ],
-        spinner_thinking_faces: &[
-        ],
-        spinner_thinking_verbs: &[
-        ],
+        spinner_waiting_faces: &[],
+        spinner_thinking_faces: &[],
+        spinner_thinking_verbs: &[],
     },
     BuiltinSkin {
         name: "slate",
@@ -257,22 +246,21 @@ const BUILTIN_SKINS: &[BuiltinSkin] = &[
             ("shell_dollar", "#7eb8f6"),
             ("voice_status_bg", "#151C2F"),
         ],
-        light_colors: &[
-        ],
+        light_colors: &[],
         branding: &[
             ("agent_name", "Hermes Agent"),
-            ("welcome", "Welcome to Hermes Agent! Type your message or /help for commands."),
+            (
+                "welcome",
+                "Welcome to Hermes Agent! Type your message or /help for commands.",
+            ),
             ("goodbye", "Goodbye! ⚕"),
             ("response_label", " ⚕ Hermes "),
             ("prompt_symbol", "❯"),
             ("help_header", "(^_^)? Available Commands"),
         ],
-        spinner_waiting_faces: &[
-        ],
-        spinner_thinking_faces: &[
-        ],
-        spinner_thinking_verbs: &[
-        ],
+        spinner_waiting_faces: &[],
+        spinner_thinking_faces: &[],
+        spinner_thinking_verbs: &[],
     },
     BuiltinSkin {
         name: "daylight",
@@ -310,22 +298,21 @@ const BUILTIN_SKINS: &[BuiltinSkin] = &[
             ("shell_dollar", "#2563EB"),
             ("voice_status_bg", "#E5EDF8"),
         ],
-        light_colors: &[
-        ],
+        light_colors: &[],
         branding: &[
             ("agent_name", "Hermes Agent"),
-            ("welcome", "Welcome to Hermes Agent! Type your message or /help for commands."),
+            (
+                "welcome",
+                "Welcome to Hermes Agent! Type your message or /help for commands.",
+            ),
             ("goodbye", "Goodbye! ⚕"),
             ("response_label", " ⚕ Hermes "),
             ("prompt_symbol", "❯"),
             ("help_header", "[?] Available Commands"),
         ],
-        spinner_waiting_faces: &[
-        ],
-        spinner_thinking_faces: &[
-        ],
-        spinner_thinking_verbs: &[
-        ],
+        spinner_waiting_faces: &[],
+        spinner_thinking_faces: &[],
+        spinner_thinking_verbs: &[],
     },
     BuiltinSkin {
         name: "warm-lightmode",
@@ -363,22 +350,21 @@ const BUILTIN_SKINS: &[BuiltinSkin] = &[
             ("shell_dollar", "#8B4513"),
             ("voice_status_bg", "#F5F0E8"),
         ],
-        light_colors: &[
-        ],
+        light_colors: &[],
         branding: &[
             ("agent_name", "Hermes Agent"),
-            ("welcome", "Welcome to Hermes Agent! Type your message or /help for commands."),
+            (
+                "welcome",
+                "Welcome to Hermes Agent! Type your message or /help for commands.",
+            ),
             ("goodbye", "Goodbye! ⚕"),
             ("response_label", " ⚕ Hermes "),
             ("prompt_symbol", "❯"),
             ("help_header", "(^_^)? Available Commands"),
         ],
-        spinner_waiting_faces: &[
-        ],
-        spinner_thinking_faces: &[
-        ],
-        spinner_thinking_verbs: &[
-        ],
+        spinner_waiting_faces: &[],
+        spinner_thinking_faces: &[],
+        spinner_thinking_verbs: &[],
     },
     BuiltinSkin {
         name: "poseidon",
@@ -414,30 +400,20 @@ const BUILTIN_SKINS: &[BuiltinSkin] = &[
             ("shell_dollar", "#5DB8F5"),
             ("voice_status_bg", "#0F2440"),
         ],
-        light_colors: &[
-        ],
+        light_colors: &[],
         branding: &[
             ("agent_name", "Poseidon Agent"),
-            ("welcome", "Welcome to Poseidon Agent! Type your message or /help for commands."),
+            (
+                "welcome",
+                "Welcome to Poseidon Agent! Type your message or /help for commands.",
+            ),
             ("goodbye", "Fair winds! Ψ"),
             ("response_label", " Ψ Poseidon "),
             ("prompt_symbol", "Ψ"),
             ("help_header", "(Ψ) Available Commands"),
         ],
-        spinner_waiting_faces: &[
-            "(≈)",
-            "(Ψ)",
-            "(∿)",
-            "(◌)",
-            "(◠)",
-        ],
-        spinner_thinking_faces: &[
-            "(Ψ)",
-            "(∿)",
-            "(≈)",
-            "(⌁)",
-            "(◌)",
-        ],
+        spinner_waiting_faces: &["(≈)", "(Ψ)", "(∿)", "(◌)", "(◠)"],
+        spinner_thinking_faces: &["(Ψ)", "(∿)", "(≈)", "(⌁)", "(◌)"],
         spinner_thinking_verbs: &[
             "charting currents",
             "sounding the depth",
@@ -483,30 +459,20 @@ const BUILTIN_SKINS: &[BuiltinSkin] = &[
             ("shell_dollar", "#E7E7E7"),
             ("voice_status_bg", "#202020"),
         ],
-        light_colors: &[
-        ],
+        light_colors: &[],
         branding: &[
             ("agent_name", "Sisyphus Agent"),
-            ("welcome", "Welcome to Sisyphus Agent! Type your message or /help for commands."),
+            (
+                "welcome",
+                "Welcome to Sisyphus Agent! Type your message or /help for commands.",
+            ),
             ("goodbye", "The boulder waits. ◉"),
             ("response_label", " ◉ Sisyphus "),
             ("prompt_symbol", "◉"),
             ("help_header", "(◉) Available Commands"),
         ],
-        spinner_waiting_faces: &[
-            "(◉)",
-            "(◌)",
-            "(◬)",
-            "(⬤)",
-            "(::)",
-        ],
-        spinner_thinking_faces: &[
-            "(◉)",
-            "(◬)",
-            "(◌)",
-            "(○)",
-            "(●)",
-        ],
+        spinner_waiting_faces: &["(◉)", "(◌)", "(◬)", "(⬤)", "(::)"],
+        spinner_thinking_faces: &["(◉)", "(◬)", "(◌)", "(○)", "(●)"],
         spinner_thinking_verbs: &[
             "finding traction",
             "measuring the grade",
@@ -554,30 +520,20 @@ const BUILTIN_SKINS: &[BuiltinSkin] = &[
             ("shell_dollar", "#F29C38"),
             ("voice_status_bg", "#2B160E"),
         ],
-        light_colors: &[
-        ],
+        light_colors: &[],
         branding: &[
             ("agent_name", "Charizard Agent"),
-            ("welcome", "Welcome to Charizard Agent! Type your message or /help for commands."),
+            (
+                "welcome",
+                "Welcome to Charizard Agent! Type your message or /help for commands.",
+            ),
             ("goodbye", "Flame out! ✦"),
             ("response_label", " ✦ Charizard "),
             ("prompt_symbol", "✦"),
             ("help_header", "(✦) Available Commands"),
         ],
-        spinner_waiting_faces: &[
-            "(✦)",
-            "(▲)",
-            "(◇)",
-            "(<>)",
-            "(🔥)",
-        ],
-        spinner_thinking_faces: &[
-            "(✦)",
-            "(▲)",
-            "(◇)",
-            "(⌁)",
-            "(🔥)",
-        ],
+        spinner_waiting_faces: &["(✦)", "(▲)", "(◇)", "(<>)", "(🔥)"],
+        spinner_thinking_faces: &["(✦)", "(▲)", "(◇)", "(⌁)", "(🔥)"],
         spinner_thinking_verbs: &[
             "banking into the draft",
             "measuring burn",
@@ -610,17 +566,26 @@ pub struct SkinConfig {
 impl SkinConfig {
     /// Color value with fallback (hermes `get_color`).
     pub fn get_color(&self, key: &str, fallback: &str) -> String {
-        self.colors.get(key).cloned().unwrap_or_else(|| fallback.to_string())
+        self.colors
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| fallback.to_string())
     }
 
     /// Branding value with fallback (hermes `get_branding`).
     pub fn get_branding(&self, key: &str, fallback: &str) -> String {
-        self.branding.get(key).cloned().unwrap_or_else(|| fallback.to_string())
+        self.branding
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| fallback.to_string())
     }
 }
 
 fn pairs_to_map(pairs: &[(&'static str, &'static str)]) -> HashMap<String, String> {
-    pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    pairs
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
 }
 
 /// Build a resolved skin from a built-in definition — every section merges
@@ -648,9 +613,21 @@ fn build_skin_config(skin: &BuiltinSkin) -> SkinConfig {
         colors,
         light_colors: pairs_to_map(skin.light_colors),
         branding,
-        spinner_waiting_faces: skin.spinner_waiting_faces.iter().map(|s| s.to_string()).collect(),
-        spinner_thinking_faces: skin.spinner_thinking_faces.iter().map(|s| s.to_string()).collect(),
-        spinner_thinking_verbs: skin.spinner_thinking_verbs.iter().map(|s| s.to_string()).collect(),
+        spinner_waiting_faces: skin
+            .spinner_waiting_faces
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        spinner_thinking_faces: skin
+            .spinner_thinking_faces
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        spinner_thinking_verbs: skin
+            .spinner_thinking_verbs
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
     }
 }
 
@@ -771,7 +748,15 @@ mod tests {
         let skins = list_skins();
         assert_eq!(skins.len(), 9);
         let names: Vec<&str> = skins.iter().map(|s| s.name.as_str()).collect();
-        for expected in ["default", "ares", "mono", "slate", "daylight", "poseidon", "charizard"] {
+        for expected in [
+            "default",
+            "ares",
+            "mono",
+            "slate",
+            "daylight",
+            "poseidon",
+            "charizard",
+        ] {
             assert!(names.contains(&expected), "missing skin {}", expected);
         }
         assert!(skins.iter().all(|s| s.source == "builtin"));

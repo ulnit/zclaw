@@ -42,21 +42,111 @@ pub struct CanonicalProvider {
 }
 
 pub const CANONICAL_PROVIDERS: &[CanonicalProvider] = &[
-    CanonicalProvider { slug: "openai", label: "OpenAI", key_env: "OPENAI_API_KEY", default_endpoint: "https://api.openai.com/v1", mode: "openai" },
-    CanonicalProvider { slug: "anthropic", label: "Anthropic", key_env: "ANTHROPIC_API_KEY", default_endpoint: "https://api.anthropic.com", mode: "anthropic" },
-    CanonicalProvider { slug: "openrouter", label: "OpenRouter", key_env: "OPENROUTER_API_KEY", default_endpoint: "https://openrouter.ai/api/v1", mode: "openai" },
-    CanonicalProvider { slug: "dashscope", label: "DashScope (Qwen)", key_env: "DASHSCOPE_API_KEY", default_endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1", mode: "openai" },
-    CanonicalProvider { slug: "deepseek", label: "DeepSeek", key_env: "DEEPSEEK_API_KEY", default_endpoint: "https://api.deepseek.com/v1", mode: "openai" },
-    CanonicalProvider { slug: "xai", label: "xAI", key_env: "XAI_API_KEY", default_endpoint: "https://api.x.ai/v1", mode: "openai" },
-    CanonicalProvider { slug: "gemini", label: "Google AI Studio", key_env: "GOOGLE_API_KEY", default_endpoint: "https://generativelanguage.googleapis.com/v1beta/openai", mode: "openai" },
-    CanonicalProvider { slug: "groq", label: "Groq", key_env: "GROQ_API_KEY", default_endpoint: "https://api.groq.com/openai/v1", mode: "openai" },
-    CanonicalProvider { slug: "mistral", label: "Mistral", key_env: "MISTRAL_API_KEY", default_endpoint: "https://api.mistral.ai/v1", mode: "openai" },
-    CanonicalProvider { slug: "fireworks", label: "Fireworks AI", key_env: "FIREWORKS_API_KEY", default_endpoint: "https://api.fireworks.ai/inference/v1", mode: "openai" },
-    CanonicalProvider { slug: "togetherai", label: "Together AI", key_env: "TOGETHER_API_KEY", default_endpoint: "https://api.together.xyz/v1", mode: "openai" },
-    CanonicalProvider { slug: "perplexity", label: "Perplexity", key_env: "PERPLEXITY_API_KEY", default_endpoint: "https://api.perplexity.ai", mode: "openai" },
-    CanonicalProvider { slug: "cohere", label: "Cohere", key_env: "COHERE_API_KEY", default_endpoint: "https://api.cohere.ai/compatibility/v1", mode: "openai" },
-    CanonicalProvider { slug: "ollama", label: "Ollama", key_env: "", default_endpoint: "http://localhost:11434/v1", mode: "openai" },
-    CanonicalProvider { slug: "llamacpp", label: "llama.cpp", key_env: "", default_endpoint: "http://localhost:8080/v1", mode: "openai" },
+    CanonicalProvider {
+        slug: "openai",
+        label: "OpenAI",
+        key_env: "OPENAI_API_KEY",
+        default_endpoint: "https://api.openai.com/v1",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "anthropic",
+        label: "Anthropic",
+        key_env: "ANTHROPIC_API_KEY",
+        default_endpoint: "https://api.anthropic.com",
+        mode: "anthropic",
+    },
+    CanonicalProvider {
+        slug: "openrouter",
+        label: "OpenRouter",
+        key_env: "OPENROUTER_API_KEY",
+        default_endpoint: "https://openrouter.ai/api/v1",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "dashscope",
+        label: "DashScope (Qwen)",
+        key_env: "DASHSCOPE_API_KEY",
+        default_endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "deepseek",
+        label: "DeepSeek",
+        key_env: "DEEPSEEK_API_KEY",
+        default_endpoint: "https://api.deepseek.com/v1",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "xai",
+        label: "xAI",
+        key_env: "XAI_API_KEY",
+        default_endpoint: "https://api.x.ai/v1",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "gemini",
+        label: "Google AI Studio",
+        key_env: "GOOGLE_API_KEY",
+        default_endpoint: "https://generativelanguage.googleapis.com/v1beta/openai",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "groq",
+        label: "Groq",
+        key_env: "GROQ_API_KEY",
+        default_endpoint: "https://api.groq.com/openai/v1",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "mistral",
+        label: "Mistral",
+        key_env: "MISTRAL_API_KEY",
+        default_endpoint: "https://api.mistral.ai/v1",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "fireworks",
+        label: "Fireworks AI",
+        key_env: "FIREWORKS_API_KEY",
+        default_endpoint: "https://api.fireworks.ai/inference/v1",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "togetherai",
+        label: "Together AI",
+        key_env: "TOGETHER_API_KEY",
+        default_endpoint: "https://api.together.xyz/v1",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "perplexity",
+        label: "Perplexity",
+        key_env: "PERPLEXITY_API_KEY",
+        default_endpoint: "https://api.perplexity.ai",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "cohere",
+        label: "Cohere",
+        key_env: "COHERE_API_KEY",
+        default_endpoint: "https://api.cohere.ai/compatibility/v1",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "ollama",
+        label: "Ollama",
+        key_env: "",
+        default_endpoint: "http://localhost:11434/v1",
+        mode: "openai",
+    },
+    CanonicalProvider {
+        slug: "llamacpp",
+        label: "llama.cpp",
+        key_env: "",
+        default_endpoint: "http://localhost:8080/v1",
+        mode: "openai",
+    },
 ];
 
 pub fn canonical_by_slug(slug: &str) -> Option<&'static CanonicalProvider> {
@@ -269,10 +359,7 @@ fn featured_models(slug: &str, models: &[String]) -> Vec<String> {
     let mut featured = Vec::new();
     for entries in by_lab.values() {
         let mut ranked = entries.clone();
-        ranked.sort_by(|a, b| {
-            b.1.cmp(&a.1)
-                .then_with(|| (a.0 as i64).cmp(&(b.0 as i64)))
-        });
+        ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| (a.0 as i64).cmp(&(b.0 as i64))));
         featured.extend(ranked.into_iter().take(FEATURED_PER_LAB).map(|e| e.2));
     }
     let order: std::collections::HashMap<&str, usize> = models
@@ -527,9 +614,7 @@ pub fn build_model_options_payload(input: &InventoryInput, opts: &InventoryOptio
 
     // Explicit-only: keep rows backed by explicit user configuration.
     if opts.explicit_only {
-        rows.retain(|r| {
-            r.is_user_defined || r.is_current || r.source == "env" || r.slug == "moa"
-        });
+        rows.retain(|r| r.is_user_defined || r.is_current || r.source == "env" || r.slug == "moa");
     }
 
     // Canonical declaration order first, custom rows last (hermes
@@ -552,7 +637,11 @@ pub fn build_model_options_payload(input: &InventoryInput, opts: &InventoryOptio
             let mut value = render_row(row, cache.fresh);
             if row.source == "canonical" && !row.authenticated {
                 // Picker setup hints (hermes `_apply_picker_hints`).
-                let auth_type = if row.key_env.is_empty() { "none" } else { "api_key" };
+                let auth_type = if row.key_env.is_empty() {
+                    "none"
+                } else {
+                    "api_key"
+                };
                 value["auth_type"] = json!(auth_type);
                 if !row.key_env.is_empty() {
                     value["key_env"] = json!(row.key_env);
@@ -603,7 +692,10 @@ mod tests {
             }
             let home_saved = std::env::var("ULNCLAW_HOME").ok();
             std::env::set_var("ULNCLAW_HOME", home);
-            Self { saved, home: home_saved }
+            Self {
+                saved,
+                home: home_saved,
+            }
         }
     }
 
@@ -704,8 +796,7 @@ mod tests {
         let _scrub = EnvScrub::new(dir.path());
         fixture_registry(dir.path());
 
-        let payload =
-            build_model_options_payload(&base_input(), &InventoryOptions::default());
+        let payload = build_model_options_payload(&base_input(), &InventoryOptions::default());
         let providers = payload["providers"].as_array().unwrap();
         assert_eq!(providers.len(), 1);
         let row = &providers[0];
@@ -735,8 +826,7 @@ mod tests {
         fixture_registry(dir.path());
         std::env::set_var("OPENAI_API_KEY", "sk-test");
 
-        let payload =
-            build_model_options_payload(&base_input(), &InventoryOptions::default());
+        let payload = build_model_options_payload(&base_input(), &InventoryOptions::default());
         let providers = payload["providers"].as_array().unwrap();
         let slugs: Vec<&str> = providers
             .iter()
@@ -773,10 +863,7 @@ mod tests {
         );
         let providers = payload["providers"].as_array().unwrap();
         assert_eq!(providers.len(), CANONICAL_PROVIDERS.len());
-        let skeleton = providers
-            .iter()
-            .find(|r| r["slug"] == "anthropic")
-            .unwrap();
+        let skeleton = providers.iter().find(|r| r["slug"] == "anthropic").unwrap();
         assert_eq!(skeleton["authenticated"], false);
         assert_eq!(skeleton["auth_type"], "api_key");
         assert_eq!(skeleton["key_env"], "ANTHROPIC_API_KEY");
@@ -888,8 +975,7 @@ mod tests {
             );
             let _ = sock.write_all(resp.as_bytes());
         });
-        let models =
-            probe_openai_models(&format!("http://{}/v1", addr), Some("k")).unwrap();
+        let models = probe_openai_models(&format!("http://{}/v1", addr), Some("k")).unwrap();
         server.join().unwrap();
         assert_eq!(models, vec!["model-a".to_string(), "model-b".to_string()]);
     }

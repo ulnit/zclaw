@@ -135,7 +135,11 @@ fn find_entry_index(entries: &[String], old_text: &str) -> Option<usize> {
     entries
         .iter()
         .position(|e| e.to_lowercase() == needle)
-        .or_else(|| entries.iter().position(|e| e.to_lowercase().contains(&needle)))
+        .or_else(|| {
+            entries
+                .iter()
+                .position(|e| e.to_lowercase().contains(&needle))
+        })
 }
 
 fn memory_handler(args: serde_json::Value, ctx: Arc<ToolContext>) -> Result<serde_json::Value> {
@@ -143,9 +147,15 @@ fn memory_handler(args: serde_json::Value, ctx: Arc<ToolContext>) -> Result<serd
     let mut ops: Vec<MemoryOp> = Vec::new();
     if let Some(batch) = args.get("operations").and_then(|v| v.as_array()) {
         for item in batch {
-            let action = item.get("action").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let action = item
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             if action.is_empty() {
-                return Ok(json!({"success": false, "error": "Each operation needs an 'action' (add|replace|remove)"}));
+                return Ok(
+                    json!({"success": false, "error": "Each operation needs an 'action' (add|replace|remove)"}),
+                );
             }
             ops.push(MemoryOp {
                 action,
@@ -154,8 +164,14 @@ fn memory_handler(args: serde_json::Value, ctx: Arc<ToolContext>) -> Result<serd
                     .and_then(|v| v.as_str())
                     .unwrap_or("memory")
                     .to_string(),
-                content: item.get("content").and_then(|v| v.as_str()).map(String::from),
-                old_text: item.get("old_text").and_then(|v| v.as_str()).map(String::from),
+                content: item
+                    .get("content")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                old_text: item
+                    .get("old_text")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
             });
         }
     } else if let Some(action) = args.get("action").and_then(|v| v.as_str()) {
@@ -166,8 +182,14 @@ fn memory_handler(args: serde_json::Value, ctx: Arc<ToolContext>) -> Result<serd
                 .and_then(|v| v.as_str())
                 .unwrap_or("memory")
                 .to_string(),
-            content: args.get("content").and_then(|v| v.as_str()).map(String::from),
-            old_text: args.get("old_text").and_then(|v| v.as_str()).map(String::from),
+            content: args
+                .get("content")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            old_text: args
+                .get("old_text")
+                .and_then(|v| v.as_str())
+                .map(String::from),
         });
     }
 
@@ -245,7 +267,9 @@ fn memory_handler(args: serde_json::Value, ctx: Arc<ToolContext>) -> Result<serd
                 changes.push(format!("{}: removed '{}'", target_name, removed));
             }
             other => {
-                return Ok(json!({"success": false, "error": format!("Unknown action: {}", other)}));
+                return Ok(
+                    json!({"success": false, "error": format!("Unknown action: {}", other)}),
+                );
             }
         }
     }

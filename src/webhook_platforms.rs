@@ -62,10 +62,7 @@ fn default_graph_version() -> String {
 
 impl WhatsAppCloudConfig {
     fn graph_url(&self, path: &str) -> String {
-        format!(
-            "https://graph.facebook.com/{}/{path}",
-            self.graph_version
-        )
+        format!("https://graph.facebook.com/{}/{path}", self.graph_version)
     }
 }
 
@@ -161,17 +158,12 @@ pub fn whatsapp_parse_messages_full(payload: &Value) -> Vec<(MessageEvent, Vec<W
             continue;
         };
         for change in changes {
-            let Some(messages) = change
-                .pointer("/value/messages")
-                .and_then(|v| v.as_array())
+            let Some(messages) = change.pointer("/value/messages").and_then(|v| v.as_array())
             else {
                 continue;
             };
             for message in messages {
-                let msg_type = message
-                    .get("type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let msg_type = message.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 let from = message
                     .get("from")
                     .and_then(|v| v.as_str())
@@ -606,9 +598,7 @@ pub async fn whatsapp_handle_webhook(
         if !media_refs.is_empty() {
             let client = reqwest::Client::new();
             for media_ref in &media_refs {
-                if let Some(attachment) =
-                    whatsapp_download_media(&client, cfg, media_ref).await
-                {
+                if let Some(attachment) = whatsapp_download_media(&client, cfg, media_ref).await {
                     event.attachments.push(attachment);
                 }
             }
@@ -818,10 +808,8 @@ fn sorted_json(value: &Value, pretty: bool) -> String {
     fn to_sorted(value: &Value) -> Value {
         match value {
             Value::Object(map) => {
-                let sorted: std::collections::BTreeMap<String, Value> = map
-                    .iter()
-                    .map(|(k, v)| (k.clone(), to_sorted(v)))
-                    .collect();
+                let sorted: std::collections::BTreeMap<String, Value> =
+                    map.iter().map(|(k, v)| (k.clone(), to_sorted(v))).collect();
                 Value::Object(sorted.into_iter().collect())
             }
             Value::Array(items) => Value::Array(items.iter().map(to_sorted).collect()),
@@ -954,9 +942,8 @@ pub async fn msgraph_handle_webhook(
             .unwrap_or("unknown");
         // hermes `_build_message_event`: receipt id, else sha1 over the
         // sorted notification JSON.
-        let message_id = receipt_key.unwrap_or_else(|| {
-            format!("sha1:{}", sha1_hex(&sorted_json(notification, false)))
-        });
+        let message_id = receipt_key
+            .unwrap_or_else(|| format!("sha1:{}", sha1_hex(&sorted_json(notification, false))));
         let event = MessageEvent {
             platform: "msgraph".into(),
             chat_id: format!("msgraph:{subscription_id}"),
@@ -1101,7 +1088,8 @@ pub fn webhook_signature_ok(
         } else {
             secret.as_bytes().to_vec()
         };
-        let signed = format!("{svix_id}.{svix_timestamp}.").into_bytes()
+        let signed = format!("{svix_id}.{svix_timestamp}.")
+            .into_bytes()
             .iter()
             .cloned()
             .chain(body.iter().cloned())
@@ -1263,7 +1251,13 @@ pub async fn webhook_deliver(
             let token = crate::messaging::resolve_telegram_token_public(cfg);
             match token {
                 Some(token) => {
-                    crate::messaging::telegram_send_public(&client, &token, &route.deliver_chat, text).await
+                    crate::messaging::telegram_send_public(
+                        &client,
+                        &token,
+                        &route.deliver_chat,
+                        text,
+                    )
+                    .await
                 }
                 None => eprintln!("[webhook] telegram delivery unavailable: no bot token"),
             }
@@ -1349,8 +1343,16 @@ mod tests {
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect();
-        assert!(whatsapp_signature_ok(body, &format!("sha256={hex}"), "app-secret"));
-        assert!(!whatsapp_signature_ok(body, "sha256=deadbeef", "app-secret"));
+        assert!(whatsapp_signature_ok(
+            body,
+            &format!("sha256={hex}"),
+            "app-secret"
+        ));
+        assert!(!whatsapp_signature_ok(
+            body,
+            "sha256=deadbeef",
+            "app-secret"
+        ));
         assert!(!whatsapp_signature_ok(body, "", "app-secret"));
         // No app_secret configured → verification disabled (hermes).
         assert!(whatsapp_signature_ok(body, "", ""));
@@ -1536,7 +1538,8 @@ mod tests {
             base64::engine::general_purpose::STANDARD.encode(key)
         );
         let now = 1_700_000_000i64;
-        let signed = format!("msg_abc.{now}.").into_bytes()
+        let signed = format!("msg_abc.{now}.")
+            .into_bytes()
             .iter()
             .cloned()
             .chain(body.iter().cloned())
@@ -1553,7 +1556,13 @@ mod tests {
         ]);
         assert!(webhook_signature_ok("svix", body, &ok, &secret, now));
         // Stale timestamp rejected.
-        assert!(!webhook_signature_ok("svix", body, &ok, &secret, now + 1000));
+        assert!(!webhook_signature_ok(
+            "svix",
+            body,
+            &ok,
+            &secret,
+            now + 1000
+        ));
     }
 
     #[test]
@@ -1564,13 +1573,17 @@ mod tests {
             prompt: "got {event}: {body}".into(),
             ..Default::default()
         };
-        let (allowed, event) = webhook_event_allowed(&route, &headers(&[("X-GitHub-Event", "push")]));
+        let (allowed, event) =
+            webhook_event_allowed(&route, &headers(&[("X-GitHub-Event", "push")]));
         assert!(allowed);
         assert_eq!(event, "push");
         let (denied, _) = webhook_event_allowed(&route, &headers(&[("X-GitHub-Event", "issues")]));
         assert!(!denied);
         // No filter → everything passes.
-        let open = WebhookRoute { name: "x".into(), ..Default::default() };
+        let open = WebhookRoute {
+            name: "x".into(),
+            ..Default::default()
+        };
         let (allowed, _) = webhook_event_allowed(&open, &[]);
         assert!(allowed);
         assert_eq!(
@@ -1634,13 +1647,19 @@ mod tests {
         let patterns: Vec<String> = vec!["users/me/messages".into(), "teams/*".into()];
         assert!(msgraph_resource_accepted("users/me/messages", &patterns));
         // Sub-path prefix matches like hermes.
-        assert!(msgraph_resource_accepted("users/me/messages/extra", &patterns));
+        assert!(msgraph_resource_accepted(
+            "users/me/messages/extra",
+            &patterns
+        ));
         assert!(msgraph_resource_accepted("/users/me/messages/", &patterns));
         // Wildcard: exact prefix or prefix/<sub>.
         assert!(msgraph_resource_accepted("teams", &patterns));
         assert!(msgraph_resource_accepted("teams/123", &patterns));
         assert!(!msgraph_resource_accepted("teamsx", &patterns));
-        assert!(!msgraph_resource_accepted("users/other/messages", &patterns));
+        assert!(!msgraph_resource_accepted(
+            "users/other/messages",
+            &patterns
+        ));
     }
 
     #[test]
@@ -1658,7 +1677,10 @@ mod tests {
             "d=v"
         );
         // Missing paths stay literal.
-        assert_eq!(msgraph_render_template("x={nope.gone}", &payload), "x={nope.gone}");
+        assert_eq!(
+            msgraph_render_template("x={nope.gone}", &payload),
+            "x={nope.gone}"
+        );
         // Dict values render as compact JSON.
         let rendered = msgraph_render_template("n={notification.nested}", &payload);
         assert_eq!(rendered, "n={\"deep\":\"v\"}");
@@ -1680,7 +1702,10 @@ mod tests {
     #[test]
     fn msgraph_sorted_json_is_deterministic() {
         let value = json!({"z": [3, {"y": 1, "x": 2}], "a": "b"});
-        assert_eq!(sorted_json(&value, false), r#"{"a":"b","z":[3,{"x":2,"y":1}]}"#);
+        assert_eq!(
+            sorted_json(&value, false),
+            r#"{"a":"b","z":[3,{"x":2,"y":1}]}"#
+        );
         // Stable input for the sha1 message-id fallback.
         assert_eq!(sha1_hex("abc"), "a9993e364706816aba3e25717850c26c9cd0d89d");
     }
@@ -1691,7 +1716,10 @@ mod tests {
     #[test]
     fn label_truncation_respects_caps() {
         assert_eq!(whatsapp_truncate_label("short", 20), "short");
-        assert_eq!(whatsapp_truncate_label("exactly-twenty-chars", 20), "exactly-twenty-chars");
+        assert_eq!(
+            whatsapp_truncate_label("exactly-twenty-chars", 20),
+            "exactly-twenty-chars"
+        );
         let long = "a".repeat(30);
         let out = whatsapp_truncate_label(&long, 20);
         assert_eq!(out.chars().count(), 20);
@@ -1712,11 +1740,17 @@ mod tests {
         let choices: Vec<String> = vec!["Alpha option".into(), "Beta option".into()];
         let payload = whatsapp_build_clarify_interactive("cid1", "Pick one", &choices).unwrap();
         assert_eq!(payload["type"], "button");
-        let body = payload.pointer("/body/text").and_then(|v| v.as_str()).unwrap();
+        let body = payload
+            .pointer("/body/text")
+            .and_then(|v| v.as_str())
+            .unwrap();
         assert!(body.contains("❓ Pick one"));
         assert!(body.contains("1. Alpha option"));
         assert!(body.contains("2. Beta option"));
-        let buttons = payload.pointer("/action/buttons").and_then(|v| v.as_array()).unwrap();
+        let buttons = payload
+            .pointer("/action/buttons")
+            .and_then(|v| v.as_array())
+            .unwrap();
         assert_eq!(buttons.len(), 2);
         assert_eq!(buttons[0].pointer("/reply/id").unwrap(), "cl:cid1:0");
         assert_eq!(buttons[0].pointer("/reply/title").unwrap(), "1");
@@ -1759,13 +1793,18 @@ mod tests {
 
     #[test]
     fn parse_interactive_taps_button_and_list() {
-        let button = whatsapp_parse_interactive_replies(&interactive_payload("cl:abc:1", "2", false));
+        let button =
+            whatsapp_parse_interactive_replies(&interactive_payload("cl:abc:1", "2", false));
         assert_eq!(button.len(), 1);
         assert_eq!(button[0].button_id, "cl:abc:1");
         assert_eq!(button[0].title, "2");
         assert_eq!(button[0].sender_id, "15550001111");
 
-        let list = whatsapp_parse_interactive_replies(&interactive_payload("cl:abc:other", "✏️ Other", true));
+        let list = whatsapp_parse_interactive_replies(&interactive_payload(
+            "cl:abc:other",
+            "✏️ Other",
+            true,
+        ));
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].button_id, "cl:abc:other");
 
@@ -1817,9 +1856,11 @@ mod tests {
         };
         // send fails (no token) but the flip still claims the tap.
         assert!(whatsapp_dispatch_interactive_tap(&cfg, &tap).await);
-        assert!(crate::clarify_gateway::pending_for_session("platform-whatsapp_cloud-2")
-            .unwrap()
-            .awaiting_text);
+        assert!(
+            crate::clarify_gateway::pending_for_session("platform-whatsapp_cloud-2")
+                .unwrap()
+                .awaiting_text
+        );
     }
 
     #[tokio::test]
@@ -1951,7 +1992,10 @@ mod tests {
             }
         }"#;
         let event = bluebubbles_parse_webhook(body).unwrap().unwrap();
-        assert_eq!(event.attachments, vec![("att-1".to_string(), "image/jpeg".to_string())]);
+        assert_eq!(
+            event.attachments,
+            vec![("att-1".to_string(), "image/jpeg".to_string())]
+        );
     }
 
     #[test]
@@ -2010,15 +2054,15 @@ mod tests {
         let cache = BlueBubblesGuidCache::default();
         // Raw GUIDs (contain ';') pass through without network.
         let guid =
-            bluebubbles_resolve_chat_guid(&client, &cfg, &cache, "iMessage;-;+15551234567")
-                .await;
+            bluebubbles_resolve_chat_guid(&client, &cfg, &cache, "iMessage;-;+15551234567").await;
         assert_eq!(guid.as_deref(), Some("iMessage;-;+15551234567"));
         // Pre-seeded cache entries resolve without network too.
         cache.put("bob@example.com", "iMessage;-;bob@example.com");
-        let cached =
-            bluebubbles_resolve_chat_guid(&client, &cfg, &cache, "bob@example.com").await;
+        let cached = bluebubbles_resolve_chat_guid(&client, &cfg, &cache, "bob@example.com").await;
         assert_eq!(cached.as_deref(), Some("iMessage;-;bob@example.com"));
-        assert!(bluebubbles_resolve_chat_guid(&client, &cfg, &cache, "   ").await.is_none());
+        assert!(bluebubbles_resolve_chat_guid(&client, &cfg, &cache, "   ")
+            .await
+            .is_none());
     }
 }
 
@@ -2054,7 +2098,7 @@ pub fn whatsapp_truncate_body(text: &str) -> String {
 
 /// Build the clarify `interactive` payload (hermes `send_clarify`):
 /// 1–3 choices → `type=button` with numeric labels (full choice text in
-/// the body so long options survive the 20-char label cap); 4+ → 
+/// the body so long options survive the 20-char label cap); 4+ →
 /// `type=list` with a per-row description and a final "✏️ Other" row.
 /// Button ids carry `cl:<clarify_id>:<idx|other>` for the inbound tap
 /// dispatch. Returns None for open-ended prompts (plain text instead).
@@ -2080,8 +2124,11 @@ pub fn whatsapp_build_clarify_interactive(
         .enumerate()
         .map(|(i, c)| format!("{}. {}", i + 1, c))
         .collect();
-    let body_text =
-        whatsapp_truncate_body(&format!("❓ {}\n\n{}", question.trim(), option_lines.join("\n")));
+    let body_text = whatsapp_truncate_body(&format!(
+        "❓ {}\n\n{}",
+        question.trim(),
+        option_lines.join("\n")
+    ));
     if choices.len() <= 3 {
         let buttons: Vec<Value> = (0..choices.len())
             .map(|idx| {
@@ -2229,9 +2276,7 @@ pub fn whatsapp_parse_interactive_replies(payload: &Value) -> Vec<WaInteractiveT
             continue;
         };
         for change in changes {
-            let Some(messages) = change
-                .pointer("/value/messages")
-                .and_then(|v| v.as_array())
+            let Some(messages) = change.pointer("/value/messages").and_then(|v| v.as_array())
             else {
                 continue;
             };
@@ -2388,8 +2433,9 @@ fn urlencode_component(value: &str) -> String {
 /// hermes `_MESSAGE_EVENTS`.
 pub const BLUEBUBBLES_MESSAGE_EVENTS: &[&str] = &["new-message", "message", "updated-message"];
 /// hermes `_TAPBACK_ADDED` ∪ `_TAPBACK_REMOVED` associatedMessageType codes.
-pub const BLUEBUBBLES_TAPBACK_CODES: &[i64] =
-    &[2000, 2001, 2002, 2003, 2004, 2005, 3000, 3001, 3002, 3003, 3004, 3005];
+pub const BLUEBUBBLES_TAPBACK_CODES: &[i64] = &[
+    2000, 2001, 2002, 2003, 2004, 2005, 3000, 3001, 3002, 3003, 3004, 3005,
+];
 
 /// Parsed BlueBubbles webhook event ready for dispatch.
 #[derive(Debug, Clone)]
@@ -2413,7 +2459,11 @@ fn bluebubbles_extract_record(payload: &Value) -> Value {
             .cloned()
             .unwrap_or_else(|| payload.clone()),
         _ => {
-            if payload.get("message").map(|v| v.is_object()).unwrap_or(false) {
+            if payload
+                .get("message")
+                .map(|v| v.is_object())
+                .unwrap_or(false)
+            {
                 payload["message"].clone()
             } else {
                 payload.clone()
@@ -2480,7 +2530,11 @@ pub fn bluebubbles_parse_webhook(body: &str) -> Result<Option<BlueBubblesEvent>>
         }
     }
 
-    let text = first_str([record.get("text"), record.get("message"), record.get("body")]);
+    let text = first_str([
+        record.get("text"),
+        record.get("message"),
+        record.get("body"),
+    ]);
 
     let mut attachments = Vec::new();
     if let Some(items) = record.get("attachments").and_then(|v| v.as_array()) {
@@ -2513,7 +2567,11 @@ pub fn bluebubbles_parse_webhook(body: &str) -> Result<Option<BlueBubblesEvent>>
     ]);
     // BlueBubbles v1.9+ nests the chat GUID under chats[0].
     if chat_guid.is_empty() {
-        if let Some(first) = record.get("chats").and_then(|v| v.as_array()).and_then(|a| a.first()) {
+        if let Some(first) = record
+            .get("chats")
+            .and_then(|v| v.as_array())
+            .and_then(|a| a.first())
+        {
             chat_guid = first_str([first.get("guid"), first.get("chatGuid")]);
         }
     }
@@ -2551,8 +2609,11 @@ pub fn bluebubbles_parse_webhook(body: &str) -> Result<Option<BlueBubblesEvent>>
     } else {
         chat_identifier.clone()
     };
-    if sender.is_empty() || chat_id.is_empty() || (text.trim().is_empty() && attachments.is_empty()) {
-        return Err(AgentError::config("bluebubbles webhook: missing message fields"));
+    if sender.is_empty() || chat_id.is_empty() || (text.trim().is_empty() && attachments.is_empty())
+    {
+        return Err(AgentError::config(
+            "bluebubbles webhook: missing message fields",
+        ));
     }
     let is_group = record
         .get("isGroup")
@@ -2650,7 +2711,9 @@ async fn bluebubbles_api_get(
     let status = response.status();
     let value: Value = response.json().await.unwrap_or_else(|_| json!({}));
     if !status.is_success() {
-        return Err(AgentError::Tool(format!("bluebubbles {path}: HTTP {status}")));
+        return Err(AgentError::Tool(format!(
+            "bluebubbles {path}: HTTP {status}"
+        )));
     }
     Ok(value)
 }
@@ -2714,10 +2777,20 @@ pub async fn bluebubbles_resolve_chat_guid(
     if let Some(guid) = cache.get(target) {
         return Some(guid);
     }
-    let payload = bluebubbles_api_post(client, cfg, "/api/v1/chat/query", json!({"limit": 100, "offset": 0}))
-        .await
-        .ok()?;
-    for chat in payload.get("data").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+    let payload = bluebubbles_api_post(
+        client,
+        cfg,
+        "/api/v1/chat/query",
+        json!({"limit": 100, "offset": 0}),
+    )
+    .await
+    .ok()?;
+    for chat in payload
+        .get("data")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+    {
         let guid = first_str([chat.get("guid"), chat.get("chatGuid")]);
         let identifier = first_str([chat.get("chatIdentifier"), chat.get("identifier")]);
         if identifier == target && !guid.is_empty() {
@@ -2738,7 +2811,10 @@ pub async fn bluebubbles_download_attachment(
 ) -> Option<MediaAttachmentRef> {
     let url = bluebubbles_api_url(
         cfg,
-        &format!("/api/v1/attachment/{}/download", urlencode_component(attachment_guid)),
+        &format!(
+            "/api/v1/attachment/{}/download",
+            urlencode_component(attachment_guid)
+        ),
     )?;
     let response = client
         .get(&url)
@@ -2755,13 +2831,9 @@ pub async fn bluebubbles_download_attachment(
     } else {
         declared_mime.to_string()
     };
-    let path = crate::media_cache::cache_media_bytes(
-        &crate::config::ulnclaw_home(),
-        &data,
-        &mime,
-        "",
-    )
-    .ok()?;
+    let path =
+        crate::media_cache::cache_media_bytes(&crate::config::ulnclaw_home(), &data, &mime, "")
+            .ok()?;
     Some(MediaAttachmentRef {
         path,
         mime,
@@ -2796,7 +2868,11 @@ pub async fn bluebubbles_send_text(
         .map(str::trim)
         .filter(|p| !p.is_empty())
         .collect();
-    for paragraph in if paragraphs.is_empty() { vec![text.trim()] } else { paragraphs } {
+    for paragraph in if paragraphs.is_empty() {
+        vec![text.trim()]
+    } else {
+        paragraphs
+    } {
         if paragraph.chars().count() <= BLUEBUBBLES_MAX_TEXT_LENGTH {
             chunks.push(paragraph.to_string());
         } else {
@@ -2973,10 +3049,7 @@ pub async fn bluebubbles_startup(cfg: BlueBubblesConfig) {
         Ok(()) => eprintln!("[bluebubbles] webhook registered: {}", cfg.webhook_url),
         Err(e) => eprintln!("[bluebubbles] webhook registration failed: {e}"),
     }
-    crate::messaging::register_platform_sender(
-        "bluebubbles",
-        Arc::new(BlueBubblesSender { cfg }),
-    );
+    crate::messaging::register_platform_sender("bluebubbles", Arc::new(BlueBubblesSender { cfg }));
 }
 
 /// PlatformSender for BlueBubbles (clarify prompts + echoes).
@@ -3017,15 +3090,11 @@ pub async fn bluebubbles_handle_webhook(
         Some(event) => event,
         None => return Ok(()), // silent ack (from-me / tapback / non-message)
     };
-    let authorized = cfg
-        .allowed_chat_ids
-        .iter()
-        .any(|allowed| {
-            *allowed == event.chat_id || *allowed == event.sender_id || *allowed == event.chat_name
-        })
-        || pairing
-            .map(|store| store.is_approved("bluebubbles", &event.sender_id))
-            .unwrap_or(false);
+    let authorized = cfg.allowed_chat_ids.iter().any(|allowed| {
+        *allowed == event.chat_id || *allowed == event.sender_id || *allowed == event.chat_name
+    }) || pairing
+        .map(|store| store.is_approved("bluebubbles", &event.sender_id))
+        .unwrap_or(false);
     if !authorized {
         eprintln!(
             "[bluebubbles] refusing message from {} — add the chat GUID/identifier to \
@@ -3069,12 +3138,14 @@ pub async fn bluebubbles_handle_webhook(
     };
     for (guid, mime) in &event.attachments {
         match bluebubbles_download_attachment(&client, cfg, guid, mime).await {
-            Some(att) => message_event.attachments.push(crate::messaging::MediaAttachment {
-                path: att.path,
-                mime: att.mime,
-                bytes: att.bytes,
-                original_name: String::new(),
-            }),
+            Some(att) => message_event
+                .attachments
+                .push(crate::messaging::MediaAttachment {
+                    path: att.path,
+                    mime: att.mime,
+                    bytes: att.bytes,
+                    original_name: String::new(),
+                }),
             None => eprintln!("[bluebubbles] failed to download attachment {guid}"),
         }
     }

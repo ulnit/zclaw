@@ -31,7 +31,11 @@ pub async fn dashboard_ws(
     let token = params.get("token").cloned();
     if let Some(key) = state.key.as_ref() {
         if token.as_deref() != Some(key.as_str()) {
-            return (StatusCode::UNAUTHORIZED, Json(json!({"error": "unauthorized"}))).into_response();
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "unauthorized"})),
+            )
+                .into_response();
         }
     }
     ws.on_upgrade(move |socket| serve_socket(socket, state))
@@ -278,7 +282,11 @@ async fn prompt_submit(state: Arc<GatewayState>, params: Value) -> Result<Value,
         .into_iter()
         .filter(|m| m.role != crate::provider::Role::System)
         .collect::<Vec<_>>();
-    let history_arg = if history.is_empty() { None } else { Some(history) };
+    let history_arg = if history.is_empty() {
+        None
+    } else {
+        Some(history)
+    };
 
     let runner = state.agent.clone();
     let sid_emit = session_id.clone();
@@ -287,32 +295,34 @@ async fn prompt_submit(state: Arc<GatewayState>, params: Value) -> Result<Value,
     // /api/sessions/:id/model) on WS turns exactly like the HTTP chat path.
     let override_model = crate::gateway::session_model_override(&state, &session_id);
     let task = tokio::spawn(crate::agent::stream_scope(
-        Arc::new(move |event: crate::agent::StreamEvent| {
-            match event {
-                crate::agent::StreamEvent::Delta(delta) => {
-                    publish(&sid_emit, "message.delta", json!({"text": delta}));
-                }
-                crate::agent::StreamEvent::ToolProgress { tool, status } => {
-                    publish(&sid_emit, "tool.progress", json!({"name": tool, "status": status}));
-                }
-                crate::agent::StreamEvent::ToolStarted {
-                    name,
-                    call_id,
-                    arguments,
-                } => {
-                    publish(
-                        &sid_emit,
-                        "tool.start",
-                        json!({"name": name, "call_id": call_id, "id": call_id, "arguments": arguments, "title": name}),
-                    );
-                }
-                crate::agent::StreamEvent::ToolCompleted { call_id, result } => {
-                    publish(
-                        &sid_emit,
-                        "tool.complete",
-                        json!({"call_id": call_id, "id": call_id, "result": result}),
-                    );
-                }
+        Arc::new(move |event: crate::agent::StreamEvent| match event {
+            crate::agent::StreamEvent::Delta(delta) => {
+                publish(&sid_emit, "message.delta", json!({"text": delta}));
+            }
+            crate::agent::StreamEvent::ToolProgress { tool, status } => {
+                publish(
+                    &sid_emit,
+                    "tool.progress",
+                    json!({"name": tool, "status": status}),
+                );
+            }
+            crate::agent::StreamEvent::ToolStarted {
+                name,
+                call_id,
+                arguments,
+            } => {
+                publish(
+                    &sid_emit,
+                    "tool.start",
+                    json!({"name": name, "call_id": call_id, "id": call_id, "arguments": arguments, "title": name}),
+                );
+            }
+            crate::agent::StreamEvent::ToolCompleted { call_id, result } => {
+                publish(
+                    &sid_emit,
+                    "tool.complete",
+                    json!({"call_id": call_id, "id": call_id, "result": result}),
+                );
             }
         }),
         async move {
@@ -364,7 +374,11 @@ async fn prompt_submit(state: Arc<GatewayState>, params: Value) -> Result<Value,
                 );
             }
         }
-        publish(&sid2, "session.info", json!({"session_id": sid2, "running": false}));
+        publish(
+            &sid2,
+            "session.info",
+            json!({"session_id": sid2, "running": false}),
+        );
         publish(&sid2, "sessions.changed", json!({"session_id": sid2}));
     });
 
@@ -616,7 +630,11 @@ fn session_close(state: Arc<GatewayState>, params: Value) -> Result<Value, Strin
         .and_then(Value::as_str)
         .unwrap_or_default();
     let _ = state.store.end_session(session_id, "closed");
-    publish(session_id, "sessions.changed", json!({"session_id": session_id}));
+    publish(
+        session_id,
+        "sessions.changed",
+        json!({"session_id": session_id}),
+    );
     Ok(json!({"ok": true}))
 }
 
@@ -625,7 +643,10 @@ fn session_title(state: Arc<GatewayState>, params: Value) -> Result<Value, Strin
         .get("session_id")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let title = params.get("title").and_then(Value::as_str).unwrap_or_default();
+    let title = params
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     state
         .store
         .set_session_title(session_id, title)
@@ -649,7 +670,9 @@ fn config_set(params: Value) -> Result<Value, String> {
     // persist the raw patch into config.toml under [desktop].
     let path = crate::config_cmd::config_path();
     let raw = std::fs::read_to_string(&path).unwrap_or_default();
-    let mut doc: toml::Value = raw.parse().unwrap_or_else(|_| toml::Value::Table(Default::default()));
+    let mut doc: toml::Value = raw
+        .parse()
+        .unwrap_or_else(|_| toml::Value::Table(Default::default()));
     let table = doc
         .as_table_mut()
         .ok_or_else(|| "config root is not a table".to_string())?;
@@ -823,7 +846,8 @@ fn complete_path(params: Value) -> Value {
     if let Ok(entries) = std::fs::read_dir(&base) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if !file_part.is_empty() && !name.to_lowercase().starts_with(&file_part.to_lowercase()) {
+            if !file_part.is_empty() && !name.to_lowercase().starts_with(&file_part.to_lowercase())
+            {
                 continue;
             }
             let is_dir = entry.path().is_dir();
@@ -873,7 +897,10 @@ fn reload_env() -> Result<Value, String> {
 }
 
 async fn reload_mcp_ws(state: Arc<GatewayState>, params: Value) -> Result<Value, String> {
-    let confirm = params.get("confirm").and_then(Value::as_bool).unwrap_or(false);
+    let confirm = params
+        .get("confirm")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     if !confirm {
         return Ok(json!({
             "warning": "Reloading MCP servers disconnects and reconnects every configured server (live sessions' prompt cache is invalidated). Pass confirm=true to proceed.",
@@ -943,8 +970,8 @@ fn slash_exec(state: Arc<GatewayState>, params: Value) -> Result<Value, String> 
 /// Pending mid-turn prompt requests (sudo password / skill secret capture).
 /// Future gateway-side emitters register a request id here and await the
 /// oneshot; the desktop overlay answers over sudo.respond / secret.respond.
-fn pending_prompts()
-    -> &'static std::sync::Mutex<HashMap<String, tokio::sync::oneshot::Sender<String>>> {
+fn pending_prompts(
+) -> &'static std::sync::Mutex<HashMap<String, tokio::sync::oneshot::Sender<String>>> {
     static MAP: std::sync::OnceLock<
         std::sync::Mutex<HashMap<String, tokio::sync::oneshot::Sender<String>>>,
     > = std::sync::OnceLock::new();
@@ -1032,10 +1059,16 @@ fn message_react(state: Arc<GatewayState>, params: Value) -> Result<Value, Strin
             .ok_or_else(|| "No message to react to yet.".to_string())?
     };
 
-    let emoji_opt = if emoji.is_empty() { None } else { Some(emoji.as_str()) };
+    let emoji_opt = if emoji.is_empty() {
+        None
+    } else {
+        Some(emoji.as_str())
+    };
     let Some(reactions) = store.set_message_reaction(&session_id, row_id, emoji_opt, &author)
     else {
-        return Err(format!("Message {row_id} is not part of this conversation."));
+        return Err(format!(
+            "Message {row_id} is not part of this conversation."
+        ));
     };
 
     publish(
@@ -1119,7 +1152,10 @@ async fn pet_generate(params: Value) -> Result<Value, String> {
 
     let token = uuid::Uuid::new_v4().to_string()[..12].to_string();
     let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    pet_cancel_flags().lock().await.insert(token.clone(), cancel.clone());
+    pet_cancel_flags()
+        .lock()
+        .await
+        .insert(token.clone(), cancel.clone());
     let stage = pet_gen_root().join(&token);
     std::fs::create_dir_all(&stage).map_err(|e| e.to_string())?;
 
@@ -1138,7 +1174,11 @@ async fn pet_generate(params: Value) -> Result<Value, String> {
         Some(path)
     };
 
-    publish("", "pet.generate.progress", json!({ "token": token, "count": count }));
+    publish(
+        "",
+        "pet.generate.progress",
+        json!({ "token": token, "count": count }),
+    );
 
     let concept = if prompt.is_empty() {
         "a pet based on the reference image".to_string()
@@ -1169,9 +1209,10 @@ async fn pet_generate(params: Value) -> Result<Value, String> {
                 if cancel_inner.load(std::sync::atomic::Ordering::SeqCst) {
                     break;
                 }
-                let variation = ["front view", "three-quarter view", "side view", "close-up"]
-                    [index % 4];
-                let prompt = crate::pets_generate::build_base_prompt(&concept, style.as_deref(), variation);
+                let variation =
+                    ["front view", "three-quarter view", "side view", "close-up"][index % 4];
+                let prompt =
+                    crate::pets_generate::build_base_prompt(&concept, style.as_deref(), variation);
                 match crate::pets_generate::generate_image(&endpoint, &prompt, reference_arg, false)
                     .map(|bytes| crate::pets_generate::harden_transparency(&bytes))
                 {
@@ -1239,7 +1280,11 @@ async fn pet_hatch(params: Value) -> Result<Value, String> {
         .unwrap_or_default()
         .trim()
         .to_string();
-    let cancel_token = if cancel_token.is_empty() { token.clone() } else { cancel_token };
+    let cancel_token = if cancel_token.is_empty() {
+        token.clone()
+    } else {
+        cancel_token
+    };
     let name = params
         .get("name")
         .and_then(Value::as_str)
@@ -1253,7 +1298,9 @@ async fn pet_hatch(params: Value) -> Result<Value, String> {
         return Err("missing name".into());
     }
     let index = params.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
-    let base = pet_gen_root().join(&token).join(format!("draft-{index}.png"));
+    let base = pet_gen_root()
+        .join(&token)
+        .join(format!("draft-{index}.png"));
     if !base.is_file() {
         return Err("draft expired — generate again".into());
     }
@@ -1530,9 +1577,11 @@ fn session_runtime_info(state: &Arc<GatewayState>, session_id: &str) -> Value {
 }
 
 fn format_epoch(ts: f64) -> String {
-    chrono::DateTime::<chrono::Local>::from(chrono::DateTime::from_timestamp(ts as i64, 0).unwrap_or_default())
-        .format("%Y-%m-%d %H:%M")
-        .to_string()
+    chrono::DateTime::<chrono::Local>::from(
+        chrono::DateTime::from_timestamp(ts as i64, 0).unwrap_or_default(),
+    )
+    .format("%Y-%m-%d %H:%M")
+    .to_string()
 }
 
 /// `session.usage` — persisted token totals for the session (hermes
@@ -1625,10 +1674,7 @@ fn session_status(state: Arc<GatewayState>, params: Value) -> Result<Value, Stri
             "Last Activity: {}",
             format_epoch(row.last_activity_at)
         ));
-        lines.push(format!(
-            "Tokens: {}",
-            row.input_tokens + row.output_tokens
-        ));
+        lines.push(format!("Tokens: {}", row.input_tokens + row.output_tokens));
     } else {
         lines.push(format!("Model: {model} ({})", state.provider_name));
     }
@@ -1643,9 +1689,7 @@ fn session_status(state: Arc<GatewayState>, params: Value) -> Result<Value, Stri
 /// (hermes session.save; the desktop renders `Saved transcript to <file>`).
 fn session_save(state: Arc<GatewayState>, params: Value) -> Result<Value, String> {
     let session_id = require_session_id(&params)?;
-    let saved_dir = crate::config::ulnclaw_home()
-        .join("sessions")
-        .join("saved");
+    let saved_dir = crate::config::ulnclaw_home().join("sessions").join("saved");
     std::fs::create_dir_all(&saved_dir).map_err(|e| {
         format!(
             "failed to create save directory {}: {e}",
@@ -1658,11 +1702,7 @@ fn session_save(state: Arc<GatewayState>, params: Value) -> Result<Value, String
         .store
         .load_messages(&session_id)
         .map_err(|e| e.to_string())?;
-    let row = state
-        .store
-        .get_session_row(&session_id)
-        .ok()
-        .flatten();
+    let row = state.store.get_session_row(&session_id).ok().flatten();
     let model = row
         .as_ref()
         .and_then(|r| r.model.clone())
@@ -1670,7 +1710,11 @@ fn session_save(state: Arc<GatewayState>, params: Value) -> Result<Value, String
         .unwrap_or_else(|| state.model_name.clone());
     let session_start = row
         .as_ref()
-        .map(|r| chrono::DateTime::from_timestamp(r.started_at as i64, 0).unwrap_or_default().to_rfc3339())
+        .map(|r| {
+            chrono::DateTime::from_timestamp(r.started_at as i64, 0)
+                .unwrap_or_default()
+                .to_rfc3339()
+        })
         .unwrap_or_default();
     let payload = json!({
         "model": model,
@@ -1704,11 +1748,7 @@ fn session_branch(state: Arc<GatewayState>, params: Value) -> Result<Value, Stri
             history.truncate(count as usize);
         }
     }
-    let parent_row = state
-        .store
-        .get_session_row(&parent_id)
-        .ok()
-        .flatten();
+    let parent_row = state.store.get_session_row(&parent_id).ok().flatten();
     let model = parent_row.as_ref().and_then(|r| r.model.clone());
     let new_id = state
         .store
@@ -1750,9 +1790,7 @@ async fn session_compress(state: Arc<GatewayState>, params: Value) -> Result<Val
     {
         let map = turns().lock().await;
         if map.contains_key(&session_id) {
-            return Err(
-                "session busy — interrupt the current turn before compress".into(),
-            );
+            return Err("session busy — interrupt the current turn before compress".into());
         }
     }
     let history: Vec<crate::provider::Message> = state
@@ -1880,18 +1918,11 @@ fn session_activate(state: Arc<GatewayState>, params: Value) -> Result<Value, St
         .get("omit_messages")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let row = state
-        .store
-        .get_session_row(&session_id)
-        .ok()
-        .flatten();
+    let row = state.store.get_session_row(&session_id).ok().flatten();
     let messages: Vec<Value> = if omit_messages {
         Vec::new()
     } else {
-        let history = state
-            .store
-            .load_messages(&session_id)
-            .unwrap_or_default();
+        let history = state.store.load_messages(&session_id).unwrap_or_default();
         history_to_wire(&history)
     };
     let message_count = if omit_messages {
@@ -1954,10 +1985,7 @@ fn sheet_revision(path: &std::path::Path) -> String {
 
 /// Renderer sprite payload (hermes `_pet_sprite_payload`): spritesheet
 /// bytes + frame geometry + state-row taxonomy for the desktop canvas.
-fn pet_sprite_payload(
-    pet: &crate::pets::InstalledPet,
-    scale: f64,
-) -> Result<Value, String> {
+fn pet_sprite_payload(pet: &crate::pets::InstalledPet, scale: f64) -> Result<Value, String> {
     use base64::Engine;
     let raw = std::fs::read(&pet.spritesheet).map_err(|e| e.to_string())?;
     let mime = match pet
@@ -2011,7 +2039,11 @@ fn active_pet_selection() -> (bool, Option<crate::pets::InstalledPet>, f64) {
     } else {
         Some(config.slug.as_str())
     };
-    (true, crate::pets::resolve_active_pet(&home, slug), config.scale)
+    (
+        true,
+        crate::pets::resolve_active_pet(&home, slug),
+        config.scale,
+    )
 }
 
 /// `pet.info` — active pet sprite payload for the desktop canvas.
@@ -2152,8 +2184,8 @@ fn pet_export(params: Value) -> Result<Value, String> {
         return Err("missing slug".into());
     }
     let home = crate::config::ulnclaw_home();
-    let (filename, data) = crate::pets::export_pet(&home, &slug)
-        .map_err(|e| format!("pet.export failed: {e}"))?;
+    let (filename, data) =
+        crate::pets::export_pet(&home, &slug).map_err(|e| format!("pet.export failed: {e}"))?;
     Ok(json!({
         "ok": true,
         "filename": filename,
@@ -2381,21 +2413,19 @@ fn setup_runtime_check(state: &Arc<GatewayState>) -> Value {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::agent::Agent;
+    use crate::gateway::ApprovalRouter;
     use crate::provider::openai::OpenAiProvider;
     use crate::session::sqlite::SqliteSessionStore;
-    use crate::gateway::ApprovalRouter;
     use crate::tools::ToolRegistry;
 
     fn test_state() -> Arc<GatewayState> {
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
         let provider = Arc::new(
             OpenAiProvider::builder()
@@ -2419,12 +2449,16 @@ mod tests {
     #[tokio::test]
     async fn wake_methods_report_unavailable_gracefully() {
         let state = test_state();
-        let status = dispatch(state.clone(), "wake.status", json!({})).await.unwrap();
+        let status = dispatch(state.clone(), "wake.status", json!({}))
+            .await
+            .unwrap();
         assert_eq!(status["listening"], false);
         assert_eq!(status["available"], false);
         assert!(status["hint"].as_str().unwrap().contains("not built"));
 
-        let start = dispatch(state.clone(), "wake.start", json!({"persist": true})).await.unwrap();
+        let start = dispatch(state.clone(), "wake.start", json!({"persist": true}))
+            .await
+            .unwrap();
         assert_eq!(start["started"], false);
         assert!(start["hint"].as_str().is_some());
 
@@ -2436,7 +2470,9 @@ mod tests {
     #[tokio::test]
     async fn pet_generate_status_shape() {
         let state = test_state();
-        let status = dispatch(state, "pet.generate.status", json!({})).await.unwrap();
+        let status = dispatch(state, "pet.generate.status", json!({}))
+            .await
+            .unwrap();
         assert!(status.get("available").is_some());
         assert!(status["providers"].is_array());
     }
@@ -2444,21 +2480,39 @@ mod tests {
     #[tokio::test]
     async fn pet_methods_validate_params() {
         let state = test_state();
-        assert!(dispatch(state.clone(), "pet.generate", json!({})).await.is_err());
-        assert!(dispatch(state.clone(), "pet.hatch", json!({"name": "x"})).await.is_err());
-        assert!(dispatch(state.clone(), "pet.hatch", json!({"token": "t"})).await.is_err());
+        assert!(dispatch(state.clone(), "pet.generate", json!({}))
+            .await
+            .is_err());
+        assert!(dispatch(state.clone(), "pet.hatch", json!({"name": "x"}))
+            .await
+            .is_err());
+        assert!(dispatch(state.clone(), "pet.hatch", json!({"token": "t"}))
+            .await
+            .is_err());
+        assert!(dispatch(
+            state.clone(),
+            "pet.hatch",
+            json!({"token": "nope", "index": 0, "name": "x"})
+        )
+        .await
+        .is_err());
+        assert!(dispatch(state.clone(), "pet.rename", json!({"slug": "s"}))
+            .await
+            .is_err());
         assert!(
-            dispatch(state.clone(), "pet.hatch", json!({"token": "nope", "index": 0, "name": "x"}))
+            dispatch(state.clone(), "pet.select", json!({"slug": "ghost"}))
                 .await
                 .is_err()
         );
-        assert!(dispatch(state.clone(), "pet.rename", json!({"slug": "s"})).await.is_err());
-        assert!(dispatch(state.clone(), "pet.select", json!({"slug": "ghost"})).await.is_err());
 
-        let removed = dispatch(state.clone(), "pet.remove", json!({"slug": "ghost"})).await.unwrap();
+        let removed = dispatch(state.clone(), "pet.remove", json!({"slug": "ghost"}))
+            .await
+            .unwrap();
         assert_eq!(removed["ok"], false);
 
-        let cancel = dispatch(state, "pet.cancel", json!({"token": "unknown"})).await.unwrap();
+        let cancel = dispatch(state, "pet.cancel", json!({"token": "unknown"}))
+            .await
+            .unwrap();
         assert_eq!(cancel["ok"], true);
     }
 
@@ -2470,23 +2524,35 @@ mod tests {
         assert!(err.unwrap_err().contains("no pending password request"));
 
         // Late answer for a known-but-unpending id -> expired, not an error.
-        let expired = dispatch(state.clone(), "sudo.respond", json!({"request_id": "r1", "password": "x"}))
-            .await
-            .unwrap();
+        let expired = dispatch(
+            state.clone(),
+            "sudo.respond",
+            json!({"request_id": "r1", "password": "x"}),
+        )
+        .await
+        .unwrap();
         assert_eq!(expired["status"], "expired");
 
         // A registered prompt is answered over the WS method.
         let rx = request_prompt("r2");
-        let ok = dispatch(state.clone(), "secret.respond", json!({"request_id": "r2", "value": "sekret"}))
-            .await
-            .unwrap();
+        let ok = dispatch(
+            state.clone(),
+            "secret.respond",
+            json!({"request_id": "r2", "value": "sekret"}),
+        )
+        .await
+        .unwrap();
         assert_eq!(ok["status"], "ok");
         assert_eq!(rx.await.unwrap(), "sekret");
 
         // Answering twice reports expired (entry consumed).
-        let again = dispatch(state, "secret.respond", json!({"request_id": "r2", "value": "x"}))
-            .await
-            .unwrap();
+        let again = dispatch(
+            state,
+            "secret.respond",
+            json!({"request_id": "r2", "value": "x"}),
+        )
+        .await
+        .unwrap();
         assert_eq!(again["status"], "expired");
     }
 
@@ -2550,7 +2616,10 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(status["output"].as_str().unwrap().starts_with("No active goal"));
+        assert!(status["output"]
+            .as_str()
+            .unwrap()
+            .starts_with("No active goal"));
 
         // Seed a goal through the manager, then pause/resume/clear over WS.
         let mut manager = crate::goals::GoalManager::new("s-goal", Some(state.store.clone()), 5);
@@ -2581,7 +2650,10 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(status["output"].as_str().unwrap().contains("ship the desktop"));
+        assert!(status["output"]
+            .as_str()
+            .unwrap()
+            .contains("ship the desktop"));
 
         let cleared = dispatch(
             state.clone(),
@@ -2604,12 +2676,19 @@ mod tests {
     #[tokio::test]
     async fn reload_mcp_requires_confirm() {
         let state = test_state();
-        let skipped = dispatch(state.clone(), "reload.mcp", json!({})).await.unwrap();
+        let skipped = dispatch(state.clone(), "reload.mcp", json!({}))
+            .await
+            .unwrap();
         assert!(skipped["warning"].as_str().is_some());
 
-        let done = dispatch(state, "reload.mcp", json!({"confirm": true})).await.unwrap();
+        let done = dispatch(state, "reload.mcp", json!({"confirm": true}))
+            .await
+            .unwrap();
         assert_eq!(done["ok"], true);
-        assert!(done["output"].as_str().unwrap().contains("No MCP servers connected"));
+        assert!(done["output"]
+            .as_str()
+            .unwrap()
+            .contains("No MCP servers connected"));
     }
 
     #[tokio::test]
@@ -2640,7 +2719,10 @@ mod tests {
         )
         .await
         .unwrap();
-        let session_id = created["session_id"].as_str().expect("session_id").to_string();
+        let session_id = created["session_id"]
+            .as_str()
+            .expect("session_id")
+            .to_string();
         assert!(!session_id.is_empty());
         assert_eq!(created["stored_session_id"], created["session_id"]);
         assert_eq!(created["message_count"], 0);
@@ -2663,25 +2745,38 @@ mod tests {
         // Bare create stays rowless (hermes lazy-row contract: no empty
         // sessions for launches that never type) and falls back to the
         // gateway's global model/provider.
-        let bare = dispatch(state.clone(), "session.create", json!({"source": "desktop"}))
-            .await
-            .unwrap();
+        let bare = dispatch(
+            state.clone(),
+            "session.create",
+            json!({"source": "desktop"}),
+        )
+        .await
+        .unwrap();
         let bare_id = bare["session_id"].as_str().unwrap().to_string();
         assert!(state.store.get_session_row(&bare_id).unwrap().is_none());
         assert_eq!(bare["info"]["model"], "test-model");
         assert_eq!(bare["info"]["provider"], "test");
 
         // session.close on a rowless draft is a clean no-op (drift abort path).
-        let closed = dispatch(state.clone(), "session.close", json!({"session_id": bare_id}))
-            .await
-            .unwrap();
+        let closed = dispatch(
+            state.clone(),
+            "session.close",
+            json!({"session_id": bare_id}),
+        )
+        .await
+        .unwrap();
         assert_eq!(closed["ok"], true);
     }
 
     /// Serialize tests that repoint ULNCLAW_HOME (process-global env).
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    fn seed_message(state: &Arc<GatewayState>, session_id: &str, role: crate::provider::Role, text: &str) {
+    fn seed_message(
+        state: &Arc<GatewayState>,
+        session_id: &str,
+        role: crate::provider::Role,
+        text: &str,
+    ) {
         state
             .store
             .append_message(
@@ -2700,15 +2795,21 @@ mod tests {
     #[tokio::test]
     async fn billing_methods_fail_open_without_portal() {
         let state = test_state();
-        let billing = dispatch(state.clone(), "billing.state", json!({})).await.unwrap();
+        let billing = dispatch(state.clone(), "billing.state", json!({}))
+            .await
+            .unwrap();
         assert_eq!(billing["ok"], true);
         assert_eq!(billing["logged_in"], false);
 
-        let subscription = dispatch(state.clone(), "subscription.state", json!({})).await.unwrap();
+        let subscription = dispatch(state.clone(), "subscription.state", json!({}))
+            .await
+            .unwrap();
         assert_eq!(subscription["ok"], true);
         assert_eq!(subscription["logged_in"], false);
 
-        let usage = dispatch(state.clone(), "usage.bars", json!({})).await.unwrap();
+        let usage = dispatch(state.clone(), "usage.bars", json!({}))
+            .await
+            .unwrap();
         assert_eq!(usage["ok"], true);
         assert_eq!(usage["available"], false);
 
@@ -2724,21 +2825,41 @@ mod tests {
         ] {
             let result = dispatch(state.clone(), method, json!({})).await.unwrap();
             assert_eq!(result["ok"], false, "{method} should be unavailable");
-            assert_eq!(result["error"], "unavailable", "{method} should carry the typed error");
+            assert_eq!(
+                result["error"], "unavailable",
+                "{method} should carry the typed error"
+            );
         }
     }
 
     #[tokio::test]
     async fn session_usage_and_context_breakdown_read_persisted_totals() {
         let state = test_state();
-        state.store.ensure_session("sess-usage", "desktop", None, None).unwrap();
-        seed_message(&state, "sess-usage", crate::provider::Role::User, "hello there");
-        seed_message(&state, "sess-usage", crate::provider::Role::Assistant, "hi!");
+        state
+            .store
+            .ensure_session("sess-usage", "desktop", None, None)
+            .unwrap();
+        seed_message(
+            &state,
+            "sess-usage",
+            crate::provider::Role::User,
+            "hello there",
+        );
+        seed_message(
+            &state,
+            "sess-usage",
+            crate::provider::Role::Assistant,
+            "hi!",
+        );
         state.store.update_usage("sess-usage", 11, 7, 0).unwrap();
 
-        let usage = dispatch(state.clone(), "session.usage", json!({"session_id": "sess-usage"}))
-            .await
-            .unwrap();
+        let usage = dispatch(
+            state.clone(),
+            "session.usage",
+            json!({"session_id": "sess-usage"}),
+        )
+        .await
+        .unwrap();
         assert_eq!(usage["input"], 11);
         assert_eq!(usage["output"], 7);
         assert_eq!(usage["total"], 18);
@@ -2763,11 +2884,21 @@ mod tests {
     #[tokio::test]
     async fn session_status_renders_cockpit_text() {
         let state = test_state();
-        state.store.ensure_session("sess-status", "desktop", None, None).unwrap();
-        state.store.set_session_title("sess-status", "Status Probe").unwrap();
-        let result = dispatch(state, "session.status", json!({"session_id": "sess-status"}))
-            .await
+        state
+            .store
+            .ensure_session("sess-status", "desktop", None, None)
             .unwrap();
+        state
+            .store
+            .set_session_title("sess-status", "Status Probe")
+            .unwrap();
+        let result = dispatch(
+            state,
+            "session.status",
+            json!({"session_id": "sess-status"}),
+        )
+        .await
+        .unwrap();
         let output = result["output"].as_str().unwrap();
         assert!(output.contains("Session ID: sess-status"));
         assert!(output.contains("Title: Status Probe"));
@@ -2777,7 +2908,10 @@ mod tests {
     #[tokio::test]
     async fn session_create_accepts_seed_messages_and_parent() {
         let state = test_state();
-        state.store.ensure_session("parent-1", "desktop", None, None).unwrap();
+        state
+            .store
+            .ensure_session("parent-1", "desktop", None, None)
+            .unwrap();
         let created = dispatch(
             state.clone(),
             "session.create",
@@ -2797,7 +2931,11 @@ mod tests {
         assert_eq!(created["messages"][0]["role"], "user");
         assert_eq!(created["messages"][1]["content"], "second");
 
-        let row = state.store.get_session_row(&new_id).unwrap().expect("seeded create persists");
+        let row = state
+            .store
+            .get_session_row(&new_id)
+            .unwrap()
+            .expect("seeded create persists");
         assert_eq!(row.parent_session_id.as_deref(), Some("parent-1"));
         let history = state.store.load_messages(&new_id).unwrap();
         assert_eq!(history.len(), 2);
@@ -2806,11 +2944,27 @@ mod tests {
     #[tokio::test]
     async fn session_branch_copies_parent_history() {
         let state = test_state();
-        state.store.ensure_session("branch-parent", "desktop", None, None).unwrap();
-        state.store.set_session_title("branch-parent", "Original").unwrap();
+        state
+            .store
+            .ensure_session("branch-parent", "desktop", None, None)
+            .unwrap();
+        state
+            .store
+            .set_session_title("branch-parent", "Original")
+            .unwrap();
         seed_message(&state, "branch-parent", crate::provider::Role::User, "one");
-        seed_message(&state, "branch-parent", crate::provider::Role::Assistant, "two");
-        seed_message(&state, "branch-parent", crate::provider::Role::User, "three");
+        seed_message(
+            &state,
+            "branch-parent",
+            crate::provider::Role::Assistant,
+            "two",
+        );
+        seed_message(
+            &state,
+            "branch-parent",
+            crate::provider::Role::User,
+            "three",
+        );
 
         let branched = dispatch(
             state.clone(),
@@ -2825,28 +2979,56 @@ mod tests {
         assert_eq!(branched["title"], "Original (branch)");
         assert_eq!(branched["messages"][1]["content"], "two");
 
-        let row = state.store.get_session_row(&new_id).unwrap().expect("branch row exists");
+        let row = state
+            .store
+            .get_session_row(&new_id)
+            .unwrap()
+            .expect("branch row exists");
         assert_eq!(row.parent_session_id.as_deref(), Some("branch-parent"));
         assert_eq!(state.store.load_messages(&new_id).unwrap().len(), 2);
 
         // Empty session refuses to branch.
-        state.store.ensure_session("branch-empty", "desktop", None, None).unwrap();
-        let err = dispatch(state, "session.branch", json!({"session_id": "branch-empty"}))
-            .await
-            .unwrap_err();
+        state
+            .store
+            .ensure_session("branch-empty", "desktop", None, None)
+            .unwrap();
+        let err = dispatch(
+            state,
+            "session.branch",
+            json!({"session_id": "branch-empty"}),
+        )
+        .await
+        .unwrap_err();
         assert!(err.contains("nothing to branch"));
     }
 
     #[tokio::test]
     async fn session_compress_short_history_aborts_without_llm() {
         let state = test_state();
-        state.store.ensure_session("sess-compress", "desktop", None, None).unwrap();
-        seed_message(&state, "sess-compress", crate::provider::Role::User, "hello");
-        seed_message(&state, "sess-compress", crate::provider::Role::Assistant, "hi");
-
-        let result = dispatch(state, "session.compress", json!({"session_id": "sess-compress"}))
-            .await
+        state
+            .store
+            .ensure_session("sess-compress", "desktop", None, None)
             .unwrap();
+        seed_message(
+            &state,
+            "sess-compress",
+            crate::provider::Role::User,
+            "hello",
+        );
+        seed_message(
+            &state,
+            "sess-compress",
+            crate::provider::Role::Assistant,
+            "hi",
+        );
+
+        let result = dispatch(
+            state,
+            "session.compress",
+            json!({"session_id": "sess-compress"}),
+        )
+        .await
+        .unwrap();
         assert_eq!(result["status"], "aborted");
         assert_eq!(result["summary"]["aborted"], true);
         assert!(result["messages"].as_array().unwrap().len() == 2);
@@ -2867,10 +3049,12 @@ mod tests {
 
         // Busy session: the correction is queued for the next turn.
         let task = tokio::spawn(async { std::future::pending::<()>().await });
-        turns()
-            .lock()
-            .await
-            .insert("sess-redir".to_string(), TurnEntry { abort: task.abort_handle() });
+        turns().lock().await.insert(
+            "sess-redir".to_string(),
+            TurnEntry {
+                abort: task.abort_handle(),
+            },
+        );
         let result = dispatch(
             state.clone(),
             "session.redirect",
@@ -2906,11 +3090,16 @@ mod tests {
         assert_eq!(activated["info"]["model"], "test-model");
         assert_eq!(activated["info"]["desktop_contract"], 5);
 
-        let list = dispatch(state.clone(), "session.active_list", json!({})).await.unwrap();
+        let list = dispatch(state.clone(), "session.active_list", json!({}))
+            .await
+            .unwrap();
         assert_eq!(list["sessions"], json!([]));
 
         // Activating a session with persisted history returns it unless omitted.
-        state.store.ensure_session("sess-act2", "desktop", None, None).unwrap();
+        state
+            .store
+            .ensure_session("sess-act2", "desktop", None, None)
+            .unwrap();
         seed_message(&state, "sess-act2", crate::provider::Role::User, "ping");
         let resumed = dispatch(
             state,
@@ -2930,7 +3119,10 @@ mod tests {
         std::env::set_var("ULNCLAW_HOME", temp.path());
 
         let state = test_state();
-        state.store.ensure_session("sess-save", "desktop", None, None).unwrap();
+        state
+            .store
+            .ensure_session("sess-save", "desktop", None, None)
+            .unwrap();
         seed_message(&state, "sess-save", crate::provider::Role::User, "save me");
 
         let result = dispatch(state, "session.save", json!({"session_id": "sess-save"}))
@@ -2951,10 +3143,14 @@ mod tests {
         std::env::set_var("ULNCLAW_HOME", temp.path());
 
         let state = test_state();
-        let info = dispatch(state.clone(), "pet.info", json!({})).await.unwrap();
+        let info = dispatch(state.clone(), "pet.info", json!({}))
+            .await
+            .unwrap();
         assert_eq!(info["enabled"], false);
 
-        let meta = dispatch(state.clone(), "pet.info.meta", json!({})).await.unwrap();
+        let meta = dispatch(state.clone(), "pet.info.meta", json!({}))
+            .await
+            .unwrap();
         assert_eq!(meta["enabled"], false);
 
         let gallery = dispatch(state.clone(), "pet.gallery", json!({"localOnly": true}))
@@ -2963,7 +3159,9 @@ mod tests {
         assert_eq!(gallery["enabled"], false);
         assert_eq!(gallery["pets"], json!([]));
 
-        let missing = dispatch(state, "pet.thumb", json!({"slug": "ghost"})).await.unwrap();
+        let missing = dispatch(state, "pet.thumb", json!({"slug": "ghost"}))
+            .await
+            .unwrap();
         assert_eq!(missing["ok"], false);
         std::env::remove_var("ULNCLAW_HOME");
     }
@@ -3024,7 +3222,9 @@ mod tests {
         let missing = dispatch(state.clone(), "handoff.request", json!({"session_id": "s"})).await;
         assert!(missing.unwrap_err().contains("platform required"));
 
-        let poll = dispatch(state, "handoff.state", json!({"session_id": "s"})).await.unwrap();
+        let poll = dispatch(state, "handoff.state", json!({"session_id": "s"}))
+            .await
+            .unwrap();
         assert_eq!(poll["state"], "");
         assert_eq!(poll["platform"], "");
     }
@@ -3032,20 +3232,25 @@ mod tests {
     #[tokio::test]
     async fn preview_restart_requires_url() {
         let state = test_state();
-        let err = dispatch(state, "preview.restart", json!({})).await.unwrap_err();
+        let err = dispatch(state, "preview.restart", json!({}))
+            .await
+            .unwrap_err();
         assert!(err.contains("url required"));
     }
 
     #[tokio::test]
     async fn setup_methods_report_provider_state() {
         let state = test_state();
-        let status = dispatch(state.clone(), "setup.status", json!({})).await.unwrap();
+        let status = dispatch(state.clone(), "setup.status", json!({}))
+            .await
+            .unwrap();
         assert!(status.get("provider_configured").is_some());
 
-        let check = dispatch(state, "setup.runtime_check", json!({})).await.unwrap();
+        let check = dispatch(state, "setup.runtime_check", json!({}))
+            .await
+            .unwrap();
         assert!(check.get("ok").is_some());
         assert_eq!(check["provider"], "test");
         assert_eq!(check["model"], "test-model");
     }
-
 }

@@ -71,10 +71,7 @@ pub fn get_timezone(config_timezone: Option<&str>) -> Option<Tz> {
     }
     let name = resolve_timezone_name(config_timezone);
     let tz = name.as_deref().and_then(parse_zoneinfo);
-    *cache = Some(TzCache {
-        resolved: true,
-        tz,
-    });
+    *cache = Some(TzCache { resolved: true, tz });
     tz
 }
 
@@ -186,7 +183,7 @@ mod tests {
         let _guard = env_lock();
         clear_env();
         reset_cache();
-        assert_eq!(get_timezone(Some("Not/AZone"), ), None);
+        assert_eq!(get_timezone(Some("Not/AZone"),), None);
         let (wall, label) = now_wall(Some("Not/AZone"));
         assert!(!label.is_empty());
         // Wall clock should be close to UTC now (same instant, any zone).
@@ -235,8 +232,16 @@ mod tests {
         let rest = line.strip_prefix("Conversation started: ").unwrap();
         let parts: Vec<&str> = rest.split(", ").collect();
         assert_eq!(parts.len(), 3, "{}", line);
-        assert!(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            .contains(&parts[0]));
+        assert!([
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+        ]
+        .contains(&parts[0]));
         reset_cache();
     }
 

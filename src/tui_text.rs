@@ -61,9 +61,7 @@ pub fn wrap_display_text(text: &str, width: usize) -> Vec<String> {
 /// Alphabetical browse-sort key: case-insensitive title, untitled
 /// sessions last, recency as the tie-breaker (matches the browse TUI
 /// `F2` sort toggle).
-pub fn browse_title_sort_key(
-    title: Option<&str>,
-) -> (u8, String) {
+pub fn browse_title_sort_key(title: Option<&str>) -> (u8, String) {
     match title.map(str::trim).filter(|t| !t.is_empty()) {
         Some(t) => (0, t.to_lowercase()),
         None => (1, String::new()),
@@ -167,28 +165,61 @@ pub fn browse_help_entries() -> &'static [(&'static str, &'static str)] {
         ("PgUp/PgDn", "scroll a page at a time"),
         ("Home/End", "jump to the first / last session"),
         ("Enter", "select and resume the highlighted session"),
-        ("v", "view the highlighted session's full transcript (Esc returns)"),
-        ("r", "in the transcript viewer: toggle raw \u{2194} pretty (timestamps + tool calls)"),
-        ("Type", "live filter over title, preview, id, source, project"),
+        (
+            "v",
+            "view the highlighted session's full transcript (Esc returns)",
+        ),
+        (
+            "r",
+            "in the transcript viewer: toggle raw \u{2194} pretty (timestamps + tool calls)",
+        ),
+        (
+            "Type",
+            "live filter over title, preview, id, source, project",
+        ),
         ("Backspace", "delete one filter character"),
         ("Esc", "clear the filter; a second press quits"),
         ("q", "quit while no filter is active"),
-        ("Tab", "cycle the source filter (all \u{2192} cli \u{2192} cron \u{2192} \u{2026})"),
+        (
+            "Tab",
+            "cycle the source filter (all \u{2192} cli \u{2192} cron \u{2192} \u{2026})",
+        ),
         ("Shift+Tab", "cycle the source filter backwards"),
         ("F2", "toggle recent-first \u{2194} alphabetical sort"),
         ("F3", "toggle the conversation preview in the details pane"),
-        ("Ctrl+U/D", "scroll the details pane when the preview overflows"),
-        ("Ctrl+\u{2191}/\u{2193}", "scroll the details pane one line at a time (P551)"),
-        ("Ctrl+Home/End", "jump the details pane to the top / bottom (P551)"),
+        (
+            "Ctrl+U/D",
+            "scroll the details pane when the preview overflows",
+        ),
+        (
+            "Ctrl+\u{2191}/\u{2193}",
+            "scroll the details pane one line at a time (P551)",
+        ),
+        (
+            "Ctrl+Home/End",
+            "jump the details pane to the top / bottom (P551)",
+        ),
         ("F4", "toggle archived sessions into the list"),
         ("F5", "reload the session list from disk"),
-        ("F6", "rename the highlighted session (Enter saves, Esc cancels)"),
+        (
+            "F6",
+            "rename the highlighted session (Enter saves, Esc cancels)",
+        ),
         ("F7", "fork the highlighted session (y confirms)"),
-        ("F8", "archive / unarchive the highlighted session (y confirms)"),
+        (
+            "F8",
+            "archive / unarchive the highlighted session (y confirms)",
+        ),
         ("F9", "delete the highlighted session forever (y confirms)"),
-        ("F10", "cycle the model filter (all \u{2192} model \u{2192} \u{2026}; Shift cycles backwards)"),
+        (
+            "F10",
+            "cycle the model filter (all \u{2192} model \u{2192} \u{2026}; Shift cycles backwards)",
+        ),
         ("F11", "export the highlighted session to Markdown (P585)"),
-        ("/", "search message bodies (FTS) while no filter is typed \u{2014} Enter runs, Esc cancels"),
+        (
+            "/",
+            "search message bodies (FTS) while no filter is typed \u{2014} Enter runs, Esc cancels",
+        ),
         ("F1", "toggle this help overlay"),
         ("Ctrl+L", "redraw the screen"),
         ("Ctrl+C", "quit"),
@@ -248,9 +279,7 @@ pub fn browse_rename_prompt_text(label: &str, buffer: &str) -> String {
     if label.chars().count() == 30 {
         label.push('\u{2026}');
     }
-    format!(
-        "Rename \u{201C}{label}\u{201D}: {buffer}\u{258F}  Enter = save \u{00B7} Esc = cancel"
-    )
+    format!("Rename \u{201C}{label}\u{201D}: {buffer}\u{258F}  Enter = save \u{00B7} Esc = cancel")
 }
 
 #[cfg(test)]
@@ -259,7 +288,25 @@ mod browse_tui_upgrade_tests {
     fn browse_help_entries_cover_core_keys() {
         let entries = super::browse_help_entries();
         let keys: Vec<&str> = entries.iter().map(|(k, _)| *k).collect();
-        for expected in ["Enter", "Esc", "Tab", "F1", "F2", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "Ctrl+U/D", "Ctrl+\u{2191}/\u{2193}", "Ctrl+Home/End", "/", "Shift+Tab"] {
+        for expected in [
+            "Enter",
+            "Esc",
+            "Tab",
+            "F1",
+            "F2",
+            "F4",
+            "F5",
+            "F6",
+            "F7",
+            "F8",
+            "F9",
+            "F10",
+            "Ctrl+U/D",
+            "Ctrl+\u{2191}/\u{2193}",
+            "Ctrl+Home/End",
+            "/",
+            "Shift+Tab",
+        ] {
             assert!(keys.contains(&expected), "missing help row for {expected}");
         }
         // Every entry has a non-empty description.
@@ -296,8 +343,14 @@ mod browse_tui_upgrade_tests {
     #[test]
     fn browse_conversation_preview_renders_and_truncates() {
         let exchange = vec![
-            ("you".to_string(), Some("Fix the   build\nplease".to_string())),
-            ("assistant".to_string(), Some("On it — running cargo build.".to_string())),
+            (
+                "you".to_string(),
+                Some("Fix the   build\nplease".to_string()),
+            ),
+            (
+                "assistant".to_string(),
+                Some("On it — running cargo build.".to_string()),
+            ),
             ("tool".to_string(), None),
         ];
         let preview = super::browse_conversation_preview(&exchange, 12);
@@ -310,7 +363,10 @@ mod browse_tui_upgrade_tests {
         let short = super::browse_conversation_preview(&exchange, 500);
         assert!(short.contains("you: Fix the build please"));
         // No usable content → empty string.
-        assert_eq!(super::browse_conversation_preview(&[("tool".to_string(), None)], 100), "");
+        assert_eq!(
+            super::browse_conversation_preview(&[("tool".to_string(), None)], 100),
+            ""
+        );
     }
 
     #[test]

@@ -25,12 +25,8 @@ pub fn alive(pid: u32) -> bool {
 /// probe — `ERROR_INVALID_PARAMETER` means the pid is gone).
 #[cfg(windows)]
 pub fn alive(pid: u32) -> bool {
-    use windows_sys::Win32::Foundation::{
-        CloseHandle, GetLastError, ERROR_INVALID_PARAMETER,
-    };
-    use windows_sys::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-    };
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_INVALID_PARAMETER};
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
     if pid == 0 {
         return false;
     }
@@ -82,15 +78,10 @@ pub fn kill_hard(pid: u32) -> std::io::Result<()> {
 
 #[cfg(windows)]
 fn terminate_impl(pid: u32) -> std::io::Result<()> {
-    use windows_sys::Win32::Foundation::{
-        CloseHandle, GetLastError, ERROR_INVALID_PARAMETER,
-    };
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_INVALID_PARAMETER};
     use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
     if pid == 0 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "pid 0",
-        ));
+        return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "pid 0"));
     }
     unsafe {
         let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
@@ -168,8 +159,7 @@ fn lock_file_ex(file: &std::fs::File, fail_immediately: bool) -> std::io::Result
     }
     // OVERLAPPED lives on this stack frame; LockFileEx with an event
     // unset completes synchronously.
-    let mut overlapped: windows_sys::Win32::System::IO::OVERLAPPED =
-        unsafe { std::mem::zeroed() };
+    let mut overlapped: windows_sys::Win32::System::IO::OVERLAPPED = unsafe { std::mem::zeroed() };
     let ok = unsafe {
         LockFileEx(
             file.as_raw_handle() as isize,
@@ -210,8 +200,7 @@ pub fn try_lock_exclusive(file: &std::fs::File) -> std::io::Result<()> {
 pub fn unlock(file: &std::fs::File) -> std::io::Result<()> {
     use std::os::windows::io::AsRawHandle;
     use windows_sys::Win32::Storage::FileSystem::UnlockFileEx;
-    let mut overlapped: windows_sys::Win32::System::IO::OVERLAPPED =
-        unsafe { std::mem::zeroed() };
+    let mut overlapped: windows_sys::Win32::System::IO::OVERLAPPED = unsafe { std::mem::zeroed() };
     let ok = unsafe {
         UnlockFileEx(
             file.as_raw_handle() as isize,

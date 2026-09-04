@@ -25,8 +25,11 @@ use crate::error::{AgentError, Result};
 
 use super::oauth;
 
-type RecoveryFuture =
-    Shared<std::pin::Pin<Box<dyn std::future::Future<Output = std::result::Result<String, String>> + Send>>>;
+type RecoveryFuture = Shared<
+    std::pin::Pin<
+        Box<dyn std::future::Future<Output = std::result::Result<String, String>> + Send>,
+    >,
+>;
 
 #[derive(Default)]
 struct ServerEntry {
@@ -133,9 +136,7 @@ impl OAuthManager {
                 .cloned()
         };
         if let Some(shared) = existing {
-            return shared
-                .await
-                .map_err(AgentError::Tool);
+            return shared.await.map_err(AgentError::Tool);
         }
 
         // Step 1 (hermes): did disk change? Picks up external refresh
@@ -162,7 +163,9 @@ impl OAuthManager {
                     if let Some(mtime_ns) = tokens_file_mtime_ns(&home_owned, &server_owned) {
                         if let Some(manager) = MANAGERS.get() {
                             let mut entries = manager.entries.lock().unwrap();
-                            if let Some(entry) = entries.get_mut(&entry_key(&home_owned, &server_owned)) {
+                            if let Some(entry) =
+                                entries.get_mut(&entry_key(&home_owned, &server_owned))
+                            {
                                 entry.last_mtime_ns = mtime_ns;
                             }
                         }
@@ -294,7 +297,11 @@ mod tests {
             results.push(handle.await.unwrap().unwrap());
         }
         assert!(results.iter().all(|t| t == "fresh-token"), "{results:?}");
-        assert_eq!(attempts.load(Ordering::SeqCst), 1, "one recovery for N concurrent 401s");
+        assert_eq!(
+            attempts.load(Ordering::SeqCst),
+            1,
+            "one recovery for N concurrent 401s"
+        );
         drop(mgr);
     }
 
@@ -310,14 +317,19 @@ mod tests {
             let home = tmp.path().to_path_buf();
             handles.push(tokio::spawn(async move {
                 crate::mcp::oauth_manager::manager()
-                    .handle_401(&home, "dedup-srv-2", Some(&format!("stale-{}", i)), move || {
-                        let attempts = attempts.clone();
-                        async move {
-                            attempts.fetch_add(1, Ordering::SeqCst);
-                            tokio::time::sleep(Duration::from_millis(30)).await;
-                            Ok(format!("fresh-{}", i))
-                        }
-                    })
+                    .handle_401(
+                        &home,
+                        "dedup-srv-2",
+                        Some(&format!("stale-{}", i)),
+                        move || {
+                            let attempts = attempts.clone();
+                            async move {
+                                attempts.fetch_add(1, Ordering::SeqCst);
+                                tokio::time::sleep(Duration::from_millis(30)).await;
+                                Ok(format!("fresh-{}", i))
+                            }
+                        },
+                    )
                     .await
             }));
         }

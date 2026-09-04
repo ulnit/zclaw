@@ -106,8 +106,14 @@ pub async fn create_board(Json(body): Json<CreateBoardBody>) -> Response {
         Ok(s) => s,
         Err(e) => return e,
     };
-    match store.create_board(&body.slug, body.name.as_deref(), body.default_workdir.as_deref()) {
-        Ok(board) => Json(json!({"object": "ulnclaw.kanban.board", "board": board})).into_response(),
+    match store.create_board(
+        &body.slug,
+        body.name.as_deref(),
+        body.default_workdir.as_deref(),
+    ) {
+        Ok(board) => {
+            Json(json!({"object": "ulnclaw.kanban.board", "board": board})).into_response()
+        }
         Err(e) => super::bad_request(&e.to_string(), None),
     }
 }
@@ -147,7 +153,9 @@ pub async fn rename_board(Path(slug): Path<String>, Json(body): Json<RenameBoard
         Err(e) => return e,
     };
     match store.rename_board(&slug, &body.name) {
-        Ok(()) => Json(json!({ "ok": true, "slug": slug, "name": body.name.trim() })).into_response(),
+        Ok(()) => {
+            Json(json!({ "ok": true, "slug": slug, "name": body.name.trim() })).into_response()
+        }
         Err(e) => {
             let msg = e.to_string();
             if msg.contains("not found") {
@@ -188,7 +196,10 @@ pub struct SetBoardWorkdirBody {
 /// or absent `workdir` clears it; otherwise the path (a leading `~`
 /// expands to the home directory) must resolve to an existing
 /// directory, stored canonicalized.
-pub async fn set_board_workdir(Path(slug): Path<String>, Json(body): Json<SetBoardWorkdirBody>) -> Response {
+pub async fn set_board_workdir(
+    Path(slug): Path<String>,
+    Json(body): Json<SetBoardWorkdirBody>,
+) -> Response {
     let store = match store() {
         Ok(s) => s,
         Err(e) => return e,
@@ -226,7 +237,9 @@ pub async fn set_board_workdir(Path(slug): Path<String>, Json(body): Json<SetBoa
         }
     };
     match store.set_board_workdir(&slug, resolved.as_deref()) {
-        Ok(()) => Json(json!({ "ok": true, "slug": slug, "default_workdir": resolved })).into_response(),
+        Ok(()) => {
+            Json(json!({ "ok": true, "slug": slug, "default_workdir": resolved })).into_response()
+        }
         Err(e) => {
             let msg = e.to_string();
             if msg.contains("not found") {
@@ -248,7 +261,10 @@ pub async fn list_tasks(Query(query): Query<ListTasksQuery>) -> Response {
         query.board.as_deref(),
         query.status.as_deref().filter(|s| !s.is_empty()),
         query.assignee.as_deref().filter(|s| !s.is_empty()),
-        query.workflow_template_id.as_deref().filter(|s| !s.is_empty()),
+        query
+            .workflow_template_id
+            .as_deref()
+            .filter(|s| !s.is_empty()),
         limit,
     ) {
         Ok(t) => t,
@@ -356,14 +372,21 @@ pub async fn create_task(Json(body): Json<CreateTaskBody>) -> Response {
     }
     if let Some(turns) = body.goal_max_turns {
         if turns < 1 {
-            return super::bad_request(
-                &format!("goal_max_turns must be >= 1 (got {turns})"),
-                None,
-            );
+            return super::bad_request(&format!("goal_max_turns must be >= 1 (got {turns})"), None);
         }
     }
-    if body.provider.as_deref().map(str::trim).filter(|s| !s.is_empty()).is_some()
-        && body.model.as_deref().map(str::trim).filter(|s| !s.is_empty()).is_none()
+    if body
+        .provider
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_some()
+        && body
+            .model
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .is_none()
     {
         return super::bad_request("provider requires model", None);
     }
@@ -397,10 +420,7 @@ pub async fn create_task(Json(body): Json<CreateTaskBody>) -> Response {
         None => None,
     };
     if branch_name.is_some() && workspace_kind != "worktree" {
-        return super::bad_request(
-            "--branch is only valid with --workspace worktree",
-            None,
-        );
+        return super::bad_request("--branch is only valid with --workspace worktree", None);
     }
     if body.workspace.is_none()
         && crate::config::UlncLawConfig::load(None)
@@ -419,10 +439,30 @@ pub async fn create_task(Json(body): Json<CreateTaskBody>) -> Response {
         assignee: body.assignee.filter(|a| !a.trim().is_empty()),
         priority: body.priority.unwrap_or(0),
         tenant: None,
-        model: body.model.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
-        provider: body.provider.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
-        reasoning_effort: body.reasoning_effort.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
-        project_id: body.project.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
+        model: body
+            .model
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        provider: body
+            .provider
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        reasoning_effort: body
+            .reasoning_effort
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        project_id: body
+            .project
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
         created_by: "gateway".to_string(),
         skills: body.skills.filter(|s| !s.is_empty()),
         max_runtime_seconds: body.max_runtime_seconds,
@@ -558,7 +598,11 @@ pub async fn complete_task(Path(id): Path<String>, Json(body): Json<CompleteBody
         .into_iter()
         .filter_map(|raw| {
             let trimmed = raw.trim().to_string();
-            if trimmed.is_empty() { None } else { Some(trimmed) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
         })
         .collect();
     let created_cards: Vec<String> = body
@@ -567,7 +611,11 @@ pub async fn complete_task(Path(id): Path<String>, Json(body): Json<CompleteBody
         .into_iter()
         .filter_map(|raw| {
             let trimmed = raw.trim().to_string();
-            if trimmed.is_empty() { None } else { Some(trimmed) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
         })
         .collect();
     let home = crate::config::ulnclaw_home();
@@ -575,13 +623,19 @@ pub async fn complete_task(Path(id): Path<String>, Json(body): Json<CompleteBody
         &home,
         &id,
         body.result.as_deref().filter(|s| !s.trim().is_empty()),
-        body.summary.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        body.summary
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()),
         metadata,
         &artifacts,
         &created_cards,
         body.expected_run_id,
     ) {
-        Ok(task) => Json(json!({"object": "ulnclaw.kanban.task", "task": task_json(&store, &task)})).into_response(),
+        Ok(task) => {
+            Json(json!({"object": "ulnclaw.kanban.task", "task": task_json(&store, &task)}))
+                .into_response()
+        }
         Err(e) => super::bad_request(&e.to_string(), None),
     }
 }
@@ -620,7 +674,10 @@ pub async fn block_task(Path(id): Path<String>, Json(body): Json<BlockBody>) -> 
             .filter(|kind| !kind.is_empty()),
         body.expected_run_id,
     ) {
-        Ok(task) => Json(json!({"object": "ulnclaw.kanban.task", "task": task_json(&store, &task)})).into_response(),
+        Ok(task) => {
+            Json(json!({"object": "ulnclaw.kanban.task", "task": task_json(&store, &task)}))
+                .into_response()
+        }
         Err(e) => super::bad_request(&e.to_string(), None),
     }
 }
@@ -636,7 +693,10 @@ pub async fn unblock_task(Path(id): Path<String>) -> Response {
         Err(e) => return e,
     };
     match store.unblock_task(&id) {
-        Ok(task) => Json(json!({"object": "ulnclaw.kanban.task", "task": task_json(&store, &task)})).into_response(),
+        Ok(task) => {
+            Json(json!({"object": "ulnclaw.kanban.task", "task": task_json(&store, &task)}))
+                .into_response()
+        }
         Err(e) => super::bad_request(&e.to_string(), None),
     }
 }
@@ -729,7 +789,11 @@ pub async fn promote_task(Path(id): Path<String>, Json(body): Json<PromoteBody>)
         Ok(id) => id,
         Err(e) => return e,
     };
-    match store.promote_task(&id, body.reason.as_deref().unwrap_or(""), body.force.unwrap_or(false)) {
+    match store.promote_task(
+        &id,
+        body.reason.as_deref().unwrap_or(""),
+        body.force.unwrap_or(false),
+    ) {
         Ok(task) => Json(json!({
             "object": "ulnclaw.kanban.task",
             "task": task_json(&store, &task),
@@ -1020,8 +1084,16 @@ pub async fn set_model(Path(id): Path<String>, Json(body): Json<SetModelBody>) -
         Ok(id) => id,
         Err(e) => return e,
     };
-    let model = body.model.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    let provider = body.provider.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let model = body
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let provider = body
+        .provider
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
     // resolve() already 404'd unknown ids; what remains (terminal
     // task, provider-without-model) is a caller error -> 400.
     match store.set_model(&id, model, provider) {
@@ -1231,7 +1303,10 @@ pub async fn claim_task(Path(id): Path<String>) -> Response {
     };
     let claimer = KanbanStore::claimer_id();
     match store.claim_task(&id, &claimer, DEFAULT_CLAIM_TTL_SECS) {
-        Ok(task) => Json(json!({"object": "ulnclaw.kanban.task", "task": task_json(&store, &task)})).into_response(),
+        Ok(task) => {
+            Json(json!({"object": "ulnclaw.kanban.task", "task": task_json(&store, &task)}))
+                .into_response()
+        }
         Err(e) => super::bad_request(&e.to_string(), None),
     }
 }

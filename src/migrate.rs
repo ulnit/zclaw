@@ -31,11 +31,7 @@ pub fn xai_retired_models() -> BTreeMap<&'static str, RetiredModel> {
         ("grok-4-1-fast-non-reasoning", "grok-4.3", Some("none")),
         ("grok-code-fast-1", "grok-4.3", None),
         ("grok-3", "grok-4.3", None),
-        (
-            "grok-imagine-image-pro",
-            "grok-imagine-image-quality",
-            None,
-        ),
+        ("grok-imagine-image-pro", "grok-imagine-image-quality", None),
     ];
     for (model, replacement, effort) in entries {
         map.insert(
@@ -204,7 +200,10 @@ mod tests {
 
     #[test]
     fn prefix_preserved_on_replacement() {
-        assert_eq!(with_original_prefix("xai/grok-3", "grok-4.3"), "xai/grok-4.3");
+        assert_eq!(
+            with_original_prefix("xai/grok-3", "grok-4.3"),
+            "xai/grok-4.3"
+        );
         assert_eq!(with_original_prefix("grok-3", "grok-4.3"), "grok-4.3");
     }
 
@@ -227,10 +226,7 @@ mod tests {
         assert!(paths.contains(&"model.model"));
         assert!(paths.contains(&"profiles.fast.model"));
         assert!(paths.contains(&"fallback.chain[0]"));
-        let non_reasoning = issues
-            .iter()
-            .find(|i| i.path == "model.model")
-            .unwrap();
+        let non_reasoning = issues.iter().find(|i| i.path == "model.model").unwrap();
         assert_eq!(non_reasoning.reasoning_effort, Some("none"));
         assert_eq!(non_reasoning.replacement, "xai/grok-4.3");
 

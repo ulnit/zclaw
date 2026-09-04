@@ -186,13 +186,9 @@ pub struct StreamChunk {
 }
 
 /// Accumulate streamed tool-call deltas into complete tool calls.
-pub fn assemble_tool_calls(
-    deltas: &[ToolCallDelta],
-) -> Vec<ToolCall> {
-    let mut by_index: std::collections::BTreeMap<
-        usize,
-        (String, String, String),
-    > = std::collections::BTreeMap::new();
+pub fn assemble_tool_calls(deltas: &[ToolCallDelta]) -> Vec<ToolCall> {
+    let mut by_index: std::collections::BTreeMap<usize, (String, String, String)> =
+        std::collections::BTreeMap::new();
     for delta in deltas {
         let entry = by_index
             .entry(delta.index)
@@ -216,7 +212,6 @@ pub fn assemble_tool_calls(
         })
         .collect()
 }
-
 
 /// A boxed provider stream.
 pub type ProviderStream =
@@ -372,9 +367,7 @@ impl ProviderConfig {
 
                 Ok(Box::new(builder.build()?))
             }
-            ProviderKind::Local => Err(AgentError::config(
-                "Local provider not yet implemented",
-            )),
+            ProviderKind::Local => Err(AgentError::config("Local provider not yet implemented")),
         }
     }
 }

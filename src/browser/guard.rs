@@ -37,7 +37,10 @@ const CDP_PRIVATE_PAGE_ALLOWED_METHODS: &[&str] = &[
 fn endpoint_host(raw: &str) -> Option<String> {
     let rest = raw.split_once("://").map(|(_, r)| r).unwrap_or(raw);
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-    let authority = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
+    let authority = authority
+        .rsplit_once('@')
+        .map(|(_, h)| h)
+        .unwrap_or(authority);
     if let Some(bracketed) = authority.strip_prefix('[') {
         return bracketed
             .split(']')
@@ -88,8 +91,7 @@ pub fn guard_active(endpoint_raw: Option<&str>, terminal_local: bool) -> bool {
 /// True when the URL targets the always-blocked floor or a
 /// private/internal address.
 pub fn is_private_url(url: &str) -> bool {
-    crate::url_safety::is_always_blocked_url_sync(url)
-        || !crate::url_safety::is_safe_url_sync(url)
+    crate::url_safety::is_always_blocked_url_sync(url) || !crate::url_safety::is_safe_url_sync(url)
 }
 
 /// Gate for navigation targets (hermes `browser_navigate` pre-checks).
@@ -214,10 +216,19 @@ mod tests {
 
     #[test]
     fn endpoint_host_parsing() {
-        assert_eq!(endpoint_host("http://127.0.0.1:9222").as_deref(), Some("127.0.0.1"));
-        assert_eq!(endpoint_host("ws://localhost:9222/devtools/browser/x").as_deref(), Some("localhost"));
+        assert_eq!(
+            endpoint_host("http://127.0.0.1:9222").as_deref(),
+            Some("127.0.0.1")
+        );
+        assert_eq!(
+            endpoint_host("ws://localhost:9222/devtools/browser/x").as_deref(),
+            Some("localhost")
+        );
         assert_eq!(endpoint_host("wss://[::1]:9222").as_deref(), Some("::1"));
-        assert_eq!(endpoint_host("http://user:pw@browser.internal:9222").as_deref(), Some("browser.internal"));
+        assert_eq!(
+            endpoint_host("http://user:pw@browser.internal:9222").as_deref(),
+            Some("browser.internal")
+        );
         assert_eq!(endpoint_host("auto").as_deref(), Some("auto")); // caller checks auto-mode first
     }
 
@@ -226,7 +237,9 @@ mod tests {
         assert!(is_local_endpoint("auto"));
         assert!(is_local_endpoint("launch"));
         assert!(is_local_endpoint("http://127.0.0.1:9222"));
-        assert!(is_local_endpoint("ws://localhost:9222/devtools/browser/abc"));
+        assert!(is_local_endpoint(
+            "ws://localhost:9222/devtools/browser/abc"
+        ));
         assert!(is_local_endpoint("http://127.3.4.5:9222"));
         assert!(!is_local_endpoint("http://10.0.0.5:9222"));
         assert!(!is_local_endpoint("ws://browser.internal:9222"));
@@ -268,11 +281,13 @@ mod tests {
     #[test]
     fn expression_literal_detection() {
         assert_eq!(
-            expression_targets_private_url("fetch('http://169.254.169.254/latest/meta-data/')").as_deref(),
+            expression_targets_private_url("fetch('http://169.254.169.254/latest/meta-data/')")
+                .as_deref(),
             Some("http://169.254.169.254/latest/meta-data/")
         );
         assert_eq!(
-            expression_targets_private_url("x = new Image(); x.src = \"http://10.0.0.1/a\";").as_deref(),
+            expression_targets_private_url("x = new Image(); x.src = \"http://10.0.0.1/a\";")
+                .as_deref(),
             Some("http://10.0.0.1/a")
         );
         assert!(expression_targets_private_url("fetch('https://example.com/')").is_none());
@@ -283,12 +298,30 @@ mod tests {
     fn cdp_guard_rules() {
         let params = json!({});
         // Guard off: everything passes.
-        assert!(blocked_cdp("Runtime.evaluate", &json!({"expression": "fetch('http://10.0.0.1')"}), None, false).is_none());
+        assert!(blocked_cdp(
+            "Runtime.evaluate",
+            &json!({"expression": "fetch('http://10.0.0.1')"}),
+            None,
+            false
+        )
+        .is_none());
         // Page.navigate to private target refused.
-        let err = blocked_cdp("Page.navigate", &json!({"url": "http://10.0.0.1/"}), None, true).unwrap();
+        let err = blocked_cdp(
+            "Page.navigate",
+            &json!({"url": "http://10.0.0.1/"}),
+            None,
+            true,
+        )
+        .unwrap();
         assert!(err.contains("Page.navigate"));
         // Page.navigate to public target passes.
-        assert!(blocked_cdp("Page.navigate", &json!({"url": "https://example.com/"}), None, true).is_none());
+        assert!(blocked_cdp(
+            "Page.navigate",
+            &json!({"url": "https://example.com/"}),
+            None,
+            true
+        )
+        .is_none());
         // Runtime.evaluate with private literal refused.
         let err = blocked_cdp(
             "Runtime.evaluate",
@@ -302,9 +335,17 @@ mod tests {
         let err = blocked_cdp("DOM.getDocument", &params, Some("http://10.0.0.1/"), true).unwrap();
         assert!(err.contains("DOM.getDocument"));
         // Allowlisted method on a private page passes (navigate away).
-        assert!(blocked_cdp("Target.getTargets", &params, Some("http://10.0.0.1/"), true).is_none());
+        assert!(
+            blocked_cdp("Target.getTargets", &params, Some("http://10.0.0.1/"), true).is_none()
+        );
         // Non-allowlisted method on a public page passes.
-        assert!(blocked_cdp("DOM.getDocument", &params, Some("https://example.com/"), true).is_none());
+        assert!(blocked_cdp(
+            "DOM.getDocument",
+            &params,
+            Some("https://example.com/"),
+            true
+        )
+        .is_none());
     }
 
     #[test]
@@ -315,8 +356,14 @@ mod tests {
             "count": 3,
         });
         let output = redact_value(input);
-        assert!(!output["snapshot"].as_str().unwrap().contains("sk-ant-api03-abcdefghij1234567890"));
-        assert!(!output["nested"][0]["token"].as_str().unwrap().contains("ghp_abcdefghijklmnopqrstuvwxyz"));
+        assert!(!output["snapshot"]
+            .as_str()
+            .unwrap()
+            .contains("sk-ant-api03-abcdefghij1234567890"));
+        assert!(!output["nested"][0]["token"]
+            .as_str()
+            .unwrap()
+            .contains("ghp_abcdefghijklmnopqrstuvwxyz"));
         assert_eq!(output["count"], 3);
     }
 }

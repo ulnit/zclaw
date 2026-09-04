@@ -112,7 +112,9 @@ pub fn save_profile(name: &str, spec: &ProfileSpec) -> Result<bool, String> {
         let Some(profiles) = profiles.as_table_mut() else {
             return Err("[profiles] in config.toml is not a table".into());
         };
-        profiles.insert(name.to_string(), Value::Table(table)).is_none()
+        profiles
+            .insert(name.to_string(), Value::Table(table))
+            .is_none()
     };
     save_root(&root)?;
     Ok(created)

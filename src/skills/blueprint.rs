@@ -85,7 +85,9 @@ pub fn parse_blueprint(content: &str) -> Result<Option<BlueprintSpec>, String> {
         return Ok(None);
     };
     let has_block = containers.contains_key(BLUEPRINT_PREFIX)
-        || values.keys().any(|key| key.starts_with(&format!("{}.", BLUEPRINT_PREFIX)));
+        || values
+            .keys()
+            .any(|key| key.starts_with(&format!("{}.", BLUEPRINT_PREFIX)));
     if !has_block {
         return Ok(None);
     }
@@ -142,7 +144,10 @@ pub fn blueprint_spec_for_installed(skills_dir: &Path, skill_name: &str) -> Opti
 
 /// Translate a blueprint into a cron job (hermes `blueprint_to_job_spec` +
 /// `create_blueprint_job`, adapted to ulnclaw's cron schema).
-pub fn blueprint_to_job(spec: &BlueprintSpec, name_override: Option<&str>) -> Result<CronJob, String> {
+pub fn blueprint_to_job(
+    spec: &BlueprintSpec,
+    name_override: Option<&str>,
+) -> Result<CronJob, String> {
     if spec.skill_name.is_empty() {
         return Err("blueprint has no skill name".to_string());
     }
@@ -159,7 +164,10 @@ pub fn blueprint_to_job(spec: &BlueprintSpec, name_override: Option<&str>) -> Re
             .unwrap_or_else(|| format!("blueprint:{}", spec.skill_name)),
         schedule: spec.schedule.clone(),
         prompt: spec.prompt.clone().unwrap_or_else(|| {
-            format!("Run the '{}' skill now and report the results.", spec.skill_name)
+            format!(
+                "Run the '{}' skill now and report the results.",
+                spec.skill_name
+            )
         }),
         skills: vec![spec.skill_name.clone()],
         enabled: true,
@@ -250,11 +258,16 @@ Body text here.
 
     #[test]
     fn parses_blueprint_block() {
-        let spec = parse_blueprint(BLUEPRINT_SKILL).unwrap().expect("blueprint");
+        let spec = parse_blueprint(BLUEPRINT_SKILL)
+            .unwrap()
+            .expect("blueprint");
         assert_eq!(spec.skill_name, "daily-digest");
         assert_eq!(spec.schedule, "0 9 * * *");
         assert_eq!(spec.deliver, "local");
-        assert_eq!(spec.prompt.as_deref(), Some("Compile today's session digest."));
+        assert_eq!(
+            spec.prompt.as_deref(),
+            Some("Compile today's session digest.")
+        );
     }
 
     #[test]
@@ -275,7 +288,8 @@ Body text here.
 
     #[test]
     fn missing_schedule_is_an_error() {
-        let content = "---\nname: bad\nmetadata:\n  hermes:\n    blueprint:\n      deliver: local\n---\n";
+        let content =
+            "---\nname: bad\nmetadata:\n  hermes:\n    blueprint:\n      deliver: local\n---\n";
         let error = parse_blueprint(content).err().expect("must error");
         assert!(error.contains("schedule"));
     }

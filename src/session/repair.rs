@@ -164,16 +164,19 @@ pub fn repair_state_db_schema(db_path: &Path, backup: bool) -> RepairReport {
 
     // ── Strategy 0: rebuild the FTS index in place (write-corruption) ──
     if with_conn(db_path, |conn| {
-        conn.execute("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')", [])
-            .map(|_| ())
-            .or_else(|e| {
-                // Table absent (FTS disabled / dropped) — skip.
-                if e.to_string().to_lowercase().contains("no such table") {
-                    Ok(())
-                } else {
-                    Err(e)
-                }
-            })
+        conn.execute(
+            "INSERT INTO messages_fts(messages_fts) VALUES('rebuild')",
+            [],
+        )
+        .map(|_| ())
+        .or_else(|e| {
+            // Table absent (FTS disabled / dropped) — skip.
+            if e.to_string().to_lowercase().contains("no such table") {
+                Ok(())
+            } else {
+                Err(e)
+            }
+        })
     }) && db_opens_cleanly(db_path).is_none()
     {
         report.repaired = true;
@@ -199,7 +202,11 @@ pub fn repair_state_db_schema(db_path: &Path, backup: bool) -> RepairReport {
                  GROUP BY type, name HAVING COUNT(*) > 1",
             )?;
             let rows = stmt.query_map([], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?))
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
             })?;
             rows.collect::<Result<Vec<_>, _>>()?
         };
@@ -220,7 +227,10 @@ pub fn repair_state_db_schema(db_path: &Path, backup: bool) -> RepairReport {
     // ── Strategy 2: drop all FTS schema, VACUUM, rebuild on next open ──
     match with_conn(db_path, |conn| {
         conn.execute_batch("PRAGMA writable_schema=ON")?;
-        conn.execute("DELETE FROM sqlite_master WHERE name LIKE 'messages_fts%'", [])?;
+        conn.execute(
+            "DELETE FROM sqlite_master WHERE name LIKE 'messages_fts%'",
+            [],
+        )?;
         conn.execute_batch("PRAGMA writable_schema=OFF")?;
         conn.execute_batch("VACUUM")
     }) {
@@ -259,13 +269,16 @@ mod tests {
         let store = crate::session::sqlite::SqliteSessionStore::open(&path).unwrap();
         let sid = store.create_session("cli", None, None).unwrap();
         store
-            .append_message(&sid, &crate::provider::Message {
-                role: crate::provider::Role::User,
-                content: Some("hello repair".into()),
-                tool_calls: None,
-                tool_call_id: None,
-                name: None,
-            })
+            .append_message(
+                &sid,
+                &crate::provider::Message {
+                    role: crate::provider::Role::User,
+                    content: Some("hello repair".into()),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                },
+            )
             .unwrap();
         drop(store);
         path
@@ -302,7 +315,10 @@ mod tests {
         drop(conn);
 
         let reason = db_opens_cleanly(&path);
-        assert!(reason.is_some(), "duplicate schema row should trip the probe: {reason:?}");
+        assert!(
+            reason.is_some(),
+            "duplicate schema row should trip the probe: {reason:?}"
+        );
         let report = repair_state_db_schema(&path, true);
         assert!(report.repaired, "report: {report:?}");
         assert!(report.backup_path.is_some());
@@ -327,6 +343,11 @@ mod tests {
         let path = healthy_db(dir.path());
         let backup = backup_db_file(&path).expect("backup copy");
         assert!(backup.exists());
-        assert!(backup.file_name().unwrap().to_str().unwrap().contains(".bak."));
+        assert!(backup
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains(".bak."));
     }
 }

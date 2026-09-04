@@ -10,8 +10,8 @@
 //! the Sec-MS-GEC token exchange, no API key required (P349). Local
 //! model providers (piper/neutts/kittentts) stay out of scope.
 
-use serde::{Deserialize, Serialize};
 use futures::StreamExt;
+use serde::{Deserialize, Serialize};
 
 fn default_provider() -> String {
     "openai".into()
@@ -262,9 +262,8 @@ const STREAM_SENTENCE_BYTE_CAP: usize = 16 * 1024 * 1024;
 /// Chunked PCM stream for one sentence: raw int16 little-endian mono at
 /// [`STREAMING_PCM_SAMPLE_RATE`], chunks arriving as the provider
 /// synthesizes them.
-pub type PcmChunkStream = std::pin::Pin<
-    Box<dyn futures::Stream<Item = Result<bytes::Bytes, String>> + Send>,
->;
+pub type PcmChunkStream =
+    std::pin::Pin<Box<dyn futures::Stream<Item = Result<bytes::Bytes, String>> + Send>>;
 
 /// Whether the configured provider has a chunked PCM API (hermes
 /// `resolve_streaming_provider`: ElevenLabs pcm_24000 + OpenAI pcm).
@@ -419,8 +418,18 @@ fn edge_http_date(now: chrono::DateTime<chrono::Utc>) -> String {
         chrono::Weekday::Sun => "Sun",
     };
     let month = match now.month() {
-        1 => "Jan", 2 => "Feb", 3 => "Mar", 4 => "Apr", 5 => "May", 6 => "Jun",
-        7 => "Jul", 8 => "Aug", 9 => "Sep", 10 => "Oct", 11 => "Nov", _ => "Dec",
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        _ => "Dec",
     };
     format!(
         "{} {} {:02} {} {:02}:{:02}:{:02} GMT+0000 (Coordinated Universal Time)",
@@ -496,8 +505,7 @@ async fn synthesize_edge(config: &TtsEdgeConfig, text: &str) -> Result<TtsOutput
     // tungstenite passes a pre-built request through unchanged, so the
     // RFC 6455 handshake headers are ours to supply.
     use base64::Engine as _;
-    let ws_key =
-        base64::engine::general_purpose::STANDARD.encode(uuid::Uuid::new_v4().as_bytes());
+    let ws_key = base64::engine::general_purpose::STANDARD.encode(uuid::Uuid::new_v4().as_bytes());
     let request = WsRequest::builder()
         .uri(url.as_str())
         .header("Host", "speech.platform.bing.com")
@@ -567,9 +575,7 @@ async fn synthesize_edge(config: &TtsEdgeConfig, text: &str) -> Result<TtsOutput
                 if frame.contains("Path:turn.end") {
                     break;
                 }
-                if frame.contains("Path:turn.error")
-                    || frame.contains("X-ErrorCode")
-                {
+                if frame.contains("Path:turn.error") || frame.contains("X-ErrorCode") {
                     turn_error = Some(truncate_for_error(&frame));
                 }
             }
@@ -622,7 +628,11 @@ pub async fn elevenlabs_voices(api_key: &str) -> Result<Vec<serde_json::Value>, 
         .map_err(|e| VoicesError::Other(format!("voices body failed: {e}")))?;
     let mut voices: Vec<serde_json::Value> = Vec::new();
     for voice in payload["voices"].as_array().cloned().unwrap_or_default() {
-        let voice_id = voice["voice_id"].as_str().unwrap_or_default().trim().to_string();
+        let voice_id = voice["voice_id"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
         if voice_id.is_empty() {
             continue;
         }
@@ -631,7 +641,11 @@ pub async fn elevenlabs_voices(api_key: &str) -> Result<Vec<serde_json::Value>, 
             .filter(|n| !n.trim().is_empty())
             .unwrap_or(&voice_id)
             .to_string();
-        let category = voice["category"].as_str().unwrap_or_default().trim().to_string();
+        let category = voice["category"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
         let label = if category.is_empty() {
             name.clone()
         } else {
@@ -711,7 +725,10 @@ mod tests {
         config.provider = "piper".into();
         let error = synthesize(&config, "hello").await.unwrap_err();
         assert!(error.contains("unsupported tts provider"), "{error}");
-        assert!(error.contains("expected edge, openai or elevenlabs"), "{error}");
+        assert!(
+            error.contains("expected edge, openai or elevenlabs"),
+            "{error}"
+        );
     }
 
     #[tokio::test]
@@ -786,11 +803,18 @@ mod tests {
         let output = synthesize_edge(&config, "Hello from ulnclaw.")
             .await
             .expect("edge synthesis");
-        assert!(output.bytes.len() > 1_000, "audio too small: {}", output.bytes.len());
+        assert!(
+            output.bytes.len() > 1_000,
+            "audio too small: {}",
+            output.bytes.len()
+        );
         assert_eq!(output.mime, "audio/mpeg");
         // mp3 frames start with 0xFF sync or an ID3 tag.
         let head = &output.bytes[..3.min(output.bytes.len())];
-        assert!(head[0] == 0xFF || head.starts_with(b"ID3"), "not mp3: {head:?}");
+        assert!(
+            head[0] == 0xFF || head.starts_with(b"ID3"),
+            "not mp3: {head:?}"
+        );
     }
 
     #[test]

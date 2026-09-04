@@ -194,8 +194,7 @@ impl FeishuConfig {
             None => self.allowed_users.clone(),
         };
         ResolvedFeishu {
-            app_id: env_trim("FEISHU_APP_ID")
-                .unwrap_or_else(|| self.app_id.trim().to_string()),
+            app_id: env_trim("FEISHU_APP_ID").unwrap_or_else(|| self.app_id.trim().to_string()),
             app_secret: env_trim("FEISHU_APP_SECRET")
                 .unwrap_or_else(|| self.app_secret.trim().to_string()),
             verification_token: env_trim("FEISHU_VERIFICATION_TOKEN")
@@ -205,8 +204,7 @@ impl FeishuConfig {
             allowed_users,
             connection_mode: env_trim("FEISHU_CONNECTION_MODE")
                 .unwrap_or_else(|| self.connection_mode.trim().to_string()),
-            domain: env_trim("FEISHU_DOMAIN")
-                .unwrap_or_else(|| self.domain.trim().to_string()),
+            domain: env_trim("FEISHU_DOMAIN").unwrap_or_else(|| self.domain.trim().to_string()),
             require_mention: env_bool_default_true("FEISHU_REQUIRE_MENTION")
                 .unwrap_or(self.require_mention),
         }
@@ -259,9 +257,8 @@ pub fn normalize_feishu_text(text: &str, mentions: &Value) -> String {
         let name = mentions
             .as_array()
             .and_then(|arr| {
-                arr.iter().find(|mention| {
-                    mention.get("key").and_then(|v| v.as_str()) == Some(key)
-                })
+                arr.iter()
+                    .find(|mention| mention.get("key").and_then(|v| v.as_str()) == Some(key))
             })
             .and_then(|mention| mention.get("name").and_then(|v| v.as_str()))
             .filter(|s| !s.is_empty());
@@ -329,12 +326,18 @@ impl FeishuApi {
             .send()
             .await
             .map_err(|e| format!("tenant token: {e}"))?;
-        let value: Value = resp.json().await.map_err(|e| format!("tenant token JSON: {e}"))?;
+        let value: Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("tenant token JSON: {e}"))?;
         let code = value.get("code").and_then(|v| v.as_i64()).unwrap_or(-1);
         if code != 0 {
             return Err(format!(
                 "tenant token error: {}",
-                value.get("msg").and_then(|v| v.as_str()).unwrap_or("unknown")
+                value
+                    .get("msg")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
             ));
         }
         let token = value
@@ -352,8 +355,8 @@ impl FeishuApi {
         let token = self.tenant_access_token().await?;
         let (receive_id, receive_id_type) = receive_id_parts(chat_id);
         for chunk in crate::messaging::chunk_text(text, MAX_MESSAGE_LENGTH) {
-            let content = serde_json::to_string(&json!({"text": chunk}))
-                .map_err(|e| e.to_string())?;
+            let content =
+                serde_json::to_string(&json!({"text": chunk})).map_err(|e| e.to_string())?;
             let resp = self
                 .client
                 .post(format!(
@@ -374,7 +377,10 @@ impl FeishuApi {
             if code != 0 {
                 return Err(format!(
                     "feishu send error: {}",
-                    value.get("msg").and_then(|v| v.as_str()).unwrap_or("unknown")
+                    value
+                        .get("msg")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
                 ));
             }
         }
@@ -402,12 +408,18 @@ impl FeishuApi {
             .send()
             .await
             .map_err(|e| format!("feishu card send: {e}"))?;
-        let value: Value = resp.json().await.map_err(|e| format!("card send JSON: {e}"))?;
+        let value: Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("card send JSON: {e}"))?;
         let code = value.get("code").and_then(|v| v.as_i64()).unwrap_or(-1);
         if code != 0 {
             return Err(format!(
                 "feishu card send error: {}",
-                value.get("msg").and_then(|v| v.as_str()).unwrap_or("unknown")
+                value
+                    .get("msg")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
             ));
         }
         Ok(())
@@ -490,7 +502,10 @@ impl FeishuApi {
             return None;
         }
         let msg = value.pointer("/data/items/0")?;
-        let sender = msg.pointer("/sender/id").and_then(|v| v.as_str())?.to_string();
+        let sender = msg
+            .pointer("/sender/id")
+            .and_then(|v| v.as_str())?
+            .to_string();
         let chat_id = msg.get("chat_id").and_then(|v| v.as_str())?.to_string();
         Some((sender, chat_id))
     }
@@ -526,7 +541,9 @@ impl FeishuApi {
             .and_then(|v| v.to_str().ok())
             .map(|s| s.split(';').next().unwrap_or("").trim().to_string())
             .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| crate::media_cache::mime_for_ext(std::path::Path::new(filename_hint)));
+            .unwrap_or_else(|| {
+                crate::media_cache::mime_for_ext(std::path::Path::new(filename_hint))
+            });
         let bytes = resp.bytes().await.ok()?.to_vec();
         let path = crate::media_cache::cache_media_bytes(
             &crate::config::ulnclaw_home(),
@@ -547,12 +564,11 @@ impl FeishuApi {
     async fn send_image(&self, chat_id: &str, path: &std::path::Path) -> Result<(), String> {
         let token = self.tenant_access_token().await?;
         let data = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-        let part = reqwest::multipart::Part::bytes(data)
-            .file_name(
-                path.file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "image.png".into()),
-            );
+        let part = reqwest::multipart::Part::bytes(data).file_name(
+            path.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "image.png".into()),
+        );
         let form = reqwest::multipart::Form::new()
             .text("image_type", "message")
             .part("image", part);
@@ -570,7 +586,10 @@ impl FeishuApi {
         if code != 0 {
             return Err(format!(
                 "image upload error: {}",
-                value.get("msg").and_then(|v| v.as_str()).unwrap_or("unknown")
+                value
+                    .get("msg")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
             ));
         }
         let image_key = value
@@ -578,8 +597,8 @@ impl FeishuApi {
             .and_then(|v| v.as_str())
             .ok_or("image upload: no image_key")?
             .to_string();
-        let content = serde_json::to_string(&json!({"image_key": image_key}))
-            .map_err(|e| e.to_string())?;
+        let content =
+            serde_json::to_string(&json!({"image_key": image_key})).map_err(|e| e.to_string())?;
         let resp = self
             .client
             .post(format!(
@@ -600,7 +619,10 @@ impl FeishuApi {
         if code != 0 {
             return Err(format!(
                 "image send error: {}",
-                value.get("msg").and_then(|v| v.as_str()).unwrap_or("unknown")
+                value
+                    .get("msg")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
             ));
         }
         Ok(())
@@ -633,7 +655,10 @@ impl FeishuApi {
         if code != 0 {
             return Err(format!(
                 "file upload error: {}",
-                value.get("msg").and_then(|v| v.as_str()).unwrap_or("unknown")
+                value
+                    .get("msg")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
             ));
         }
         let file_key = value
@@ -641,8 +666,8 @@ impl FeishuApi {
             .and_then(|v| v.as_str())
             .ok_or("file upload: no file_key")?
             .to_string();
-        let content = serde_json::to_string(&json!({"file_key": file_key}))
-            .map_err(|e| e.to_string())?;
+        let content =
+            serde_json::to_string(&json!({"file_key": file_key})).map_err(|e| e.to_string())?;
         let resp = self
             .client
             .post(format!(
@@ -663,7 +688,10 @@ impl FeishuApi {
         if code != 0 {
             return Err(format!(
                 "file send error: {}",
-                value.get("msg").and_then(|v| v.as_str()).unwrap_or("unknown")
+                value
+                    .get("msg")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
             ));
         }
         Ok(())
@@ -698,9 +726,7 @@ pub(crate) fn register_sender(cfg: &FeishuConfig) {
     let api = feishu_api(cfg);
     crate::messaging::register_platform_sender(
         "feishu",
-        Arc::new(FeishuSender {
-            api: api.clone(),
-        }),
+        Arc::new(FeishuSender { api: api.clone() }),
     );
 }
 
@@ -787,7 +813,10 @@ pub async fn feishu_handle_webhook(
             .unwrap_or("")
             .to_string();
         if incoming_token.is_empty()
-            || !constant_time_eq(incoming_token.as_bytes(), resolved.verification_token.as_bytes())
+            || !constant_time_eq(
+                incoming_token.as_bytes(),
+                resolved.verification_token.as_bytes(),
+            )
         {
             return FeishuWebhookResponse {
                 status: 401,
@@ -831,7 +860,11 @@ pub async fn feishu_handle_webhook(
     // Card action callback (hermes `CardActionHandler`): top-level
     // `action` + `operator` (token-gated above). Handled inline so the
     // response body can carry the resolved card (all clients update).
-    if payload.get("action").map(|v| v.is_object()).unwrap_or(false) {
+    if payload
+        .get("action")
+        .map(|v| v.is_object())
+        .unwrap_or(false)
+    {
         let response = handle_card_action(cfg, dispatcher, pairing, &payload).await;
         return FeishuWebhookResponse {
             status: 200,
@@ -865,7 +898,9 @@ pub async fn feishu_handle_webhook(
             let payload = payload.clone();
             tokio::spawn(async move {
                 let store = if pairing_active {
-                    Some(crate::pairing::PairingStore::open(&crate::config::ulnclaw_home()))
+                    Some(crate::pairing::PairingStore::open(
+                        &crate::config::ulnclaw_home(),
+                    ))
                 } else {
                     None
                 };
@@ -922,9 +957,7 @@ pub(crate) async fn handle_message_event(
     let api = feishu_api(cfg);
     crate::messaging::register_platform_sender(
         "feishu",
-        Arc::new(FeishuSender {
-            api: api.clone(),
-        }),
+        Arc::new(FeishuSender { api: api.clone() }),
     );
 
     let event = payload.get("event").cloned().unwrap_or(json!({}));
@@ -966,14 +999,18 @@ pub(crate) async fn handle_message_event(
     let mentions = message.get("mentions").cloned().unwrap_or(json!([]));
 
     // Allowlist ∪ pairing gate.
-    if !resolved.allowed_users.iter().any(|u| u == "*" || *u == sender_id) {
+    if !resolved
+        .allowed_users
+        .iter()
+        .any(|u| u == "*" || *u == sender_id)
+    {
         let mut approved = false;
         if let Some(store) = pairing {
             if store.is_approved("feishu", &sender_id) {
                 approved = true;
-            } else if let Some(code_msg) = crate::messaging::pairing_offer_public(
-                store, "feishu", &sender_id, &sender_id,
-            ) {
+            } else if let Some(code_msg) =
+                crate::messaging::pairing_offer_public(store, "feishu", &sender_id, &sender_id)
+            {
                 let _ = api.send_text(&chat_id, &code_msg).await;
             }
         }
@@ -1012,14 +1049,13 @@ pub(crate) async fn handle_message_event(
                 .get("file_key")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let filename = content
-                .get("file_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or(if message_type == "audio" {
+            let filename = content.get("file_name").and_then(|v| v.as_str()).unwrap_or(
+                if message_type == "audio" {
                     "voice.opus"
                 } else {
                     "file.bin"
-                });
+                },
+            );
             if !file_key.is_empty() {
                 if let Some(att) = api
                     .download_resource(&message_id, file_key, "file", filename)
@@ -1112,18 +1148,18 @@ pub(crate) async fn handle_message_event(
         }
     }
     if !reply_text.trim().is_empty() {
-    // P704: ledger-protected reply delivery.
-    dispatcher
-        .try_send_with_ledger("feishu", &chat_id, &reply_text, || async {
-            match api.send_text(&chat_id, &reply_text).await {
-                Ok(()) => Ok(()),
-                Err(e) => {
-                    eprintln!("[feishu] reply failed: {e}");
-                    Err(e.to_string())
+        // P704: ledger-protected reply delivery.
+        dispatcher
+            .try_send_with_ledger("feishu", &chat_id, &reply_text, || async {
+                match api.send_text(&chat_id, &reply_text).await {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        eprintln!("[feishu] reply failed: {e}");
+                        Err(e.to_string())
+                    }
                 }
-            }
-        })
-        .await;
+            })
+            .await;
     }
 
     // hermes `on_processing_complete`: remove the Typing badge; on
@@ -1187,7 +1223,8 @@ pub(crate) async fn handle_reaction_event(
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let synthetic = reaction_synthetic_text(reaction_action_from_event_type(event_type), &emoji_type);
+    let synthetic =
+        reaction_synthetic_text(reaction_action_from_event_type(event_type), &emoji_type);
     let event_id = payload
         .pointer("/header/event_id")
         .and_then(|v| v.as_str())
@@ -1221,18 +1258,18 @@ pub(crate) async fn handle_reaction_event(
     full.push_str(&outcome.reply);
     let (reply_text, _media_paths) = crate::messaging::extract_media_tags(&full);
     if !reply_text.trim().is_empty() {
-    // P704: ledger-protected reply delivery.
-    dispatcher
-        .try_send_with_ledger("feishu", &chat_id, &reply_text, || async {
-            match api.send_text(&chat_id, &reply_text).await {
-                Ok(()) => Ok(()),
-                Err(e) => {
-                    eprintln!("[feishu] reaction reply failed: {e}");
-                    Err(e.to_string())
+        // P704: ledger-protected reply delivery.
+        dispatcher
+            .try_send_with_ledger("feishu", &chat_id, &reply_text, || async {
+                match api.send_text(&chat_id, &reply_text).await {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        eprintln!("[feishu] reaction reply failed: {e}");
+                        Err(e.to_string())
+                    }
                 }
-            }
-        })
-        .await;
+            })
+            .await;
     }
 }
 
@@ -1384,7 +1421,11 @@ pub fn build_update_prompt_card(prompt: &str, default: &str) -> Value {
 /// hermes `_build_resolved_approval_card` — inline card response that
 /// replaces the approval card once resolved.
 pub fn build_resolved_approval_card(choice: &str, user_name: &str) -> Value {
-    let icon = if choice == crate::approval_gateway::CHOICE_DENY { "❌" } else { "✅" };
+    let icon = if choice == crate::approval_gateway::CHOICE_DENY {
+        "❌"
+    } else {
+        "✅"
+    };
     let label = approval_choice_label(choice);
     json!({
         "config": {"wide_screen_mode": true},
@@ -1448,7 +1489,11 @@ fn card_action_authorized(
         return false;
     }
     let resolved = cfg.resolve();
-    if resolved.allowed_users.iter().any(|u| u == "*" || u == operator) {
+    if resolved
+        .allowed_users
+        .iter()
+        .any(|u| u == "*" || u == operator)
+    {
         return true;
     }
     pairing
@@ -1528,7 +1573,10 @@ pub(crate) async fn handle_card_action(
     pairing: Option<&crate::pairing::PairingStore>,
     payload: &Value,
 ) -> Value {
-    let action_value = payload.pointer("/action/value").cloned().unwrap_or(json!({}));
+    let action_value = payload
+        .pointer("/action/value")
+        .cloned()
+        .unwrap_or(json!({}));
     let operator = payload
         .pointer("/operator/open_id")
         .and_then(|v| v.as_str())
@@ -1540,7 +1588,10 @@ pub(crate) async fn handle_card_action(
         .unwrap_or("")
         .to_string();
 
-    if let Some(button_data) = action_value.get("ulnclaw_approval").and_then(|v| v.as_str()) {
+    if let Some(button_data) = action_value
+        .get("ulnclaw_approval")
+        .and_then(|v| v.as_str())
+    {
         let Some((session_key, decision)) = crate::qqbot::parse_approval_button_data(button_data)
         else {
             eprintln!("[feishu] card action with unparsable approval data {button_data:?}");
@@ -1616,7 +1667,10 @@ pub(crate) async fn handle_card_action(
         return json!({});
     }
     let resolved = cfg.resolve();
-    let authorized = resolved.allowed_users.iter().any(|u| u == "*" || *u == operator)
+    let authorized = resolved
+        .allowed_users
+        .iter()
+        .any(|u| u == "*" || *u == operator)
         || pairing
             .map(|store| store.is_approved("feishu", &operator))
             .unwrap_or(false);
@@ -1670,18 +1724,18 @@ pub(crate) async fn handle_card_action(
         full.push_str(&outcome.reply);
         let (reply_text, _media_paths) = crate::messaging::extract_media_tags(&full);
         if !reply_text.trim().is_empty() {
-        // P704: ledger-protected reply delivery.
-        dispatcher
-            .try_send_with_ledger("feishu", &chat_id, &reply_text, || async {
-                match api.send_text(&chat_id, &reply_text).await {
-                    Ok(()) => Ok(()),
-                    Err(e) => {
-                        eprintln!("[feishu] card action reply failed: {e}");
-                        Err(e.to_string())
+            // P704: ledger-protected reply delivery.
+            dispatcher
+                .try_send_with_ledger("feishu", &chat_id, &reply_text, || async {
+                    match api.send_text(&chat_id, &reply_text).await {
+                        Ok(()) => Ok(()),
+                        Err(e) => {
+                            eprintln!("[feishu] card action reply failed: {e}");
+                            Err(e.to_string())
+                        }
                     }
-                }
-            })
-            .await;
+                })
+                .await;
         }
     });
     eprintln!(
@@ -1756,7 +1810,13 @@ mod tests {
         assert!(!feishu_signature_ok(body, timestamp, nonce, "bad", key));
         assert!(!feishu_signature_ok(body, "", nonce, &sig, key));
         // Tampered body fails.
-        assert!(!feishu_signature_ok(br#"{"hello":"evil"}"#, timestamp, nonce, &sig, key));
+        assert!(!feishu_signature_ok(
+            br#"{"hello":"evil"}"#,
+            timestamp,
+            nonce,
+            &sig,
+            key
+        ));
     }
 
     #[test]
@@ -1908,7 +1968,10 @@ mod tests {
             true,
             false,
         );
-        assert_eq!(card["header"]["title"]["content"], "⚠️ Command Approval Required");
+        assert_eq!(
+            card["header"]["title"]["content"],
+            "⚠️ Command Approval Required"
+        );
         assert_eq!(card["header"]["template"], "orange");
         let markdown = card["elements"][0]["content"].as_str().unwrap();
         assert!(markdown.contains("```\nrm -rf /tmp/x\n```"));
@@ -1956,20 +2019,32 @@ mod tests {
     #[test]
     fn update_prompt_card_layout() {
         let card = build_update_prompt_card("Upgrade now?", "yes");
-        assert_eq!(card["header"]["title"]["content"], "⚕ Update Needs Your Input");
+        assert_eq!(
+            card["header"]["title"]["content"],
+            "⚕ Update Needs Your Input"
+        );
         let markdown = card["elements"][0]["content"].as_str().unwrap();
         assert!(markdown.contains("Upgrade now?"));
         assert!(markdown.contains("Default: `yes`"));
         let actions = card["elements"][1]["actions"].as_array().unwrap();
-        assert_eq!(actions[0]["value"]["ulnclaw_update_prompt"], "update_prompt:y");
-        assert_eq!(actions[1]["value"]["ulnclaw_update_prompt"], "update_prompt:n");
+        assert_eq!(
+            actions[0]["value"]["ulnclaw_update_prompt"],
+            "update_prompt:y"
+        );
+        assert_eq!(
+            actions[1]["value"]["ulnclaw_update_prompt"],
+            "update_prompt:n"
+        );
         assert_eq!(actions[1]["type"], "danger");
     }
 
     #[test]
     fn resolved_cards_layout() {
         let approved = build_resolved_approval_card("always", "ou_admin");
-        assert_eq!(approved["header"]["title"]["content"], "✅ Approved permanently");
+        assert_eq!(
+            approved["header"]["title"]["content"],
+            "✅ Approved permanently"
+        );
         assert_eq!(approved["header"]["template"], "green");
         assert_eq!(
             approved["elements"][0]["content"],
@@ -1983,7 +2058,10 @@ mod tests {
             answered["header"]["title"]["content"],
             "✅ Update prompt answered: Yes"
         );
-        assert_eq!(answered["elements"][0]["content"], "Answered by **ou_admin**");
+        assert_eq!(
+            answered["elements"][0]["content"],
+            "Answered by **ou_admin**"
+        );
     }
 
     #[test]
@@ -1996,21 +2074,65 @@ mod tests {
         };
         let session = "platform-feishu-oc_1";
         // Allowlisted operator passes; chat mismatch and strangers fail.
-        assert!(card_action_authorized(&cfg, Some(&store), "ou_admin", session, "oc_1"));
-        assert!(card_action_authorized(&cfg, Some(&store), "ou_admin", session, ""));
-        assert!(!card_action_authorized(&cfg, Some(&store), "ou_admin", session, "oc_other"));
-        assert!(!card_action_authorized(&cfg, Some(&store), "ou_stranger", session, "oc_1"));
-        assert!(!card_action_authorized(&cfg, Some(&store), "", session, "oc_1"));
+        assert!(card_action_authorized(
+            &cfg,
+            Some(&store),
+            "ou_admin",
+            session,
+            "oc_1"
+        ));
+        assert!(card_action_authorized(
+            &cfg,
+            Some(&store),
+            "ou_admin",
+            session,
+            ""
+        ));
+        assert!(!card_action_authorized(
+            &cfg,
+            Some(&store),
+            "ou_admin",
+            session,
+            "oc_other"
+        ));
+        assert!(!card_action_authorized(
+            &cfg,
+            Some(&store),
+            "ou_stranger",
+            session,
+            "oc_1"
+        ));
+        assert!(!card_action_authorized(
+            &cfg,
+            Some(&store),
+            "",
+            session,
+            "oc_1"
+        ));
         // Wildcard allowlist.
         let wildcard = FeishuConfig {
             allowed_users: vec!["*".into()],
             ..Default::default()
         };
-        assert!(card_action_authorized(&wildcard, Some(&store), "ou_anyone", session, "oc_1"));
+        assert!(card_action_authorized(
+            &wildcard,
+            Some(&store),
+            "ou_anyone",
+            session,
+            "oc_1"
+        ));
         // Pairing approval passes the gate.
-        let code = store.generate_code("feishu", "ou_paired", "Paired").unwrap();
+        let code = store
+            .generate_code("feishu", "ou_paired", "Paired")
+            .unwrap();
         store.approve_code("feishu", &code);
-        assert!(card_action_authorized(&cfg, Some(&store), "ou_paired", session, "oc_1"));
+        assert!(card_action_authorized(
+            &cfg,
+            Some(&store),
+            "ou_paired",
+            session,
+            "oc_1"
+        ));
     }
 
     #[tokio::test]
@@ -2034,7 +2156,10 @@ mod tests {
         let resp = feishu_handle_webhook(&cfg, &dummy_dispatcher().await, None, &body, &[]).await;
         assert_eq!(resp.status, 200);
         assert_eq!(resp.body["card"]["type"], "raw");
-        assert_eq!(resp.body["card"]["data"]["header"]["title"]["content"], "✅ Approved once");
+        assert_eq!(
+            resp.body["card"]["data"]["header"]["title"]["content"],
+            "✅ Approved once"
+        );
         assert_eq!(crate::approval_gateway::pending_count(session), 0);
     }
 
@@ -2066,7 +2191,8 @@ mod tests {
     #[tokio::test]
     async fn webhook_read_receipt_ignored() {
         let cfg = FeishuConfig::default();
-        let body = br#"{"header":{"event_type":"im.message.message_read_v1","event_id":"r1"},"event":{}}"#;
+        let body =
+            br#"{"header":{"event_type":"im.message.message_read_v1","event_id":"r1"},"event":{}}"#;
         let resp = feishu_handle_webhook(&cfg, &dummy_dispatcher().await, None, body, &[]).await;
         assert_eq!(resp.status, 200);
         assert_eq!(resp.body["code"], 0);
@@ -2087,7 +2213,10 @@ mod tests {
     #[test]
     fn card_action_synthetic_text_formatting() {
         // No value → bare command.
-        assert_eq!(card_action_synthetic_text("button", &json!({})), "/card button");
+        assert_eq!(
+            card_action_synthetic_text("button", &json!({})),
+            "/card button"
+        );
         // Non-empty value rides as compact JSON; UTF-8 stays raw
         // (ensure_ascii=False parity); serde_json keys sort.
         let value = json!({"choice": "选项A", "action": "go"});
@@ -2114,25 +2243,40 @@ mod tests {
             "operator": {"open_id": "ou_stranger"},
             "context": {"open_chat_id": "oc_1"},
         });
-        assert_eq!(handle_card_action(&cfg, &dispatcher, None, &payload).await, json!({}));
+        assert_eq!(
+            handle_card_action(&cfg, &dispatcher, None, &payload).await,
+            json!({})
+        );
         // Authorized (wildcard) → {} response; the synthetic command
         // dispatch runs detached.
-        let wildcard = FeishuConfig { allowed_users: vec!["*".into()], ..Default::default() };
+        let wildcard = FeishuConfig {
+            allowed_users: vec!["*".into()],
+            ..Default::default()
+        };
         let payload = json!({
             "token": format!("p210-auth-{}", uuid::Uuid::new_v4().simple()),
             "action": {"tag": "button", "value": {"custom": "x"}},
             "operator": {"open_id": "ou_user"},
             "context": {"open_chat_id": "oc_1"},
         });
-        assert_eq!(handle_card_action(&wildcard, &dispatcher, None, &payload).await, json!({}));
+        assert_eq!(
+            handle_card_action(&wildcard, &dispatcher, None, &payload).await,
+            json!({})
+        );
         // Duplicate token is dropped (still {}).
-        assert_eq!(handle_card_action(&wildcard, &dispatcher, None, &payload).await, json!({}));
+        assert_eq!(
+            handle_card_action(&wildcard, &dispatcher, None, &payload).await,
+            json!({})
+        );
         // Missing operator → {} (dropped before gating).
         let incomplete = json!({
             "action": {"tag": "button", "value": {}},
             "operator": {"open_id": ""},
             "context": {"open_chat_id": "oc_1"},
         });
-        assert_eq!(handle_card_action(&wildcard, &dispatcher, None, &incomplete).await, json!({}));
+        assert_eq!(
+            handle_card_action(&wildcard, &dispatcher, None, &incomplete).await,
+            json!({})
+        );
     }
 }

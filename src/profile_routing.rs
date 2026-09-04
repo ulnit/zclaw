@@ -222,22 +222,48 @@ mod tests {
         let routes = parse_profile_routes(&[chat_route, thread_route, guild_route]);
 
         // Exact thread beats its parent channel route.
-        let hit = match_profile_route(&routes, "discord", Some("G1"), Some("C1"), Some("T9"), None).unwrap();
+        let hit = match_profile_route(&routes, "discord", Some("G1"), Some("C1"), Some("T9"), None)
+            .unwrap();
         assert_eq!(hit.profile, "thread-profile");
         // A different thread in the channel falls to the channel route.
-        let hit = match_profile_route(&routes, "discord", Some("G1"), Some("C1"), Some("T10"), None).unwrap();
+        let hit = match_profile_route(
+            &routes,
+            "discord",
+            Some("G1"),
+            Some("C1"),
+            Some("T10"),
+            None,
+        )
+        .unwrap();
         assert_eq!(hit.profile, "chan-profile");
         // Thread-bearing message whose PARENT is the routed channel
         // (forum post semantics) still matches the channel route.
-        let hit = match_profile_route(&routes, "discord", Some("G1"), Some("POST1"), Some("T1"), Some("C1")).unwrap();
+        let hit = match_profile_route(
+            &routes,
+            "discord",
+            Some("G1"),
+            Some("POST1"),
+            Some("T1"),
+            Some("C1"),
+        )
+        .unwrap();
         assert_eq!(hit.profile, "chan-profile");
         // Another guild's chat with the same id: guild route needs G1.
         let hit = match_profile_route(&routes, "discord", Some("G2"), Some("OTHER"), None, None);
         assert!(hit.is_none());
-        let hit = match_profile_route(&routes, "discord", Some("G1"), Some("OTHER"), None, None).unwrap();
+        let hit =
+            match_profile_route(&routes, "discord", Some("G1"), Some("OTHER"), None, None).unwrap();
         assert_eq!(hit.profile, "guild-profile");
         // Platform mismatch never matches.
-        assert!(match_profile_route(&routes, "telegram", Some("G1"), Some("C1"), Some("T9"), None).is_none());
+        assert!(match_profile_route(
+            &routes,
+            "telegram",
+            Some("G1"),
+            Some("C1"),
+            Some("T9"),
+            None
+        )
+        .is_none());
     }
 
     #[test]
@@ -264,8 +290,11 @@ mod tests {
         let mut s = spec("r", "telegram", "work");
         s.chat_id = Some("-100123".into());
         let routes = parse_profile_routes(&[s]);
-        let hit = match_profile_route(&routes, "telegram", None, Some("-100123"), None, None).unwrap();
+        let hit =
+            match_profile_route(&routes, "telegram", None, Some("-100123"), None, None).unwrap();
         assert_eq!(hit.profile, "work");
-        assert!(match_profile_route(&routes, "telegram", None, Some("-100999"), None, None).is_none());
+        assert!(
+            match_profile_route(&routes, "telegram", None, Some("-100999"), None, None).is_none()
+        );
     }
 }

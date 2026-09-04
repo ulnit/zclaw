@@ -83,10 +83,7 @@ fn metadata_pairs(row: &SessionRow) -> Vec<(String, String)> {
     pairs.push(("Messages".to_string(), row.message_count.to_string()));
     pairs.push((
         "Tokens".to_string(),
-        format!(
-            "{} in / {} out",
-            row.input_tokens, row.output_tokens
-        ),
+        format!("{} in / {} out", row.input_tokens, row.output_tokens),
     ));
     pairs
 }

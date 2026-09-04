@@ -154,9 +154,14 @@ fn find_family(id: &str) -> Option<FalFamily> {
 /// Decide which FAL family to use (hermes `_resolve_family`): explicit arg
 /// → `FAL_VIDEO_MODEL` env → `video_gen.fal.model` → `video_gen.model` →
 /// default.
-fn resolve_fal_family(explicit: Option<&str>, config: &crate::config::UlncLawConfig) -> (String, FalFamily) {
+fn resolve_fal_family(
+    explicit: Option<&str>,
+    config: &crate::config::UlncLawConfig,
+) -> (String, FalFamily) {
     let mut candidates: Vec<Option<String>> = vec![
-        explicit.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+        explicit
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
         crate::config::get_env_value("FAL_VIDEO_MODEL")
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty()),
@@ -321,7 +326,11 @@ async fn fal_submit_and_wait(endpoint: &str, arguments: &Value) -> Result<Value,
             let bearer = crate::managed_gateway::read_nous_access_token().ok_or_else(|| {
                 "Nous managed FAL gateway requires a sign-in (no token available)".to_string()
             })?;
-            (origin.clone(), "Authorization", format!("Bearer {}", bearer))
+            (
+                origin.clone(),
+                "Authorization",
+                format!("Bearer {}", bearer),
+            )
         }
     };
 
@@ -362,8 +371,8 @@ async fn fal_submit_and_wait(endpoint: &str, arguments: &Value) -> Result<Value,
         .to_string();
 
     // Poll status until terminal, then fetch the result.
-    let deadline = std::time::Instant::now()
-        + std::time::Duration::from_secs(FAL_POLL_DEADLINE_SECONDS);
+    let deadline =
+        std::time::Instant::now() + std::time::Duration::from_secs(FAL_POLL_DEADLINE_SECONDS);
     loop {
         if std::time::Instant::now() >= deadline {
             return Err(format!(
@@ -373,10 +382,7 @@ async fn fal_submit_and_wait(endpoint: &str, arguments: &Value) -> Result<Value,
         }
         tokio::time::sleep(std::time::Duration::from_secs(FAL_POLL_INTERVAL_SECONDS)).await;
 
-        let status_url = format!(
-            "{}/{}/requests/{}/status",
-            origin, endpoint, request_id
-        );
+        let status_url = format!("{}/{}/requests/{}/status", origin, endpoint, request_id);
         let status_response = client
             .get(&status_url)
             .header(auth_header, &auth_value)
@@ -397,10 +403,7 @@ async fn fal_submit_and_wait(endpoint: &str, arguments: &Value) -> Result<Value,
             .to_ascii_uppercase();
         match state.as_str() {
             "COMPLETED" => {
-                let result_url = format!(
-                    "{}/{}/requests/{}",
-                    origin, endpoint, request_id
-                );
+                let result_url = format!("{}/{}/requests/{}", origin, endpoint, request_id);
                 let result_response = client
                     .get(&result_url)
                     .header(auth_header, &auth_value)
@@ -468,7 +471,13 @@ impl VideoGenProvider for FalVideoGenProvider {
         };
 
         if prompt.is_empty() {
-            return error_response("prompt is required.", "missing_prompt", "fal", &family_id, prompt);
+            return error_response(
+                "prompt is required.",
+                "missing_prompt",
+                "fal",
+                &family_id,
+                prompt,
+            );
         }
 
         let payload = fal_build_payload(
@@ -534,14 +543,24 @@ impl VideoGenProvider for FalVideoGenProvider {
         let duration_sent = payload
             .get("duration")
             .and_then(|d| d.as_str())
-            .and_then(|s| s.chars().filter(|c| c.is_ascii_digit()).collect::<String>().parse::<i64>().ok())
+            .and_then(|s| {
+                s.chars()
+                    .filter(|c| c.is_ascii_digit())
+                    .collect::<String>()
+                    .parse::<i64>()
+                    .ok()
+            })
             .unwrap_or(0);
         success_response(
             &url,
             &family_id,
             prompt,
             modality_used,
-            if aspect_in_payload { &params.aspect_ratio } else { "" },
+            if aspect_in_payload {
+                &params.aspect_ratio
+            } else {
+                ""
+            },
             duration_sent,
             "fal",
             Some(extra),
@@ -594,7 +613,11 @@ fn deepinfra_video_models() -> Vec<String> {
     let Ok(body) = response.json::<Value>() else {
         return Vec::new();
     };
-    let items = body.get("data").and_then(|d| d.as_array()).cloned().unwrap_or_default();
+    let items = body
+        .get("data")
+        .and_then(|d| d.as_array())
+        .cloned()
+        .unwrap_or_default();
     items
         .iter()
         .filter_map(|item| item.get("id").and_then(|id| id.as_str()))
@@ -715,7 +738,10 @@ impl VideoGenProvider for DeepInfraVideoGenProvider {
             let detail = create_response.text().await.unwrap_or_default();
             let truncated: String = detail.chars().take(300).collect();
             return error_response(
-                &format!("{} video generation failed (HTTP {}): {}", name, status, truncated),
+                &format!(
+                    "{} video generation failed (HTTP {}): {}",
+                    name, status, truncated
+                ),
                 "api_error",
                 name,
                 &model_id,
@@ -736,7 +762,14 @@ impl VideoGenProvider for DeepInfraVideoGenProvider {
         };
 
         // poll with a hard deadline (hermes `_create_and_poll`).
-        let terminal = ["completed", "succeeded", "failed", "error", "cancelled", "canceled"];
+        let terminal = [
+            "completed",
+            "succeeded",
+            "failed",
+            "error",
+            "cancelled",
+            "canceled",
+        ];
         let deadline = std::time::Instant::now()
             + std::time::Duration::from_secs(OPENAI_COMPAT_POLL_DEADLINE_SECONDS);
         let job_id = job
@@ -765,8 +798,10 @@ impl VideoGenProvider for DeepInfraVideoGenProvider {
                     prompt,
                 );
             }
-            tokio::time::sleep(std::time::Duration::from_secs(OPENAI_COMPAT_POLL_INTERVAL_SECONDS))
-                .await;
+            tokio::time::sleep(std::time::Duration::from_secs(
+                OPENAI_COMPAT_POLL_INTERVAL_SECONDS,
+            ))
+            .await;
             match client
                 .get(format!("{}/videos/{}", base_url, job_id))
                 .bearer_auth(&auth)
@@ -782,7 +817,11 @@ impl VideoGenProvider for DeepInfraVideoGenProvider {
             }
         }
 
-        let status = job.get("status").and_then(|s| s.as_str()).unwrap_or("").to_string();
+        let status = job
+            .get("status")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
         if status != "completed" && status != "succeeded" {
             let job_error = job.get("error").map(|e| e.to_string());
             return error_response(
@@ -857,9 +896,9 @@ impl VideoGenProvider for DeepInfraVideoGenProvider {
                             Err(e) => {
                                 return error_response(
                                     &format!(
-                                        "{} video job succeeded but no output could be retrieved: {}",
-                                        name, e
-                                    ),
+                                    "{} video job succeeded but no output could be retrieved: {}",
+                                    name, e
+                                ),
                                     "empty_response",
                                     name,
                                     &model_id,
@@ -896,7 +935,11 @@ impl VideoGenProvider for DeepInfraVideoGenProvider {
             }
         };
 
-        let modality = if params.image_url.is_some() { "image" } else { "text" };
+        let modality = if params.image_url.is_some() {
+            "image"
+        } else {
+            "text"
+        };
         success_response(
             &video_ref,
             &model_id,
@@ -945,26 +988,45 @@ mod tests {
     #[test]
     fn duration_clamping_modes() {
         let families = fal_families();
-        let pixverse = families.iter().find(|(id, _)| *id == "pixverse-v6").map(|(_, f)| f).unwrap();
+        let pixverse = families
+            .iter()
+            .find(|(id, _)| *id == "pixverse-v6")
+            .map(|(_, f)| f)
+            .unwrap();
         // Range family: unset omits, set clamps.
         assert_eq!(fal_clamp_duration(pixverse, None), None);
         assert_eq!(fal_clamp_duration(pixverse, Some(30)), Some(15));
         assert_eq!(fal_clamp_duration(pixverse, Some(7)), Some(7));
 
-        let veo = families.iter().find(|(id, _)| *id == "veo3.1").map(|(_, f)| f).unwrap();
+        let veo = families
+            .iter()
+            .find(|(id, _)| *id == "veo3.1")
+            .map(|(_, f)| f)
+            .unwrap();
         // Enum family: unset takes the first entry; nearest wins.
         assert_eq!(fal_clamp_duration(veo, None), Some(4));
         assert_eq!(fal_clamp_duration(veo, Some(6)), Some(6));
-        assert_eq!(fal_clamp_duration(veo, Some(7)), Some(6) /* or 8: nearest */);
+        assert_eq!(
+            fal_clamp_duration(veo, Some(7)),
+            Some(6) /* or 8: nearest */
+        );
 
-        let ltx = families.iter().find(|(id, _)| *id == "ltx-2.3").map(|(_, f)| f).unwrap();
+        let ltx = families
+            .iter()
+            .find(|(id, _)| *id == "ltx-2.3")
+            .map(|(_, f)| f)
+            .unwrap();
         assert_eq!(fal_clamp_duration(ltx, Some(9)), Some(9));
     }
 
     #[test]
     fn payload_drops_undeclared_keys() {
         let families = fal_families();
-        let happy = families.iter().find(|(id, _)| *id == "happy-horse").map(|(_, f)| f).unwrap();
+        let happy = families
+            .iter()
+            .find(|(id, _)| *id == "happy-horse")
+            .map(|(_, f)| f)
+            .unwrap();
         let payload = fal_build_payload(
             happy,
             "a horse runs",
@@ -989,16 +1051,40 @@ mod tests {
     #[test]
     fn payload_duration_suffix_and_image_key() {
         let families = fal_families();
-        let veo = families.iter().find(|(id, _)| *id == "veo3.1").map(|(_, f)| f).unwrap();
+        let veo = families
+            .iter()
+            .find(|(id, _)| *id == "veo3.1")
+            .map(|(_, f)| f)
+            .unwrap();
         let payload = fal_build_payload(
-            &veo, "cinematic shot", Some("https://x/i.png"), Some(6), "16:9", "720p", None, None, None,
+            &veo,
+            "cinematic shot",
+            Some("https://x/i.png"),
+            Some(6),
+            "16:9",
+            "720p",
+            None,
+            None,
+            None,
         );
         assert_eq!(payload["duration"], json!("6s"));
         assert_eq!(payload["image_url"], json!("https://x/i.png"));
 
-        let kling = families.iter().find(|(id, _)| *id == "kling-v3-4k").map(|(_, f)| f).unwrap();
+        let kling = families
+            .iter()
+            .find(|(id, _)| *id == "kling-v3-4k")
+            .map(|(_, f)| f)
+            .unwrap();
         let payload = fal_build_payload(
-            &kling, "pan", Some("https://x/i.png"), None, "1:1", "720p", None, None, None,
+            &kling,
+            "pan",
+            Some("https://x/i.png"),
+            None,
+            "1:1",
+            "720p",
+            None,
+            None,
+            None,
         );
         assert_eq!(payload["start_image_url"], json!("https://x/i.png"));
         assert!(payload.get("image_url").is_none());

@@ -70,8 +70,7 @@ pub const HOME_TARGET_ENV_VARS: &[(&str, &str)] = &[
 
 /// Legacy env var names kept for back-compat: current primary env var →
 /// the previous name (hermes `_LEGACY_HOME_TARGET_ENV_VARS`).
-const LEGACY_HOME_TARGET_ENV_VARS: &[(&str, &str)] =
-    &[("QQBOT_HOME_CHANNEL", "QQ_HOME_CHANNEL")];
+const LEGACY_HOME_TARGET_ENV_VARS: &[(&str, &str)] = &[("QQBOT_HOME_CHANNEL", "QQ_HOME_CHANNEL")];
 
 /// Routing intent tokens — resolved at fire time (hermes
 /// `_ROUTING_TOKENS`). `all` expands into the set of platforms with a
@@ -253,18 +252,19 @@ fn parse_target_ref(platform: &str, rest: &str) -> (String, Option<String>, bool
         return (rest.to_string(), None, false);
     }
     match rest.split_once(':') {
-        Some((chat_id, thread_id)) if !chat_id.is_empty() && !thread_id.is_empty() => (
-            chat_id.to_string(),
-            Some(thread_id.to_string()),
-            true,
-        ),
+        Some((chat_id, thread_id)) if !chat_id.is_empty() && !thread_id.is_empty() => {
+            (chat_id.to_string(), Some(thread_id.to_string()), true)
+        }
         _ => (rest.to_string(), None, false),
     }
 }
 
 /// Resolve one concrete auto-delivery target for a cron job (hermes
 /// `_resolve_single_delivery_target`).
-pub fn resolve_single_delivery_target(job: &CronJob, deliver_value: &str) -> Option<DeliveryTarget> {
+pub fn resolve_single_delivery_target(
+    job: &CronJob,
+    deliver_value: &str,
+) -> Option<DeliveryTarget> {
     let origin = resolve_origin(job);
 
     if deliver_value == "local" {
@@ -413,7 +413,11 @@ pub fn is_cron_silence_response(response: &str) -> bool {
 /// knows this is a cron delivery (hermes `wrap_response` block in
 /// `_deliver_result`).
 pub fn wrap_delivery_content(job: &CronJob, content: &str) -> String {
-    let task_name = if job.name.is_empty() { &job.id } else { &job.name };
+    let task_name = if job.name.is_empty() {
+        &job.id
+    } else {
+        &job.name
+    };
     format!(
         "Cronjob Response: {}\n(job_id: {})\n-------------\n\n{}\n\nTo stop or manage this job, send me a new message (e.g. \"stop reminder {}\").",
         task_name, job.id, content, task_name
@@ -425,7 +429,11 @@ pub fn wrap_delivery_content(job: &CronJob, content: &str) -> String {
 /// logs; chat shows the operator what broke without dumping provider
 /// JSON or stack traces.
 pub fn summarize_cron_failure_for_delivery(job: &CronJob, error: Option<&str>) -> String {
-    let job_name = if job.name.is_empty() { &job.id } else { &job.name };
+    let job_name = if job.name.is_empty() {
+        &job.id
+    } else {
+        &job.name
+    };
     let text = error.unwrap_or("unknown error").trim().to_string();
     let lower = text.to_lowercase();
 
@@ -456,7 +464,9 @@ pub fn summarize_cron_failure_for_delivery(job: &CronJob, error: Option<&str>) -
     }
     // Whole-token 401/403 match so "oauth", "4015" etc. do not trip the
     // auth message (hermes word-boundary regex).
-    let has_auth_code = text.split(|c: char| !c.is_ascii_digit()).any(|token| token == "401" || token == "403");
+    let has_auth_code = text
+        .split(|c: char| !c.is_ascii_digit())
+        .any(|token| token == "401" || token == "403");
     if has_auth_code {
         return format!(
             "⚠️ Cron '{}' failed: provider authentication error. Full details saved in cron output.",
@@ -502,7 +512,9 @@ pub fn cron_delivery_targets(connected: &[String]) -> Vec<serde_json::Value> {
             .map(|word| {
                 let mut chars = word.chars();
                 match chars.next() {
-                    Some(first) => first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase(),
+                    Some(first) => {
+                        first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
+                    }
                     None => String::new(),
                 }
             })
@@ -616,10 +628,7 @@ mod tests {
             None
         ));
 
-        let job = test_job(
-            Some("origin"),
-            Some(origin("telegram", "42", None)),
-        );
+        let job = test_job(Some("origin"), Some(origin("telegram", "42", None)));
         let origin_ref = job.origin.as_ref();
         // Same chat (case-insensitive platform) matches.
         assert!(target_matches_origin(origin_ref, "Telegram", "42", None));
@@ -628,13 +637,20 @@ mod tests {
         assert!(!target_matches_origin(origin_ref, "discord", "42", None));
 
         // A thread-pinned origin requires the same lane.
-        let threaded = test_job(
-            Some("origin"),
-            Some(origin("telegram", "42", Some("7"))),
-        );
+        let threaded = test_job(Some("origin"), Some(origin("telegram", "42", Some("7"))));
         let origin_ref = threaded.origin.as_ref();
-        assert!(target_matches_origin(origin_ref, "telegram", "42", Some("7")));
-        assert!(!target_matches_origin(origin_ref, "telegram", "42", Some("8")));
+        assert!(target_matches_origin(
+            origin_ref,
+            "telegram",
+            "42",
+            Some("7")
+        ));
+        assert!(!target_matches_origin(
+            origin_ref,
+            "telegram",
+            "42",
+            Some("8")
+        ));
         assert!(!target_matches_origin(origin_ref, "telegram", "42", None));
     }
 
@@ -659,7 +675,10 @@ mod tests {
         assert_eq!(normalize_deliver_value(None), "local");
         assert_eq!(normalize_deliver_value(Some(&json!(null))), "local");
         assert_eq!(normalize_deliver_value(Some(&json!(""))), "local");
-        assert_eq!(normalize_deliver_value(Some(&json!(" telegram "))), "telegram");
+        assert_eq!(
+            normalize_deliver_value(Some(&json!(" telegram "))),
+            "telegram"
+        );
         assert_eq!(
             normalize_deliver_value(Some(&json!(["telegram", "discord"]))),
             "telegram,discord"
@@ -715,7 +734,10 @@ mod tests {
 
     #[test]
     fn test_resolve_origin_target() {
-        let job = test_job(Some("origin"), Some(origin("telegram", "-100123", Some("5"))));
+        let job = test_job(
+            Some("origin"),
+            Some(origin("telegram", "-100123", Some("5"))),
+        );
         let target = resolve_single_delivery_target(&job, "origin").unwrap();
         assert_eq!(target.platform, "telegram");
         assert_eq!(target.chat_id, "-100123");
@@ -738,7 +760,10 @@ mod tests {
     fn test_resolve_origin_missing_home_channel_uses_origin_chat() {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_home_envs();
-        let job = test_job(Some("telegram"), Some(origin("telegram", "-100123", Some("5"))));
+        let job = test_job(
+            Some("telegram"),
+            Some(origin("telegram", "-100123", Some("5"))),
+        );
         // No TELEGRAM_HOME_CHANNEL set → falls back to the origin chat.
         let target = resolve_single_delivery_target(&job, "telegram").unwrap();
         assert_eq!(target.chat_id, "-100123");
@@ -758,8 +783,7 @@ mod tests {
     #[test]
     fn test_resolve_matrix_explicit_target_keeps_colons() {
         let job = test_job(Some("matrix:!room:example.org"), None);
-        let target =
-            resolve_single_delivery_target(&job, "matrix:!room:example.org").unwrap();
+        let target = resolve_single_delivery_target(&job, "matrix:!room:example.org").unwrap();
         assert_eq!(target.chat_id, "!room:example.org");
         assert_eq!(target.thread_id, None);
     }
@@ -801,7 +825,10 @@ mod tests {
         assert!(expanded.contains(&"telegram".to_string()));
         assert!(expanded.contains(&"discord".to_string()));
         assert_eq!(expanded.len(), 2);
-        assert_eq!(expand_routing_tokens("telegram"), vec!["telegram".to_string()]);
+        assert_eq!(
+            expand_routing_tokens("telegram"),
+            vec!["telegram".to_string()]
+        );
         clear_home_envs();
     }
 

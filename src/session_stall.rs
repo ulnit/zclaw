@@ -239,25 +239,73 @@ mod tests {
     fn emit_policy_matches_hermes() {
         // Disabled timeout, missing pending, already-notified, unknown
         // idle and fresh activity all suppress the notice.
-        assert!(!should_emit_session_stall_notification(0.0, Some(999.0), true, false));
-        assert!(!should_emit_session_stall_notification(300.0, Some(999.0), false, false));
-        assert!(!should_emit_session_stall_notification(300.0, Some(999.0), true, true));
-        assert!(!should_emit_session_stall_notification(300.0, None, true, false));
-        assert!(!should_emit_session_stall_notification(300.0, Some(299.9), true, false));
+        assert!(!should_emit_session_stall_notification(
+            0.0,
+            Some(999.0),
+            true,
+            false
+        ));
+        assert!(!should_emit_session_stall_notification(
+            300.0,
+            Some(999.0),
+            false,
+            false
+        ));
+        assert!(!should_emit_session_stall_notification(
+            300.0,
+            Some(999.0),
+            true,
+            true
+        ));
+        assert!(!should_emit_session_stall_notification(
+            300.0, None, true, false
+        ));
+        assert!(!should_emit_session_stall_notification(
+            300.0,
+            Some(299.9),
+            true,
+            false
+        ));
         // Stale + pending + un-notified fires.
-        assert!(should_emit_session_stall_notification(300.0, Some(300.0), true, false));
-        assert!(should_emit_session_stall_notification(300.0, Some(9999.0), true, false));
+        assert!(should_emit_session_stall_notification(
+            300.0,
+            Some(300.0),
+            true,
+            false
+        ));
+        assert!(should_emit_session_stall_notification(
+            300.0,
+            Some(9999.0),
+            true,
+            false
+        ));
     }
 
     #[test]
     fn clear_policy_matches_hermes() {
         // Episode ends when the queue drains or the watchdog is off.
-        assert!(should_clear_session_stall_notification(300.0, Some(9999.0), false));
-        assert!(should_clear_session_stall_notification(0.0, Some(9999.0), true));
+        assert!(should_clear_session_stall_notification(
+            300.0,
+            Some(9999.0),
+            false
+        ));
+        assert!(should_clear_session_stall_notification(
+            0.0,
+            Some(9999.0),
+            true
+        ));
         // Unknown progress holds the latch; fresh activity clears it.
         assert!(!should_clear_session_stall_notification(300.0, None, true));
-        assert!(should_clear_session_stall_notification(300.0, Some(1.0), true));
-        assert!(!should_clear_session_stall_notification(300.0, Some(300.0), true));
+        assert!(should_clear_session_stall_notification(
+            300.0,
+            Some(1.0),
+            true
+        ));
+        assert!(!should_clear_session_stall_notification(
+            300.0,
+            Some(300.0),
+            true
+        ));
     }
 
     #[test]
@@ -274,7 +322,10 @@ mod tests {
 
     #[test]
     fn resolve_idle_only_from_activity() {
-        assert_eq!(resolve_session_idle_seconds_from_activity(None, 500.0), None);
+        assert_eq!(
+            resolve_session_idle_seconds_from_activity(None, 500.0),
+            None
+        );
         assert_eq!(
             resolve_session_idle_seconds_from_activity(Some(&snap(400.0)), 500.0),
             Some(100.0)
@@ -318,7 +369,9 @@ mod tests {
         let sends = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         crate::messaging::register_platform_sender(
             "stallplat",
-            std::sync::Arc::new(StallCapture { sends: sends.clone() }),
+            std::sync::Arc::new(StallCapture {
+                sends: sends.clone(),
+            }),
         );
         crate::session_activity::clear_for_tests();
         crate::messaging::clear_pending_inbound_for_tests();

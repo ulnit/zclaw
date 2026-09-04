@@ -103,7 +103,9 @@ pub fn safe_scalar(value: &str) -> Option<String> {
 /// Extract a content string from the first known content field (hermes
 /// `_CONTENT_FIELD_NAMES`).
 pub fn content_string(value: &Value) -> Option<(String, bool)> {
-    for field in ["body", "content", "message", "messages", "preview", "snippet", "text"] {
+    for field in [
+        "body", "content", "message", "messages", "preview", "snippet", "text",
+    ] {
         if let Some(v) = value.get(field).and_then(|v| v.as_str()) {
             let text = v.trim().to_string();
             if text.is_empty() {
@@ -292,8 +294,8 @@ pub async fn raft_handle_wake(
         .and_then(|v| v.as_str())
         .and_then(safe_scalar)
         .unwrap_or_else(|| "wake".to_string());
-    let (content, truncated) = content_string(&payload)
-        .unwrap_or_else(|| (format!("raft wake: {hook_event}"), false));
+    let (content, truncated) =
+        content_string(&payload).unwrap_or_else(|| (format!("raft wake: {hook_event}"), false));
     let event = crate::messaging::MessageEvent {
         platform: "raft".into(),
         chat_id: format!("raft:{session_id}"),
@@ -437,10 +439,14 @@ mod tests {
         assert_eq!(
             args,
             vec![
-                "--profile", "work",
-                "agent", "bridge",
-                "--wake-adapter", "wake-channel",
-                "--wake-channel-endpoint", "http://127.0.0.1:8080/webhooks/raft/wake",
+                "--profile",
+                "work",
+                "agent",
+                "bridge",
+                "--wake-adapter",
+                "wake-channel",
+                "--wake-channel-endpoint",
+                "http://127.0.0.1:8080/webhooks/raft/wake",
             ]
         );
         let env_token = std_cmd

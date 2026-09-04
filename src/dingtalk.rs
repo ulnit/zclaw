@@ -199,9 +199,7 @@ struct Runtime {
 
 impl Runtime {
     fn is_user_allowed(&self, sender_id: &str, sender_staff_id: &str) -> bool {
-        if self.cfg.allowed_users.is_empty()
-            || self.cfg.allowed_users.iter().any(|u| u == "*")
-        {
+        if self.cfg.allowed_users.is_empty() || self.cfg.allowed_users.iter().any(|u| u == "*") {
             return true;
         }
         let lower: Vec<String> = self
@@ -224,7 +222,9 @@ impl Runtime {
         if !is_group {
             return true;
         }
-        if !self.cfg.allowed_chats.is_empty() && !self.cfg.allowed_chats.contains(&chat_id.to_string()) {
+        if !self.cfg.allowed_chats.is_empty()
+            && !self.cfg.allowed_chats.contains(&chat_id.to_string())
+        {
             return false;
         }
         if self.cfg.free_response_chats.contains(&chat_id.to_string()) {
@@ -272,7 +272,10 @@ impl Runtime {
         map.insert(chat_id.to_string(), (webhook.to_string(), expired_ms));
     }
 
-    fn valid_webhook<'a>(map: &'a HashMap<String, (String, u64)>, chat_id: &str) -> Option<&'a String> {
+    fn valid_webhook<'a>(
+        map: &'a HashMap<String, (String, u64)>,
+        chat_id: &str,
+    ) -> Option<&'a String> {
         let (webhook, expired_ms) = map.get(chat_id)?;
         if *expired_ms > 0 {
             let now_ms = std::time::SystemTime::now()
@@ -306,7 +309,8 @@ impl Runtime {
         if status >= 400 {
             return Err(format!("accessToken → {status}: {body}"));
         }
-        let value: Value = serde_json::from_str(&body).map_err(|e| format!("accessToken JSON: {e}"))?;
+        let value: Value =
+            serde_json::from_str(&body).map_err(|e| format!("accessToken JSON: {e}"))?;
         let token = value
             .get("accessToken")
             .and_then(|v| v.as_str())
@@ -373,8 +377,7 @@ impl Runtime {
             }
             fired.insert(chat_id.to_string());
         }
-        let (msg_id, conversation_id) =
-            self.message_contexts.lock().await.get(chat_id)?.clone();
+        let (msg_id, conversation_id) = self.message_contexts.lock().await.get(chat_id)?.clone();
         if msg_id.is_empty() || conversation_id.is_empty() {
             return None;
         }
@@ -404,7 +407,13 @@ impl Runtime {
         }
         let value: Value = resp.json().await.ok()?;
         let url = value.get("downloadUrl").and_then(|v| v.as_str())?;
-        let file_resp = self.client.get(url).timeout(REQUEST_TIMEOUT).send().await.ok()?;
+        let file_resp = self
+            .client
+            .get(url)
+            .timeout(REQUEST_TIMEOUT)
+            .send()
+            .await
+            .ok()?;
         if !file_resp.status().is_success() {
             return None;
         }
@@ -522,7 +531,10 @@ impl Runtime {
         }
         let resp = self
             .client
-            .post(format!("{}/v1.0/card/instances/deliver", dingtalk_api_base()))
+            .post(format!(
+                "{}/v1.0/card/instances/deliver",
+                dingtalk_api_base()
+            ))
             .header("x-acs-dingtalk-access-token", token)
             .json(&body)
             .timeout(REQUEST_TIMEOUT)
@@ -594,8 +606,14 @@ impl Runtime {
             &uuid::Uuid::new_v4().simple().to_string()[..12]
         );
         self.create_card(&token, &out_track_id).await?;
-        self.deliver_card(&token, &out_track_id, is_group, conversation_id, sender_staff_id)
-            .await?;
+        self.deliver_card(
+            &token,
+            &out_track_id,
+            is_group,
+            conversation_id,
+            sender_staff_id,
+        )
+        .await?;
         self.stream_card_content(&token, &out_track_id, content, true)
             .await?;
         Ok(out_track_id)
@@ -758,10 +776,7 @@ async fn stream_session(
         .get("endpoint")
         .and_then(|v| v.as_str())
         .ok_or_else(|| "connections/open: no endpoint".to_string())?;
-    let ticket = open
-        .get("ticket")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let ticket = open.get("ticket").and_then(|v| v.as_str()).unwrap_or("");
     let ws_url = format!("{endpoint}?ticket={ticket}");
 
     let (ws, _) = tokio_tungstenite::connect_async(&ws_url)
@@ -889,7 +904,10 @@ async fn handle_bot_message(
         let mid = msg_id.clone();
         let cid = conversation_id.clone();
         tokio::spawn(async move {
-            if let Err(e) = rt.send_emotion(&code, &mid, &cid, THINKING_EMOJI, false).await {
+            if let Err(e) = rt
+                .send_emotion(&code, &mid, &cid, THINKING_EMOJI, false)
+                .await
+            {
                 eprintln!("[dingtalk] Thinking reaction failed: {e}");
             }
         });
@@ -931,7 +949,9 @@ async fn handle_bot_message(
     }
 
     if !runtime.is_user_allowed(&sender_id, &sender_staff_id) {
-        eprintln!("[dingtalk] dropping message from non-allowlisted user {sender_staff_id}/{sender_id}");
+        eprintln!(
+            "[dingtalk] dropping message from non-allowlisted user {sender_staff_id}/{sender_id}"
+        );
         return;
     }
 
@@ -982,15 +1002,16 @@ async fn handle_bot_message(
         .get("sessionWebhookExpiredMilli")
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
-    runtime.store_webhook(&chat_id, session_webhook, expired).await;
+    runtime
+        .store_webhook(&chat_id, session_webhook, expired)
+        .await;
 
     // Resolve media download codes.
-    let attachments: Vec<MediaAttachment> =
-        collect_media_refs(runtime, payload, &robot_code)
-            .await
-            .into_iter()
-            .flatten()
-            .collect();
+    let attachments: Vec<MediaAttachment> = collect_media_refs(runtime, payload, &robot_code)
+        .await
+        .into_iter()
+        .flatten()
+        .collect();
 
     if text.trim().is_empty() && attachments.is_empty() {
         return;
@@ -1033,8 +1054,7 @@ async fn handle_bot_message(
         // fallback).
         let sent = dispatcher
             .try_send_with_ledger("dingtalk", &chat_id, &reply_text, || async {
-                let mut result: Result<(), String> =
-                    Err("no delivery path attempted".to_string());
+                let mut result: Result<(), String> = Err("no delivery path attempted".to_string());
                 if !runtime.cfg.card_template_id.is_empty() {
                     match runtime
                         .send_ai_card(is_group, &conversation_id, &sender_staff_id, &reply_text)
@@ -1063,9 +1083,7 @@ async fn handle_bot_message(
             })
             .await;
         if sent {
-            if let Some((target_msg, target_conv)) =
-                runtime.take_done_reaction(&chat_id).await
-            {
+            if let Some((target_msg, target_conv)) = runtime.take_done_reaction(&chat_id).await {
                 // hermes `_fire_done_reaction`: recall 🤔Thinking, then add
                 // 🥳Done — once per inbound message.
                 let rt = runtime.clone();
@@ -1252,10 +1270,7 @@ async fn collect_media_refs(
                 .and_then(|v| v.as_str())
             {
                 if !code.is_empty() {
-                    let ext = item
-                        .get("type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("file");
+                    let ext = item.get("type").and_then(|v| v.as_str()).unwrap_or("file");
                     refs.push((code.to_string(), format!("rich_{ext}")));
                 }
             }
@@ -1273,7 +1288,10 @@ async fn collect_media_refs(
                     .filter(|s| !s.is_empty())
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| {
-                        format!("attachment.{}", if msg_type == "image" { "jpg" } else { "bin" })
+                        format!(
+                            "attachment.{}",
+                            if msg_type == "image" { "jpg" } else { "bin" }
+                        )
                     });
                 refs.push((code.to_string(), fname));
             }
@@ -1337,7 +1355,9 @@ mod tests {
             "https://oapi.dingtalk.com/robot/sendBySession?session=x"
         ));
         assert!(is_dingtalk_webhook_url("https://api.dingtalk.com/v1.0/x"));
-        assert!(!is_dingtalk_webhook_url("https://evil.com/oapi.dingtalk.com"));
+        assert!(!is_dingtalk_webhook_url(
+            "https://evil.com/oapi.dingtalk.com"
+        ));
         assert!(!is_dingtalk_webhook_url("http://oapi.dingtalk.com/x"));
     }
 
@@ -1462,7 +1482,10 @@ mod tests {
             .unwrap()
             .as_millis() as u64)
             + 60 * 60 * 1000;
-        map.insert("chat1".to_string(), ("https://oapi.dingtalk.com/x".to_string(), future_ms));
+        map.insert(
+            "chat1".to_string(),
+            ("https://oapi.dingtalk.com/x".to_string(), future_ms),
+        );
         assert!(Runtime::valid_webhook(&map, "chat1").is_some());
         // Expires within the 5-minute margin → rejected.
         let soon_ms = (std::time::SystemTime::now()
@@ -1470,10 +1493,16 @@ mod tests {
             .unwrap()
             .as_millis() as u64)
             + 60 * 1000;
-        map.insert("chat2".to_string(), ("https://oapi.dingtalk.com/y".to_string(), soon_ms));
+        map.insert(
+            "chat2".to_string(),
+            ("https://oapi.dingtalk.com/y".to_string(), soon_ms),
+        );
         assert!(Runtime::valid_webhook(&map, "chat2").is_none());
         // No expiry recorded → always valid.
-        map.insert("chat3".to_string(), ("https://oapi.dingtalk.com/z".to_string(), 0));
+        map.insert(
+            "chat3".to_string(),
+            ("https://oapi.dingtalk.com/z".to_string(), 0),
+        );
         assert!(Runtime::valid_webhook(&map, "chat3").is_some());
     }
 
@@ -1556,9 +1585,7 @@ mod tests {
     /// axum mock of the DingTalk card endpoints — logs (method, path,
     /// body) per call so the create → deliver → stream sequence is
     /// assertable.
-    async fn spawn_card_api(
-        log: Arc<std::sync::Mutex<Vec<(String, String, Value)>>>,
-    ) -> String {
+    async fn spawn_card_api(log: Arc<std::sync::Mutex<Vec<(String, String, Value)>>>) -> String {
         use axum::extract::State;
         use axum::routing::{post, put};
         type Log = Arc<std::sync::Mutex<Vec<(String, String, Value)>>>;
@@ -1567,7 +1594,11 @@ mod tests {
                 "/v1.0/oauth2/accessToken",
                 post(
                     move |State(log): State<Log>, axum::Json(body): axum::Json<Value>| async move {
-                        log.lock().unwrap().push(("POST".into(), "/v1.0/oauth2/accessToken".into(), body));
+                        log.lock().unwrap().push((
+                            "POST".into(),
+                            "/v1.0/oauth2/accessToken".into(),
+                            body,
+                        ));
                         axum::Json(json!({"accessToken": "TOK", "expireIn": 7200}))
                     },
                 ),
@@ -1576,7 +1607,11 @@ mod tests {
                 "/v1.0/card/instances",
                 post(
                     move |State(log): State<Log>, axum::Json(body): axum::Json<Value>| async move {
-                        log.lock().unwrap().push(("POST".into(), "/v1.0/card/instances".into(), body));
+                        log.lock().unwrap().push((
+                            "POST".into(),
+                            "/v1.0/card/instances".into(),
+                            body,
+                        ));
                         axum::Json(json!({"result": {"outTrackId": "x"}}))
                     },
                 ),
@@ -1585,7 +1620,11 @@ mod tests {
                 "/v1.0/card/instances/deliver",
                 post(
                     move |State(log): State<Log>, axum::Json(body): axum::Json<Value>| async move {
-                        log.lock().unwrap().push(("POST".into(), "/v1.0/card/instances/deliver".into(), body));
+                        log.lock().unwrap().push((
+                            "POST".into(),
+                            "/v1.0/card/instances/deliver".into(),
+                            body,
+                        ));
                         axum::Json(json!({"result": true}))
                     },
                 ),
@@ -1594,7 +1633,11 @@ mod tests {
                 "/v1.0/card/streaming",
                 put(
                     move |State(log): State<Log>, axum::Json(body): axum::Json<Value>| async move {
-                        log.lock().unwrap().push(("PUT".into(), "/v1.0/card/streaming".into(), body));
+                        log.lock().unwrap().push((
+                            "PUT".into(),
+                            "/v1.0/card/streaming".into(),
+                            body,
+                        ));
                         axum::Json(json!({"result": true}))
                     },
                 ),

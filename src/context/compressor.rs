@@ -74,7 +74,8 @@ impl ContextCompressor {
         messages: Vec<Message>,
         provider: &dyn Provider,
     ) -> Option<Vec<Message>> {
-        self.compress_with_model(messages, provider, provider.model()).await
+        self.compress_with_model(messages, provider, provider.model())
+            .await
     }
 
     /// Compress with an explicit model id (auxiliary model routing — the
@@ -136,9 +137,9 @@ impl ContextCompressor {
             temperature: Some(0.2),
             stream: false,
             stop: None,
-        
-        images: None,
-};
+
+            images: None,
+        };
 
         let summary = match provider.chat_completion(summary_request).await {
             Ok(response) => response.content.unwrap_or_default(),

@@ -115,7 +115,11 @@ pub fn dispatch_background_delegation(
         finished_ms: None,
         log_dir: log_dir.clone(),
     };
-    state().lock().unwrap().records.insert(id.clone(), record.clone());
+    state()
+        .lock()
+        .unwrap()
+        .records
+        .insert(id.clone(), record.clone());
     if let Some(store) = &store {
         let tasks_json = serde_json::to_string(
             &tasks
@@ -133,7 +137,13 @@ pub fn dispatch_background_delegation(
     let store_for_task = store.clone();
     tokio::spawn(async move {
         let results = run_batch(runner, tasks, &log_dir, max_concurrent.max(1)).await;
-        finalize_delegation(&id, &parent_session_key, &log_dir, results, store_for_task.as_deref());
+        finalize_delegation(
+            &id,
+            &parent_session_key,
+            &log_dir,
+            results,
+            store_for_task.as_deref(),
+        );
     });
 
     Ok(record)
@@ -479,11 +489,8 @@ mod tests {
     }
 
     fn unique_home(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "ulnclaw-asyncdel-{}-{}",
-            tag,
-            uuid::Uuid::new_v4()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("ulnclaw-asyncdel-{}-{}", tag, uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -542,7 +549,10 @@ mod tests {
         assert!(dir.join("task-1.log").exists());
         assert!(dir.join("task-2.log").exists());
         assert!(dir.join("result.json").exists());
-        assert_eq!(std::fs::read_to_string(dir.join("DONE")).unwrap().trim(), "completed");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("DONE")).unwrap().trim(),
+            "completed"
+        );
 
         // Registry bookkeeping.
         let stored = get_delegation(&record.id).unwrap();
@@ -615,7 +625,9 @@ mod tests {
         let runner_dyn: Arc<dyn SubAgentRunner> = runner.clone();
         let record = dispatch_background_delegation(
             runner_dyn,
-            (0..4).map(|i| (format!("task {i}"), String::new())).collect(),
+            (0..4)
+                .map(|i| (format!("task {i}"), String::new()))
+                .collect(),
             "session-bounded".to_string(),
             home,
             2,
@@ -653,7 +665,9 @@ mod tests {
                 "[{\"goal\":\"old work\",\"context\":\"\"}]",
             )
             .unwrap();
-        store.persist_delegation_dispatch("d-finished", &old_sess, "[]").unwrap();
+        store
+            .persist_delegation_dispatch("d-finished", &old_sess, "[]")
+            .unwrap();
         store
             .finish_delegation(
                 "d-finished",
@@ -670,17 +684,29 @@ mod tests {
             .into_iter()
             .map(|(id, _, st, _, _, _, _)| (id, st))
             .collect();
-        assert_eq!(states.get("d-abandoned").map(String::as_str), Some("unknown"));
-        assert_eq!(states.get("d-finished").map(String::as_str), Some("completed"));
+        assert_eq!(
+            states.get("d-abandoned").map(String::as_str),
+            Some("unknown")
+        );
+        assert_eq!(
+            states.get("d-finished").map(String::as_str),
+            Some("completed")
+        );
 
         // The restarted process has a NEW session key; the delivery claim
         // still hands over every pending row (single-consumer process).
         let drained = drain_completions(Some(&store), "new-sess");
         assert_eq!(drained.len(), 2);
-        let lost = drained.iter().find(|c| c.delegation_id == "d-abandoned").unwrap();
+        let lost = drained
+            .iter()
+            .find(|c| c.delegation_id == "d-abandoned")
+            .unwrap();
         assert!(lost.message.contains("outcome unknown"));
         assert!(lost.message.contains("old work"));
-        let recovered = drained.iter().find(|c| c.delegation_id == "d-finished").unwrap();
+        let recovered = drained
+            .iter()
+            .find(|c| c.delegation_id == "d-finished")
+            .unwrap();
         assert!(recovered.message.contains("done"));
         // Claim is durable: nothing left undelivered, second drain empty.
         assert!(store.undelivered_delegations().is_empty());
@@ -728,22 +754,36 @@ mod tests {
         let _guard = STORE_LOCK.lock().unwrap();
         let home = unique_home("claim-lifecycle");
         let store = SqliteSessionStore::open(home.join("state.db")).unwrap();
-        store.persist_delegation_dispatch("d-claim", "sess-x", "[]").unwrap();
+        store
+            .persist_delegation_dispatch("d-claim", "sess-x", "[]")
+            .unwrap();
         store
             .finish_delegation("d-claim", "completed", "{\"results\":[]}")
             .unwrap();
 
         // Claim wins once; competing claims lose while it is held.
-        assert!(store.claim_delegation_delivery("d-claim", "claim-a").unwrap());
-        assert!(!store.claim_delegation_delivery("d-claim", "claim-b").unwrap());
+        assert!(store
+            .claim_delegation_delivery("d-claim", "claim-a")
+            .unwrap());
+        assert!(!store
+            .claim_delegation_delivery("d-claim", "claim-b")
+            .unwrap());
         // Release clears the claim; attempts were counted at claim time.
-        assert!(!store.release_delegation_delivery("d-claim", "claim-a").unwrap());
+        assert!(!store
+            .release_delegation_delivery("d-claim", "claim-a")
+            .unwrap());
         assert_eq!(store.delegation_delivery_attempts("d-claim"), 1);
 
         // Re-claim + complete under the claim token only.
-        assert!(store.claim_delegation_delivery("d-claim", "claim-c").unwrap());
-        assert!(!store.complete_delegation_delivery("d-claim", "wrong-claim").unwrap());
-        assert!(store.complete_delegation_delivery("d-claim", "claim-c").unwrap());
+        assert!(store
+            .claim_delegation_delivery("d-claim", "claim-c")
+            .unwrap());
+        assert!(!store
+            .complete_delegation_delivery("d-claim", "wrong-claim")
+            .unwrap());
+        assert!(store
+            .complete_delegation_delivery("d-claim", "claim-c")
+            .unwrap());
         let states: std::collections::HashMap<String, String> = store
             .delegation_rows(10)
             .into_iter()
@@ -751,20 +791,28 @@ mod tests {
             .collect();
         assert_eq!(states.get("d-claim").map(String::as_str), Some("delivered"));
         // Delivered rows are not re-claimable.
-        assert!(!store.claim_delegation_delivery("d-claim", "claim-d").unwrap());
+        assert!(!store
+            .claim_delegation_delivery("d-claim", "claim-d")
+            .unwrap());
 
         // drop_delegation_delivery: terminal drop of a claimed row.
-        store.persist_delegation_dispatch("d-drop", "sess-y", "[]").unwrap();
+        store
+            .persist_delegation_dispatch("d-drop", "sess-y", "[]")
+            .unwrap();
         store
             .finish_delegation("d-drop", "completed", "{\"results\":[]}")
             .unwrap();
-        assert!(store.claim_delegation_delivery("d-drop", "claim-e").unwrap());
+        assert!(store
+            .claim_delegation_delivery("d-drop", "claim-e")
+            .unwrap());
         assert!(store.drop_delegation_delivery("d-drop", "claim-e").unwrap());
         assert!(store
             .undelivered_delegations()
             .iter()
             .all(|(id, _, _)| id != "d-drop"));
-        assert!(!store.claim_delegation_delivery("d-drop", "claim-f").unwrap());
+        assert!(!store
+            .claim_delegation_delivery("d-drop", "claim-f")
+            .unwrap());
     }
 
     #[tokio::test]

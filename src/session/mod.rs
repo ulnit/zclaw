@@ -6,8 +6,8 @@
 pub mod export;
 pub mod filters;
 pub mod recap;
-pub mod repair;
 pub mod recovery;
+pub mod repair;
 pub mod retitle;
 pub mod sqlite;
 
@@ -80,24 +80,27 @@ impl MemorySessionStore {
 
 impl SessionStore for MemorySessionStore {
     fn save_session(&self, session: &Session) -> Result<()> {
-        let mut sessions = self.sessions.lock().map_err(|e| {
-            AgentError::Session(format!("Failed to acquire lock: {}", e))
-        })?;
+        let mut sessions = self
+            .sessions
+            .lock()
+            .map_err(|e| AgentError::Session(format!("Failed to acquire lock: {}", e)))?;
         sessions.insert(session.id.clone(), session.clone());
         Ok(())
     }
 
     fn load_session(&self, session_id: &str) -> Result<Option<Session>> {
-        let sessions = self.sessions.lock().map_err(|e| {
-            AgentError::Session(format!("Failed to acquire lock: {}", e))
-        })?;
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|e| AgentError::Session(format!("Failed to acquire lock: {}", e)))?;
         Ok(sessions.get(session_id).cloned())
     }
 
     fn list_sessions(&self, limit: usize) -> Result<Vec<Session>> {
-        let sessions = self.sessions.lock().map_err(|e| {
-            AgentError::Session(format!("Failed to acquire lock: {}", e))
-        })?;
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|e| AgentError::Session(format!("Failed to acquire lock: {}", e)))?;
         let mut all: Vec<Session> = sessions.values().cloned().collect();
         all.sort_by(|a, b| b.updated_at_ms.cmp(&a.updated_at_ms));
         all.truncate(limit);
@@ -105,17 +108,19 @@ impl SessionStore for MemorySessionStore {
     }
 
     fn delete_session(&self, session_id: &str) -> Result<()> {
-        let mut sessions = self.sessions.lock().map_err(|e| {
-            AgentError::Session(format!("Failed to acquire lock: {}", e))
-        })?;
+        let mut sessions = self
+            .sessions
+            .lock()
+            .map_err(|e| AgentError::Session(format!("Failed to acquire lock: {}", e)))?;
         sessions.remove(session_id);
         Ok(())
     }
 
     fn search_sessions(&self, query: &str, limit: usize) -> Result<Vec<Session>> {
-        let sessions = self.sessions.lock().map_err(|e| {
-            AgentError::Session(format!("Failed to acquire lock: {}", e))
-        })?;
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|e| AgentError::Session(format!("Failed to acquire lock: {}", e)))?;
         let query_lower = query.to_lowercase();
         let mut results: Vec<Session> = sessions
             .values()

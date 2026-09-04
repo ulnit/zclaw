@@ -471,7 +471,10 @@ mod tests {
         let second = get_environment_probe_line("local");
         assert_eq!(first, second);
         // Line is either empty (clean env) or starts with the marker.
-        assert!(first.is_empty() || first.starts_with("Python toolchain: "), "got: {first}");
+        assert!(
+            first.is_empty() || first.starts_with("Python toolchain: "),
+            "got: {first}"
+        );
     }
 
     #[test]

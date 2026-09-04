@@ -86,13 +86,7 @@ fn ensure_docker_container(container: &str, image: Option<&str>) -> Result<Strin
             };
             let created = std::process::Command::new("docker")
                 .args([
-                    "run",
-                    "--detach",
-                    "--name",
-                    container,
-                    image,
-                    "sleep",
-                    "infinity",
+                    "run", "--detach", "--name", container, image, "sleep", "infinity",
                 ])
                 .output()
                 .map_err(|e| AgentError::config(format!("docker run failed: {}", e)))?;

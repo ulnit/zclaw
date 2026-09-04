@@ -40,7 +40,9 @@ pub struct TodoItem {
 }
 
 fn todo_path(ctx: &ToolContext) -> std::path::PathBuf {
-    ctx.home.join("sessions").join(format!("{}.todos.json", ctx.session_id))
+    ctx.home
+        .join("sessions")
+        .join(format!("{}.todos.json", ctx.session_id))
 }
 
 fn load_todos(ctx: &ToolContext) -> Vec<TodoItem> {
@@ -73,8 +75,14 @@ fn render(todos: &[TodoItem]) -> serde_json::Value {
             })
         })
         .collect();
-    let in_progress = todos.iter().filter(|t| t.status == TodoStatus::InProgress).count();
-    let completed = todos.iter().filter(|t| t.status == TodoStatus::Completed).count();
+    let in_progress = todos
+        .iter()
+        .filter(|t| t.status == TodoStatus::InProgress)
+        .count();
+    let completed = todos
+        .iter()
+        .filter(|t| t.status == TodoStatus::Completed)
+        .count();
     json!({
         "success": true,
         "todos": items,

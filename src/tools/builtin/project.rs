@@ -39,9 +39,7 @@ fn apply_workspace(task_id: Option<&str>, path: Option<&str>, name: &str) {
     let cb = workspace_slot().lock().ok().and_then(|slot| slot.clone());
     if let (Some(cb), Some(task_id), Some(path)) = (cb, task_id, path) {
         // hermes swallows callback errors — the DB write already happened.
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            cb(task_id, path, name)
-        }));
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cb(task_id, path, name)));
     }
 }
 
@@ -154,7 +152,9 @@ fn project_switch_impl(ctx: &ToolContext, project: &str) -> Value {
     let result = (|| -> crate::error::Result<Value> {
         let conn = open_db(ctx)?;
         let Some(proj) = resolve(&conn, project)? else {
-            return Ok(json!({"success": false, "error": format!("no project matching '{}'", project.trim())}));
+            return Ok(
+                json!({"success": false, "error": format!("no project matching '{}'", project.trim())}),
+            );
         };
         pdb::set_active(&conn, Some(&proj.id))?;
         let primary = primary_path(&proj);
@@ -176,9 +176,7 @@ fn project_switch_impl(ctx: &ToolContext, project: &str) -> Value {
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(
         tool("project_list")
-            .description(
-                "List the desktop Projects (named workspaces) and which one is active.",
-            )
+            .description("List the desktop Projects (named workspaces) and which one is active.")
             .parameters(json!({"type": "object", "properties": {}}))
             .handler(|_args, ctx| async move { Ok(project_list_impl(&ctx)) })
             .toolset("project")
@@ -242,7 +240,9 @@ mod tests {
     use super::*;
 
     fn test_context(dir: &std::path::Path) -> ToolContext {
-        ToolContext::new().with_home(dir).with_session_id("test-session")
+        ToolContext::new()
+            .with_home(dir)
+            .with_session_id("test-session")
     }
 
     #[tokio::test]
@@ -275,7 +275,10 @@ mod tests {
 
         let missing = project_switch_impl(&ctx, "ghost");
         assert_eq!(missing["success"], false);
-        assert!(missing["error"].as_str().unwrap().contains("no project matching"));
+        assert!(missing["error"]
+            .as_str()
+            .unwrap()
+            .contains("no project matching"));
 
         let no_name = project_create_impl(&ctx, "  ", None);
         assert_eq!(no_name["success"], false);
@@ -284,7 +287,9 @@ mod tests {
         let seen: Arc<Mutex<Vec<(String, String, String)>>> = Arc::new(Mutex::new(Vec::new()));
         let sink = seen.clone();
         set_project_workspace_callback(Some(Arc::new(move |task, path, name| {
-            sink.lock().unwrap().push((task.to_string(), path.to_string(), name.to_string()));
+            sink.lock()
+                .unwrap()
+                .push((task.to_string(), path.to_string(), name.to_string()));
         })));
         project_switch_impl(&ctx, "beta");
         set_project_workspace_callback(None);

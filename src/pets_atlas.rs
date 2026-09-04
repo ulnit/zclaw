@@ -301,12 +301,10 @@ pub fn remove_background(img: &RgbaImage, chroma_key: Option<(u8, u8, u8)>) -> R
 
     let is_bg = |idx: usize| {
         let raw = &rgba.as_raw()[idx * 4..idx * 4 + 4];
-        raw[3] > ALPHA_FLOOR
-            && color_distance(raw[0], raw[1], raw[2], key) <= threshold
+        raw[3] > ALPHA_FLOOR && color_distance(raw[0], raw[1], raw[2], key) <= threshold
     };
 
-    let key_spread = key.0.max(key.1).max(key.2) as i32
-        - key.0.min(key.1).min(key.2) as i32;
+    let key_spread = key.0.max(key.1).max(key.2) as i32 - key.0.min(key.1).min(key.2) as i32;
 
     if key_spread >= 120 {
         // Fast path for strongly-saturated chroma keys: remove every near-key
@@ -671,7 +669,10 @@ fn group_component_rows(boxes: &[Box4]) -> Vec<Vec<Box4>> {
         for (i, center) in centers.iter_mut().enumerate() {
             if (cy - *center).abs() <= row_tol {
                 rows[i].push(box4);
-                *center = rows[i].iter().map(|b| (b.1 + b.3) as f64 / 2.0).sum::<f64>()
+                *center = rows[i]
+                    .iter()
+                    .map(|b| (b.1 + b.3) as f64 / 2.0)
+                    .sum::<f64>()
                     / rows[i].len() as f64;
                 placed = true;
                 break;
@@ -703,11 +704,7 @@ fn isolate_slot_subject(img: &RgbaImage) -> RgbaImage {
     if comps.is_empty() {
         return rgba;
     }
-    let (main_box, main_mass) = comps
-        .iter()
-        .max_by_key(|(_, mass)| *mass)
-        .copied()
-        .unwrap();
+    let (main_box, main_mass) = comps.iter().max_by_key(|(_, mass)| *mass).copied().unwrap();
     let (ml, _mt, mr, _mb) = main_box;
     let mw = (mr - ml).max(1);
     let mut out = RgbaImage::from_pixel(rgba.width(), rgba.height(), Rgba([0, 0, 0, 0]));
@@ -760,7 +757,11 @@ fn slot_bounds(width: u32, frame_count: u32) -> Vec<(u32, u32)> {
 
 /// Extract frame subjects as connected non-background objects (hermes
 /// `_component_crops`).
-fn component_crops(strip: &RgbaImage, frame_count: u32, require_padding: bool) -> Option<Vec<RgbaImage>> {
+fn component_crops(
+    strip: &RgbaImage,
+    frame_count: u32,
+    require_padding: bool,
+) -> Option<Vec<RgbaImage>> {
     let attempt = |source: &RgbaImage| -> Option<Vec<RgbaImage>> {
         let comps = component_boxes(source);
         if comps.is_empty() {
@@ -789,7 +790,8 @@ fn component_crops(strip: &RgbaImage, frame_count: u32, require_padding: bool) -
         }
         if require_padding {
             let min_x = (4.0f64).max((12.0f64).min((source.width() as f64 * 0.01).round())) as u32;
-            let min_y = (4.0f64).max((16.0f64).min((source.height() as f64 * 0.015).round())) as u32;
+            let min_y =
+                (4.0f64).max((16.0f64).min((source.height() as f64 * 0.015).round())) as u32;
             for (left, top, right, bottom) in &ordered {
                 if *left < min_x
                     || *top < min_y
@@ -869,7 +871,11 @@ fn sever_expected_gutters(strip: &RgbaImage, frame_count: u32) -> RgbaImage {
 
 /// Slice `strip` into `frame_count` uniform columns, each cleaned
 /// independently (hermes `_slot_crops`).
-fn slot_crops(strip: &RgbaImage, frame_count: u32, require_padding: bool) -> Option<Vec<RgbaImage>> {
+fn slot_crops(
+    strip: &RgbaImage,
+    frame_count: u32,
+    require_padding: bool,
+) -> Option<Vec<RgbaImage>> {
     let h = strip.height();
     let mut frames = Vec::new();
     for (left, right) in slot_bounds(strip.width(), frame_count) {
@@ -909,7 +915,9 @@ fn frame_x_ranges(strip: &RgbaImage, frame_count: u32) -> Option<Vec<(u32, u32)>
     let mut groups: Vec<[usize; 2]> = runs.iter().map(|(l, r)| [*l, *r]).collect();
     while groups.len() as u32 > frame_count {
         let gi = (0..groups.len() - 1)
-            .min_by(|i, j| (groups[*i + 1][0] - groups[*i][1]).cmp(&(groups[*j + 1][0] - groups[*j][1])))
+            .min_by(|i, j| {
+                (groups[*i + 1][0] - groups[*i][1]).cmp(&(groups[*j + 1][0] - groups[*j][1]))
+            })
             .unwrap();
         groups[gi][1] = groups[gi + 1][1];
         groups.remove(gi + 1);
@@ -1081,12 +1089,7 @@ pub fn normalize_cells(
 
     let mut out = std::collections::HashMap::new();
     // (aligned frames, union bbox, (median pose w, median pose h))
-    let mut prepared: Vec<(
-        String,
-        Vec<RgbaImage>,
-        Box4,
-        (u32, u32),
-    )> = Vec::new();
+    let mut prepared: Vec<(String, Vec<RgbaImage>, Box4, (u32, u32))> = Vec::new();
 
     let target_w = CELL_WIDTH.saturating_sub(pad);
     let target_h = CELL_HEIGHT.saturating_sub(pad);
@@ -1131,8 +1134,7 @@ pub fn normalize_cells(
         let mut aligned = Vec::new();
         for (frame, profile) in canvas.iter().zip(profiles.iter()) {
             let shift = best_shift(&reference, profile, window);
-            let mut shifted =
-                RgbaImage::from_pixel(w0 + 2 * margin as u32, h0, Rgba([0, 0, 0, 0]));
+            let mut shifted = RgbaImage::from_pixel(w0 + 2 * margin as u32, h0, Rgba([0, 0, 0, 0]));
             image::imageops::overlay(&mut shifted, frame, margin + shift, 0);
             aligned.push(shifted);
         }
@@ -1220,7 +1222,10 @@ pub fn clear_transparent_rgb(img: &mut RgbaImage) {
 /// Horizontally flip each frame (derive `running-left` from
 /// `running-right`, preserving frame order/timing).
 pub fn mirror_frames(frames: &[RgbaImage]) -> Vec<RgbaImage> {
-    frames.iter().map(image::imageops::flip_horizontal).collect()
+    frames
+        .iter()
+        .map(image::imageops::flip_horizontal)
+        .collect()
 }
 
 /// Pack per-state frame lists into the Hermes atlas (RGBA, residue-cleared).
@@ -1254,7 +1259,10 @@ pub fn compose_atlas(
 pub fn atlas_to_sheet_bytes(atlas: &RgbaImage) -> Result<Vec<u8>, String> {
     let mut buffer: Vec<u8> = Vec::new();
     atlas
-        .write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageFormat::Png)
+        .write_to(
+            &mut std::io::Cursor::new(&mut buffer),
+            image::ImageFormat::Png,
+        )
         .map_err(|e| format!("atlas encode: {e}"))?;
     Ok(buffer)
 }
@@ -1359,7 +1367,9 @@ pub fn validate_atlas(atlas: &RgbaImage) -> AtlasValidation {
         if max_w as f64 > (med_w as f64 * 3.0).max(med_w as f64 + 96.0)
             && max_h as f64 <= med_h as f64 * 1.6
         {
-            errors.push(format!("state '{state}' contains a multi-pose frame outlier"));
+            errors.push(format!(
+                "state '{state}' contains a multi-pose frame outlier"
+            ));
         }
         if global_med_w > 0 && global_med_h > 0 {
             let min_state_w = (32.0f64).max((global_med_w as f64 * 0.42).round()) as u32;

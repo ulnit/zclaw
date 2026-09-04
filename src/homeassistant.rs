@@ -109,7 +109,8 @@ impl HomeassistantConfig {
                 .trim_end_matches('/')
                 .to_string(),
             token: env_trim("HASS_TOKEN").unwrap_or_else(|| self.token.clone()),
-            watch_domains: env_list("HASS_WATCH_DOMAINS").unwrap_or_else(|| self.watch_domains.clone()),
+            watch_domains: env_list("HASS_WATCH_DOMAINS")
+                .unwrap_or_else(|| self.watch_domains.clone()),
             watch_entities: env_list("HASS_WATCH_ENTITIES")
                 .unwrap_or_else(|| self.watch_entities.clone()),
             ignore_entities: env_list("HASS_IGNORE_ENTITIES")
@@ -141,16 +142,14 @@ struct Runtime {
 
 /// hermes `_handle_ha_event` filter stack. Closed by default: without
 /// `watch_domains`/`watch_entities`/`watch_all` nothing is forwarded.
-pub fn should_forward(
-    cfg: &ResolvedHomeassistant,
-    entity_id: &str,
-) -> bool {
+pub fn should_forward(cfg: &ResolvedHomeassistant, entity_id: &str) -> bool {
     if cfg.ignore_entities.iter().any(|e| e == entity_id) {
         return false;
     }
     let domain = entity_id.split('.').next().unwrap_or("");
     if !cfg.watch_domains.is_empty() || !cfg.watch_entities.is_empty() {
-        let domain_match = !cfg.watch_domains.is_empty() && cfg.watch_domains.iter().any(|d| d == domain);
+        let domain_match =
+            !cfg.watch_domains.is_empty() && cfg.watch_domains.iter().any(|d| d == domain);
         let entity_match =
             !cfg.watch_entities.is_empty() && cfg.watch_entities.iter().any(|e| e == entity_id);
         domain_match || entity_match
@@ -160,7 +159,11 @@ pub fn should_forward(
 }
 
 /// hermes `_format_state_change` — domain-specific human-readable lines.
-pub fn format_state_change(entity_id: &str, old_state: &Value, new_state: &Value) -> Option<String> {
+pub fn format_state_change(
+    entity_id: &str,
+    old_state: &Value,
+    new_state: &Value,
+) -> Option<String> {
     if new_state.is_null() {
         return None;
     }
@@ -344,14 +347,10 @@ async fn run_session(runtime: &Arc<Runtime>, dispatcher: &Arc<Dispatcher>) -> Re
 }
 
 type StreamHalf = futures::stream::SplitStream<
-    tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
 >;
 type SinkHalf = futures::stream::SplitSink<
-    tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
     tokio_tungstenite::tungstenite::Message,
 >;
 
@@ -659,7 +658,12 @@ mod tests {
 
     #[test]
     fn format_sensor_with_unit() {
-        let (old, new) = state("21.0", "23.5", "Living Room Temp", json!({"unit_of_measurement": "°C"}));
+        let (old, new) = state(
+            "21.0",
+            "23.5",
+            "Living Room Temp",
+            json!({"unit_of_measurement": "°C"}),
+        );
         let msg = format_state_change("sensor.living_room_temp", &old, &new).unwrap();
         assert_eq!(
             msg,

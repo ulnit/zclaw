@@ -136,10 +136,8 @@ pub fn normalize_slug(slug: Option<&str>) -> Result<Option<String>> {
     if s.is_empty() {
         return Ok(None);
     }
-    let valid = s.len() <= 64
-        && s.chars().all(slug_char_ok)
-        && !s.starts_with('-')
-        && !s.starts_with('_');
+    let valid =
+        s.len() <= 64 && s.chars().all(slug_char_ok) && !s.starts_with('-') && !s.starts_with('_');
     if !valid {
         return Err(AgentError::session(format!(
             "invalid project slug '{}': must be 1-64 chars, lowercase alphanumerics / hyphens / underscores, not starting with '-' or '_'",
@@ -159,7 +157,10 @@ fn new_project_id() -> String {
         .unwrap_or(0);
     let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let pid = std::process::id() as u64;
-    format!("p_{:08x}", (nanos ^ (n.wrapping_mul(0x9E3779B9)) ^ pid) & 0xFFFF_FFFF)
+    format!(
+        "p_{:08x}",
+        (nanos ^ (n.wrapping_mul(0x9E3779B9)) ^ pid) & 0xFFFF_FFFF
+    )
 }
 
 fn now_secs() -> i64 {
@@ -267,7 +268,9 @@ pub fn connect(db_path: Option<&Path>) -> Result<Connection> {
 /// hermes `apply_wal_with_fallback`.
 fn apply_wal_with_fallback(conn: &Connection) {
     let ok = conn
-        .query_row("PRAGMA journal_mode=WAL;", [], |row| row.get::<_, String>(0))
+        .query_row("PRAGMA journal_mode=WAL;", [], |row| {
+            row.get::<_, String>(0)
+        })
         .map(|mode| mode.eq_ignore_ascii_case("wal"))
         .unwrap_or(false);
     if !ok {
@@ -406,7 +409,11 @@ fn unique_slug(conn: &Connection, candidate: &str) -> Result<String> {
     let mut slug = candidate.to_string();
     let mut n: usize = 1;
     while conn
-        .query_row("SELECT 1 FROM projects WHERE slug = ?1", params![slug], |_| Ok(()))
+        .query_row(
+            "SELECT 1 FROM projects WHERE slug = ?1",
+            params![slug],
+            |_| Ok(()),
+        )
         .optional()
         .map_err(db_err)?
         .is_some()
@@ -457,7 +464,10 @@ pub fn create_project(conn: &Connection, args: &CreateProject<'_>) -> Result<Str
             folder_paths.push(norm);
         }
     }
-    let mut primary: Option<String> = args.primary_path.map(|p| normalize_path(p)).filter(|p| !p.is_empty());
+    let mut primary: Option<String> = args
+        .primary_path
+        .map(|p| normalize_path(p))
+        .filter(|p| !p.is_empty());
     if let Some(ref p) = primary {
         if !folder_paths.contains(p) {
             folder_paths.insert(0, p.clone());
@@ -494,7 +504,13 @@ pub fn create_project(conn: &Connection, args: &CreateProject<'_>) -> Result<Str
         tx.execute(
             "INSERT INTO project_folders (project_id, path, label, is_primary, added_at) \
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![pid, path, Option::<String>::None, Some(path) == primary.as_ref(), now],
+            params![
+                pid,
+                path,
+                Option::<String>::None,
+                Some(path) == primary.as_ref(),
+                now
+            ],
         )
         .map_err(db_err)?;
     }
@@ -523,9 +539,11 @@ pub fn list_projects(conn: &Connection, include_archived: bool) -> Result<Vec<Pr
 /// Look up a project by id first, then by slug (hermes `get_project`).
 pub fn get_project(conn: &Connection, id_or_slug: &str) -> Result<Option<Project>> {
     let row = conn
-        .query_row("SELECT * FROM projects WHERE id = ?1", params![id_or_slug], |r| {
-            project_from_row(r)
-        })
+        .query_row(
+            "SELECT * FROM projects WHERE id = ?1",
+            params![id_or_slug],
+            |r| project_from_row(r),
+        )
         .optional()
         .map_err(db_err)?
         .or_else(|| {
@@ -557,7 +575,11 @@ pub struct UpdateProject<'a> {
 
 /// Patch top-level project fields; only provided fields change (hermes
 /// `update_project`). Returns whether a row changed.
-pub fn update_project(conn: &Connection, project_id: &str, args: &UpdateProject<'_>) -> Result<bool> {
+pub fn update_project(
+    conn: &Connection,
+    project_id: &str,
+    args: &UpdateProject<'_>,
+) -> Result<bool> {
     let mut sets: Vec<String> = Vec::new();
     let mut values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
     if let Some(name) = args.name {
@@ -574,11 +596,19 @@ pub fn update_project(conn: &Connection, project_id: &str, args: &UpdateProject<
     }
     if let Some(icon) = args.icon {
         sets.push("icon = ?".to_string());
-        values.push(Box::new(if icon.is_empty() { None::<String> } else { Some(icon.to_string()) }));
+        values.push(Box::new(if icon.is_empty() {
+            None::<String>
+        } else {
+            Some(icon.to_string())
+        }));
     }
     if let Some(color) = args.color {
         sets.push("color = ?".to_string());
-        values.push(Box::new(if color.is_empty() { None::<String> } else { Some(color.to_string()) }));
+        values.push(Box::new(if color.is_empty() {
+            None::<String>
+        } else {
+            Some(color.to_string())
+        }));
     }
     if let Some(board) = args.board_slug {
         let normalized = if board.trim().is_empty() {
@@ -596,7 +626,10 @@ pub fn update_project(conn: &Connection, project_id: &str, args: &UpdateProject<
     let refs: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
     let sql = format!("UPDATE projects SET {} WHERE id = ?", sets.join(", "));
     let tx = conn.unchecked_transaction().map_err(db_err)?;
-    let changed = tx.execute(&sql, rusqlite::params_from_iter(refs)).map_err(db_err)? > 0;
+    let changed = tx
+        .execute(&sql, rusqlite::params_from_iter(refs))
+        .map_err(db_err)?
+        > 0;
     tx.commit().map_err(db_err)?;
     Ok(changed)
 }
@@ -618,7 +651,10 @@ pub fn add_folder(
         return Err(AgentError::session("folder path must not be empty"));
     }
     if get_project(conn, project_id)?.is_none() {
-        return Err(AgentError::session(format!("no such project: {}", project_id)));
+        return Err(AgentError::session(format!(
+            "no such project: {}",
+            project_id
+        )));
     }
     let now = now_secs();
     let tx = conn.unchecked_transaction().map_err(db_err)?;
@@ -686,8 +722,11 @@ pub fn remove_folder(conn: &Connection, project_id: &str, path: &str) -> Result<
         match next {
             Some(p) => set_primary_locked(&tx, project_id, &p)?,
             None => {
-                tx.execute("UPDATE projects SET primary_path = NULL WHERE id = ?1", params![project_id])
-                    .map_err(db_err)?;
+                tx.execute(
+                    "UPDATE projects SET primary_path = NULL WHERE id = ?1",
+                    params![project_id],
+                )
+                .map_err(db_err)?;
             }
         }
     }
@@ -737,14 +776,20 @@ pub fn set_primary(conn: &Connection, project_id: &str, path: &str) -> Result<bo
 
 pub fn archive_project(conn: &Connection, project_id: &str) -> Result<bool> {
     Ok(conn
-        .execute("UPDATE projects SET archived = 1 WHERE id = ?1", params![project_id])
+        .execute(
+            "UPDATE projects SET archived = 1 WHERE id = ?1",
+            params![project_id],
+        )
         .map_err(db_err)?
         > 0)
 }
 
 pub fn restore_project(conn: &Connection, project_id: &str) -> Result<bool> {
     Ok(conn
-        .execute("UPDATE projects SET archived = 0 WHERE id = ?1", params![project_id])
+        .execute(
+            "UPDATE projects SET archived = 0 WHERE id = ?1",
+            params![project_id],
+        )
         .map_err(db_err)?
         > 0)
 }
@@ -770,8 +815,11 @@ pub fn set_active(conn: &Connection, project_id: Option<&str>) -> Result<()> {
     let tx = conn.unchecked_transaction().map_err(db_err)?;
     match project_id {
         None => {
-            tx.execute("DELETE FROM project_meta WHERE key = ?1", params![ACTIVE_META_KEY])
-                .map_err(db_err)?;
+            tx.execute(
+                "DELETE FROM project_meta WHERE key = ?1",
+                params![ACTIVE_META_KEY],
+            )
+            .map_err(db_err)?;
         }
         Some(id) => {
             tx.execute(
@@ -822,7 +870,8 @@ pub fn reconcile_discovered_repos_policy(
     let cleared = current.is_some() || !preserve_unversioned;
     let tx = conn.unchecked_transaction().map_err(db_err)?;
     if cleared {
-        tx.execute("DELETE FROM discovered_repos", []).map_err(db_err)?;
+        tx.execute("DELETE FROM discovered_repos", [])
+            .map_err(db_err)?;
     }
     tx.execute(
         "INSERT INTO project_meta (key, value) VALUES (?1, ?2) \
@@ -836,7 +885,8 @@ pub fn reconcile_discovered_repos_policy(
 
 pub fn clear_discovered_repos(conn: &Connection, policy_key: Option<&str>) -> Result<()> {
     let tx = conn.unchecked_transaction().map_err(db_err)?;
-    tx.execute("DELETE FROM discovered_repos", []).map_err(db_err)?;
+    tx.execute("DELETE FROM discovered_repos", [])
+        .map_err(db_err)?;
     if let Some(key) = policy_key {
         tx.execute(
             "INSERT INTO project_meta (key, value) VALUES (?1, ?2) \
@@ -878,7 +928,8 @@ pub fn record_discovered_repos(
     }
     let tx = conn.unchecked_transaction().map_err(db_err)?;
     if replace {
-        tx.execute("DELETE FROM discovered_repos", []).map_err(db_err)?;
+        tx.execute("DELETE FROM discovered_repos", [])
+            .map_err(db_err)?;
     }
     for (root, label, seen) in &rows {
         tx.execute(
@@ -942,15 +993,16 @@ pub fn project_for_path(
     };
     let mut stmt = conn.prepare(sql).map_err(db_err)?;
     let rows = stmt
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
         .map_err(db_err)?;
     let mut best_pid: Option<String> = None;
     let mut best_len: usize = 0;
     for row in rows {
         let (pid, folder) = row.map_err(db_err)?;
         let base = folder.trim_end_matches('/');
-        let owned = target == folder
-            || target.starts_with(&format!("{}/", base));
+        let owned = target == folder || target.starts_with(&format!("{}/", base));
         if owned && folder.len() >= best_len {
             best_len = folder.len();
             best_pid = Some(pid);
@@ -1002,8 +1054,7 @@ pub fn projects_for_paths(
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })
             .map_err(db_err)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(db_err)?
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(db_err)?
     };
     if folders.is_empty() {
         return Ok(out);
@@ -1018,7 +1069,10 @@ pub fn projects_for_paths(
         let mut best: Option<(String, usize)> = None;
         for (folder, pid) in &folders {
             if path_under(folder, &target)
-                && best.as_ref().map(|(_, len)| folder.len() > *len).unwrap_or(true)
+                && best
+                    .as_ref()
+                    .map(|(_, len)| folder.len() > *len)
+                    .unwrap_or(true)
             {
                 best = Some((pid.clone(), folder.len()));
             }
@@ -1065,7 +1119,6 @@ pub fn branch_name_for(project: &Project, task_id: &str, title: &str) -> String 
     base
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1075,11 +1128,8 @@ mod tests {
 
     fn temp_db() -> (Connection, PathBuf) {
         let n = DB_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "ulnclaw-projects-db-{}-{}",
-            std::process::id(),
-            n
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("ulnclaw-projects-db-{}-{}", std::process::id(), n));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("projects.db");
         let conn = connect(Some(&path)).unwrap();
@@ -1091,7 +1141,10 @@ mod tests {
         assert_eq!(slugify("Aurora Demo"), "aurora-demo");
         assert_eq!(slugify("  Weird!!  Name__  "), "weird-name");
         assert_eq!(slugify("!!!"), "project");
-        assert_eq!(normalize_slug(Some("  My-Slug ")).unwrap(), Some("my-slug".to_string()));
+        assert_eq!(
+            normalize_slug(Some("  My-Slug ")).unwrap(),
+            Some("my-slug".to_string())
+        );
         assert_eq!(normalize_slug(Some("")).unwrap(), None);
         assert_eq!(normalize_slug(None).unwrap(), None);
         assert!(normalize_slug(Some("-bad")).is_err());
@@ -1126,7 +1179,10 @@ mod tests {
         // Same name again -> unique slug with -2 suffix.
         let pid2 = create_project(
             &conn,
-            &CreateProject { name: "Aurora Demo", ..Default::default() },
+            &CreateProject {
+                name: "Aurora Demo",
+                ..Default::default()
+            },
         )
         .unwrap();
         let p2 = get_project(&conn, &pid2).unwrap().unwrap();
@@ -1151,7 +1207,13 @@ mod tests {
     #[test]
     fn create_requires_name() {
         let (conn, dir) = temp_db();
-        let err = create_project(&conn, &CreateProject { name: "  ", ..Default::default() });
+        let err = create_project(
+            &conn,
+            &CreateProject {
+                name: "  ",
+                ..Default::default()
+            },
+        );
         assert!(err.is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -1161,7 +1223,10 @@ mod tests {
         let (conn, dir) = temp_db();
         let pid = create_project(
             &conn,
-            &CreateProject { name: "Multi", ..Default::default() },
+            &CreateProject {
+                name: "Multi",
+                ..Default::default()
+            },
         )
         .unwrap();
         let a = add_folder(&conn, &pid, "/srv/a", None, false).unwrap();
@@ -1225,14 +1290,29 @@ mod tests {
         assert_eq!(proj.color.as_deref(), Some("#ff0000"));
 
         // Empty name is rejected.
-        assert!(update_project(&conn, &pid, &UpdateProject { name: Some(" "), ..Default::default() }).is_err());
+        assert!(update_project(
+            &conn,
+            &pid,
+            &UpdateProject {
+                name: Some(" "),
+                ..Default::default()
+            }
+        )
+        .is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn archive_restore_delete() {
         let (conn, dir) = temp_db();
-        let pid = create_project(&conn, &CreateProject { name: "Ephemeral", ..Default::default() }).unwrap();
+        let pid = create_project(
+            &conn,
+            &CreateProject {
+                name: "Ephemeral",
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert!(archive_project(&conn, &pid).unwrap());
         assert_eq!(list_projects(&conn, false).unwrap().len(), 0);
         assert_eq!(list_projects(&conn, true).unwrap().len(), 1);
@@ -1252,7 +1332,14 @@ mod tests {
     fn active_pointer() {
         let (conn, dir) = temp_db();
         assert!(get_active_id(&conn).unwrap().is_none());
-        let pid = create_project(&conn, &CreateProject { name: "Active", ..Default::default() }).unwrap();
+        let pid = create_project(
+            &conn,
+            &CreateProject {
+                name: "Active",
+                ..Default::default()
+            },
+        )
+        .unwrap();
         set_active(&conn, Some(&pid)).unwrap();
         assert_eq!(get_active_id(&conn).unwrap(), Some(pid.clone()));
         set_active(&conn, None).unwrap();
@@ -1265,20 +1352,34 @@ mod tests {
         let (conn, dir) = temp_db();
         let outer = create_project(
             &conn,
-            &CreateProject { name: "Outer", folders: &["/work"], ..Default::default() },
+            &CreateProject {
+                name: "Outer",
+                folders: &["/work"],
+                ..Default::default()
+            },
         )
         .unwrap();
         let inner = create_project(
             &conn,
-            &CreateProject { name: "Inner", folders: &["/work/inner"], ..Default::default() },
+            &CreateProject {
+                name: "Inner",
+                folders: &["/work/inner"],
+                ..Default::default()
+            },
         )
         .unwrap();
 
-        let hit = project_for_path(&conn, "/work/inner/src/main.rs", false).unwrap().unwrap();
+        let hit = project_for_path(&conn, "/work/inner/src/main.rs", false)
+            .unwrap()
+            .unwrap();
         assert_eq!(hit.id, inner);
-        let hit = project_for_path(&conn, "/work/other/file.txt", false).unwrap().unwrap();
+        let hit = project_for_path(&conn, "/work/other/file.txt", false)
+            .unwrap()
+            .unwrap();
         assert_eq!(hit.id, outer);
-        assert!(project_for_path(&conn, "/elsewhere", false).unwrap().is_none());
+        assert!(project_for_path(&conn, "/elsewhere", false)
+            .unwrap()
+            .is_none());
         assert!(project_for_path(&conn, "  ", false).unwrap().is_none());
         // Exact folder match counts as owned.
         let hit = project_for_path(&conn, "/work", false).unwrap().unwrap();
@@ -1316,7 +1417,10 @@ mod tests {
         let rows = list_discovered_repos(&conn).unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0]["root"], "/srv/three");
-        assert_eq!(get_discovery_policy_key(&conn).unwrap(), Some("git-only".to_string()));
+        assert_eq!(
+            get_discovery_policy_key(&conn).unwrap(),
+            Some("git-only".to_string())
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1334,7 +1438,10 @@ mod tests {
         record_discovered_repos(&conn, &[("/srv/two".to_string(), None)], false, None).unwrap();
         assert!(reconcile_discovered_repos_policy(&conn, "all-dirs", false).unwrap());
         assert_eq!(list_discovered_repos(&conn).unwrap().len(), 0);
-        assert_eq!(get_discovery_policy_key(&conn).unwrap(), Some("all-dirs".to_string()));
+        assert_eq!(
+            get_discovery_policy_key(&conn).unwrap(),
+            Some("all-dirs".to_string())
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1386,20 +1493,29 @@ mod tests {
         archive_project(&conn, &archived).unwrap();
 
         let paths: Vec<String> = [
-            "/work/code",           // exact outer folder
-            "/work/code/src/main",  // nested under outer
-            "/work/code/nested/x",  // inner wins (longest prefix)
-            "/work/code2",          // sibling — no match
-            "/work/old/stuff",      // archived — no match
-            "",                     // empty — skipped
+            "/work/code",          // exact outer folder
+            "/work/code/src/main", // nested under outer
+            "/work/code/nested/x", // inner wins (longest prefix)
+            "/work/code2",         // sibling — no match
+            "/work/old/stuff",     // archived — no match
+            "",                    // empty — skipped
         ]
         .iter()
         .map(|s| s.to_string())
         .collect();
         let resolved = projects_for_paths(&conn, &paths).unwrap();
-        assert_eq!(resolved.get("/work/code").map(|p| p.id.as_str()), Some(outer.as_str()));
-        assert_eq!(resolved.get("/work/code/src/main").map(|p| p.id.as_str()), Some(outer.as_str()));
-        assert_eq!(resolved.get("/work/code/nested/x").map(|p| p.id.as_str()), Some(inner.as_str()));
+        assert_eq!(
+            resolved.get("/work/code").map(|p| p.id.as_str()),
+            Some(outer.as_str())
+        );
+        assert_eq!(
+            resolved.get("/work/code/src/main").map(|p| p.id.as_str()),
+            Some(outer.as_str())
+        );
+        assert_eq!(
+            resolved.get("/work/code/nested/x").map(|p| p.id.as_str()),
+            Some(inner.as_str())
+        );
         assert!(!resolved.contains_key("/work/code2"));
         assert!(!resolved.contains_key("/work/old/stuff"));
         assert_eq!(resolved.len(), 3);

@@ -150,7 +150,11 @@ fn collect_files(root: &Path, dir: &Path, out: &mut BTreeMap<String, String>) ->
         if path.is_dir() {
             collect_files(root, &path, out)?;
         } else if path.is_file() {
-            let rel = path.strip_prefix(root).unwrap_or(&path).display().to_string();
+            let rel = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .display()
+                .to_string();
             // Text-only payloads; skip binaries quietly.
             if let Ok(content) = std::fs::read_to_string(&path) {
                 out.insert(rel, content);
@@ -176,7 +180,11 @@ enum ManifestTarget {
 }
 
 /// Read the remote manifest.
-pub async fn read_manifest(cfg: &SyncConfig, oauth: &crate::oauth::OAuthConfig, home: &Path) -> Result<SyncManifest> {
+pub async fn read_manifest(
+    cfg: &SyncConfig,
+    oauth: &crate::oauth::OAuthConfig,
+    home: &Path,
+) -> Result<SyncManifest> {
     match manifest_path_for(&cfg.base_url)? {
         ManifestTarget::Dir(dir) => {
             let path = dir.join("manifest.json");
@@ -253,7 +261,11 @@ pub async fn write_manifest(
     }
 }
 
-async fn bearer(cfg: &SyncConfig, oauth: &crate::oauth::OAuthConfig, home: &Path) -> Option<String> {
+async fn bearer(
+    cfg: &SyncConfig,
+    oauth: &crate::oauth::OAuthConfig,
+    home: &Path,
+) -> Option<String> {
     if !cfg.api_key.trim().is_empty() {
         return Some(cfg.api_key.trim().to_string());
     }
@@ -261,7 +273,11 @@ async fn bearer(cfg: &SyncConfig, oauth: &crate::oauth::OAuthConfig, home: &Path
 }
 
 /// Push every opted-in skill (hermes `sync push`). Returns names pushed.
-pub async fn push(cfg: &SyncConfig, oauth: &crate::oauth::OAuthConfig, home: &Path) -> Result<Vec<String>> {
+pub async fn push(
+    cfg: &SyncConfig,
+    oauth: &crate::oauth::OAuthConfig,
+    home: &Path,
+) -> Result<Vec<String>> {
     if let Some(reason) = inert_reason(cfg) {
         return Err(AgentError::config(reason));
     }
@@ -290,7 +306,11 @@ pub async fn push(cfg: &SyncConfig, oauth: &crate::oauth::OAuthConfig, home: &Pa
 
 /// Pull remote skills into the local skills dir (hermes `sync pull`).
 /// Existing local skills are never clobbered; returns names materialized.
-pub async fn pull(cfg: &SyncConfig, oauth: &crate::oauth::OAuthConfig, home: &Path) -> Result<Vec<String>> {
+pub async fn pull(
+    cfg: &SyncConfig,
+    oauth: &crate::oauth::OAuthConfig,
+    home: &Path,
+) -> Result<Vec<String>> {
     if let Some(reason) = inert_reason(cfg) {
         return Err(AgentError::config(reason));
     }

@@ -107,7 +107,10 @@ fn image_ref_to_xai_url(value: &str, ctx_home: Option<&std::path::Path>) -> Stri
         return String::new();
     }
     let lower = reference.to_ascii_lowercase();
-    if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("data:image/") {
+    if lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("data:image/")
+    {
         return reference.to_string();
     }
     let path = expand_media_path(reference, ctx_home);
@@ -151,7 +154,10 @@ fn image_ref_to_xai_input(value: &str, ctx_home: Option<&std::path::Path>) -> Op
         return None;
     }
     let lower = reference.to_ascii_lowercase();
-    if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("data:image/") {
+    if lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("data:image/")
+    {
         return Some(json!({"url": reference}));
     }
     None
@@ -367,7 +373,9 @@ async fn submit_xai_video_payload(
                 "xAI video request completed without a video URL",
                 "empty_response",
                 "xai",
-                body.get("model").and_then(|m| m.as_str()).unwrap_or(resolved_model),
+                body.get("model")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or(resolved_model),
                 prompt,
             );
         }
@@ -506,7 +514,11 @@ pub async fn generate_xai_video(
     }
 
     let prompt = prompt.trim();
-    let image_input = if image_url.map(|s| s.trim()).filter(|s| !s.is_empty()).is_some() {
+    let image_input = if image_url
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .is_some()
+    {
         match image_ref_to_xai_input(image_url.unwrap().trim(), ctx_home) {
             Some(input) => Some(input),
             None => {
@@ -810,7 +822,10 @@ mod tests {
         let (public_url, temporary, stored) = xai_video_output_urls(&video);
         assert_eq!(public_url, "https://files-cdn.example/stored.mp4");
         assert_eq!(temporary.as_deref(), Some("https://tmp.example/short.mp4"));
-        assert_eq!(stored.as_deref(), Some("https://files-cdn.example/stored.mp4"));
+        assert_eq!(
+            stored.as_deref(),
+            Some("https://files-cdn.example/stored.mp4")
+        );
 
         let video = json!({"url": "https://tmp.example/only.mp4"});
         let (public_url, temporary, stored) = xai_video_output_urls(&video);

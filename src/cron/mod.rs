@@ -11,7 +11,6 @@ pub mod chronos;
 pub mod delivery;
 pub mod suggestions;
 
-
 use crate::error::{AgentError, Result};
 use chrono::{DateTime, Duration, Local, NaiveDateTime};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -109,8 +108,10 @@ fn parse_field(field: &str, min: u32, max: u32) -> std::result::Result<Vec<u32>,
             (min, max)
         } else if let Some((a, b)) = range_part.split_once('-') {
             (
-                a.parse::<u32>().map_err(|_| format!("bad range: {}", part))?,
-                b.parse::<u32>().map_err(|_| format!("bad range: {}", part))?,
+                a.parse::<u32>()
+                    .map_err(|_| format!("bad range: {}", part))?,
+                b.parse::<u32>()
+                    .map_err(|_| format!("bad range: {}", part))?,
             )
         } else {
             let v = range_part
@@ -136,7 +137,10 @@ impl CronExpr {
     pub fn parse(expr: &str) -> std::result::Result<Self, String> {
         let fields: Vec<&str> = expr.split_whitespace().collect();
         if fields.len() != 5 {
-            return Err(format!("cron expression needs 5 fields, got {}", fields.len()));
+            return Err(format!(
+                "cron expression needs 5 fields, got {}",
+                fields.len()
+            ));
         }
         Ok(Self {
             minutes: parse_field(fields[0], 0, 59)?,
@@ -220,7 +224,10 @@ pub fn parse_schedule(raw: &str) -> Result<Schedule> {
     }
 
     // ISO timestamp one-shot (starts with YYYY-...).
-    if raw.len() >= 10 && raw.as_bytes()[4] == b'-' && raw.chars().take(4).all(|c| c.is_ascii_digit()) {
+    if raw.len() >= 10
+        && raw.as_bytes()[4] == b'-'
+        && raw.chars().take(4).all(|c| c.is_ascii_digit())
+    {
         let naive = NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S")
             .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S"))
             .or_else(|_| {
@@ -357,7 +364,9 @@ impl CronStore {
         conn.execute_batch(CRON_SCHEMA)
             .map_err(|e| AgentError::session(format!("cron schema: {}", e)))?;
         migrate_cron_schema(&conn)?;
-        Ok(Self { conn: Mutex::new(conn) })
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     pub fn open_default() -> Result<Self> {
@@ -366,7 +375,10 @@ impl CronStore {
     }
 
     pub fn add(&self, job: &CronJob) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "INSERT INTO cron_jobs (id, name, schedule, prompt, skills, enabled, repeat, next_run, created_at, deliver, origin, attach_to_session)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
@@ -390,7 +402,10 @@ impl CronStore {
     }
 
     pub fn update(&self, job: &CronJob) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "UPDATE cron_jobs SET name=?2, schedule=?3, prompt=?4, skills=?5, enabled=?6,
                 repeat=?7, next_run=?8, last_run=?9, last_status=?10, deliver=?11, origin=?12,
@@ -408,7 +423,9 @@ impl CronStore {
                 job.last_run,
                 job.last_status,
                 job.deliver,
-                job.origin.as_ref().and_then(|origin| serde_json::to_string(origin).ok()),
+                job.origin
+                    .as_ref()
+                    .and_then(|origin| serde_json::to_string(origin).ok()),
                 job.last_delivery_error,
                 job.attach_to_session.map(|flag| flag as i32),
             ],
@@ -418,7 +435,10 @@ impl CronStore {
     }
 
     pub fn get(&self, id: &str) -> Result<Option<CronJob>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let row = conn
             .query_row(
                 "SELECT id, name, schedule, prompt, skills, enabled, repeat, next_run, created_at, last_run, last_status,
@@ -489,7 +509,10 @@ impl CronStore {
     pub fn list(&self) -> Result<Vec<CronJob>> {
         let mut ids: Vec<String> = Vec::new();
         {
-            let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+            let conn = self
+                .conn
+                .lock()
+                .map_err(|e| AgentError::session(e.to_string()))?;
             let mut stmt = conn
                 .prepare("SELECT id FROM cron_jobs ORDER BY created_at")
                 .map_err(|e| AgentError::session(e.to_string()))?;
@@ -512,7 +535,10 @@ impl CronStore {
     }
 
     pub fn remove(&self, id: &str) -> Result<bool> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let n = conn
             .execute("DELETE FROM cron_jobs WHERE id = ?1", params![id])
             .map_err(|e| AgentError::session(e.to_string()))?;
@@ -597,7 +623,10 @@ pub struct CronSlashResult {
 }
 
 fn slash_ok(text: String) -> CronSlashResult {
-    CronSlashResult { text, run_prompt: None }
+    CronSlashResult {
+        text,
+        run_prompt: None,
+    }
 }
 
 /// Humanize a duration in seconds (`5s`, `3m`, `2h`, `4d`).
@@ -646,7 +675,8 @@ fn resolve_job<'a>(jobs: &'a [CronJob], needle: &str) -> Option<&'a CronJob> {
     None
 }
 
-const CRON_SLASH_USAGE: &str = "(o_o) usage: /cron [list|show <id>|pause <id>|resume <id>|run <id>|remove <id>|status]\n";
+const CRON_SLASH_USAGE: &str =
+    "(o_o) usage: /cron [list|show <id>|pause <id>|resume <id>|run <id>|remove <id>|status]\n";
 
 /// Shared `/cron` dispatch for REPL and gateway (P663): one formatted
 /// string back (plus an optional run seed), no process spawn. The store
@@ -814,7 +844,10 @@ pub fn run_slash(home: &std::path::Path, rest: &str) -> CronSlashResult {
                 return slash_ok(format!("(._.) cron job '{needle}' not found\n"));
             };
             if job.prompt.trim().is_empty() {
-                return slash_ok(format!("(._.) cron job '{}' has no prompt to run\n", job.id));
+                return slash_ok(format!(
+                    "(._.) cron job '{}' has no prompt to run\n",
+                    job.id
+                ));
             }
             CronSlashResult {
                 text: format!("▶ running cron job {} ({}) now…\n", job.id, job.name),
@@ -830,7 +863,10 @@ pub fn run_slash(home: &std::path::Path, rest: &str) -> CronSlashResult {
             let paused = jobs.len() - active;
             let mut out = String::new();
             out.push_str("cron status:\n");
-            out.push_str(&format!("  jobs:      {} active, {} paused\n", active, paused));
+            out.push_str(&format!(
+                "  jobs:      {} active, {} paused\n",
+                active, paused
+            ));
             let next_fire = jobs
                 .iter()
                 .filter(|j| j.enabled)
@@ -866,7 +902,10 @@ mod tests {
     #[test]
     fn test_parse_intervals() {
         assert_eq!(parse_schedule("30m").unwrap(), Schedule::Interval(1800));
-        assert_eq!(parse_schedule("every 2h").unwrap(), Schedule::Interval(7200));
+        assert_eq!(
+            parse_schedule("every 2h").unwrap(),
+            Schedule::Interval(7200)
+        );
         assert_eq!(parse_schedule("1d").unwrap(), Schedule::Interval(86400));
         assert!(parse_schedule("5s").is_err()); // below minimum
     }
@@ -874,9 +913,18 @@ mod tests {
     #[test]
     fn test_parse_at_aliases() {
         // P661: hermes-style @every / @at / cron macros.
-        assert_eq!(parse_schedule("@every 30m").unwrap(), Schedule::Interval(1800));
-        assert_eq!(parse_schedule("@every 2h").unwrap(), Schedule::Interval(7200));
-        assert_eq!(parse_schedule("@at 1893456000").unwrap(), Schedule::OneShot(1893456000.0));
+        assert_eq!(
+            parse_schedule("@every 30m").unwrap(),
+            Schedule::Interval(1800)
+        );
+        assert_eq!(
+            parse_schedule("@every 2h").unwrap(),
+            Schedule::Interval(7200)
+        );
+        assert_eq!(
+            parse_schedule("@at 1893456000").unwrap(),
+            Schedule::OneShot(1893456000.0)
+        );
         match parse_schedule("@daily").unwrap() {
             Schedule::Cron(e) => {
                 assert_eq!(e.minutes, vec![0]);
@@ -884,7 +932,10 @@ mod tests {
             }
             other => panic!("expected cron, got {:?}", other),
         }
-        assert!(matches!(parse_schedule("@hourly").unwrap(), Schedule::Cron(_)));
+        assert!(matches!(
+            parse_schedule("@hourly").unwrap(),
+            Schedule::Cron(_)
+        ));
         assert!(parse_schedule("@fortnightly").is_err());
         assert!(parse_schedule("@at not-a-number").is_err());
     }
@@ -946,10 +997,7 @@ mod tests {
         let mut updated = loaded.clone();
         updated.attach_to_session = None;
         store.update(&updated).unwrap();
-        assert_eq!(
-            store.get("job-1").unwrap().unwrap().attach_to_session,
-            None
-        );
+        assert_eq!(store.get("job-1").unwrap().unwrap().attach_to_session, None);
         assert!(store.remove("job-1").unwrap());
         assert_eq!(store.list().unwrap().len(), 0);
     }
@@ -1022,8 +1070,12 @@ mod tests {
     fn slash_home_with_jobs() -> (tempfile::TempDir, CronStore) {
         let dir = tempfile::tempdir().unwrap();
         let store = CronStore::open(&dir.path().join("state.db")).unwrap();
-        store.add(&slash_job("aabbccddeeff", "Morning briefing", "@daily")).unwrap();
-        store.add(&slash_job("ffeeddccbbaa", "Inbox sweep", "@every 30m")).unwrap();
+        store
+            .add(&slash_job("aabbccddeeff", "Morning briefing", "@daily"))
+            .unwrap();
+        store
+            .add(&slash_job("ffeeddccbbaa", "Inbox sweep", "@every 30m"))
+            .unwrap();
         (dir, store)
     }
 
@@ -1071,7 +1123,10 @@ mod tests {
     fn cron_slash_run_seeds_agent_turn() {
         let (dir, _store) = slash_home_with_jobs();
         let result = run_slash(dir.path(), "run morning briefing");
-        assert_eq!(result.run_prompt.as_deref(), Some("prompt for Morning briefing"));
+        assert_eq!(
+            result.run_prompt.as_deref(),
+            Some("prompt for Morning briefing")
+        );
         assert!(result.text.contains("running cron job"), "{}", result.text);
 
         let empty = run_slash(dir.path(), "run missing");

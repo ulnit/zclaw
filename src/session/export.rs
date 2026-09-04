@@ -79,7 +79,11 @@ fn render_content(message: &Message) -> String {
 }
 
 fn render_tool_calls(message: &Message) -> String {
-    let Some(tool_calls) = message.tool_calls.as_ref().filter(|calls| !calls.is_empty()) else {
+    let Some(tool_calls) = message
+        .tool_calls
+        .as_ref()
+        .filter(|calls| !calls.is_empty())
+    else {
         return String::new();
     };
     let pretty = serde_json::to_string_pretty(tool_calls).unwrap_or_else(|_| "[]".to_string());
@@ -114,10 +118,7 @@ pub fn render_session_markdown_at(
         frontmatter_line("title", json!(session.title)),
         frontmatter_line("source", json!(session.source)),
         frontmatter_line("created_at", json!(iso_timestamp(session.started_at))),
-        frontmatter_line(
-            "ended_at",
-            json!(session.ended_at.map(iso_timestamp)),
-        ),
+        frontmatter_line("ended_at", json!(session.ended_at.map(iso_timestamp))),
         frontmatter_line("model", json!(session.model)),
         frontmatter_line("cwd", json!(session.cwd)),
         frontmatter_line("message_count", json!(message_count)),
@@ -173,7 +174,10 @@ pub fn render_session_markdown_at(
         exported_iso
     );
     let digest = sha256_hex(pending_body.as_bytes());
-    pending_body.replace("SHA256 of exported body: `pending`", &format!("SHA256 of exported body: `{}`", digest))
+    pending_body.replace(
+        "SHA256 of exported body: `pending`",
+        &format!("SHA256 of exported body: `{}`", digest),
+    )
 }
 
 fn html_escape(text: &str) -> String {
@@ -320,13 +324,14 @@ pub fn render_session_html_at(
         } else {
             html.push_str(&html_escape(&content));
         }
-        if let Some(tool_calls) = message.tool_calls.as_ref().filter(|calls| !calls.is_empty()) {
+        if let Some(tool_calls) = message
+            .tool_calls
+            .as_ref()
+            .filter(|calls| !calls.is_empty())
+        {
             let pretty =
                 serde_json::to_string_pretty(tool_calls).unwrap_or_else(|_| "[]".to_string());
-            html.push_str(&format!(
-                "<pre><code>{}</code></pre>",
-                html_escape(&pretty)
-            ));
+            html.push_str(&format!("<pre><code>{}</code></pre>", html_escape(&pretty)));
         }
         html.push_str("</div>\n</div>\n");
     }
@@ -350,7 +355,11 @@ fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    hasher.finalize().iter().map(|b| format!("{:02x}", b)).collect()
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect()
 }
 
 /// Re-verify exported Markdown: recomputes the digest with the SHA line
@@ -360,8 +369,13 @@ pub fn verify_export_content(content: &str) -> (bool, String) {
     let Some(captures) = re.captures(content) else {
         return (false, String::new());
     };
-    let embedded = captures.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
-    let pending_body = re.replace(content, "SHA256 of exported body: `pending`").to_string();
+    let embedded = captures
+        .get(1)
+        .map(|m| m.as_str().to_string())
+        .unwrap_or_default();
+    let pending_body = re
+        .replace(content, "SHA256 of exported body: `pending`")
+        .to_string();
     (sha256_hex(pending_body.as_bytes()) == embedded, embedded)
 }
 
@@ -414,7 +428,11 @@ pub fn write_session_export(
     };
     std::fs::create_dir_all(output_dir)
         .map_err(|e| AgentError::session(format!("create export dir: {}", e)))?;
-    let path = output_dir.join(safe_session_filename(&session.id, session.title.as_deref(), fmt));
+    let path = output_dir.join(safe_session_filename(
+        &session.id,
+        session.title.as_deref(),
+        fmt,
+    ));
     std::fs::write(&path, &body)
         .map_err(|e| AgentError::session(format!("write export: {}", e)))?;
 
@@ -443,10 +461,7 @@ pub fn write_session_export(
 /// every message with timestamp, role, tool name/id and tool_calls
 /// JSON; no decoration, stable and grep-friendly. With `json` the
 /// transcript renders as a JSON array instead (one object per message).
-pub fn render_session_raw(
-    messages: &[(f64, crate::provider::Message)],
-    json: bool,
-) -> String {
+pub fn render_session_raw(messages: &[(f64, crate::provider::Message)], json: bool) -> String {
     if json {
         let rows: Vec<serde_json::Value> = messages
             .iter()
@@ -514,7 +529,6 @@ pub fn render_show_line(
         format!("── {} ──\n{}", message.role, content)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -614,7 +628,10 @@ mod tests {
             "abc-my-cool-session.md"
         );
         assert_eq!(safe_session_filename("abc", None, "md"), "abc-session.md");
-        assert_eq!(safe_session_filename("abc", Some("///"), "md"), "abc-session.md");
+        assert_eq!(
+            safe_session_filename("abc", Some("///"), "md"),
+            "abc-session.md"
+        );
         assert_eq!(
             safe_session_filename("abc", Some("My Cool Session!"), "html"),
             "abc-my-cool-session.html"
@@ -634,7 +651,8 @@ mod tests {
         assert!(verify_export_content(&content).0);
 
         let manifest = std::fs::read_to_string(dir.path().join("manifest.jsonl")).unwrap();
-        let entry: serde_json::Value = serde_json::from_str(manifest.lines().next().unwrap()).unwrap();
+        let entry: serde_json::Value =
+            serde_json::from_str(manifest.lines().next().unwrap()).unwrap();
         assert_eq!(entry["session_id"], "sess-123");
         assert_eq!(entry["format"], "md");
         assert_eq!(entry["message_count"], 3);
@@ -678,7 +696,8 @@ mod tests {
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("<!DOCTYPE html>"));
         let manifest = std::fs::read_to_string(dir.path().join("manifest.jsonl")).unwrap();
-        let entry: serde_json::Value = serde_json::from_str(manifest.lines().next().unwrap()).unwrap();
+        let entry: serde_json::Value =
+            serde_json::from_str(manifest.lines().next().unwrap()).unwrap();
         assert_eq!(entry["format"], "html");
 
         assert!(write_session_export(dir.path(), &session, "pdf").is_err());
@@ -770,5 +789,4 @@ mod tests {
         assert!(plain.starts_with("── user ──"), "{plain}");
         assert!(stamped.contains("user ["), "{stamped}");
     }
-
 }

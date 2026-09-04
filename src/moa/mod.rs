@@ -49,8 +49,7 @@ pub struct MoaOutcome {
 }
 
 /// Builds the provider for one slot (injectable for tests).
-pub type SlotProviderFactory =
-    Arc<dyn Fn(&MoaSlot) -> Result<Arc<dyn Provider>> + Send + Sync>;
+pub type SlotProviderFactory = Arc<dyn Fn(&MoaSlot) -> Result<Arc<dyn Provider>> + Send + Sync>;
 
 /// Production slot factory: builds an OpenAI-compatible or Anthropic client
 /// per slot, with credential fallback to the main runtime (mirrors the
@@ -89,7 +88,12 @@ pub fn default_slot_factory(config: UlncLawConfig) -> SlotProviderFactory {
     })
 }
 
-fn simple_user_request(prompt: &str, model: &str, temperature: Option<f32>, max_tokens: Option<u32>) -> ProviderRequest {
+fn simple_user_request(
+    prompt: &str,
+    model: &str,
+    temperature: Option<f32>,
+    max_tokens: Option<u32>,
+) -> ProviderRequest {
     ProviderRequest {
         messages: vec![Message {
             role: Role::User,
@@ -166,7 +170,10 @@ pub fn join_references(references: &[MoaReferenceOutcome]) -> String {
             continue;
         }
         index += 1;
-        parts.push(format!("Reference {} — {}:\n{}", index, outcome.label, outcome.text));
+        parts.push(format!(
+            "Reference {} — {}:\n{}",
+            index, outcome.label, outcome.text
+        ));
     }
     parts.join("\n\n")
 }
@@ -288,9 +295,9 @@ Proceeding without aggregated guidance.]\nReferences: {}\n\n{}",
                 temperature: preset.aggregator_temperature,
                 stream: false,
                 stop: None,
-            
-            images: None,
-};
+
+                images: None,
+            };
             match provider.chat_completion(request).await {
                 Ok(response) => response.content.unwrap_or_default(),
                 Err(e) => {
@@ -359,7 +366,9 @@ use std::sync::OnceLock;
 
 fn moa_email_re() -> &'static regex::Regex {
     static RE: OnceLock<regex::Regex> = OnceLock::new();
-    RE.get_or_init(|| regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b").unwrap())
+    RE.get_or_init(|| {
+        regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b").unwrap()
+    })
 }
 
 /// Delimited formatted phones only — bare digit runs, dates, times, hex
@@ -369,10 +378,7 @@ fn moa_email_re() -> &'static regex::Regex {
 fn moa_phone_re() -> &'static regex::Regex {
     static RE: OnceLock<regex::Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        regex::Regex::new(
-            r"(?:\+?1[ .-])?(?:\(\d{3}\)[ .-]?|\d{3}[.-])\d{3}[.-]\d{4}",
-        )
-        .unwrap()
+        regex::Regex::new(r"(?:\+?1[ .-])?(?:\(\d{3}\)[ .-]?|\d{3}[.-])\d{3}[.-]\d{4}").unwrap()
     })
 }
 
@@ -420,7 +426,9 @@ pub fn redact_reference_text(text: &str) -> String {
             redact_url_credentials: false,
         },
     );
-    out = moa_email_re().replace_all(&out, "[redacted email]").into_owned();
+    out = moa_email_re()
+        .replace_all(&out, "[redacted email]")
+        .into_owned();
     redact_phones(&out)
 }
 
@@ -437,7 +445,13 @@ fn sanitize_session_id(session_id: Option<&str>) -> String {
     }
     let cleaned: String = raw
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     cleaned.chars().take(120).collect()
 }
@@ -496,7 +510,10 @@ pub fn save_moa_turn(
             },
         });
         use std::io::Write;
-        let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?;
         writeln!(file, "{}", record)?;
         Ok(())
     })();
@@ -646,10 +663,7 @@ pub async fn run_moa_facade_turn(
 
     // 1. Reference fan-out (cache hit on tool-loop iterations).
     let cache_key = reference_cache_key(&request.messages);
-    let (display_refs, wrapped) = match cache_key
-        .as_deref()
-        .and_then(|key| cache.get(key))
-    {
+    let (display_refs, wrapped) = match cache_key.as_deref().and_then(|key| cache.get(key)) {
         Some(hit) => hit,
         None => {
             let prompt = render_conversation_for_references(&request.messages);
@@ -674,8 +688,7 @@ pub async fn run_moa_facade_turn(
             } else {
                 references.clone()
             };
-            let degraded =
-                degraded_notice(&aggregation_refs, &preset.degraded_reference_policy);
+            let degraded = degraded_notice(&aggregation_refs, &preset.degraded_reference_policy);
             let joined = join_references(&aggregation_refs);
             let wrapped = if aggregation_refs.iter().all(|r| r.failed()) {
                 format!(
@@ -722,9 +735,9 @@ for this turn. Synthesize it into your answer; do not quote it verbatim.]\n{}",
         temperature: preset.aggregator_temperature,
         stream: false,
         stop: request.stop.clone(),
-    
-    images: None,
-};
+
+        images: None,
+    };
     let provider = factory(&preset.aggregator)?;
     match provider.chat_completion(aggregator_request).await {
         Ok(response) => Ok(response),
@@ -760,7 +773,11 @@ impl MoaProvider {
     /// preset fails at startup with the available list.
     pub fn new(config: UlncLawConfig, session_id: Option<String>) -> Result<Self> {
         let requested = config.model.model.trim().to_string();
-        let wanted = if requested.is_empty() { None } else { Some(requested.as_str()) };
+        let wanted = if requested.is_empty() {
+            None
+        } else {
+            Some(requested.as_str())
+        };
         let (preset_name, _) = config.moa.resolve_preset(wanted)?;
         let factory = default_slot_factory(config.clone());
         Ok(Self {
@@ -943,16 +960,17 @@ mod tests {
             &[("ref-a", "advice A"), ("ref-b", "<fail>")],
             ("agg", "SYNTH"),
         ));
-        let factory = factory_for(
-            vec![("ref-a", "advice A"), ("agg", "SYNTH")],
-            log.clone(),
-        );
-        let outcome = run_moa_with(None, "p", &config, factory, None).await.unwrap();
+        let factory = factory_for(vec![("ref-a", "advice A"), ("agg", "SYNTH")], log.clone());
+        let outcome = run_moa_with(None, "p", &config, factory, None)
+            .await
+            .unwrap();
         let failed = &outcome.references[1];
         assert!(failed.failed());
         let calls = log.lock().unwrap();
         let agg_call = calls.last().expect("aggregator call");
-        assert!(agg_call.1.contains("[Reference models unavailable: stubprov:ref-b]"));
+        assert!(agg_call
+            .1
+            .contains("[Reference models unavailable: stubprov:ref-b]"));
         assert_eq!(outcome.synthesis, "SYNTH");
     }
 
@@ -963,7 +981,9 @@ mod tests {
         let config = moa_config(preset);
         let log = Arc::new(Mutex::new(Vec::new()));
         let factory = factory_for(vec![("ref-a", "advice A"), ("agg", "S")], log.clone());
-        run_moa_with(None, "p", &config, factory, None).await.unwrap();
+        run_moa_with(None, "p", &config, factory, None)
+            .await
+            .unwrap();
         let calls = log.lock().unwrap();
         let agg_call = calls.last().expect("aggregator call");
         assert!(!agg_call.1.contains("Reference models unavailable"));
@@ -974,7 +994,9 @@ mod tests {
         let config = moa_config(preset(&[("ref-a", "<fail>")], ("agg", "S")));
         let log = Arc::new(Mutex::new(Vec::new()));
         let factory = factory_for(vec![], log.clone());
-        let outcome = run_moa_with(None, "p", &config, factory, None).await.unwrap();
+        let outcome = run_moa_with(None, "p", &config, factory, None)
+            .await
+            .unwrap();
         assert!(outcome.wrapped.contains("all reference models failed"));
         // Only the reference call happened — no aggregator call.
         assert_eq!(log.lock().unwrap().len(), 1);
@@ -985,7 +1007,9 @@ mod tests {
         let config = moa_config(preset(&[("ref-a", "advice A")], ("agg", "<fail>")));
         let log = Arc::new(Mutex::new(Vec::new()));
         let factory = factory_for(vec![("ref-a", "advice A")], log.clone());
-        let outcome = run_moa_with(None, "p", &config, factory, None).await.unwrap();
+        let outcome = run_moa_with(None, "p", &config, factory, None)
+            .await
+            .unwrap();
         assert!(outcome.synthesis.contains("Reference 1 — stubprov:ref-a"));
         assert!(outcome.synthesis.contains("advice A"));
     }
@@ -993,10 +1017,16 @@ mod tests {
     #[tokio::test]
     async fn unknown_preset_lists_available() {
         let config = moa_config(preset(&[("ref-a", "x")], ("agg", "y")));
-        let error = run_moa_with(Some("nope"), "p", &config, factory_for(vec![], Arc::new(Mutex::new(Vec::new()))), None)
-            .await
-            .err()
-            .unwrap();
+        let error = run_moa_with(
+            Some("nope"),
+            "p",
+            &config,
+            factory_for(vec![], Arc::new(Mutex::new(Vec::new()))),
+            None,
+        )
+        .await
+        .err()
+        .unwrap();
         let message = error.to_string();
         assert!(message.contains("'nope'"), "{}", message);
         assert!(message.contains("default"), "{}", message);
@@ -1027,9 +1057,27 @@ mod tests {
     fn conversation_render_truncates_tool_results() {
         let long = "x".repeat(REFERENCE_TOOL_RESULT_BUDGET + 50);
         let messages = vec![
-            Message { role: Role::System, content: Some("be brief".into()), tool_calls: None, tool_call_id: None, name: None },
-            Message { role: Role::User, content: Some("do it".into()), tool_calls: None, tool_call_id: None, name: None },
-            Message { role: Role::Tool, content: Some(long), tool_calls: None, tool_call_id: Some("t1".into()), name: Some("shell".into()) },
+            Message {
+                role: Role::System,
+                content: Some("be brief".into()),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+            Message {
+                role: Role::User,
+                content: Some("do it".into()),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+            Message {
+                role: Role::Tool,
+                content: Some(long),
+                tool_calls: None,
+                tool_call_id: Some("t1".into()),
+                name: Some("shell".into()),
+            },
         ];
         let rendered = render_conversation_for_references(&messages);
         assert!(rendered.starts_with("System: be brief"));
@@ -1093,9 +1141,24 @@ mod tests {
         // Turn 2 (tool iteration: same prefix + assistant/tool tail):
         // references are cached — only the aggregator runs.
         let mut messages = facade_request("task").messages;
-        messages.push(Message { role: Role::Assistant, content: Some("thinking".into()), tool_calls: None, tool_call_id: None, name: None });
-        messages.push(Message { role: Role::Tool, content: Some("tool output".into()), tool_calls: None, tool_call_id: Some("t".into()), name: Some("shell".into()) });
-        let request = ProviderRequest { messages, ..facade_request("task") };
+        messages.push(Message {
+            role: Role::Assistant,
+            content: Some("thinking".into()),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        });
+        messages.push(Message {
+            role: Role::Tool,
+            content: Some("tool output".into()),
+            tool_calls: None,
+            tool_call_id: Some("t".into()),
+            name: Some("shell".into()),
+        });
+        let request = ProviderRequest {
+            messages,
+            ..facade_request("task")
+        };
         run_moa_facade_turn(&request, &config, "default", &factory, &cache, None)
             .await
             .unwrap();
@@ -1107,7 +1170,10 @@ mod tests {
         let log = Arc::new(Mutex::new(Vec::new()));
         let config = facade_config(Some(crate::config::MoaPrivacyFilter::Mode("full".into())));
         let factory = factory_for(
-            vec![("ref-a", "advice from bob@example.com"), ("agg", "SYNTHESIS")],
+            vec![
+                ("ref-a", "advice from bob@example.com"),
+                ("agg", "SYNTHESIS"),
+            ],
             log.clone(),
         );
         let cache = MoaReferenceCache::default();
@@ -1130,9 +1196,14 @@ mod tests {
     #[tokio::test]
     async fn facade_privacy_display_keeps_aggregator_raw() {
         let log = Arc::new(Mutex::new(Vec::new()));
-        let config = facade_config(Some(crate::config::MoaPrivacyFilter::Mode("display".into())));
+        let config = facade_config(Some(crate::config::MoaPrivacyFilter::Mode(
+            "display".into(),
+        )));
         let factory = factory_for(
-            vec![("ref-a", "advice from bob@example.com"), ("agg", "SYNTHESIS")],
+            vec![
+                ("ref-a", "advice from bob@example.com"),
+                ("agg", "SYNTHESIS"),
+            ],
             log.clone(),
         );
         let cache = MoaReferenceCache::default();
@@ -1181,10 +1252,10 @@ mod tests {
     #[test]
     fn preset_resolution_prefers_default_preset() {
         let mut config = moa_config(preset(&[("ref-a", "x")], ("agg", "y")));
-        config.moa.presets.insert(
-            "other".to_string(),
-            preset(&[("ref-b", "x")], ("agg", "y")),
-        );
+        config
+            .moa
+            .presets
+            .insert("other".to_string(), preset(&[("ref-b", "x")], ("agg", "y")));
         config.moa.default_preset = Some("other".into());
         let (name, preset) = config.moa.resolve_preset(None).unwrap();
         assert_eq!(name, "other");

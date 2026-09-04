@@ -173,7 +173,11 @@ fn profile_author(fallback: &str) -> String {
     std::env::var("ULNCLAW_PROFILE")
         .ok()
         .filter(|v| !v.trim().is_empty())
-        .or_else(|| std::env::var("HERMES_PROFILE").ok().filter(|v| !v.trim().is_empty()))
+        .or_else(|| {
+            std::env::var("HERMES_PROFILE")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+        })
         .or_else(|| std::env::var("USER").ok().filter(|v| !v.trim().is_empty()))
         .unwrap_or_else(|| fallback.to_string())
 }
@@ -215,9 +219,9 @@ async fn call_aux(
         temperature: Some(0.3),
         stream: false,
         stop: None,
-    
-    images: None,
-};
+
+        images: None,
+    };
     let response = resolution.provider.chat_completion(request).await?;
     Ok(response.content.unwrap_or_default())
 }
@@ -359,14 +363,24 @@ pub async fn specify_task(
         Err(_) => return outcome(false, "unknown task id"),
     };
     if task.status != "triage" {
-        return outcome(false, &format!("task is not in triage (status={})", task.status));
+        return outcome(
+            false,
+            &format!("task is not in triage (status={})", task.status),
+        );
     }
 
     let user_prompt = format!(
         "Task id: {}\nCurrent title: {}\nCurrent body:\n{}\n",
         task.id,
         truncate(&task.title, 400),
-        truncate(if task.body.is_empty() { "(no body)" } else { &task.body }, 4000),
+        truncate(
+            if task.body.is_empty() {
+                "(no body)"
+            } else {
+                &task.body
+            },
+            4000
+        ),
     );
     let raw = match call_aux(
         config,
@@ -415,7 +429,9 @@ pub async fn specify_task(
         }
     };
 
-    let author = author.map(str::to_string).unwrap_or_else(|| profile_author("specifier"));
+    let author = author
+        .map(str::to_string)
+        .unwrap_or_else(|| profile_author("specifier"));
     match store.specify_triage_task(
         task_id,
         new_title.as_deref(),
@@ -460,7 +476,10 @@ pub async fn decompose_task(
         _ => return outcome(false, "unknown task id"),
     };
     if task.status != "triage" {
-        return outcome(false, &format!("task is not in triage (status={})", task.status));
+        return outcome(
+            false,
+            &format!("task is not in triage (status={})", task.status),
+        );
     }
 
     let orchestrator = resolve_orchestrator_profile(config);
@@ -495,8 +514,13 @@ pub async fn decompose_task(
     let Some(parsed) = extract_json_blob(&raw) else {
         return outcome(false, "LLM returned malformed JSON");
     };
-    let audit_author = author.map(str::to_string).unwrap_or_else(|| profile_author("decomposer"));
-    let fanout = parsed.get("fanout").and_then(|v| v.as_bool()).unwrap_or(false);
+    let audit_author = author
+        .map(str::to_string)
+        .unwrap_or_else(|| profile_author("decomposer"));
+    let fanout = parsed
+        .get("fanout")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     if !fanout {
         // Single-task fallback: same effect as specify (+ assignee routing).
@@ -544,10 +568,16 @@ pub async fn decompose_task(
     }
 
     let Some(raw_tasks) = parsed.get("tasks").and_then(|v| v.as_array()) else {
-        return outcome(false, "decomposer returned fanout=true with empty tasks list");
+        return outcome(
+            false,
+            "decomposer returned fanout=true with empty tasks list",
+        );
     };
     if raw_tasks.is_empty() {
-        return outcome(false, "decomposer returned fanout=true with empty tasks list");
+        return outcome(
+            false,
+            "decomposer returned fanout=true with empty tasks list",
+        );
     }
 
     let mut children: Vec<DecomposeChild> = Vec::new();
@@ -555,7 +585,12 @@ pub async fn decompose_task(
         let Some(entry) = entry.as_object() else {
             return outcome(false, &format!("tasks[{idx}] is not an object"));
         };
-        let Some(title) = entry.get("title").and_then(|v| v.as_str()).map(str::trim).filter(|t| !t.is_empty()) else {
+        let Some(title) = entry
+            .get("title")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+        else {
             return outcome(false, &format!("tasks[{idx}].title is missing or empty"));
         };
         let body = entry
@@ -618,7 +653,8 @@ mod tests {
         assert_eq!(plain["title"], "A");
         let fenced = extract_json_blob("```json\n{\"fanout\": false}\n```").unwrap();
         assert_eq!(fenced["fanout"], false);
-        let noisy = extract_json_blob("Sure! Here you go: {\"tasks\": []} hope that helps").unwrap();
+        let noisy =
+            extract_json_blob("Sure! Here you go: {\"tasks\": []} hope that helps").unwrap();
         assert!(noisy.get("tasks").is_some());
         assert!(extract_json_blob("no json here").is_none());
         assert!(extract_json_blob("").is_none());

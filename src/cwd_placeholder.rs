@@ -45,7 +45,11 @@ pub fn resolve_placeholder_terminal_cwd(
         return Some(configured.to_string());
     }
     let backend = terminal_backend.trim().to_lowercase();
-    let backend = if backend.is_empty() { "local" } else { &backend };
+    let backend = if backend.is_empty() {
+        "local"
+    } else {
+        &backend
+    };
     let messaging = messaging_cwd.map(str::trim).unwrap_or("");
     match backend {
         "local" => {
@@ -82,7 +86,11 @@ pub fn resolve_messaging_cwd(config: &crate::config::UlncLawConfig) -> Option<Pa
     let configured = std::env::var("ULNCLAW_TERMINAL_CWD")
         .ok()
         .filter(|v| !v.trim().is_empty())
-        .or_else(|| std::env::var("TERMINAL_CWD").ok().filter(|v| !v.trim().is_empty()))
+        .or_else(|| {
+            std::env::var("TERMINAL_CWD")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+        })
         .or_else(|| config.terminal.cwd.clone());
     let backend = std::env::var("TERMINAL_ENV")
         .ok()
@@ -92,7 +100,11 @@ pub fn resolve_messaging_cwd(config: &crate::config::UlncLawConfig) -> Option<Pa
     let messaging_cwd = std::env::var("ULNCLAW_MESSAGING_CWD")
         .ok()
         .filter(|v| !v.trim().is_empty())
-        .or_else(|| std::env::var("MESSAGING_CWD").ok().filter(|v| !v.trim().is_empty()));
+        .or_else(|| {
+            std::env::var("MESSAGING_CWD")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+        });
     let mount = std::env::var("TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE")
         .ok()
         .map(|v| truthy_env(Some(&v)))
@@ -117,13 +129,7 @@ mod tests {
     #[test]
     fn explicit_cwd_passes_through() {
         assert_eq!(
-            resolve_placeholder_terminal_cwd(
-                "/srv/project",
-                "docker",
-                None,
-                false,
-                "/home/u"
-            ),
+            resolve_placeholder_terminal_cwd("/srv/project", "docker", None, false, "/home/u"),
             Some("/srv/project".into())
         );
         assert!(!is_placeholder("/srv/project"));
@@ -171,7 +177,13 @@ mod tests {
     #[test]
     fn docker_mount_off_and_other_backends_unset() {
         assert_eq!(
-            resolve_placeholder_terminal_cwd(".", "docker", Some("/host/project"), false, "/home/u"),
+            resolve_placeholder_terminal_cwd(
+                ".",
+                "docker",
+                Some("/host/project"),
+                false,
+                "/home/u"
+            ),
             None
         );
         assert_eq!(
@@ -228,11 +240,7 @@ mod tests {
             Some(PathBuf::from("/explicit"))
         );
 
-        for key in [
-            "ULNCLAW_TERMINAL_CWD",
-            "TERMINAL_ENV",
-            "MESSAGING_CWD",
-        ] {
+        for key in ["ULNCLAW_TERMINAL_CWD", "TERMINAL_ENV", "MESSAGING_CWD"] {
             std::env::remove_var(key);
         }
     }

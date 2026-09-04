@@ -217,7 +217,11 @@ mod tests {
         let first = cache_media_bytes(&home, data, "image/png", "").unwrap();
         let second = cache_media_bytes(&home, data, "image/png", "").unwrap();
         assert_eq!(first, second);
-        assert!(first.file_name().unwrap().to_string_lossy().ends_with(".png"));
+        assert!(first
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(".png"));
         assert_eq!(std::fs::read(&first).unwrap(), data);
         // Different bytes → different path.
         let other = cache_media_bytes(&home, b"other", "image/png", "").unwrap();
@@ -228,7 +232,8 @@ mod tests {
     #[test]
     fn documents_keep_sanitized_names() {
         let home = temp_home("docnames");
-        let path = cache_media_bytes(&home, b"%PDF-1.4", "application/pdf", "../../evil .pdf").unwrap();
+        let path =
+            cache_media_bytes(&home, b"%PDF-1.4", "application/pdf", "../../evil .pdf").unwrap();
         let name = path.file_name().unwrap().to_string_lossy().to_string();
         assert!(name.ends_with(".pdf"));
         assert!(!name.contains(".."));

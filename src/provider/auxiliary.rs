@@ -259,8 +259,7 @@ base_url = "http://localhost:9/v1"
 key_env = "ULNCLAW_TEST_AUX_KEY"
 "#,
         );
-        let resolution =
-            resolve_aux_task(&config, TASK_VISION, main_provider()).unwrap();
+        let resolution = resolve_aux_task(&config, TASK_VISION, main_provider()).unwrap();
         assert_eq!(resolution.source, AuxSource::TaskConfig);
         assert_eq!(resolution.model, "gpt-vision");
         std::env::remove_var("ULNCLAW_TEST_AUX_KEY");
@@ -277,8 +276,7 @@ provider = "ollama"
 model = "qwen3:1.7b"
 "#,
         );
-        let resolution =
-            resolve_aux_task(&config, TASK_COMPRESSION, main_provider()).unwrap();
+        let resolution = resolve_aux_task(&config, TASK_COMPRESSION, main_provider()).unwrap();
         assert_eq!(resolution.model, "qwen3:1.7b");
         assert_eq!(resolution.provider.name(), "ollama");
     }

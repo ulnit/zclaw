@@ -117,7 +117,10 @@ fn parse_token_response(value: &Value) -> std::result::Result<StoredTokens, Stri
         .and_then(|v| v.as_str())
         .ok_or("token response missing access_token")?
         .to_string();
-    let expires_in = value.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(0);
+    let expires_in = value
+        .get("expires_in")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
     let expires_at = if expires_in > 0 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -142,11 +145,20 @@ fn parse_token_response(value: &Value) -> std::result::Result<StoredTokens, Stri
     })
 }
 
-async fn token_request(client: &reqwest::Client, cfg: &OAuthConfig, form: &[(&str, String)]) -> Result<Value> {
+async fn token_request(
+    client: &reqwest::Client,
+    cfg: &OAuthConfig,
+    form: &[(&str, String)],
+) -> Result<Value> {
     let response = client
         .post(&cfg.token_url)
         .header("Accept", "application/json")
-        .form(&form.iter().map(|(k, v)| (*k, v.clone())).collect::<Vec<_>>())
+        .form(
+            &form
+                .iter()
+                .map(|(k, v)| (*k, v.clone()))
+                .collect::<Vec<_>>(),
+        )
         .timeout(Duration::from_secs(30))
         .send()
         .await
@@ -160,7 +172,9 @@ async fn token_request(client: &reqwest::Client, cfg: &OAuthConfig, form: &[(&st
     if value.get("error").is_some() || status.is_success() {
         Ok(value)
     } else {
-        Err(AgentError::Tool(format!("token endpoint returned {status}")))
+        Err(AgentError::Tool(format!(
+            "token endpoint returned {status}"
+        )))
     }
 }
 
@@ -205,16 +219,28 @@ pub async fn poll_for_token(cfg: &OAuthConfig, auth: &Value) -> Result<StoredTok
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let expires_in = auth.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(600);
-    let mut interval = auth.get("interval").and_then(|v| v.as_u64()).unwrap_or(5).max(3);
+    let expires_in = auth
+        .get("expires_in")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(600);
+    let mut interval = auth
+        .get("interval")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(5)
+        .max(3);
     let deadline = std::time::Instant::now() + Duration::from_secs(expires_in);
     loop {
         if std::time::Instant::now() > deadline {
-            return Err(AgentError::Tool("device code expired before authorization".into()));
+            return Err(AgentError::Tool(
+                "device code expired before authorization".into(),
+            ));
         }
         tokio::time::sleep(Duration::from_secs(interval)).await;
         let form = vec![
-            ("grant_type", "urn:ietf:params:oauth:grant-type:device_code".to_string()),
+            (
+                "grant_type",
+                "urn:ietf:params:oauth:grant-type:device_code".to_string(),
+            ),
             ("device_code", device_code.clone()),
             ("client_id", cfg.client_id.clone()),
         ];
@@ -230,7 +256,9 @@ pub async fn poll_for_token(cfg: &OAuthConfig, auth: &Value) -> Result<StoredTok
                 return Err(AgentError::Tool("authorization denied by the user".into()));
             }
             Some("expired_token") => {
-                return Err(AgentError::Tool("device code expired — run auth login again".into()));
+                return Err(AgentError::Tool(
+                    "device code expired — run auth login again".into(),
+                ));
             }
             Some(other) => return Err(AgentError::Tool(format!("token error: {other}"))),
         }
@@ -242,7 +270,9 @@ pub async fn refresh(cfg: &OAuthConfig, home: &Path) -> Result<StoredTokens> {
     require_endpoints(cfg)?;
     let stored = load_tokens(home);
     if stored.refresh_token.is_empty() {
-        return Err(AgentError::Tool("no refresh_token stored — run auth login".into()));
+        return Err(AgentError::Tool(
+            "no refresh_token stored — run auth login".into(),
+        ));
     }
     let client = reqwest::Client::new();
     let form = vec![
@@ -276,7 +306,10 @@ pub async fn access_token(cfg: &OAuthConfig, home: &Path) -> Option<String> {
 
 /// Render the login prompt lines (hermes portal shows code + URL).
 pub fn login_instructions(auth: &Value) -> Vec<String> {
-    let user_code = auth.get("user_code").and_then(|v| v.as_str()).unwrap_or("?");
+    let user_code = auth
+        .get("user_code")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
     let uri = auth
         .get("verification_uri_complete")
         .or_else(|| auth.get("verification_uri"))
@@ -346,7 +379,10 @@ mod tests {
     #[test]
     fn parse_error_response() {
         let value = json!({"error": "authorization_pending"});
-        assert_eq!(parse_token_response(&value).unwrap_err(), "authorization_pending");
+        assert_eq!(
+            parse_token_response(&value).unwrap_err(),
+            "authorization_pending"
+        );
     }
 
     #[test]

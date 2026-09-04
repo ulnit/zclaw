@@ -27,7 +27,10 @@ pub fn mask_secret(value: &str, head: usize, tail: usize, floor: usize) -> Strin
     }
     let chars: Vec<char> = value.chars().collect();
     let head: String = chars.iter().take(head).collect();
-    let tail: String = chars.iter().skip(chars.len().saturating_sub(tail)).collect();
+    let tail: String = chars
+        .iter()
+        .skip(chars.len().saturating_sub(tail))
+        .collect();
     format!("{head}...{tail}")
 }
 
@@ -101,12 +104,61 @@ const PREFIX_PATTERNS: &[&str] = &[
 /// Literal prefix substrings for the cheap pre-gate and the non-reusable
 /// sentinel label (every pattern starts with one of these).
 const PREFIX_SUBSTRINGS: &[&str] = &[
-    "sk_live_", "sk_test_", "sk-", "sk_", "ghp_", "github_pat_", "gho_", "ghu_", "ghs_", "ghr_",
-    "xapp-", "xox", "AIza", "pplx-", "fal_", "fc-", "bb_live_", "gAAAA", "AKIA", "rk_live_",
-    "SG.", "hf_", "r8_", "npm_", "pypi-", "dop_v1_", "doo_v1_", "am_", "tvly-", "exa_", "gsk_",
-    "syt_", "retaindb_", "hsk-", "mem0_", "brv_", "xai-", "ntn_", "fw-", "fw_", "fpk_",
-    "glpat-", "gloas-", "gldt-", "glrt-", "glrtr-", "glcbt-", "glptt-", "glft-", "glimt-",
-    "glagent-", "glsoat-", "glffct-", "glwt-", "GR1348941",
+    "sk_live_",
+    "sk_test_",
+    "sk-",
+    "sk_",
+    "ghp_",
+    "github_pat_",
+    "gho_",
+    "ghu_",
+    "ghs_",
+    "ghr_",
+    "xapp-",
+    "xox",
+    "AIza",
+    "pplx-",
+    "fal_",
+    "fc-",
+    "bb_live_",
+    "gAAAA",
+    "AKIA",
+    "rk_live_",
+    "SG.",
+    "hf_",
+    "r8_",
+    "npm_",
+    "pypi-",
+    "dop_v1_",
+    "doo_v1_",
+    "am_",
+    "tvly-",
+    "exa_",
+    "gsk_",
+    "syt_",
+    "retaindb_",
+    "hsk-",
+    "mem0_",
+    "brv_",
+    "xai-",
+    "ntn_",
+    "fw-",
+    "fw_",
+    "fpk_",
+    "glpat-",
+    "gloas-",
+    "gldt-",
+    "glrt-",
+    "glrtr-",
+    "glcbt-",
+    "glptt-",
+    "glft-",
+    "glimt-",
+    "glagent-",
+    "glsoat-",
+    "glffct-",
+    "glwt-",
+    "GR1348941",
 ];
 
 fn prefix_re() -> &'static Regex {
@@ -221,8 +273,10 @@ fn private_key_re() -> &'static Regex {
 fn db_connstr_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)((?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^:\s]+:)([^@\s]+)(@)")
-            .expect("static regex")
+        Regex::new(
+            r"(?i)((?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^:\s]+:)([^@\s]+)(@)",
+        )
+        .expect("static regex")
     })
 }
 
@@ -280,8 +334,17 @@ pub struct RedactOpts {
 }
 
 const SENSITIVE_QUERY_PARAMS: &[&str] = &[
-    "api_key", "apikey", "api-key", "access_token", "auth_token", "token", "secret",
-    "password", "key", "signature", "sig",
+    "api_key",
+    "apikey",
+    "api-key",
+    "access_token",
+    "auth_token",
+    "token",
+    "secret",
+    "password",
+    "key",
+    "signature",
+    "sig",
 ];
 
 fn redact_query_string(query: &str) -> String {
@@ -317,7 +380,9 @@ pub fn redact_sensitive_text(text: &str, opts: RedactOpts) -> String {
         let re = prefix_re();
         if opts.file_read {
             out = re
-                .replace_all(&out, |caps: &regex::Captures| mask_token_nonreusable(&caps[1]))
+                .replace_all(&out, |caps: &regex::Captures| {
+                    mask_token_nonreusable(&caps[1])
+                })
                 .into_owned();
         } else {
             out = re
@@ -366,7 +431,14 @@ pub fn redact_sensitive_text(text: &str, opts: RedactOpts) -> String {
                 if env_lookup_value_re().is_match(value) {
                     return caps[0].to_string();
                 }
-                format!("{}{}{}{}{}", &caps[1], &caps[2], &caps[3], &caps[4], mask_token(value))
+                format!(
+                    "{}{}{}{}{}",
+                    &caps[1],
+                    &caps[2],
+                    &caps[3],
+                    &caps[4],
+                    mask_token(value)
+                )
             })
             .into_owned();
     }
@@ -384,7 +456,8 @@ pub fn redact_sensitive_text(text: &str, opts: RedactOpts) -> String {
     }
 
     // 6. x-api-key style headers.
-    if out.to_ascii_lowercase().contains("api-key") || out.to_ascii_lowercase().contains("apikey")
+    if out.to_ascii_lowercase().contains("api-key")
+        || out.to_ascii_lowercase().contains("apikey")
         || out.to_ascii_lowercase().contains("x-auth-token")
     {
         let re = secret_header_re();
@@ -398,7 +471,9 @@ pub fn redact_sensitive_text(text: &str, opts: RedactOpts) -> String {
     // 7. Private key blocks.
     if out.contains("PRIVATE KEY-----") {
         let re = private_key_re();
-        out = re.replace_all(&out, "*** redacted private key ***").into_owned();
+        out = re
+            .replace_all(&out, "*** redacted private key ***")
+            .into_owned();
     }
 
     // 8. DB connection strings.
@@ -431,7 +506,8 @@ pub fn redact_sensitive_text(text: &str, opts: RedactOpts) -> String {
 
     // 11. Opt-in web-URL credential redaction (query params).
     if opts.redact_url_credentials && out.contains('?') {
-        let re = Regex::new(r"(?i)([a-z][a-z0-9+.-]*://[^\s?#]*)\?([^\s#]*)").expect("static regex");
+        let re =
+            Regex::new(r"(?i)([a-z][a-z0-9+.-]*://[^\s?#]*)\?([^\s#]*)").expect("static regex");
         out = re
             .replace_all(&out, |caps: &regex::Captures| {
                 format!("{}?{}", &caps[1], redact_query_string(&caps[2]))
@@ -499,7 +575,10 @@ mod tests {
         // file_read mode: non-reusable sentinel, no secret bytes.
         let out = redact_sensitive_text(
             "key is ghp_ABCDEF1234567890XYZ ok",
-            RedactOpts { file_read: true, ..Default::default() },
+            RedactOpts {
+                file_read: true,
+                ..Default::default()
+            },
         );
         assert!(out.contains("«redacted:ghp_…»"), "got: {out}");
         assert!(!out.contains("ABCDEF"), "got: {out}");
@@ -537,20 +616,30 @@ mod tests {
     fn redacts_auth_headers() {
         let out = redact_sensitive_text(
             "Authorization: Bearer sk-proj-abcdef1234567890",
-            RedactOpts { code_file: true, ..Default::default() },
+            RedactOpts {
+                code_file: true,
+                ..Default::default()
+            },
         );
-        assert!(!out.contains("abcdef1234567890") || out.contains("***"), "got: {out}");
+        assert!(
+            !out.contains("abcdef1234567890") || out.contains("***"),
+            "got: {out}"
+        );
         assert!(out.contains("Authorization: Bearer"), "got: {out}");
     }
 
     #[test]
     fn redacts_private_keys_and_db_connstrings() {
-        let pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----";
+        let pem =
+            "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----";
         let out = redact_sensitive_text(pem, RedactOpts::default());
         assert!(!out.contains("MIIEow"), "got: {out}");
         let out = redact_sensitive_text(
             "postgres://admin:s3cretpass@db.internal:5432/app",
-            RedactOpts { code_file: true, ..Default::default() },
+            RedactOpts {
+                code_file: true,
+                ..Default::default()
+            },
         );
         assert!(!out.contains("s3cretpass"), "got: {out}");
         assert!(out.contains("admin:"), "got: {out}");
@@ -576,7 +665,10 @@ mod tests {
         assert_eq!(passthrough, url);
         let redacted = redact_sensitive_text(
             url,
-            RedactOpts { redact_url_credentials: true, ..Default::default() },
+            RedactOpts {
+                redact_url_credentials: true,
+                ..Default::default()
+            },
         );
         assert!(!redacted.contains("secret1234567890ab"), "got: {redacted}");
         assert!(redacted.contains("x=1"), "got: {redacted}");

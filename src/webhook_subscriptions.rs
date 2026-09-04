@@ -121,7 +121,12 @@ pub fn normalize_name(raw: &str) -> String {
 pub fn mint_secret() -> String {
     let mut out = String::with_capacity(64);
     for _ in 0..2 {
-        out.extend(uuid::Uuid::new_v4().to_string().chars().filter(|c| *c != '-'));
+        out.extend(
+            uuid::Uuid::new_v4()
+                .to_string()
+                .chars()
+                .filter(|c| *c != '-'),
+        );
     }
     out
 }
@@ -169,7 +174,11 @@ pub fn to_webhook_route(name: &str, sub: &Subscription) -> WebhookRoute {
         } else {
             sub.prompt.clone()
         },
-        deliver: if sub.deliver.is_empty() { "log".to_string() } else { sub.deliver.clone() },
+        deliver: if sub.deliver.is_empty() {
+            "log".to_string()
+        } else {
+            sub.deliver.clone()
+        },
         deliver_chat: sub
             .deliver_extra
             .as_ref()
@@ -252,7 +261,12 @@ pub fn cmd_subscribe(raw_name: &str, opts: &SubscribeOptions) -> Result<String, 
         .events
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .map(|s| s.split(',').map(|e| e.trim().to_string()).filter(|e| !e.is_empty()).collect())
+        .map(|s| {
+            s.split(',')
+                .map(|e| e.trim().to_string())
+                .filter(|e| !e.is_empty())
+                .collect()
+        })
         .unwrap_or_default();
 
     let mut route = Subscription {
@@ -267,7 +281,12 @@ pub fn cmd_subscribe(raw_name: &str, opts: &SubscribeOptions) -> Result<String, 
             .skills
             .as_deref()
             .filter(|s| !s.trim().is_empty())
-            .map(|s| s.split(',').map(|e| e.trim().to_string()).filter(|e| !e.is_empty()).collect())
+            .map(|s| {
+                s.split(',')
+                    .map(|e| e.trim().to_string())
+                    .filter(|e| !e.is_empty())
+                    .collect()
+            })
             .unwrap_or_default(),
         deliver: opts
             .deliver
@@ -282,15 +301,18 @@ pub fn cmd_subscribe(raw_name: &str, opts: &SubscribeOptions) -> Result<String, 
 
     if opts.deliver_only {
         if route.deliver == "log" {
-            return Err(
-                "--deliver-only requires --deliver to be a real target \
+            return Err("--deliver-only requires --deliver to be a real target \
                  (telegram, discord, slack, …) — not 'log'."
-                    .to_string(),
-            );
+                .to_string());
         }
         route.deliver_only = true;
     }
-    if let Some(script) = opts.script.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(script) = opts
+        .script
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         route.script = Some(script.to_string());
     }
     if let Some(chat_id) = opts
@@ -299,7 +321,9 @@ pub fn cmd_subscribe(raw_name: &str, opts: &SubscribeOptions) -> Result<String, 
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        route.deliver_extra = Some(DeliverExtra { chat_id: Some(chat_id.to_string()) });
+        route.deliver_extra = Some(DeliverExtra {
+            chat_id: Some(chat_id.to_string()),
+        });
     }
 
     subs.insert(name.clone(), route.clone());
@@ -324,8 +348,16 @@ pub fn cmd_subscribe(raw_name: &str, opts: &SubscribeOptions) -> Result<String, 
     }
     if !route.prompt.is_empty() {
         let preview: String = route.prompt.chars().take(80).collect();
-        let suffix = if route.prompt.chars().count() > 80 { "..." } else { "" };
-        let label = if route.deliver_only { "Message" } else { "Prompt" };
+        let suffix = if route.prompt.chars().count() > 80 {
+            "..."
+        } else {
+            ""
+        };
+        let label = if route.deliver_only {
+            "Message"
+        } else {
+            "Prompt"
+        };
         out.push_str(&format!("  {label}: {preview}{suffix}\n"));
     }
     if let Some(script) = &route.script {
@@ -405,7 +437,9 @@ pub fn cmd_test(raw_name: &str, payload: Option<&str>) -> Result<String, String>
             out.push_str(&format!("  Response ({status}): {resp_body}\n"));
         }
         Err(e) => {
-            out.push_str(&format!("  Error: {e}\n  Is the gateway running? (ulnclaw gateway)\n"));
+            out.push_str(&format!(
+                "  Error: {e}\n  Is the gateway running? (ulnclaw gateway)\n"
+            ));
         }
     }
     Ok(out)
@@ -500,7 +534,9 @@ mod tests {
                     secret: "s3cret".into(),
                     prompt: "handle {body}".into(),
                     deliver: "telegram".into(),
-                    deliver_extra: Some(DeliverExtra { chat_id: Some("123".into()) }),
+                    deliver_extra: Some(DeliverExtra {
+                        chat_id: Some("123".into()),
+                    }),
                     created_at: created_at_now(),
                     ..Default::default()
                 },
@@ -509,12 +545,19 @@ mod tests {
             let loaded = load_subscriptions();
             let sub = &loaded["ci"];
             assert_eq!(sub.secret, "s3cret");
-            assert_eq!(sub.deliver_extra.as_ref().unwrap().chat_id.as_deref(), Some("123"));
+            assert_eq!(
+                sub.deliver_extra.as_ref().unwrap().chat_id.as_deref(),
+                Some("123")
+            );
             // Secret file must be owner-only on unix.
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let mode = std::fs::metadata(subscriptions_path()).unwrap().permissions().mode() & 0o777;
+                let mode = std::fs::metadata(subscriptions_path())
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777;
                 assert_eq!(mode, 0o600);
             }
         });
@@ -537,7 +580,9 @@ mod tests {
             prompt: String::new(),
             deliver: "discord".into(),
             deliver_only: true,
-            deliver_extra: Some(DeliverExtra { chat_id: Some("42".into()) }),
+            deliver_extra: Some(DeliverExtra {
+                chat_id: Some("42".into()),
+            }),
             ..Default::default()
         };
         let route = to_webhook_route("ci", &sub);
@@ -587,7 +632,10 @@ mod tests {
     #[test]
     fn subscribe_rejects_deliver_only_with_log() {
         with_home(|| {
-            let opts = SubscribeOptions { deliver_only: true, ..Default::default() };
+            let opts = SubscribeOptions {
+                deliver_only: true,
+                ..Default::default()
+            };
             let err = cmd_subscribe("hook", &opts).unwrap_err();
             assert!(err.contains("--deliver-only"), "{err}");
         });
@@ -613,13 +661,18 @@ mod tests {
             assert!(listing.contains("◆ ci-hook"));
 
             // Update path.
-            let opts2 = SubscribeOptions { deliver: Some("discord".into()), ..Default::default() };
+            let opts2 = SubscribeOptions {
+                deliver: Some("discord".into()),
+                ..Default::default()
+            };
             let out2 = cmd_subscribe("ci-hook", &opts2).unwrap();
             assert!(out2.contains("Updated webhook subscription"));
 
             let removed = cmd_remove("ci-hook").unwrap();
             assert!(removed.contains("Removed webhook subscription: ci-hook"));
-            assert!(cmd_list().unwrap().contains("No dynamic webhook subscriptions"));
+            assert!(cmd_list()
+                .unwrap()
+                .contains("No dynamic webhook subscriptions"));
             // Removing static/unknown notes the config-route caveat.
             assert!(cmd_remove("nope").unwrap().contains("Static routes"));
         });

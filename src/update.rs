@@ -47,7 +47,11 @@ fn git(cwd: &Path, args: &[&str]) -> GitOutput {
             stdout: String::from_utf8_lossy(&o.stdout).trim().to_string(),
             stderr: String::from_utf8_lossy(&o.stderr).trim().to_string(),
         },
-        Err(e) => GitOutput { ok: false, stdout: String::new(), stderr: e.to_string() },
+        Err(e) => GitOutput {
+            ok: false,
+            stdout: String::new(),
+            stderr: e.to_string(),
+        },
     }
 }
 
@@ -105,13 +109,21 @@ pub fn is_fork(origin_url: Option<&str>) -> bool {
 
 fn capture_head_sha(root: &Path) -> Option<String> {
     let out = git(root, &["rev-parse", "HEAD"]);
-    if out.ok && !out.stdout.is_empty() { Some(out.stdout) } else { None }
+    if out.ok && !out.stdout.is_empty() {
+        Some(out.stdout)
+    } else {
+        None
+    }
 }
 
 fn count_commits_between(root: &Path, base: &str, head: &str) -> i64 {
     let range = format!("{base}..{head}");
     let out = git(root, &["rev-list", "--count", &range]);
-    if out.ok { out.stdout.parse().unwrap_or(-1) } else { -1 }
+    if out.ok {
+        out.stdout.parse().unwrap_or(-1)
+    } else {
+        -1
+    }
 }
 
 fn current_branch(root: &Path) -> Option<String> {
@@ -147,7 +159,8 @@ fn fetch(root: &Path, remote: &str, branch: &str, shallow: bool) -> GitOutput {
 fn classify_fetch_error(stderr: &str) -> String {
     if stderr.contains("Could not resolve host") || stderr.contains("unable to access") {
         "✗ Network error — cannot reach the remote repository.".to_string()
-    } else if stderr.contains("Authentication failed") || stderr.contains("could not read Username") {
+    } else if stderr.contains("Authentication failed") || stderr.contains("could not read Username")
+    {
         "✗ Authentication failed — check your git credentials or SSH key.".to_string()
     } else {
         let first = stderr.lines().next().unwrap_or("");
@@ -179,7 +192,10 @@ pub enum CheckOutcome {
 }
 
 /// Implement `ulnclaw update --check` (hermes `_cmd_update_check`).
-pub fn check_update(root: &Path, opts: &UpdateOptions) -> Result<(CheckOutcome, Vec<String>), String> {
+pub fn check_update(
+    root: &Path,
+    opts: &UpdateOptions,
+) -> Result<(CheckOutcome, Vec<String>), String> {
     let mut log_lines: Vec<String> = Vec::new();
     let branch = resolve_update_branch(root, opts);
     let default_branch = current_branch(root).unwrap_or_else(|| "master".to_string());
@@ -200,7 +216,9 @@ pub fn check_update(root: &Path, opts: &UpdateOptions) -> Result<(CheckOutcome, 
             return Err(classify_fetch_error(&fetch_result.stderr));
         }
     }
-    let compare_ref = if remote == "upstream" && git(root, &["rev-parse", "--verify", "--quiet", &compare_ref]).ok {
+    let compare_ref = if remote == "upstream"
+        && git(root, &["rev-parse", "--verify", "--quiet", &compare_ref]).ok
+    {
         compare_ref.clone()
     } else {
         format!("origin/{branch}")
@@ -224,7 +242,13 @@ pub fn check_update(root: &Path, opts: &UpdateOptions) -> Result<(CheckOutcome, 
     if behind <= 0 {
         Ok((CheckOutcome::UpToDate, log_lines))
     } else {
-        Ok((CheckOutcome::Behind { count: behind, compare_ref }, log_lines))
+        Ok((
+            CheckOutcome::Behind {
+                count: behind,
+                compare_ref,
+            },
+            log_lines,
+        ))
     }
 }
 
@@ -239,7 +263,9 @@ pub fn format_check_report(outcome: &CheckOutcome) -> String {
             )
         }
         CheckOutcome::BehindShallow { compare_ref } => {
-            format!("⚕ Update available (behind {compare_ref}).\n  Run 'ulnclaw update' to install.\n")
+            format!(
+                "⚕ Update available (behind {compare_ref}).\n  Run 'ulnclaw update' to install.\n"
+            )
         }
     }
 }
@@ -247,7 +273,10 @@ pub fn format_check_report(outcome: &CheckOutcome) -> String {
 /// Stash local changes before mutating the tree (hermes
 /// `_stash_local_changes_if_needed`). Returns the stash name when a stash
 /// entry was actually created.
-fn stash_local_changes_if_needed(root: &Path, log_lines: &mut Vec<String>) -> Result<Option<String>, String> {
+fn stash_local_changes_if_needed(
+    root: &Path,
+    log_lines: &mut Vec<String>,
+) -> Result<Option<String>, String> {
     let status = git(root, &["status", "--porcelain"]);
     if !status.ok {
         return Err(format!("git status failed: {}", status.stderr));
@@ -266,7 +295,10 @@ fn stash_local_changes_if_needed(root: &Path, log_lines: &mut Vec<String>) -> Re
     let stash_name = format!("ulnclaw-update-autostash-{stamp}");
     log_lines.push("→ Local changes detected — stashing before update...".to_string());
     let prev_stash = git(root, &["rev-parse", "--verify", "refs/stash"]).stdout;
-    let push = git(root, &["stash", "push", "--include-untracked", "-m", &stash_name]);
+    let push = git(
+        root,
+        &["stash", "push", "--include-untracked", "-m", &stash_name],
+    );
     if !push.stdout.trim().is_empty() {
         log_lines.push(push.stdout.trim().to_string());
     }
@@ -332,7 +364,9 @@ pub fn apply_update(root: &Path, opts: &UpdateOptions) -> Result<UpdateReport, S
         .unwrap_or(false);
     if is_network_origin && is_fork(origin_url.as_deref()) && !has_upstream_remote(root) {
         if git(root, &["remote", "add", "upstream", OFFICIAL_REPO_URL]).ok {
-            report.log_lines.push(format!("→ Added official repo as 'upstream' remote ({OFFICIAL_REPO_URL})."));
+            report.log_lines.push(format!(
+                "→ Added official repo as 'upstream' remote ({OFFICIAL_REPO_URL})."
+            ));
         }
     }
 
@@ -344,7 +378,9 @@ pub fn apply_update(root: &Path, opts: &UpdateOptions) -> Result<UpdateReport, S
         };
         (preferred, format!("{preferred}/{branch}"))
     };
-    report.log_lines.push(format!("→ Fetching from {remote}..."));
+    report
+        .log_lines
+        .push(format!("→ Fetching from {remote}..."));
     let fetch_result = fetch(root, remote, &branch, shallow);
     if !fetch_result.ok {
         if stash_name.is_some() {
@@ -402,8 +438,16 @@ pub fn apply_update(root: &Path, opts: &UpdateOptions) -> Result<UpdateReport, S
     }
 
     // Rebuild the binary (the Rust equivalent of hermes' dependency refresh).
-    if root.join("Cargo.toml").exists() && Command::new("cargo").arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
-        report.log_lines.push("→ Rebuilding (cargo build --release)...".to_string());
+    if root.join("Cargo.toml").exists()
+        && Command::new("cargo")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    {
+        report
+            .log_lines
+            .push("→ Rebuilding (cargo build --release)...".to_string());
         let build = Command::new("cargo")
             .args(["build", "--release"])
             .current_dir(root)
@@ -415,15 +459,20 @@ pub fn apply_update(root: &Path, opts: &UpdateOptions) -> Result<UpdateReport, S
             }
             Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                report.rebuild_output = Some(stderr.lines().take(10).collect::<Vec<_>>().join("\n"));
-                report.log_lines.push("✗ Build failed — the previous binary is still in place.".to_string());
+                report.rebuild_output =
+                    Some(stderr.lines().take(10).collect::<Vec<_>>().join("\n"));
+                report
+                    .log_lines
+                    .push("✗ Build failed — the previous binary is still in place.".to_string());
             }
             Err(e) => {
                 report.log_lines.push(format!("✗ Could not run cargo: {e}"));
             }
         }
     } else {
-        report.log_lines.push("⚠ No cargo toolchain found — rebuild manually to run the new code.".to_string());
+        report
+            .log_lines
+            .push("⚠ No cargo toolchain found — rebuild manually to run the new code.".to_string());
     }
 
     Ok(report)
@@ -440,7 +489,11 @@ pub fn format_update_report(report: &UpdateReport) -> String {
     if report.new_commits == 0 {
         out.push_str("✓ Already up to date.\n");
     } else {
-        let word = if report.new_commits == 1 { "commit" } else { "commits" };
+        let word = if report.new_commits == 1 {
+            "commit"
+        } else {
+            "commits"
+        };
         out.push_str(&format!("✓ Updated: {} new {word}.\n", report.new_commits));
     }
     if report.rebuilt {
@@ -455,12 +508,24 @@ mod tests {
     use std::process::Command as Cmd;
 
     fn run(dir: &Path, args: &[&str]) {
-        let out = Cmd::new(args[0]).args(&args[1..]).current_dir(dir).output().unwrap();
-        assert!(out.status.success(), "{args:?} failed: {}", String::from_utf8_lossy(&out.stderr));
+        let out = Cmd::new(args[0])
+            .args(&args[1..])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
     }
 
     fn git_out(dir: &Path, args: &[&str]) -> String {
-        let out = Cmd::new("git").args(args).current_dir(dir).output().unwrap();
+        let out = Cmd::new("git")
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap();
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     }
 
@@ -478,7 +543,15 @@ mod tests {
     /// Clone `origin_dir` into `work_dir` and return the working clone path.
     fn clone_work(origin_dir: &Path, work_dir: &Path) -> PathBuf {
         let work = work_dir.join("work");
-        run(work_dir, &["git", "clone", origin_dir.to_str().unwrap(), work.to_str().unwrap()]);
+        run(
+            work_dir,
+            &[
+                "git",
+                "clone",
+                origin_dir.to_str().unwrap(),
+                work.to_str().unwrap(),
+            ],
+        );
         run(&work, &["git", "config", "user.email", "test@example.com"]);
         run(&work, &["git", "config", "user.name", "Test"]);
         work
@@ -508,12 +581,18 @@ mod tests {
         for i in 10..12 {
             std::fs::write(origin_dir.join("file.txt"), format!("content {i}\n")).unwrap();
             run(&origin_dir, &["git", "add", "file.txt"]);
-            run(&origin_dir, &["git", "commit", "-m", &format!("commit {i}")]);
+            run(
+                &origin_dir,
+                &["git", "commit", "-m", &format!("commit {i}")],
+            );
         }
         let (outcome, _) = check_update(&work, &opts).unwrap();
         assert_eq!(
             outcome,
-            CheckOutcome::Behind { count: 2, compare_ref: "origin/master".to_string() }
+            CheckOutcome::Behind {
+                count: 2,
+                compare_ref: "origin/master".to_string()
+            }
         );
         let text = format_check_report(&outcome);
         assert!(text.contains("2 commits behind"));
@@ -536,9 +615,15 @@ mod tests {
         let report = apply_update(&work, &UpdateOptions::default()).unwrap();
         assert_eq!(report.new_commits, 1);
         assert!(work.join("new.txt").exists(), "pulled the new file");
-        assert!(work.join("local.txt").exists(), "stash restored the local file");
+        assert!(
+            work.join("local.txt").exists(),
+            "stash restored the local file"
+        );
         let status = git_out(&work, &["status", "--porcelain"]);
-        assert!(status.contains("local.txt"), "local change back in working tree");
+        assert!(
+            status.contains("local.txt"),
+            "local change back in working tree"
+        );
     }
 
     #[test]
@@ -561,7 +646,10 @@ mod tests {
         std::fs::create_dir_all(&origin_dir).unwrap();
         init_repo_with_commits(&origin_dir, 1);
         let work = clone_work(&origin_dir, tmp.path());
-        let opts = UpdateOptions { branch: Some("does-not-exist".into()), ..Default::default() };
+        let opts = UpdateOptions {
+            branch: Some("does-not-exist".into()),
+            ..Default::default()
+        };
         // Hermes parity: a missing remote ref fails at the fetch stage
         // ("couldn't find remote ref ..."), not at ref verification.
         let err = check_update(&work, &opts).unwrap_err();

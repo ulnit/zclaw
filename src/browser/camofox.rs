@@ -98,7 +98,11 @@ pub fn state_dir() -> std::path::PathBuf {
 /// identity contract.
 pub fn managed_identity(task_id: &str) -> (String, String) {
     let scope_root = state_dir().display().to_string();
-    let logical_scope = if task_id.is_empty() { "default" } else { task_id };
+    let logical_scope = if task_id.is_empty() {
+        "default"
+    } else {
+        task_id
+    };
     let user_digest = uuid::Uuid::new_v5(
         &uuid::Uuid::NAMESPACE_URL,
         format!("camofox-user:{scope_root}").as_bytes(),
@@ -194,7 +198,11 @@ fn url_host(url: &str) -> Option<String> {
     let authority = rest.split('/').next()?;
     let hostport = authority.rsplit('@').next()?;
     let host = if hostport.starts_with('[') {
-        hostport.split(']').next()?.trim_start_matches('[').to_string()
+        hostport
+            .split(']')
+            .next()?
+            .trim_start_matches('[')
+            .to_string()
     } else {
         hostport.split(':').next()?.to_string()
     };
@@ -222,7 +230,10 @@ fn loopback_host_alias() -> String {
 }
 
 fn is_loopback_hostname(host: &str) -> bool {
-    let host = host.trim().trim_matches(|c| c == '[' || c == ']').to_lowercase();
+    let host = host
+        .trim()
+        .trim_matches(|c| c == '[' || c == ']')
+        .to_lowercase();
     if matches!(host.as_str(), "localhost" | "localhost.localdomain") {
         return true;
     }
@@ -254,12 +265,26 @@ pub fn rewrite_loopback_url(url: &str) -> (String, Option<Value>) {
         None => ("", authority),
     };
     let (host, port) = if hostport.starts_with('[') {
-        let host = hostport.split(']').next().unwrap_or("").trim_start_matches('[');
-        let port = hostport.rsplit(':').next().filter(|p| !p.is_empty() && p != &hostport[1..].split(']').nth(1).unwrap_or("")).map(String::from);
-        (host.to_string(), port.filter(|p| p.chars().all(|c| c.is_ascii_digit())))
+        let host = hostport
+            .split(']')
+            .next()
+            .unwrap_or("")
+            .trim_start_matches('[');
+        let port = hostport
+            .rsplit(':')
+            .next()
+            .filter(|p| !p.is_empty() && p != &hostport[1..].split(']').nth(1).unwrap_or(""))
+            .map(String::from);
+        (
+            host.to_string(),
+            port.filter(|p| p.chars().all(|c| c.is_ascii_digit())),
+        )
     } else {
         match hostport.rfind(':') {
-            Some(i) => (hostport[..i].to_string(), Some(hostport[i + 1..].to_string())),
+            Some(i) => (
+                hostport[..i].to_string(),
+                Some(hostport[i + 1..].to_string()),
+            ),
             None => (hostport.to_string(), None),
         }
     };
@@ -325,7 +350,11 @@ fn identity_override(task_id: &str) -> Option<(String, String)> {
 /// `_get_session`). Without `CAMOFOX_USER_ID` each session is ephemeral
 /// (random userId).
 fn get_session(task_id: &str) -> CamofoxSession {
-    let task_id = if task_id.is_empty() { "default" } else { task_id };
+    let task_id = if task_id.is_empty() {
+        "default"
+    } else {
+        task_id
+    };
     let mut map = sessions();
     if let Some(existing) = map.get(task_id) {
         return existing.clone();
@@ -347,7 +376,10 @@ fn get_session(task_id: &str) -> CamofoxSession {
         }
     } else {
         CamofoxSession {
-            user_id: format!("ulnclaw_{}", &uuid::Uuid::new_v4().simple().to_string()[..10]),
+            user_id: format!(
+                "ulnclaw_{}",
+                &uuid::Uuid::new_v4().simple().to_string()[..10]
+            ),
             tab_id: None,
             session_key: format!("task_{}", &task_id[..task_id.len().min(16)]),
             adopt_existing_tab: false,
@@ -358,12 +390,20 @@ fn get_session(task_id: &str) -> CamofoxSession {
 }
 
 fn store_session(task_id: &str, session: &CamofoxSession) {
-    let task_id = if task_id.is_empty() { "default" } else { task_id };
+    let task_id = if task_id.is_empty() {
+        "default"
+    } else {
+        task_id
+    };
     sessions().insert(task_id.to_string(), session.clone());
 }
 
 fn drop_session(task_id: &str) -> Option<CamofoxSession> {
-    let task_id = if task_id.is_empty() { "default" } else { task_id };
+    let task_id = if task_id.is_empty() {
+        "default"
+    } else {
+        task_id
+    };
     sessions().remove(task_id)
 }
 
@@ -416,16 +456,25 @@ async fn post(path: &str, body: Value, timeout: Option<Duration>) -> Result<Valu
     if let Some(auth) = auth_header() {
         req = req.header("Authorization", auth);
     }
-    let resp = req.send().await.map_err(|e| CamofoxError::Connection(e.to_string()))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| CamofoxError::Connection(e.to_string()))?;
     let status = resp.status().as_u16();
     if !resp.status().is_success() {
         let text = resp.text().await.unwrap_or_default();
         return Err(CamofoxError::Http(status, text));
     }
-    resp.json::<Value>().await.map_err(|e| CamofoxError::Parse(e.to_string()))
+    resp.json::<Value>()
+        .await
+        .map_err(|e| CamofoxError::Parse(e.to_string()))
 }
 
-async fn get(path: &str, query: &[(&str, String)], timeout: Option<Duration>) -> Result<Value, CamofoxError> {
+async fn get(
+    path: &str,
+    query: &[(&str, String)],
+    timeout: Option<Duration>,
+) -> Result<Value, CamofoxError> {
     let Some(url) = camofox_url() else {
         return Err(CamofoxError::Connection("CAMOFOX_URL not set".into()));
     };
@@ -436,13 +485,18 @@ async fn get(path: &str, query: &[(&str, String)], timeout: Option<Duration>) ->
     if let Some(auth) = auth_header() {
         req = req.header("Authorization", auth);
     }
-    let resp = req.send().await.map_err(|e| CamofoxError::Connection(e.to_string()))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| CamofoxError::Connection(e.to_string()))?;
     let status = resp.status().as_u16();
     if !resp.status().is_success() {
         let text = resp.text().await.unwrap_or_default();
         return Err(CamofoxError::Http(status, text));
     }
-    resp.json::<Value>().await.map_err(|e| CamofoxError::Parse(e.to_string()))
+    resp.json::<Value>()
+        .await
+        .map_err(|e| CamofoxError::Parse(e.to_string()))
 }
 
 async fn get_bytes(path: &str, query: &[(&str, String)]) -> Result<bytes::Bytes, CamofoxError> {
@@ -456,13 +510,18 @@ async fn get_bytes(path: &str, query: &[(&str, String)]) -> Result<bytes::Bytes,
     if let Some(auth) = auth_header() {
         req = req.header("Authorization", auth);
     }
-    let resp = req.send().await.map_err(|e| CamofoxError::Connection(e.to_string()))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| CamofoxError::Connection(e.to_string()))?;
     let status = resp.status().as_u16();
     if !resp.status().is_success() {
         let text = resp.text().await.unwrap_or_default();
         return Err(CamofoxError::Http(status, text));
     }
-    resp.bytes().await.map_err(|e| CamofoxError::Parse(e.to_string()))
+    resp.bytes()
+        .await
+        .map_err(|e| CamofoxError::Parse(e.to_string()))
 }
 
 async fn delete(path: &str) -> Result<Value, CamofoxError> {
@@ -475,13 +534,18 @@ async fn delete(path: &str) -> Result<Value, CamofoxError> {
     if let Some(auth) = auth_header() {
         req = req.header("Authorization", auth);
     }
-    let resp = req.send().await.map_err(|e| CamofoxError::Connection(e.to_string()))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| CamofoxError::Connection(e.to_string()))?;
     let status = resp.status().as_u16();
     if !resp.status().is_success() {
         let text = resp.text().await.unwrap_or_default();
         return Err(CamofoxError::Http(status, text));
     }
-    resp.json::<Value>().await.map_err(|e| CamofoxError::Parse(e.to_string()))
+    resp.json::<Value>()
+        .await
+        .map_err(|e| CamofoxError::Parse(e.to_string()))
 }
 
 fn error_value(message: String) -> Value {
@@ -515,7 +579,13 @@ async fn adopt_existing_tab(mut session: CamofoxSession) -> CamofoxSession {
         return session;
     }
     let query = vec![("userId", session.user_id.clone())];
-    let Ok(data) = get("/tabs", &query, Some(Duration::from_secs(HEALTH_TIMEOUT_SECS))).await else {
+    let Ok(data) = get(
+        "/tabs",
+        &query,
+        Some(Duration::from_secs(HEALTH_TIMEOUT_SECS)),
+    )
+    .await
+    else {
         return session;
     };
     let Some(tabs) = data.get("tabs").and_then(|v| v.as_array()) else {
@@ -526,7 +596,9 @@ async fn adopt_existing_tab(mut session: CamofoxSession) -> CamofoxSession {
     }
     let matching: Vec<&Value> = tabs
         .iter()
-        .filter(|tab| tab.get("listItemId").and_then(|v| v.as_str()) == Some(session.session_key.as_str()))
+        .filter(|tab| {
+            tab.get("listItemId").and_then(|v| v.as_str()) == Some(session.session_key.as_str())
+        })
         .collect();
     let candidates: Vec<&Value> = if !matching.is_empty() {
         matching
@@ -534,7 +606,11 @@ async fn adopt_existing_tab(mut session: CamofoxSession) -> CamofoxSession {
         tabs.iter().filter(|tab| tab.is_object()).collect()
     };
     if let Some(latest) = candidates.last() {
-        if let Some(tab_id) = latest.get("tabId").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        if let Some(tab_id) = latest
+            .get("tabId")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
             session.tab_id = Some(tab_id.to_string());
         }
     }
@@ -597,11 +673,18 @@ async fn private_page_block(session: &CamofoxSession, guard: bool, action: &str)
             other => other.to_string(),
         })
         .unwrap_or_default();
-    let current = current.trim().trim_matches('"').trim_matches('\'').trim().to_string();
+    let current = current
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .trim()
+        .to_string();
     if current.is_empty() {
         return None;
     }
-    if crate::url_safety::is_always_blocked_url_sync(&current) || !crate::url_safety::is_safe_url_sync(&current) {
+    if crate::url_safety::is_always_blocked_url_sync(&current)
+        || !crate::url_safety::is_safe_url_sync(&current)
+    {
         return Some(json!({
             "success": false,
             "error": format!(
@@ -676,7 +759,11 @@ pub async fn navigate(task_id: &str, url: &str, guard: bool) -> Value {
     if let Some(tab_id) = session.tab_id.as_deref() {
         let query = vec![("userId", session.user_id.clone())];
         if let Ok(snap) = get(&format!("/tabs/{tab_id}/snapshot"), &query, None).await {
-            let mut text = snap.get("snapshot").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let mut text = snap
+                .get("snapshot")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             if text.len() > SNAPSHOT_MAX_CHARS {
                 text.truncate(SNAPSHOT_MAX_CHARS);
                 text.push_str("\n[snapshot truncated]");
@@ -701,7 +788,11 @@ pub async fn snapshot(task_id: &str, guard: bool) -> Value {
     let query = vec![("userId", session.user_id.clone())];
     match get(&format!("/tabs/{tab_id}/snapshot"), &query, None).await {
         Ok(data) => {
-            let mut text = data.get("snapshot").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let mut text = data
+                .get("snapshot")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             if text.len() > SNAPSHOT_MAX_CHARS {
                 text.truncate(SNAPSHOT_MAX_CHARS);
                 text.push_str("\n[snapshot truncated]");
@@ -1212,7 +1303,7 @@ mod tests {
         tokio::spawn(async move {
             axum::serve(listener, app).await.ok();
         });
-                format!("http://{addr}")
+        format!("http://{addr}")
     }
 
     #[tokio::test]
@@ -1293,7 +1384,10 @@ mod tests {
 
         let snap = snapshot("guard-task", true).await;
         assert_eq!(snap["success"], false, "snapshot must be blocked: {snap}");
-        assert!(snap["error"].as_str().unwrap().contains("private or internal"));
+        assert!(snap["error"]
+            .as_str()
+            .unwrap()
+            .contains("private or internal"));
 
         // Guard off → reads pass through.
         let snap = snapshot("guard-task", false).await;
@@ -1306,8 +1400,14 @@ mod tests {
 
     #[test]
     fn url_host_parsing() {
-        assert_eq!(url_host("http://127.0.0.1:9377/x").as_deref(), Some("127.0.0.1"));
-        assert_eq!(url_host("https://camofox.example").as_deref(), Some("camofox.example"));
+        assert_eq!(
+            url_host("http://127.0.0.1:9377/x").as_deref(),
+            Some("127.0.0.1")
+        );
+        assert_eq!(
+            url_host("https://camofox.example").as_deref(),
+            Some("camofox.example")
+        );
         assert_eq!(url_host("http://[::1]:9377").as_deref(), Some("::1"));
     }
 }

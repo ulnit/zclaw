@@ -58,7 +58,11 @@ fn web_search_tool() -> crate::tools::Tool {
         .expect("web_search builds")
 }
 
-async fn web_search_impl(ctx: &Arc<ToolContext>, query: &str, max_results: usize) -> Result<serde_json::Value> {
+async fn web_search_impl(
+    ctx: &Arc<ToolContext>,
+    query: &str,
+    max_results: usize,
+) -> Result<serde_json::Value> {
     // Backend selection — hermes precedence: config > env availability.
     let configured = ctx
         .config
@@ -122,7 +126,11 @@ async fn web_search_impl(ctx: &Arc<ToolContext>, query: &str, max_results: usize
 
 type SearchResults = Vec<serde_json::Value>;
 
-async fn search_tavily(query: &str, max_results: usize, api_key: String) -> std::result::Result<SearchResults, String> {
+async fn search_tavily(
+    query: &str,
+    max_results: usize,
+    api_key: String,
+) -> std::result::Result<SearchResults, String> {
     let client = http_client();
     let response: serde_json::Value = client
         .post("https://api.tavily.com/search")
@@ -155,7 +163,11 @@ async fn search_tavily(query: &str, max_results: usize, api_key: String) -> std:
         .collect())
 }
 
-async fn search_brave(query: &str, max_results: usize, api_key: String) -> std::result::Result<SearchResults, String> {
+async fn search_brave(
+    query: &str,
+    max_results: usize,
+    api_key: String,
+) -> std::result::Result<SearchResults, String> {
     let client = http_client();
     let response: serde_json::Value = client
         .get("https://api.search.brave.com/res/v1/web/search")
@@ -190,7 +202,11 @@ async fn search_brave(query: &str, max_results: usize, api_key: String) -> std::
         .collect())
 }
 
-async fn search_searxng(query: &str, max_results: usize, base_url: String) -> std::result::Result<SearchResults, String> {
+async fn search_searxng(
+    query: &str,
+    max_results: usize,
+    base_url: String,
+) -> std::result::Result<SearchResults, String> {
     let client = http_client();
     let url = format!("{}/search", base_url.trim_end_matches('/'));
     let response: serde_json::Value = client
@@ -226,7 +242,10 @@ async fn search_searxng(query: &str, max_results: usize, base_url: String) -> st
 }
 
 /// Built-in DuckDuckGo HTML backend (no API key).
-async fn search_duckduckgo(query: &str, max_results: usize) -> std::result::Result<SearchResults, String> {
+async fn search_duckduckgo(
+    query: &str,
+    max_results: usize,
+) -> std::result::Result<SearchResults, String> {
     let client = http_client();
     let html = client
         .get("https://html.duckduckgo.com/html/")
@@ -258,7 +277,8 @@ async fn search_duckduckgo(query: &str, max_results: usize) -> std::result::Resu
                 url = urlencoding_decode(encoded);
             }
         }
-        let title = extract_between(&html[block_offset(&html, block)..], ">", "</a>").unwrap_or_default();
+        let title =
+            extract_between(&html[block_offset(&html, block)..], ">", "</a>").unwrap_or_default();
         let snippet = extract_between(block, "result__snippet", "</a>")
             .map(|s| strip_tags(&s))
             .unwrap_or_default();
@@ -500,7 +520,10 @@ mod tests {
 
     #[test]
     fn test_url_decode() {
-        assert_eq!(urlencoding_decode("https%3A%2F%2Fexample.com%2Fx"), "https://example.com/x");
+        assert_eq!(
+            urlencoding_decode("https%3A%2F%2Fexample.com%2Fx"),
+            "https://example.com/x"
+        );
     }
 
     #[test]

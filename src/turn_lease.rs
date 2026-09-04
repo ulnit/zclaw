@@ -60,7 +60,10 @@ pub struct TurnLeaseToken {
 
 impl TurnLeaseToken {
     pub fn session_id(&self) -> String {
-        self.session_id.lock().map(|s| s.clone()).unwrap_or_default()
+        self.session_id
+            .lock()
+            .map(|s| s.clone())
+            .unwrap_or_default()
     }
 
     pub fn owner_key(&self) -> &str {
@@ -197,7 +200,9 @@ impl SessionTurnLeaseRegistry {
         if session_id.trim().is_empty() {
             return None;
         }
-        let wait = timeout.filter(|t| *t > Duration::ZERO).unwrap_or(DEFAULT_LEASE_WAIT);
+        let wait = timeout
+            .filter(|t| *t > Duration::ZERO)
+            .unwrap_or(DEFAULT_LEASE_WAIT);
         let lease = self.get_or_create(session_id);
 
         if lease.lock.clone().try_lock_owned().is_err() {
@@ -269,7 +274,11 @@ impl SessionTurnLeaseRegistry {
     /// (fail-open, never deadlock).
     pub fn rebind(&self, token: &Arc<TurnLeaseToken>, new_session_id: &str) -> bool {
         let old_id = token.session_id();
-        if token.degraded || token.is_released() || new_session_id.trim().is_empty() || new_session_id == old_id {
+        if token.degraded
+            || token.is_released()
+            || new_session_id.trim().is_empty()
+            || new_session_id == old_id
+        {
             return false;
         }
         let Ok(mut leases) = self.leases.lock() else {

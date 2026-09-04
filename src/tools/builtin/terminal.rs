@@ -90,15 +90,30 @@ pub fn list_background_processes() -> Vec<crate::goals::BackgroundProcessInfo> {
             let exited = proc.exit_code.lock().ok().and_then(|g| *g).is_some();
             let output = proc.output.lock().map(|g| g.clone()).unwrap_or_default();
             // Tail of the output as a one-line preview.
-            let tail: String = output.chars().rev().take(200).collect::<String>().chars().rev().collect();
+            let tail: String = output
+                .chars()
+                .rev()
+                .take(200)
+                .collect::<String>()
+                .chars()
+                .rev()
+                .collect();
             let preview = tail.replace('\n', " ");
             crate::goals::BackgroundProcessInfo {
                 pid: proc.pid,
                 session_id: Some(id.clone()),
                 command: proc.command.clone(),
-                status: if exited { "exited".to_string() } else { "running".to_string() },
+                status: if exited {
+                    "exited".to_string()
+                } else {
+                    "running".to_string()
+                },
                 uptime_seconds: Some((now - proc.started_at).max(0.0) as u64),
-                output_preview: if preview.trim().is_empty() { None } else { Some(preview) },
+                output_preview: if preview.trim().is_empty() {
+                    None
+                } else {
+                    Some(preview)
+                },
             }
         })
         .collect()
@@ -176,7 +191,11 @@ fn shell_command(command: &str) -> Command {
 }
 
 fn truncate_output_with(output: &str, max_chars: usize) -> String {
-    let max_chars = if max_chars == 0 { MAX_OUTPUT_CHARS } else { max_chars };
+    let max_chars = if max_chars == 0 {
+        MAX_OUTPUT_CHARS
+    } else {
+        max_chars
+    };
     let count = output.chars().count();
     if count <= max_chars {
         return output.to_string();
@@ -190,7 +209,6 @@ fn truncate_output_with(output: &str, max_chars: usize) -> String {
         tail
     )
 }
-
 
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(terminal_tool());
@@ -279,14 +297,18 @@ async fn terminal_exec(
                 "note": "Session working directory updated."
             }));
         }
-        return Ok(json!({"success": false, "error": format!("cd: no such directory: {}", target)}));
+        return Ok(
+            json!({"success": false, "error": format!("cd: no such directory: {}", target)}),
+        );
     }
 
     let cwd = match workdir {
         Some(ref dir) => {
             let path = ctx.resolve_path(dir);
             if !path.is_dir() {
-                return Ok(json!({"success": false, "error": format!("workdir not found: {}", path.display())}));
+                return Ok(
+                    json!({"success": false, "error": format!("workdir not found: {}", path.display())}),
+                );
             }
             path
         }
@@ -308,11 +330,7 @@ async fn terminal_exec(
     }
 
     let started = std::time::Instant::now();
-    let effective = crate::environments::wrap_command(
-        &backend,
-        &command,
-        cwd.to_str(),
-    );
+    let effective = crate::environments::wrap_command(&backend, &command, cwd.to_str());
     let mut cmd = shell_command(&effective);
     if backend == crate::environments::TerminalBackend::Local {
         cmd.current_dir(&cwd);
@@ -348,11 +366,15 @@ async fn terminal_exec(
     match result {
         Ok(Ok(status)) => {
             let stdout = match stdout_task {
-                Some(handle) => String::from_utf8_lossy(&handle.await.unwrap_or_default()).into_owned(),
+                Some(handle) => {
+                    String::from_utf8_lossy(&handle.await.unwrap_or_default()).into_owned()
+                }
                 None => String::new(),
             };
             let stderr = match stderr_task {
-                Some(handle) => String::from_utf8_lossy(&handle.await.unwrap_or_default()).into_owned(),
+                Some(handle) => {
+                    String::from_utf8_lossy(&handle.await.unwrap_or_default()).into_owned()
+                }
                 None => String::new(),
             };
             let combined = if stderr.trim().is_empty() {
@@ -382,7 +404,9 @@ async fn terminal_exec(
                 // attach one actionable failure hint (tools/hints.rs).
                 if let Some(note) = crate::tools::hints::interpret_exit_code(&command, exit_code) {
                     result["exit_code_meaning"] = json!(note);
-                } else if let Some(hint) = crate::tools::hints::annotate_failure(&command, exit_code, &output) {
+                } else if let Some(hint) =
+                    crate::tools::hints::annotate_failure(&command, exit_code, &output)
+                {
                     result["hint"] = json!(hint);
                 }
             }
@@ -678,7 +702,12 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(result["success"], json!(true));
-        assert_eq!(ctx.cwd(), dir.path().canonicalize().unwrap_or(dir.path().to_path_buf()));
+        assert_eq!(
+            ctx.cwd(),
+            dir.path()
+                .canonicalize()
+                .unwrap_or(dir.path().to_path_buf())
+        );
     }
 
     #[tokio::test]
@@ -695,7 +724,10 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(result["exit_code"], json!(1));
-        assert_eq!(result["exit_code_meaning"], json!("No matches found (not an error)"));
+        assert_eq!(
+            result["exit_code_meaning"],
+            json!("No matches found (not an error)")
+        );
         assert!(result.get("hint").is_none());
     }
 
@@ -724,7 +756,10 @@ mod tests {
         assert_eq!(truncate_output_with(&output, 2000), output);
         // Smaller cap: head + tail + marker.
         let truncated = truncate_output_with(&output, 100);
-        assert!(truncated.contains("[... 900 chars truncated ...]"), "got: {truncated}");
+        assert!(
+            truncated.contains("[... 900 chars truncated ...]"),
+            "got: {truncated}"
+        );
         assert!(truncated.len() < 300);
     }
 
@@ -770,8 +805,14 @@ mod tests {
             None => std::env::remove_var("ULNCLAW_TEST_PT_VAR"),
         }
 
-        assert!(!output.contains("scrub-secret-xyz"), "credential leaked into child env");
-        assert!(output.contains("ULNCLAW_TEST_PT_VAR=passme-123"), "passthrough var missing");
+        assert!(
+            !output.contains("scrub-secret-xyz"),
+            "credential leaked into child env"
+        );
+        assert!(
+            output.contains("ULNCLAW_TEST_PT_VAR=passme-123"),
+            "passthrough var missing"
+        );
         assert!(output.contains("PATH="), "PATH must survive the scrub");
     }
 }

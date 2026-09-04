@@ -546,23 +546,17 @@ async fn run_once(
     pairing: &Option<std::sync::Arc<crate::pairing::PairingStore>>,
     conf: &mut WsClientConfig,
 ) -> RunOutcome {
-    let (conn_url, new_conf) = match fetch_ws_endpoint(
-        client,
-        domain_url,
-        &resolved.app_id,
-        &resolved.app_secret,
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            return if e.fatal {
-                RunOutcome::Fatal(e.msg)
-            } else {
-                RunOutcome::Disconnected(e.msg)
+    let (conn_url, new_conf) =
+        match fetch_ws_endpoint(client, domain_url, &resolved.app_id, &resolved.app_secret).await {
+            Ok(v) => v,
+            Err(e) => {
+                return if e.fatal {
+                    RunOutcome::Fatal(e.msg)
+                } else {
+                    RunOutcome::Disconnected(e.msg)
+                }
             }
-        }
-    };
+        };
     *conf = new_conf;
     let (conn_id, service_id) = match parse_conn_url(&conn_url) {
         Ok(v) => v,
@@ -706,13 +700,8 @@ fn dispatch_event_envelope(
         let envelope = envelope.clone();
         let event_type = event_type.to_string();
         tokio::spawn(async move {
-            crate::feishu_comment::dispatch_aux_event(
-                &cfg,
-                &dispatcher,
-                &event_type,
-                &envelope,
-            )
-            .await;
+            crate::feishu_comment::dispatch_aux_event(&cfg, &dispatcher, &event_type, &envelope)
+                .await;
         });
         return;
     }
@@ -756,8 +745,7 @@ fn dispatch_event_envelope(
     let pairing = pairing.clone();
     let envelope = envelope.clone();
     tokio::spawn(async move {
-        crate::feishu::handle_message_event(&cfg, &dispatcher, pairing.as_deref(), &envelope)
-            .await;
+        crate::feishu::handle_message_event(&cfg, &dispatcher, pairing.as_deref(), &envelope).await;
     });
 }
 
@@ -926,9 +914,8 @@ mod tests {
 
     #[test]
     fn endpoint_response_fatal_error() {
-        let err =
-            parse_endpoint_response(r#"{"code":1000040350,"msg":"exceed conn limit"}"#)
-                .unwrap_err();
+        let err = parse_endpoint_response(r#"{"code":1000040350,"msg":"exceed conn limit"}"#)
+            .unwrap_err();
         assert!(err.fatal);
         // Internal error is retryable (lark_oapi ServerException).
         let err = parse_endpoint_response(r#"{"code":1000040343,"msg":"internal"}"#).unwrap_err();
@@ -937,7 +924,8 @@ mod tests {
 
     #[test]
     fn pong_payload_reconfigures() {
-        let payload = r#"{"ReconnectCount":5,"ReconnectInterval":30,"ReconnectNonce":10,"PingInterval":45}"#;
+        let payload =
+            r#"{"ReconnectCount":5,"ReconnectInterval":30,"ReconnectNonce":10,"PingInterval":45}"#;
         let value: Value = serde_json::from_str(payload).unwrap();
         let conf = parse_client_config(&value);
         assert_eq!(conf.reconnect_count, 5);

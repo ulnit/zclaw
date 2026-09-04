@@ -56,7 +56,9 @@ struct FileShape {
 }
 
 fn now_iso() -> String {
-    chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%:z").to_string()
+    chrono::Local::now()
+        .format("%Y-%m-%dT%H:%M:%S%:z")
+        .to_string()
 }
 
 /// JSON-backed suggestion store (hermes `cron/suggestions.py`).
@@ -71,7 +73,11 @@ impl SuggestionStore {
 
     /// Default location: `<home>/cron/suggestions.json`.
     pub fn open_default() -> Self {
-        Self::open(crate::config::ulnclaw_home().join("cron").join("suggestions.json"))
+        Self::open(
+            crate::config::ulnclaw_home()
+                .join("cron")
+                .join("suggestions.json"),
+        )
     }
 
     fn load_raw(&self) -> Vec<Suggestion> {
@@ -401,7 +407,8 @@ fn fmt_pending(pending: &[Suggestion]) -> String {
                 curated starter set, or install a blueprint skill to get one."
             .to_string();
     }
-    let mut lines = vec!["Suggested automations — `/suggestions accept N` or `dismiss N`:\n".to_string()];
+    let mut lines =
+        vec!["Suggested automations — `/suggestions accept N` or `dismiss N`:\n".to_string()];
     for (i, suggestion) in pending.iter().enumerate() {
         lines.push(format!(
             "  {}. {}  [{}]  ({})",
@@ -515,11 +522,20 @@ mod tests {
             .unwrap();
         assert!(first.is_some());
         // Identical dedup key → skipped.
-        assert!(store.add("T1 dup", "d", "catalog", spec("every 1h"), "k1").unwrap().is_none());
+        assert!(store
+            .add("T1 dup", "d", "catalog", spec("every 1h"), "k1")
+            .unwrap()
+            .is_none());
         // Fill to MAX_PENDING.
         for i in 2..=MAX_PENDING {
             assert!(store
-                .add(&format!("T{i}"), "d", "usage", spec("every 1h"), &format!("k{i}"))
+                .add(
+                    &format!("T{i}"),
+                    "d",
+                    "usage",
+                    spec("every 1h"),
+                    &format!("k{i}")
+                )
                 .unwrap()
                 .is_some());
         }
@@ -532,15 +548,21 @@ mod tests {
         // Unknown source → error.
         assert!(store.add("X", "d", "nope", spec("every 1h"), "kx").is_err());
         // Empty title → error.
-        assert!(store.add(" ", "d", "catalog", spec("every 1h"), "ky").is_err());
+        assert!(store
+            .add(" ", "d", "catalog", spec("every 1h"), "ky")
+            .is_err());
     }
 
     #[test]
     fn resolve_by_index_id_and_title() {
         let dir = tempfile::tempdir().unwrap();
         let store = temp_store(dir.path());
-        store.add("Alpha", "", "catalog", spec("every 1h"), "a").unwrap();
-        store.add("Beta Job", "", "blueprint", spec("every 2h"), "b").unwrap();
+        store
+            .add("Alpha", "", "catalog", spec("every 1h"), "a")
+            .unwrap();
+        store
+            .add("Beta Job", "", "blueprint", spec("every 2h"), "b")
+            .unwrap();
         assert_eq!(store.get("1").unwrap().title, "Alpha");
         assert_eq!(store.get("2").unwrap().title, "Beta Job");
         let id = store.get("1").unwrap().id;
@@ -554,11 +576,16 @@ mod tests {
     fn dismiss_latches_dedup_key() {
         let dir = tempfile::tempdir().unwrap();
         let store = temp_store(dir.path());
-        store.add("Alpha", "", "catalog", spec("every 1h"), "a").unwrap();
+        store
+            .add("Alpha", "", "catalog", spec("every 1h"), "a")
+            .unwrap();
         assert!(store.dismiss("1"));
         assert!(store.list_pending().is_empty());
         // Same dedup key never re-offered.
-        assert!(store.add("Alpha again", "", "catalog", spec("every 1h"), "a").unwrap().is_none());
+        assert!(store
+            .add("Alpha again", "", "catalog", spec("every 1h"), "a")
+            .unwrap()
+            .is_none());
         // Dismissed records survive clear_resolved (dedup memory).
         assert_eq!(store.clear_resolved(), 0);
         assert_eq!(store.load().len(), 1);
@@ -571,7 +598,9 @@ mod tests {
         let prev = std::env::var("ULNCLAW_HOME").ok();
         std::env::set_var("ULNCLAW_HOME", dir.path());
         let store = SuggestionStore::open_default();
-        store.add("Alpha", "", "catalog", spec("every 1h"), "a").unwrap();
+        store
+            .add("Alpha", "", "catalog", spec("every 1h"), "a")
+            .unwrap();
         let job = store.accept("1").unwrap().expect("job created");
         assert_eq!(job.name, "Test job");
         assert!(job.enabled);

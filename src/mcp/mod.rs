@@ -86,12 +86,33 @@ const SAFE_ENV_KEYS: &[&str] = &[
 /// Windows process/location vars needed by launcher-style tools; no secrets
 /// (hermes `_SAFE_ENV_KEYS_CASE_INSENSITIVE`).
 const SAFE_ENV_KEYS_CASE_INSENSITIVE: &[&str] = &[
-    "ALLUSERSPROFILE", "APPDATA", "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)",
-    "COMMONPROGRAMW6432", "COMPUTERNAME", "COMSPEC", "HOMEDRIVE", "HOMEPATH",
-    "LOCALAPPDATA", "NUMBER_OF_PROCESSORS", "OS", "PATHEXT", "PROCESSOR_ARCHITECTURE",
-    "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMW6432", "PUBLIC",
-    "SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "TMP", "USERDOMAIN", "USERNAME",
-    "USERPROFILE", "WINDIR",
+    "ALLUSERSPROFILE",
+    "APPDATA",
+    "COMMONPROGRAMFILES",
+    "COMMONPROGRAMFILES(X86)",
+    "COMMONPROGRAMW6432",
+    "COMPUTERNAME",
+    "COMSPEC",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "LOCALAPPDATA",
+    "NUMBER_OF_PROCESSORS",
+    "OS",
+    "PATHEXT",
+    "PROCESSOR_ARCHITECTURE",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "PROGRAMFILES(X86)",
+    "PROGRAMW6432",
+    "PUBLIC",
+    "SYSTEMDRIVE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "USERDOMAIN",
+    "USERNAME",
+    "USERPROFILE",
+    "WINDIR",
 ];
 
 /// A variable is "secret-source tagged" when ulnclaw explicitly injected it
@@ -201,8 +222,14 @@ impl McpClient {
         let mut child = cmd
             .spawn()
             .map_err(|e| AgentError::Tool(format!("spawn MCP server '{}': {}", config.name, e)))?;
-        let stdin = child.stdin.take().ok_or_else(|| AgentError::Tool("MCP stdin missing".into()))?;
-        let stdout = child.stdout.take().ok_or_else(|| AgentError::Tool("MCP stdout missing".into()))?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| AgentError::Tool("MCP stdin missing".into()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| AgentError::Tool("MCP stdout missing".into()))?;
 
         let pending: Arc<Mutex<HashMap<u64, tokio::sync::oneshot::Sender<Result<Value>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
@@ -252,7 +279,9 @@ impl McpClient {
         });
         let result = client.request("initialize", init).await?;
         let _server_info = result.get("serverInfo").cloned();
-        client.notify("notifications/initialized", json!({})).await?;
+        client
+            .notify("notifications/initialized", json!({}))
+            .await?;
         Ok(client)
     }
 
@@ -365,7 +394,11 @@ pub async fn test_server(config: &McpServerConfig) -> Result<Vec<String>> {
     let tools = client.list_tools().await?;
     let names = tools
         .iter()
-        .filter_map(|tool| tool.get("name").and_then(|value| value.as_str()).map(str::to_string))
+        .filter_map(|tool| {
+            tool.get("name")
+                .and_then(|value| value.as_str())
+                .map(str::to_string)
+        })
         .collect();
     client.close().await;
     Ok(names)
@@ -411,11 +444,15 @@ async fn connect_any(config: &McpServerConfig) -> Result<AnyMcpClient> {
                     let rec_url = url.clone();
                     let rec_cfg = cfg.clone();
                     oauth_manager::manager()
-                        .handle_401(&home, &name, failed_token.as_deref(), move || {
-                            async move {
-                                oauth::recover_token(&rec_home, &rec_name, &rec_url, &rec_cfg, interactive)
-                                    .await
-                            }
+                        .handle_401(&home, &name, failed_token.as_deref(), move || async move {
+                            oauth::recover_token(
+                                &rec_home,
+                                &rec_name,
+                                &rec_url,
+                                &rec_cfg,
+                                interactive,
+                            )
+                            .await
                         })
                         .await
                 })
@@ -454,9 +491,7 @@ async fn connect_any(config: &McpServerConfig) -> Result<AnyMcpClient> {
     }
     // OSV malware preflight for npx/uvx-launched servers (hermes
     // `tools/osv_check.py`): only confirmed MAL-* advisories block.
-    if let Some(reason) =
-        osv::check_package_for_malware(&config.command, &config.args).await
-    {
+    if let Some(reason) = osv::check_package_for_malware(&config.command, &config.args).await {
         return Err(AgentError::config(format!(
             "MCP server '{}' refused: {}",
             config.name, reason
@@ -509,7 +544,11 @@ pub async fn register_mcp_server(
                         let mut client = client.lock().await;
                         let result = client.call_tool(&remote_name, args).await?;
                         // MCP results: {content: [{type: text, text}], isError}
-                        if result.get("isError").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        if result
+                            .get("isError")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false)
+                        {
                             let text = result
                                 .pointer("/content/0/text")
                                 .and_then(|v| v.as_str())
@@ -694,7 +733,11 @@ async fn lazy_call(state: Arc<LazyServer>, remote_name: &str, args: Value) -> Re
     let client = guard.as_mut().expect("connected above");
     let result = client.call_tool(remote_name, args).await?;
     // MCP results: {content: [{type: text, text}], isError}
-    if result.get("isError").and_then(|v| v.as_bool()).unwrap_or(false) {
+    if result
+        .get("isError")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
         let text = result
             .pointer("/content/0/text")
             .and_then(|v| v.as_str())
@@ -703,7 +746,6 @@ async fn lazy_call(state: Arc<LazyServer>, remote_name: &str, args: Value) -> Re
     }
     Ok(result)
 }
-
 
 /// Outcome of an MCP reload (hermes `_reload_mcp` change report).
 #[derive(Debug, Default)]
@@ -780,7 +822,10 @@ pub async fn reload_mcp_servers(
 pub fn format_reload_report(report: &ReloadReport) -> String {
     let mut lines: Vec<String> = Vec::new();
     if !report.reconnected.is_empty() {
-        lines.push(format!("  ♻️  Reconnected: {}", report.reconnected.join(", ")));
+        lines.push(format!(
+            "  ♻️  Reconnected: {}",
+            report.reconnected.join(", ")
+        ));
     }
     if !report.added.is_empty() {
         lines.push(format!("  ➕ Added: {}", report.added.join(", ")));
@@ -921,7 +966,10 @@ while True:
             .dispatch("mcp__live-srv__echo", json!({"text": "hi"}), ctx)
             .await
             .unwrap();
-        assert_eq!(result.pointer("/content/0/text").and_then(|v| v.as_str()), Some("echo:hi"));
+        assert_eq!(
+            result.pointer("/content/0/text").and_then(|v| v.as_str()),
+            Some("echo:hi")
+        );
 
         match prev {
             Some(v) => std::env::set_var("ULNCLAW_HOME", v),
@@ -952,7 +1000,9 @@ while True:
 
         // No cache yet: falls back to the live path, which fails.
         let mut registry = ToolRegistry::new();
-        assert!(register_mcp_server_lazy(&mut registry, &config).await.is_err());
+        assert!(register_mcp_server_lazy(&mut registry, &config)
+            .await
+            .is_err());
 
         // Seed a matching cache entry: registration succeeds without spawn.
         let fp = schema_cache::config_fingerprint(&config);
@@ -967,7 +1017,9 @@ while True:
             &[],
         )
         .unwrap();
-        let count = register_mcp_server_lazy(&mut registry, &config).await.unwrap();
+        let count = register_mcp_server_lazy(&mut registry, &config)
+            .await
+            .unwrap();
         assert_eq!(count, 1);
         assert!(registry.has("mcp__lazy-srv__cached_tool"));
 
@@ -994,10 +1046,22 @@ while True:
         let env = build_safe_env(&declared);
 
         assert!(env.contains_key("PATH"), "PATH must pass");
-        assert_eq!(env.get("XDG_TEST_VAR").map(String::as_str), Some("xdg-value"));
-        assert_eq!(env.get("DOTENV_SECRET").map(String::as_str), Some("from-dotenv"));
-        assert_eq!(env.get("DECLARED_KEY").map(String::as_str), Some("declared-value"));
-        assert!(!env.contains_key("ULNCLAW_MCP_LEAK_TEST"), "undeclared secret leaked");
+        assert_eq!(
+            env.get("XDG_TEST_VAR").map(String::as_str),
+            Some("xdg-value")
+        );
+        assert_eq!(
+            env.get("DOTENV_SECRET").map(String::as_str),
+            Some("from-dotenv")
+        );
+        assert_eq!(
+            env.get("DECLARED_KEY").map(String::as_str),
+            Some("declared-value")
+        );
+        assert!(
+            !env.contains_key("ULNCLAW_MCP_LEAK_TEST"),
+            "undeclared secret leaked"
+        );
 
         std::env::remove_var("DOTENV_SECRET");
         std::env::remove_var("ULNCLAW_MCP_LEAK_TEST");
@@ -1112,7 +1176,10 @@ while True:
         config.mcp.servers.push(server_a.clone());
 
         let mut registry = ToolRegistry::new();
-        assert_eq!(register_mcp_server(&mut registry, &server_a).await.unwrap(), 2);
+        assert_eq!(
+            register_mcp_server(&mut registry, &server_a).await.unwrap(),
+            2
+        );
 
         // Reload with the same server list: reconnect, no adds/removes.
         let report = reload_mcp_servers(&mut registry, &config).await;
@@ -1168,7 +1235,9 @@ while True:
         .unwrap();
 
         let mut registry = ToolRegistry::new();
-        let count = register_mcp_server_lazy(&mut registry, &config).await.unwrap();
+        let count = register_mcp_server_lazy(&mut registry, &config)
+            .await
+            .unwrap();
         assert_eq!(count, 2, "both cached tools register without spawning");
 
         let ctx = Arc::new(ToolContext::default());

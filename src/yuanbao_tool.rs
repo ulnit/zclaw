@@ -41,7 +41,12 @@ fn arg_str(args: &Value, key: &str) -> String {
 }
 
 /// hermes `query_group_members` filtering (pure — shared with tests).
-pub fn query_members_result(members: &[MemberInfo], action: &str, name: &str, mention: bool) -> Value {
+pub fn query_members_result(
+    members: &[MemberInfo],
+    action: &str,
+    name: &str,
+    mention: bool,
+) -> Value {
     let all: Vec<Value> = members.iter().map(member_view).collect();
     if all.is_empty() {
         return json!({"success": false, "error": "No members found in this group."});
@@ -84,12 +89,17 @@ pub fn query_members_result(members: &[MemberInfo], action: &str, name: &str, me
                 .collect();
             if matched.is_empty() {
                 out["success"] = json!(false);
-                out["msg"] = json!(format!("No match for \"{trimmed}\". All members listed below."));
+                out["msg"] = json!(format!(
+                    "No match for \"{trimmed}\". All members listed below."
+                ));
                 out["members"] = json!(all);
                 return out;
             }
             out["success"] = json!(true);
-            out["msg"] = json!(format!("Found {} member(s) matching \"{trimmed}\".", matched.len()));
+            out["msg"] = json!(format!(
+                "Found {} member(s) matching \"{trimmed}\".",
+                matched.len()
+            ));
             out["members"] = json!(matched);
             out
         }
@@ -135,14 +145,21 @@ async fn handle_query_group_members(args: &Value) -> Value {
     }
     let action = {
         let raw = arg_str(args, "action");
-        if raw.is_empty() { "list_all".to_string() } else { raw }
+        if raw.is_empty() {
+            "list_all".to_string()
+        } else {
+            raw
+        }
     };
     let Some(handle) = crate::yuanbao::active_handle() else {
         return not_connected();
     };
     match handle.get_group_member_list(&group_code).await {
         Ok(list) => {
-            let mention = args.get("mention").and_then(Value::as_bool).unwrap_or(false);
+            let mention = args
+                .get("mention")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             query_members_result(&list.members, &action, &arg_str(args, "name"), mention)
         }
         Err(e) => json!({"success": false, "error": e}),
@@ -183,7 +200,15 @@ async fn handle_send_sticker(args: &Value) -> Value {
     let sticker = arg_str(args, "sticker");
     let reply_to = arg_str(args, "reply_to");
     match handle
-        .send_sticker(&target, &sticker, if reply_to.is_empty() { None } else { Some(reply_to.as_str()) })
+        .send_sticker(
+            &target,
+            &sticker,
+            if reply_to.is_empty() {
+                None
+            } else {
+                Some(reply_to.as_str())
+            },
+        )
         .await
     {
         Ok((sticker_id, name)) => json!({
@@ -501,10 +526,30 @@ mod tests {
 
     fn members() -> Vec<MemberInfo> {
         vec![
-            MemberInfo { user_id: "u1".into(), nickname: "Alice".into(), role: 1, ..Default::default() },
-            MemberInfo { user_id: "u2".into(), nickname: "Bob".into(), role: 1, ..Default::default() },
-            MemberInfo { user_id: "b1".into(), nickname: "YuanbaoAI".into(), role: 2, ..Default::default() },
-            MemberInfo { user_id: "b2".into(), nickname: "WeatherBot".into(), role: 3, ..Default::default() },
+            MemberInfo {
+                user_id: "u1".into(),
+                nickname: "Alice".into(),
+                role: 1,
+                ..Default::default()
+            },
+            MemberInfo {
+                user_id: "u2".into(),
+                nickname: "Bob".into(),
+                role: 1,
+                ..Default::default()
+            },
+            MemberInfo {
+                user_id: "b1".into(),
+                nickname: "YuanbaoAI".into(),
+                role: 2,
+                ..Default::default()
+            },
+            MemberInfo {
+                user_id: "b2".into(),
+                nickname: "WeatherBot".into(),
+                role: 3,
+                ..Default::default()
+            },
         ]
     }
 
@@ -547,7 +592,10 @@ mod tests {
         assert_eq!(out["members"][0]["nickname"], "Alice");
         let miss = query_members_result(&members(), "find", "Zed", false);
         assert_eq!(miss["success"], false);
-        assert!(miss["msg"].as_str().unwrap().contains("No match for \"Zed\""));
+        assert!(miss["msg"]
+            .as_str()
+            .unwrap()
+            .contains("No match for \"Zed\""));
         assert_eq!(miss["members"].as_array().unwrap().len(), 4);
         // Empty name returns the full roster (hermes parity).
         let all = query_members_result(&members(), "find", "", false);
@@ -564,9 +612,18 @@ mod tests {
 
     #[test]
     fn parse_chat_target_shapes() {
-        assert_eq!(crate::yuanbao::parse_chat_target("direct:u9"), ("u9".to_string(), "".to_string()));
-        assert_eq!(crate::yuanbao::parse_chat_target("group:777"), ("".to_string(), "777".to_string()));
-        assert_eq!(crate::yuanbao::parse_chat_target("u5"), ("u5".to_string(), "".to_string()));
+        assert_eq!(
+            crate::yuanbao::parse_chat_target("direct:u9"),
+            ("u9".to_string(), "".to_string())
+        );
+        assert_eq!(
+            crate::yuanbao::parse_chat_target("group:777"),
+            ("".to_string(), "777".to_string())
+        );
+        assert_eq!(
+            crate::yuanbao::parse_chat_target("u5"),
+            ("u5".to_string(), "".to_string())
+        );
     }
 
     #[tokio::test]
@@ -582,23 +639,38 @@ mod tests {
     #[tokio::test]
     async fn group_tools_require_group_code() {
         let out = run_yuanbao_tool("yb_query_group_info", &json!({})).await;
-        assert!(out["error"].as_str().unwrap().contains("group_code is required"));
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("group_code is required"));
         let out = run_yuanbao_tool("yb_query_group_members", &json!({"action": "list_all"})).await;
-        assert!(out["error"].as_str().unwrap().contains("group_code is required"));
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("group_code is required"));
     }
 
     #[tokio::test]
     async fn send_dm_validates_recipient_inputs() {
         let out = run_yuanbao_tool("yb_send_dm", &json!({"message": "hi"})).await;
-        assert!(out["error"].as_str().unwrap().contains("name or user_id is required"));
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("name or user_id is required"));
         let out = run_yuanbao_tool("yb_send_dm", &json!({"name": "Alice", "message": "hi"})).await;
-        assert!(out["error"].as_str().unwrap().contains("group_code is required"));
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("group_code is required"));
     }
 
     #[tokio::test]
     async fn send_sticker_requires_chat_id_without_session() {
         let out = run_yuanbao_tool("yb_send_sticker", &json!({"sticker": "ok"})).await;
-        assert!(out["error"].as_str().unwrap().contains("chat_id is required"));
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("chat_id is required"));
     }
 
     #[test]
@@ -612,7 +684,11 @@ mod tests {
             "yb_search_sticker",
             "yb_send_sticker",
         ] {
-            assert_eq!(registry.get(name).unwrap().toolset, "hermes-yuanbao", "{name}");
+            assert_eq!(
+                registry.get(name).unwrap().toolset,
+                "hermes-yuanbao",
+                "{name}"
+            );
         }
     }
 }

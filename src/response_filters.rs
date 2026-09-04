@@ -72,13 +72,25 @@ pub fn strip_edge_silence_punctuation(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut start = 0usize;
     let mut end = chars.len();
-    while start < end && chars[start] != '[' && chars[start] != ']' && is_punctuation_category(chars[start]) {
+    while start < end
+        && chars[start] != '['
+        && chars[start] != ']'
+        && is_punctuation_category(chars[start])
+    {
         start += 1;
     }
-    while end > start && chars[end - 1] != '[' && chars[end - 1] != ']' && is_punctuation_category(chars[end - 1]) {
+    while end > start
+        && chars[end - 1] != '['
+        && chars[end - 1] != ']'
+        && is_punctuation_category(chars[end - 1])
+    {
         end -= 1;
     }
-    chars[start..end].iter().collect::<String>().trim().to_string()
+    chars[start..end]
+        .iter()
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 /// Canonical candidates for a stripped response: the exact form plus
@@ -182,12 +194,14 @@ pub fn is_partial_silence_marker(text: &str) -> bool {
     if stripped.is_empty() || stripped.chars().count() > MAX_SILENCE_CHARS {
         return false;
     }
-    canonical_silence_candidates(stripped).iter().any(|candidate| {
-        !candidate.is_empty()
-            && LIVE_GATEWAY_SILENT_MARKERS
-                .iter()
-                .any(|marker| marker.starts_with(candidate.as_str()))
-    })
+    canonical_silence_candidates(stripped)
+        .iter()
+        .any(|candidate| {
+            !candidate.is_empty()
+                && LIVE_GATEWAY_SILENT_MARKERS
+                    .iter()
+                    .any(|marker| marker.starts_with(candidate.as_str()))
+        })
 }
 
 #[cfg(test)]
@@ -198,8 +212,14 @@ mod tests {
     fn exact_markers_are_silence() {
         for marker in LIVE_GATEWAY_SILENT_MARKERS {
             assert!(is_intentional_silence_response(marker), "{marker}");
-            assert!(is_intentional_silence_response(&format!("  {marker}  ")), "{marker}");
-            assert!(is_intentional_silence_response(&marker.to_lowercase()), "{marker}");
+            assert!(
+                is_intentional_silence_response(&format!("  {marker}  ")),
+                "{marker}"
+            );
+            assert!(
+                is_intentional_silence_response(&marker.to_lowercase()),
+                "{marker}"
+            );
         }
         // Whitespace-collapsed interior.
         assert!(is_intentional_silence_response("NO   REPLY"));
@@ -247,8 +267,12 @@ mod tests {
         assert!(is_autonomous_silence_response("[SILENT]"));
         assert!(is_autonomous_silence_response("NO_REPLY"));
         assert!(is_autonomous_silence_response("  [SILENT]  "));
-        assert!(is_autonomous_silence_response("[SILENT] No changes detected"));
-        assert!(is_autonomous_silence_response("2 deals filtered\n\n[SILENT]"));
+        assert!(is_autonomous_silence_response(
+            "[SILENT] No changes detected"
+        ));
+        assert!(is_autonomous_silence_response(
+            "2 deals filtered\n\n[SILENT]"
+        ));
         assert!(is_autonomous_silence_response("[SILENT]\nnote follows"));
         // Mid-sentence token in a genuine report is delivered.
         assert!(!is_autonomous_silence_response(

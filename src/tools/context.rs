@@ -16,19 +16,14 @@ use std::sync::{Arc, Mutex, RwLock};
 
 /// Callback used by the `clarify` tool: (question, choices, multi_select) -> answer.
 pub type ClarifyFn = Arc<
-    dyn Fn(
-            String,
-            Vec<String>,
-            bool,
-        ) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
+    dyn Fn(String, Vec<String>, bool) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
         + Send
         + Sync,
 >;
 
 /// Callback used by the approval system: (reason, command) -> approved?
-pub type ApproveFn = Arc<
-    dyn Fn(String, String) -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync,
->;
+pub type ApproveFn =
+    Arc<dyn Fn(String, String) -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
 
 /// Backend that can run delegated sub-agents (implemented by `Agent`).
 #[async_trait]
@@ -219,7 +214,8 @@ impl ToolContext {
 
     /// True when background delegations can deliver results to this session.
     pub fn async_delivery(&self) -> bool {
-        self.async_delivery.load(std::sync::atomic::Ordering::SeqCst)
+        self.async_delivery
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Set the delegation depth of the owning agent (children > 0).

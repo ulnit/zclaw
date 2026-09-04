@@ -163,7 +163,10 @@ mod tests {
     #[test]
     fn describe_bundle_bare_and_slash_names() {
         let content = bundle_message("work", "");
-        assert_eq!(describe_skill_invocation(&content).as_deref(), Some("/work"));
+        assert_eq!(
+            describe_skill_invocation(&content).as_deref(),
+            Some("/work")
+        );
         // Bundle headers already carry their typed "/a /b" keys.
         let content = bundle_message("/a /b", "do it");
         assert_eq!(
@@ -183,10 +186,12 @@ mod tests {
             Some("/deploy — ship the hotfix")
         );
         // Bare single-skill invocation.
-        let content = format!(
-            "{SKILL_INVOCATION_PREFIX}\"deploy\" skill. {SINGLE_SKILL_MARKER}\n\n<body>"
+        let content =
+            format!("{SKILL_INVOCATION_PREFIX}\"deploy\" skill. {SINGLE_SKILL_MARKER}\n\n<body>");
+        assert_eq!(
+            describe_skill_invocation(&content).as_deref(),
+            Some("/deploy")
         );
-        assert_eq!(describe_skill_invocation(&content).as_deref(), Some("/deploy"));
     }
 
     #[test]

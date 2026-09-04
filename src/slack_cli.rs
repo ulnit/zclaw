@@ -21,9 +21,25 @@ const SLACK_MAX_SLASH_COMMANDS: usize = 50;
 /// Built-in Slack slash commands that cannot be registered by apps
 /// (hermes `_SLACK_RESERVED_COMMANDS`).
 const SLACK_RESERVED_COMMANDS: &[&str] = &[
-    "me", "status", "away", "dnd", "shrug", "remind", "msg", "feed", "who",
-    "collapse", "expand", "leave", "join", "open", "search", "topic", "mute",
-    "pro", "shortcuts",
+    "me",
+    "status",
+    "away",
+    "dnd",
+    "shrug",
+    "remind",
+    "msg",
+    "feed",
+    "who",
+    "collapse",
+    "expand",
+    "leave",
+    "join",
+    "open",
+    "search",
+    "topic",
+    "mute",
+    "pro",
+    "shortcuts",
 ];
 
 /// (slash_name, description, usage_hint) triples for the Slack manifest.
@@ -47,7 +63,11 @@ pub fn slack_native_slashes() -> Vec<(String, String, String)> {
         ("recap", "Recap this chat's session", ""),
         ("title", "Show or set the session title", "[new title]"),
         ("usage", "This session's token usage", ""),
-        ("insights", "Usage analytics across sessions", "[days] [--days N] [--source S]"),
+        (
+            "insights",
+            "Usage analytics across sessions",
+            "[days] [--days N] [--source S]",
+        ),
         ("reload-mcp", "Reload MCP servers (asks confirmation)", ""),
         ("approve", "Approve a pending confirmation", ""),
         ("deny", "Deny a pending confirmation", ""),
@@ -65,7 +85,11 @@ pub fn slack_native_slashes() -> Vec<(String, String, String)> {
             break;
         }
         // Slack caps: description 2000 (keep 140 like hermes), hint 100.
-        entries.push((name.clone(), desc.chars().take(140).collect(), hint.chars().take(100).collect()));
+        entries.push((
+            name.clone(),
+            desc.chars().take(140).collect(),
+            hint.chars().take(100).collect(),
+        ));
         seen.insert(name);
     }
 
@@ -126,8 +150,8 @@ pub fn build_full_manifest(
     experience: MessagingExperience,
     long_description: Option<&str>,
 ) -> Value {
-    let slashes = slash_commands_manifest("https://ulnclaw.local/slack/commands")
-        ["features"]["slash_commands"]
+    let slashes = slash_commands_manifest("https://ulnclaw.local/slack/commands")["features"]
+        ["slash_commands"]
         .clone();
 
     let mut features = json!({
@@ -245,10 +269,7 @@ pub struct ManifestOptions {
 /// `slack_manifest_command`). `payload_writer` receives the JSON text:
 /// stdout when not --write, file write otherwise (kept injectable for
 /// tests).
-pub fn run_manifest_command(
-    opts: &ManifestOptions,
-    home: &std::path::Path,
-) -> i32 {
+pub fn run_manifest_command(opts: &ManifestOptions, home: &std::path::Path) -> i32 {
     let name = opts.name.clone().unwrap_or_else(|| "Ulnclaw".to_string());
     let description = opts
         .description
@@ -322,7 +343,10 @@ pub fn run_manifest_command(
                 std::fs::create_dir_all(parent).ok();
             }
             if let Err(e) = std::fs::write(&path, &payload) {
-                eprintln!("ulnclaw slack manifest: cannot write {}: {e}", path.display());
+                eprintln!(
+                    "ulnclaw slack manifest: cannot write {}: {e}",
+                    path.display()
+                );
                 return 1;
             }
             eprintln!("Slack manifest written to: {}", path.display());
@@ -337,8 +361,7 @@ pub fn run_manifest_command(
 
 fn shellexpand_path(raw: &str) -> std::path::PathBuf {
     if let Some(rest) = raw.strip_prefix("~/") {
-        if let Some(home_dir) = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
+        if let Some(home_dir) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))
         {
             return std::path::PathBuf::from(home_dir).join(rest);
         }
@@ -369,7 +392,9 @@ mod tests {
         }
         // Direct-command surface is present.
         let names: Vec<&str> = entries.iter().map(|(n, _, _)| n.as_str()).collect();
-        for expected in ["help", "skills", "tools", "recap", "title", "usage", "insights"] {
+        for expected in [
+            "help", "skills", "tools", "recap", "title", "usage", "insights",
+        ] {
             assert!(names.contains(&expected), "missing /{expected}");
         }
         assert!(entries.len() <= SLACK_MAX_SLASH_COMMANDS);
@@ -378,7 +403,9 @@ mod tests {
     #[test]
     fn slash_commands_manifest_shape() {
         let manifest = slash_commands_manifest("https://example.test/hook");
-        let slashes = manifest["features"]["slash_commands"].as_array().expect("array");
+        let slashes = manifest["features"]["slash_commands"]
+            .as_array()
+            .expect("array");
         assert_eq!(slashes[0]["command"], "/ulnclaw");
         for entry in slashes {
             assert_eq!(entry["url"], "https://example.test/hook");
@@ -393,7 +420,9 @@ mod tests {
         assert_eq!(manifest["display_information"]["name"], "My Bot");
         assert!(manifest["features"]["assistant_view"].is_object());
         assert!(manifest["features"].get("agent_view").is_none());
-        let scopes = manifest["oauth_config"]["scopes"]["bot"].as_array().unwrap();
+        let scopes = manifest["oauth_config"]["scopes"]["bot"]
+            .as_array()
+            .unwrap();
         let scope_names: Vec<&str> = scopes.iter().map(|v| v.as_str().unwrap()).collect();
         assert!(scope_names.contains(&"assistant:write"));
         assert!(scope_names.contains(&"commands"));

@@ -23,11 +23,8 @@ use serde::Serialize;
 
 /// Named weekday recurrences -> cron day-of-week field (hermes
 /// `WEEKDAY_PRESETS`).
-pub const WEEKDAY_PRESETS: &[(&str, &str)] = &[
-    ("everyday", "*"),
-    ("weekdays", "1-5"),
-    ("weekends", "0,6"),
-];
+pub const WEEKDAY_PRESETS: &[(&str, &str)] =
+    &[("everyday", "*"), ("weekdays", "1-5"), ("weekends", "0,6")];
 
 const SLOT_TYPES: &[&str] = &["time", "enum", "text", "weekdays"];
 
@@ -158,11 +155,7 @@ pub fn catalog() -> Vec<AutomationBlueprint> {
                         "needs a reply today, is from my manager or family, \
                          or mentions a deadline",
                     ),
-                    ..BlueprintSlot::new(
-                        "criteria",
-                        "text",
-                        "Only notify me if the mail…",
-                    )
+                    ..BlueprintSlot::new("criteria", "text", "Only notify me if the mail…")
                 },
                 deliver_slot(),
             ],
@@ -456,7 +449,11 @@ pub fn catalog() -> Vec<AutomationBlueprint> {
                               that went well, one thing they are grateful for, \
                               and one small win. If they reply, acknowledge it \
                               kindly. One message.",
-            slots: vec![time_slot("21:30"), recurrence_slot("everyday"), deliver_slot()],
+            slots: vec![
+                time_slot("21:30"),
+                recurrence_slot("everyday"),
+                deliver_slot(),
+            ],
             deliver_default: "origin",
             skills: vec![],
             tags: vec!["wellbeing", "reflection"],
@@ -501,8 +498,7 @@ pub fn get_blueprint(key: &str) -> Option<AutomationBlueprint> {
 // Renderers
 // ---------------------------------------------------------------------------
 
-static PLACEHOLDER_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\{(\w+)\}").unwrap());
+static PLACEHOLDER_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{(\w+)\}").unwrap());
 static TIME_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([01]?\d|2[0-3]):([0-5]\d)$").unwrap());
 
@@ -589,12 +585,13 @@ fn humanize_schedule(blueprint: &AutomationBlueprint) -> String {
         return format!("every {every} minutes");
     }
     if sched.contains("{interval_hours}") {
-        let iv = blueprint
-            .slots
-            .iter()
-            .find(|s| s.name == "interval_hours");
+        let iv = blueprint.slots.iter().find(|s| s.name == "interval_hours");
         let every = iv.and_then(|s| s.default).unwrap_or("1").to_string();
-        let scope = if sched.contains("* * 1-5") { "weekdays, " } else { "" };
+        let scope = if sched.contains("* * 1-5") {
+            "weekdays, "
+        } else {
+            ""
+        };
         return if every == "1" {
             format!("{scope}every hour")
         } else {
@@ -714,7 +711,10 @@ fn resolve_schedule(
             .captures(time_val.trim())
             .ok_or_else(|| format!("invalid time {time_val:?} — use HH:MM (24h)"))?;
         repl.insert("hour".to_string(), m[1].parse::<u32>().unwrap().to_string());
-        repl.insert("minute".to_string(), m[2].parse::<u32>().unwrap().to_string());
+        repl.insert(
+            "minute".to_string(),
+            m[2].parse::<u32>().unwrap().to_string(),
+        );
     }
 
     // weekday set -> dow
@@ -741,8 +741,7 @@ fn resolve_schedule(
             repl.insert("dow".to_string(), dow.to_string());
         } else if let Some(day) = values.get("day") {
             let day = day.to_lowercase();
-            let dow = day_to_dow(&day)
-                .ok_or_else(|| format!("unknown day {day:?}"))?;
+            let dow = day_to_dow(&day).ok_or_else(|| format!("unknown day {day:?}"))?;
             repl.insert("dow".to_string(), dow.to_string());
         } else {
             repl.insert("dow".to_string(), "*".to_string());
@@ -808,9 +807,11 @@ pub fn fill_blueprint(
     blueprint: &AutomationBlueprint,
     values: &HashMap<String, String>,
 ) -> Result<FilledBlueprint, String> {
-    let known: std::collections::HashSet<&str> =
-        blueprint.slots.iter().map(|s| s.name).collect();
-    let mut unknown: Vec<&String> = values.keys().filter(|k| !known.contains(k.as_str())).collect();
+    let known: std::collections::HashSet<&str> = blueprint.slots.iter().map(|s| s.name).collect();
+    let mut unknown: Vec<&String> = values
+        .keys()
+        .filter(|k| !known.contains(k.as_str()))
+        .collect();
     if !unknown.is_empty() {
         unknown.sort();
         let valid = blueprint
@@ -1037,8 +1038,7 @@ pub fn build_blueprint_seed(blueprint: &AutomationBlueprint) -> String {
 /// `_fmt_catalog`).
 pub fn format_catalog() -> String {
     let mut lines = vec![
-        "Automation Blueprints — `/blueprint <name>` and I'll ask you what I need:"
-            .to_string(),
+        "Automation Blueprints — `/blueprint <name>` and I'll ask you what I need:".to_string(),
         String::new(),
     ];
     for bp in catalog() {
@@ -1107,7 +1107,10 @@ pub fn handle_blueprint_command(args: &str) -> BlueprintCommandResult {
         } else {
             format_candidates(query, &candidates)
         };
-        return BlueprintCommandResult { text, agent_seed: None };
+        return BlueprintCommandResult {
+            text,
+            agent_seed: None,
+        };
     };
     let values: std::collections::HashMap<String, String> = tokens[1..]
         .iter()
@@ -1157,9 +1160,9 @@ pub fn handle_blueprint_command(args: &str) -> BlueprintCommandResult {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs_f64())
         .unwrap_or(0.0);
-    let deliver = crate::cron::delivery::normalize_deliver_value(Some(
-        &serde_json::Value::String(filled.deliver.clone()),
-    ));
+    let deliver = crate::cron::delivery::normalize_deliver_value(Some(&serde_json::Value::String(
+        filled.deliver.clone(),
+    )));
     let job = crate::cron::CronJob {
         id: uuid::Uuid::new_v4().to_string(),
         name: filled.name,
@@ -1225,7 +1228,10 @@ mod tests {
     use super::*;
 
     fn vals(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]
@@ -1285,9 +1291,11 @@ mod tests {
     #[test]
     fn fill_recurrence_preset_maps_to_dow() {
         let bp = get_blueprint("custom-reminder").unwrap();
-        let filled =
-            fill_blueprint(&bp, &vals(&[("what", "stretch"), ("recurrence", "weekdays")]))
-                .unwrap();
+        let filled = fill_blueprint(
+            &bp,
+            &vals(&[("what", "stretch"), ("recurrence", "weekdays")]),
+        )
+        .unwrap();
         assert_eq!(filled.schedule, "0 14 * * 1-5");
         assert!(filled.prompt.contains("stretch"));
     }
@@ -1320,7 +1328,11 @@ mod tests {
         assert_eq!(filled.schedule, "0 9-17/1 * * 1-5");
         let filled = fill_blueprint(
             &bp,
-            &vals(&[("interval_hours", "2"), ("start_hour", "8"), ("end_hour", "18")]),
+            &vals(&[
+                ("interval_hours", "2"),
+                ("start_hour", "8"),
+                ("end_hour", "18"),
+            ]),
         )
         .unwrap();
         assert_eq!(filled.schedule, "0 8-18/2 * * 1-5");
@@ -1344,7 +1356,10 @@ mod tests {
     fn humanize_schedules() {
         let by_key = |k: &str| {
             let bp = get_blueprint(k).unwrap();
-            blueprint_catalog_entry(&bp)["scheduleHuman"].as_str().unwrap().to_string()
+            blueprint_catalog_entry(&bp)["scheduleHuman"]
+                .as_str()
+                .unwrap()
+                .to_string()
         };
         assert_eq!(by_key("morning-brief"), "daily at 08:00");
         assert_eq!(by_key("important-mail"), "every 30 minutes");
@@ -1410,7 +1425,11 @@ mod tests {
 
         // Name only -> agent seed.
         let result = handle_blueprint_command("habit");
-        assert!(result.text.contains("Setting up 'Habit check-in'"), "{}", result.text);
+        assert!(
+            result.text.contains("Setting up 'Habit check-in'"),
+            "{}",
+            result.text
+        );
         let seed = result.agent_seed.expect("seed set");
         assert!(seed.contains("(habit)"));
 

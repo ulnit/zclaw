@@ -139,10 +139,7 @@ impl HookRegistry {
             {
                 Some(Value::Object(map)) => Value::Object(map),
                 _ => {
-                    tracing::warn!(
-                        "[hooks] Skipping {}: invalid HOOK.yaml",
-                        hook_dir.display()
-                    );
+                    tracing::warn!("[hooks] Skipping {}: invalid HOOK.yaml", hook_dir.display());
                     continue;
                 }
             };
@@ -181,9 +178,7 @@ impl HookRegistry {
                         .map(|m| m.permissions().mode())
                         .unwrap_or(0);
                     if mode & 0o111 == 0 {
-                        tracing::warn!(
-                            "[hooks] Skipping {hook_name}: handler is not executable"
-                        );
+                        tracing::warn!("[hooks] Skipping {hook_name}: handler is not executable");
                         continue;
                     }
                 }
@@ -227,8 +222,11 @@ impl HookRegistry {
     /// `command:reset`; a bare `agent` registration does NOT fire for
     /// `agent:start` — hermes `_resolve_handlers`).
     fn resolve_handlers(&self, event_type: &str) -> Vec<&Handler> {
-        let mut handlers: Vec<&Handler> =
-            self.handlers.get(event_type).map(|v| v.iter().collect()).unwrap_or_default();
+        let mut handlers: Vec<&Handler> = self
+            .handlers
+            .get(event_type)
+            .map(|v| v.iter().collect())
+            .unwrap_or_default();
         if let Some(colon) = event_type.find(':') {
             let wildcard = format!("{}:*", &event_type[..colon]);
             if let Some(extra) = self.handlers.get(&wildcard) {
@@ -294,7 +292,10 @@ async fn run_handler(
     let mut child = command.spawn().map_err(|e| e.to_string())?;
     if let Some(mut stdin) = child.stdin.take() {
         use tokio::io::AsyncWriteExt as _;
-        stdin.write_all(&payload_bytes).await.map_err(|e| e.to_string())?;
+        stdin
+            .write_all(&payload_bytes)
+            .await
+            .map_err(|e| e.to_string())?;
     }
     let output = tokio::time::timeout(HANDLER_TIMEOUT, child.wait_with_output())
         .await
@@ -302,9 +303,16 @@ async fn run_handler(
         .map_err(|e| e.to_string())?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("handler exited {:?}: {}", output.status.code(), stderr.trim()));
+        return Err(format!(
+            "handler exited {:?}: {}",
+            output.status.code(),
+            stderr.trim()
+        ));
     }
-    let stdout = std::str::from_utf8(&output.stdout).unwrap_or("").trim().to_string();
+    let stdout = std::str::from_utf8(&output.stdout)
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if stdout.is_empty() {
         return Ok(None);
     }
@@ -477,14 +485,20 @@ mod tests {
             temp.path(),
             "greeter",
             "name: greeter\ndescription: says hi\nevents:\n- agent:start\n- command:*\n",
-            Some(("handler.py", "def handle(event_type, context):\n    return None\n")),
+            Some((
+                "handler.py",
+                "def handle(event_type, context):\n    return None\n",
+            )),
         );
         let registry = HookRegistry::discover_and_load(temp.path());
         let hooks = registry.loaded_hooks();
         assert_eq!(hooks.len(), 1);
         assert_eq!(hooks[0].name, "greeter");
         assert_eq!(hooks[0].description, "says hi");
-        assert_eq!(hooks[0].events, vec!["agent:start".to_string(), "command:*".to_string()]);
+        assert_eq!(
+            hooks[0].events,
+            vec!["agent:start".to_string(), "command:*".to_string()]
+        );
     }
 
     #[test]
@@ -505,7 +519,12 @@ mod tests {
             Some(("handler.py", "def handle(e, c):\n    return None\n")),
         );
         // Missing handler file.
-        write_hook(temp.path(), "nohandler", "name: nohandler\nevents:\n- agent:start\n", None);
+        write_hook(
+            temp.path(),
+            "nohandler",
+            "name: nohandler\nevents:\n- agent:start\n",
+            None,
+        );
         // Missing manifest.
         let bare = temp.path().join("hooks").join("bare");
         std::fs::create_dir_all(&bare).unwrap();
@@ -542,10 +561,7 @@ mod tests {
     async fn test_emit_exec_handler() {
         let temp = tempfile::tempdir().unwrap();
         let out_file = temp.path().join("seen.txt");
-        let script = format!(
-            "#!/bin/sh\ncat >> {}\n",
-            out_file.to_string_lossy()
-        );
+        let script = format!("#!/bin/sh\ncat >> {}\n", out_file.to_string_lossy());
         write_hook(
             temp.path(),
             "writer",
@@ -568,7 +584,10 @@ mod tests {
             temp.path(),
             "decider",
             "name: decider\nevents:\n- command:reset\n",
-            Some(("handler", "#!/bin/sh\ncat > /dev/null\necho '{\"verdict\": \"allow\"}'\n")),
+            Some((
+                "handler",
+                "#!/bin/sh\ncat > /dev/null\necho '{\"verdict\": \"allow\"}'\n",
+            )),
         );
         let registry = HookRegistry::discover_and_load(temp.path());
         let results = registry.emit_collect("command:reset", &json!({})).await;
@@ -587,11 +606,12 @@ mod tests {
         }
         let temp = tempfile::tempdir().unwrap();
         let out_file = temp.path().join("py_seen.txt");
-        let mut handler = String::from(
-            "import json\n\ndef handle(event_type, context):\n    open(r'",
-        );
+        let mut handler =
+            String::from("import json\n\ndef handle(event_type, context):\n    open(r'");
         handler.push_str(&out_file.to_string_lossy());
-        handler.push_str("', 'w').write(json.dumps([event_type, context]))\n    return {\"ok\": True}\n");
+        handler.push_str(
+            "', 'w').write(json.dumps([event_type, context]))\n    return {\"ok\": True}\n",
+        );
         write_hook(
             temp.path(),
             "pyhook",
@@ -621,7 +641,10 @@ mod tests {
         let registry = HookRegistry::discover_and_load(temp.path());
         // Must not panic; broken handler is logged and skipped.
         registry.emit("agent:start", &json!({})).await;
-        assert!(registry.emit_collect("agent:start", &json!({})).await.is_empty());
+        assert!(registry
+            .emit_collect("agent:start", &json!({}))
+            .await
+            .is_empty());
     }
 
     #[test]
@@ -663,7 +686,10 @@ mod tests {
             interpret_command_hook_results(&[
                 json!({"decision": "rewrite", "command_name": "/status", "raw_args": " full"})
             ]),
-            Rewrite { command: "status".into(), args: "full".into() }
+            Rewrite {
+                command: "status".into(),
+                args: "full".into()
+            }
         );
         // Rewrite without command_name is ignored; first decisive wins.
         assert_eq!(

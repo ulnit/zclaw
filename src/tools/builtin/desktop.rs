@@ -365,7 +365,10 @@ mod tests {
         let _guard = BRIDGE_TEST_LOCK.lock().unwrap();
         let tool = close_terminal_tool();
         let out = call(&tool, json!({"process_id": "  "})).await;
-        assert!(out["error"].as_str().unwrap().contains("process_id is required"));
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("process_id is required"));
         // No sink wired (CLI context) → desktop-only error.
         crate::tools::builtin::terminal::set_close_sink(None);
         let out = call(&tool, json!({"process_id": "bg-1234"})).await;
@@ -402,7 +405,10 @@ mod tests {
         let _guard = BRIDGE_TEST_LOCK.lock().unwrap();
         let tool = focus_pane_tool();
         let out = call(&tool, json!({"pane": "nope"})).await;
-        assert!(out["error"].as_str().unwrap().contains("pane must be one of"));
+        assert!(out["error"]
+            .as_str()
+            .unwrap()
+            .contains("pane must be one of"));
         // No emitter → desktop-only error.
         crate::desktop::set_emitter(None);
         let out = call(&tool, json!({"pane": "Terminal"})).await;

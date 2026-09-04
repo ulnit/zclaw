@@ -250,10 +250,7 @@ pub async fn a2a_handle_rpc(
         }
     };
     let id = request.get("id").cloned().unwrap_or(Value::Null);
-    let method = request
-        .get("method")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let method = request.get("method").and_then(|v| v.as_str()).unwrap_or("");
     let params = request.get("params").cloned().unwrap_or(json!({}));
     let Some((verb, _streaming)) = method_info(method) else {
         return A2aResponse {
@@ -428,7 +425,11 @@ pub async fn a2a_handle_rpc(
         }
         "stream" => A2aResponse {
             status: 200,
-            body: rpc_error(&id, -32601, "message/stream not supported (streaming capability false)"),
+            body: rpc_error(
+                &id,
+                -32601,
+                "message/stream not supported (streaming capability false)",
+            ),
         },
         _ => A2aResponse {
             status: 200,

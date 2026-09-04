@@ -13,7 +13,8 @@
 /// The quality bar, embedded in every prompt so the generated file
 /// reads like a maintainer wrote it — concrete and command-exact, not
 /// generic advice (hermes `_QUALITY_BAR`).
-const QUALITY_BAR: &str = "Quality bar for the file you write (this is what separates a useful AGENTS.md\n\
+const QUALITY_BAR: &str =
+    "Quality bar for the file you write (this is what separates a useful AGENTS.md\n\
 from noise):\n\
 - CONCISE: target under 100 lines. Agents load this file every session — every\n\
   line costs context. No essays, no marketing prose, no filler.\n\
@@ -141,8 +142,14 @@ mod tests {
         let cwd = std::path::Path::new("/tmp/demo-project");
         let prompt = build_init_prompt(cwd, None, "");
         assert!(prompt.contains("generate an AGENTS.md"), "{prompt}");
-        assert!(prompt.contains("for the project at: /tmp/demo-project"), "{prompt}");
-        assert!(prompt.contains("/tmp/demo-project/AGENTS.md with `write_file`."), "{prompt}");
+        assert!(
+            prompt.contains("for the project at: /tmp/demo-project"),
+            "{prompt}"
+        );
+        assert!(
+            prompt.contains("/tmp/demo-project/AGENTS.md with `write_file`."),
+            "{prompt}"
+        );
         assert!(prompt.contains("Quality bar"), "{prompt}");
         assert!(!prompt.contains("MERGE DISCIPLINE"), "{prompt}");
         assert!(!is_update_prompt(&prompt));

@@ -138,7 +138,10 @@ pub fn parse_pypi_package(token: &str) -> (String, Option<String>) {
 
 /// Extract `(package, version)` from launcher args, honoring npx's
 /// `--package`/`-p` install-target flags (hermes `_parse_package_from_args`).
-pub fn parse_package_from_args(args: &[String], ecosystem: &str) -> Option<(String, Option<String>)> {
+pub fn parse_package_from_args(
+    args: &[String],
+    ecosystem: &str,
+) -> Option<(String, Option<String>)> {
     let mut package_token: Option<&str> = None;
     let mut take_next = false;
     for arg in args {
@@ -204,7 +207,11 @@ async fn query_osv(
         return Err(format!("OSV API {}", response.status()));
     }
     let body: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
-    let vulns = body.get("vulns").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let vulns = body
+        .get("vulns")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
     Ok(vulns
         .iter()
         .filter_map(|vuln| {
@@ -226,11 +233,7 @@ async fn query_osv(
 
 /// Check a launcher command for known-malware packages against an explicit
 /// endpoint (test-friendly core of `check_package_for_malware`).
-pub async fn check_with_endpoint(
-    endpoint: &str,
-    command: &str,
-    args: &[String],
-) -> Option<String> {
+pub async fn check_with_endpoint(endpoint: &str, command: &str, args: &[String]) -> Option<String> {
     let ecosystem = infer_ecosystem(command)?;
     let (package, version) = parse_package_from_args(args, ecosystem)?;
     let cache_key: CacheKey = (ecosystem.to_string(), package.clone(), version.clone());
@@ -313,10 +316,7 @@ mod tests {
             parse_npm_package("@scope/pkg@1.2.3"),
             ("@scope/pkg".into(), Some("1.2.3".into()))
         );
-        assert_eq!(
-            parse_npm_package("server@latest"),
-            ("server".into(), None)
-        );
+        assert_eq!(parse_npm_package("server@latest"), ("server".into(), None));
         assert_eq!(
             parse_npm_package("server@2.0.0"),
             ("server".into(), Some("2.0.0".into()))
@@ -326,7 +326,10 @@ mod tests {
 
     #[test]
     fn pypi_package_parsing() {
-        assert_eq!(parse_pypi_package("mcp-server"), ("mcp-server".into(), None));
+        assert_eq!(
+            parse_pypi_package("mcp-server"),
+            ("mcp-server".into(), None)
+        );
         assert_eq!(
             parse_pypi_package("mcp-server==0.9.1"),
             ("mcp-server".into(), Some("0.9.1".into()))
@@ -401,7 +404,10 @@ mod tests {
         let (endpoint, handle) = spawn_osv_mock(
             r#"{"vulns":[{"id":"MAL-2025-9999","summary":"evil package"},{"id":"GHSA-xxxx","summary":"regular cve"}]}"#,
         );
-        let args: Vec<String> = ["-y", "evil-test-pkg-a"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["-y", "evil-test-pkg-a"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let result = check_with_endpoint(&endpoint, "npx", &args).await;
         let reason = result.expect("malware must block");
         assert!(reason.contains("BLOCKED"));
@@ -426,7 +432,10 @@ mod tests {
     async fn network_failure_fails_open() {
         clear_cache_for_tests();
         // Unreachable endpoint → allow (fail-open), and nothing cached.
-        let args: Vec<String> = ["failopen-test-pkg-c"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["failopen-test-pkg-c"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let result = check_with_endpoint("http://127.0.0.1:1", "uvx", &args).await;
         assert!(result.is_none());
     }

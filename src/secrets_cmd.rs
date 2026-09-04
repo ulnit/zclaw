@@ -16,7 +16,9 @@ fn prompt(label: &str) -> Result<String, String> {
     print!("{label}");
     std::io::stdout().flush().map_err(|e| e.to_string())?;
     let mut line = String::new();
-    std::io::stdin().read_line(&mut line).map_err(|e| e.to_string())?;
+    std::io::stdin()
+        .read_line(&mut line)
+        .map_err(|e| e.to_string())?;
     Ok(line.trim().to_string())
 }
 
@@ -59,11 +61,7 @@ fn binary_version(binary: &Path, flag: &str) -> String {
         .stdin(std::process::Stdio::null())
         .output()
         .ok()
-        .map(|out| {
-            String::from_utf8_lossy(&out.stdout)
-                .trim()
-                .to_string()
-        })
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "unknown version".to_string())
 }
@@ -106,7 +104,11 @@ pub fn bitwarden_cmd(cmd: BitwardenCmd) -> Result<(), String> {
         } => bitwarden_setup(&home, access_token, server_url, project_id),
         BitwardenCmd::Install { force } => {
             let path = crate::secrets::install_bws(&home, force)?;
-            println!("✓ {}  ({})", path.display(), binary_version(&path, "--version"));
+            println!(
+                "✓ {}  ({})",
+                path.display(),
+                binary_version(&path, "--version")
+            );
             Ok(())
         }
         BitwardenCmd::Status => bitwarden_status(&home),
@@ -162,16 +164,30 @@ fn bitwarden_setup(
     let interactive = std::io::stdin().is_terminal();
     if !interactive {
         let mut missing = Vec::new();
-        if access_token.as_deref().map(str::trim).map(str::is_empty).unwrap_or(true) {
+        if access_token
+            .as_deref()
+            .map(str::trim)
+            .map(str::is_empty)
+            .unwrap_or(true)
+        {
             missing.push("--access-token");
         }
         let env_url = std::env::var("BWS_SERVER_URL").unwrap_or_default();
-        if server_url.as_deref().map(str::trim).map(str::is_empty).unwrap_or(true)
+        if server_url
+            .as_deref()
+            .map(str::trim)
+            .map(str::is_empty)
+            .unwrap_or(true)
             && env_url.trim().is_empty()
         {
             missing.push("--server-url");
         }
-        if project_id.as_deref().map(str::trim).map(str::is_empty).unwrap_or(true) {
+        if project_id
+            .as_deref()
+            .map(str::trim)
+            .map(str::is_empty)
+            .unwrap_or(true)
+        {
             missing.push("--project-id");
         }
         if !missing.is_empty() {
@@ -387,8 +403,14 @@ fn list_bws_projects_with(
         .iter()
         .map(|item| {
             (
-                item.get("name").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
-                item.get("id").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
+                item.get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?")
+                    .to_string(),
+                item.get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?")
+                    .to_string(),
             )
         })
         .collect())
@@ -399,7 +421,11 @@ fn list_bws_projects_with(
 /// prompt/accept a new machine-account token, probe Bitwarden with it
 /// (unless `--no-verify`), and only then persist it to .env — a bad
 /// paste never bricks the working token.
-fn bitwarden_token(home: &Path, access_token: Option<String>, no_verify: bool) -> Result<(), String> {
+fn bitwarden_token(
+    home: &Path,
+    access_token: Option<String>,
+    no_verify: bool,
+) -> Result<(), String> {
     let config = crate::config::UlncLawConfig::load(None).unwrap_or_default();
     let bw_cfg = &config.secrets.bitwarden;
     let token_env = if bw_cfg.access_token_env.trim().is_empty() {
@@ -431,8 +457,7 @@ fn bitwarden_token(home: &Path, access_token: Option<String>, no_verify: bool) -
     }
 
     if !no_verify {
-        let Some(binary) = crate::secrets::find_bws_maybe_install(home, bw_cfg.auto_install)
-        else {
+        let Some(binary) = crate::secrets::find_bws_maybe_install(home, bw_cfg.auto_install) else {
             return Err(
                 "bws binary not available — cannot verify. Re-run with --no-verify to \
                  store anyway."
@@ -510,11 +535,19 @@ fn bitwarden_status(home: &Path) -> Result<(), String> {
     );
     println!(
         "  project_id:       {}",
-        if cfg.project_id.is_empty() { "(unset)" } else { &cfg.project_id }
+        if cfg.project_id.is_empty() {
+            "(unset)"
+        } else {
+            &cfg.project_id
+        }
     );
     println!(
         "  server_url:       {}",
-        if cfg.server_url.is_empty() { "(bws default — US Cloud)" } else { &cfg.server_url }
+        if cfg.server_url.is_empty() {
+            "(bws default — US Cloud)"
+        } else {
+            &cfg.server_url
+        }
     );
     println!("  cache_ttl:        {}s", cfg.cache_ttl_seconds);
     let cache_path = home
@@ -522,7 +555,11 @@ fn bitwarden_status(home: &Path) -> Result<(), String> {
         .join(crate::secrets_cache::BWS_ENCRYPTED_CACHE_BASENAME);
     println!(
         "  encrypted cache:  {}",
-        if cache_path.exists() { "present" } else { "empty" }
+        if cache_path.exists() {
+            "present"
+        } else {
+            "empty"
+        }
     );
     if !cfg.enabled || cfg.project_id.is_empty() {
         println!();
@@ -610,7 +647,9 @@ fn onepassword_setup(
         Some(path) => path,
         None => {
             if configured_path.is_empty() {
-                return Err(format!("op not found on PATH.\n  Install the 1Password CLI: {OP_DOCS_URL}"));
+                return Err(format!(
+                    "op not found on PATH.\n  Install the 1Password CLI: {OP_DOCS_URL}"
+                ));
             }
             return Err(format!(
                 "{configured_path} is not an executable op binary.\n  Install the 1Password CLI: {OP_DOCS_URL}"
@@ -685,7 +724,11 @@ fn op_whoami(binary: &Path) -> Option<String> {
         return None;
     }
     let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if text.is_empty() { None } else { Some(text) }
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
 }
 
 fn onepassword_status() -> Result<(), String> {
@@ -703,7 +746,11 @@ fn onepassword_status() -> Result<(), String> {
     }
     println!(
         "  account:     {}",
-        if cfg.account.is_empty() { "(default)" } else { &cfg.account }
+        if cfg.account.is_empty() {
+            "(default)"
+        } else {
+            &cfg.account
+        }
     );
     let token_present = crate::config::get_env_value(&cfg.service_account_token_env)
         .map(|v| !v.trim().is_empty())

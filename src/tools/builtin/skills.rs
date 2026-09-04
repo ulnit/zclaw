@@ -232,7 +232,9 @@ mod tests {
         assert_eq!(result["skills"].as_array().unwrap().len(), 1);
 
         let view = skill_view_tool();
-        let result = (view.handler)(json!({"name": "test-skill"}), ctx).await.unwrap();
+        let result = (view.handler)(json!({"name": "test-skill"}), ctx)
+            .await
+            .unwrap();
         assert!(result["content"].as_str().unwrap().contains("Do the thing"));
     }
 }

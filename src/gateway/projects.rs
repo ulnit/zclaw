@@ -54,7 +54,9 @@ fn sync_board_default_workdir(project: &pdb::Project, board_slug: &str) {
 }
 
 /// `GET /api/projects?all=true` — projects (oldest first) + active id.
-pub async fn list_projects(Query(params): Query<std::collections::HashMap<String, String>>) -> Response {
+pub async fn list_projects(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Response {
     let include_archived = params
         .get("all")
         .map(|v| v == "true" || v == "1")
@@ -174,7 +176,10 @@ pub struct UpdateProjectBody {
 
 /// `PATCH /api/projects/:id` — patch fields; binding a board mirrors the
 /// primary repo as the board's `default_workdir`.
-pub async fn update_project(Path(id): Path<String>, Json(body): Json<UpdateProjectBody>) -> Response {
+pub async fn update_project(
+    Path(id): Path<String>,
+    Json(body): Json<UpdateProjectBody>,
+) -> Response {
     let conn = match conn() {
         Ok(c) => c,
         Err(e) => return e,
@@ -198,7 +203,12 @@ pub async fn update_project(Path(id): Path<String>, Json(body): Json<UpdateProje
         Ok(None) => return super::server_error("project vanished after update"),
         Err(e) => return super::server_error(&e.to_string()),
     };
-    if let Some(board) = body.board_slug.as_deref().map(str::trim).filter(|b| !b.is_empty()) {
+    if let Some(board) = body
+        .board_slug
+        .as_deref()
+        .map(str::trim)
+        .filter(|b| !b.is_empty())
+    {
         sync_board_default_workdir(&updated, board);
     }
     Json(json!({
@@ -278,9 +288,7 @@ pub async fn remove_folder(Path(id): Path<String>, Json(body): Json<FolderBody>)
     };
     match pdb::remove_folder(&conn, &project.id, &body.path) {
         Ok(true) => {}
-        Ok(false) => {
-            return super::not_found(&format!("folder not in project: {}", body.path))
-        }
+        Ok(false) => return super::not_found(&format!("folder not in project: {}", body.path)),
         Err(e) => return super::server_error(&e.to_string()),
     }
     let updated = match pdb::get_project(&conn, &project.id) {
@@ -309,7 +317,10 @@ pub async fn set_primary(Path(id): Path<String>, Json(body): Json<FolderBody>) -
         Ok(true) => {}
         Ok(false) => {
             return super::bad_request(
-                &format!("'{}' is not a folder of project {}", body.path, project.slug),
+                &format!(
+                    "'{}' is not a folder of project {}",
+                    body.path, project.slug
+                ),
                 None,
             )
         }
@@ -424,7 +435,9 @@ pub async fn scan_repos(Json(body): Json<ScanBody>) -> Response {
     } else {
         body.roots.iter().map(std::path::PathBuf::from).collect()
     };
-    let max_depth = body.max_depth.unwrap_or(crate::projects_scan::DEFAULT_MAX_DEPTH);
+    let max_depth = body
+        .max_depth
+        .unwrap_or(crate::projects_scan::DEFAULT_MAX_DEPTH);
     let found = crate::projects_scan::scan_for_repos(&roots, max_depth);
     let conn = match conn() {
         Ok(c) => c,

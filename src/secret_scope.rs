@@ -187,7 +187,9 @@ pub fn is_global_env(name: &str) -> bool {
     if GLOBAL_ENV_EXACT.contains(&name) {
         return true;
     }
-    GLOBAL_ENV_PREFIXES.iter().any(|prefix| name.starts_with(prefix))
+    GLOBAL_ENV_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
 }
 
 // ── scoped resolution ────────────────────────────────────────────────────
@@ -265,8 +267,7 @@ pub fn get_secret(name: &str) -> Result<Option<String>, UnscopedSecretError> {
 /// Lenient variant for call sites outside the multiplexed gateway: a
 /// fail-closed error degrades to the default instead of surfacing.
 pub fn get_secret_lenient(name: &str, default: Option<&str>) -> Option<String> {
-    get_secret_default(name, default)
-        .unwrap_or_else(|_| default.map(str::to_string))
+    get_secret_default(name, default).unwrap_or_else(|_| default.map(str::to_string))
 }
 
 // ── dotenv parsing (no process-env mutation) ─────────────────────────────
@@ -504,7 +505,10 @@ mod tests {
     #[test]
     fn parse_env_value_reverses_double_quote_escapes() {
         assert_eq!(parse_env_value(r#""plain""#), "plain");
-        assert_eq!(parse_env_value(r#""has \"quote\" inside""#), r#"has "quote" inside"#);
+        assert_eq!(
+            parse_env_value(r#""has \"quote\" inside""#),
+            r#"has "quote" inside"#
+        );
         assert_eq!(parse_env_value(r#""back\\slash""#), r"back\slash");
         assert_eq!(parse_env_value(r#""kept \n literal""#), r"kept \n literal");
     }
@@ -525,10 +529,7 @@ mod tests {
         );
         assert_eq!(strip_inline_comment("'q # v' # c"), "'q # v'");
         // Escaped quote does not end the value early.
-        assert_eq!(
-            strip_inline_comment(r#""a \" b" # c"#),
-            r#""a \" b""#
-        );
+        assert_eq!(strip_inline_comment(r#""a \" b" # c"#), r#""a \" b""#);
     }
 
     #[test]
@@ -540,7 +541,10 @@ mod tests {
         // Non-comment trailing junk after a close quote: lenient keep.
         assert_eq!(strip_inline_comment(r#""v" junk"#), r#""v" junk"#);
         // Unterminated quote: leave as-is.
-        assert_eq!(strip_inline_comment(r#""unterminated # x"#), r#""unterminated # x"#);
+        assert_eq!(
+            strip_inline_comment(r#""unterminated # x"#),
+            r#""unterminated # x"#
+        );
     }
 
     // ── load_env_scoped ──────────────────────────────────────────────
@@ -599,7 +603,9 @@ mod tests {
         std::env::set_var(TEST_VAR, "env-value");
         assert_eq!(get_secret(TEST_VAR).unwrap().as_deref(), Some("env-value"));
         assert_eq!(
-            get_secret_default("ULNCLAW_SS_UNSET_XYZ", Some("dflt")).unwrap().as_deref(),
+            get_secret_default("ULNCLAW_SS_UNSET_XYZ", Some("dflt"))
+                .unwrap()
+                .as_deref(),
             Some("dflt")
         );
         std::env::remove_var(TEST_VAR);
@@ -681,7 +687,9 @@ mod tests {
         // Prefix global with a default.
         std::env::remove_var("ULNCLAW_KANBAN_BOARD");
         assert_eq!(
-            get_secret_default("ULNCLAW_KANBAN_BOARD", Some("b")).unwrap().as_deref(),
+            get_secret_default("ULNCLAW_KANBAN_BOARD", Some("b"))
+                .unwrap()
+                .as_deref(),
             Some("b")
         );
         std::env::remove_var("ULNCLAW_HOME");
@@ -692,7 +700,10 @@ mod tests {
     async fn lenient_variant_degrades_to_default() {
         let _guard = test_multiplex_lock();
         set_multiplex_active(true);
-        assert_eq!(get_secret_lenient("OPENAI_API_KEY", Some("dflt")).as_deref(), Some("dflt"));
+        assert_eq!(
+            get_secret_lenient("OPENAI_API_KEY", Some("dflt")).as_deref(),
+            Some("dflt")
+        );
         set_multiplex_active(false);
         assert_eq!(get_secret_lenient("ULNCLAW_SS_UNSET_XYZ", None), None);
     }
@@ -711,7 +722,9 @@ mod tests {
         })
         .await;
         assert_eq!(
-            out.as_ref().and_then(|map| map.get("ULNCLAW_SS_PROP")).map(String::as_str),
+            out.as_ref()
+                .and_then(|map| map.get("ULNCLAW_SS_PROP"))
+                .map(String::as_str),
             Some("deep")
         );
     }
@@ -737,7 +750,10 @@ mod tests {
         )
         .unwrap();
         let scope = build_profile_secret_scope(dir.path());
-        assert_eq!(scope.get("OPENAI_API_KEY").map(String::as_str), Some("sk-profile"));
+        assert_eq!(
+            scope.get("OPENAI_API_KEY").map(String::as_str),
+            Some("sk-profile")
+        );
         assert!(!scope.contains_key("ULNCLAW_HOME"));
         clear_source_registry();
     }

@@ -126,7 +126,11 @@ mod tests {
         assert!(TIPS.len() >= 40, "tip corpus should be substantial");
         for tip in TIPS {
             assert!(!tip.trim().is_empty());
-            assert!(tip.chars().count() < 400, "tips stay one-liner-ish: {}", tip);
+            assert!(
+                tip.chars().count() < 400,
+                "tips stay one-liner-ish: {}",
+                tip
+            );
         }
         // No exact duplicates.
         let mut seen = std::collections::HashSet::new();
@@ -145,8 +149,7 @@ mod tests {
 
     #[test]
     fn picker_varies() {
-        let picks: std::collections::HashSet<&str> =
-            (0..200).map(|_| get_random_tip()).collect();
+        let picks: std::collections::HashSet<&str> = (0..200).map(|_| get_random_tip()).collect();
         assert!(picks.len() > 1, "picker should not be constant");
     }
 

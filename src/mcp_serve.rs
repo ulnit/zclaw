@@ -89,7 +89,10 @@ fn conversation_entry(row: &crate::session::sqlite::PlatformSessionRow) -> Value
     let platform = if !key_platform.is_empty() {
         key_platform.clone()
     } else {
-        row.source.strip_prefix("platform:").unwrap_or(&row.source).to_string()
+        row.source
+            .strip_prefix("platform:")
+            .unwrap_or(&row.source)
+            .to_string()
     };
     let directory_entry = crate::channel_directory::channel_info(&platform, &chat_id);
     let display_name = row
@@ -332,8 +335,7 @@ impl EventBridge {
         session_key: Option<&str>,
         timeout_ms: u64,
     ) -> Option<Value> {
-        let deadline =
-            tokio::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
         loop {
             if let Some(event) = self.find_event(after_cursor, session_key) {
                 return Some(event);
@@ -464,7 +466,14 @@ fn tool_messages_read(args: &Value) -> String {
         })
         .collect();
     let total = filtered.len();
-    let messages: Vec<Value> = filtered.into_iter().rev().take(limit).collect::<Vec<_>>().into_iter().rev().collect();
+    let messages: Vec<Value> = filtered
+        .into_iter()
+        .rev()
+        .take(limit)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
     json!({
         "session_key": session_key,
         "count": messages.len(),
@@ -486,7 +495,10 @@ fn tool_attachments_fetch(args: &Value) -> String {
     let Ok(all) = store.load_message_rows(&row.id) else {
         return json!({"error": "Failed to read messages"}).to_string();
     };
-    let Some(message) = all.iter().find(|message| message.id.to_string() == message_id) else {
+    let Some(message) = all
+        .iter()
+        .find(|message| message.id.to_string() == message_id)
+    else {
         return json!({"error": format!("Message not found: {message_id}")}).to_string();
     };
     let attachments = extract_attachments(&message.content);
@@ -518,10 +530,18 @@ async fn tool_events_wait(bridge: &EventBridge, args: &Value) -> String {
         0,
         1_000_000_000_000_000_000,
     ) as u64;
-    let timeout_ms = coerce_int(args.get("timeout_ms").unwrap_or(&json!(30000)), 30000, 0, 300000)
-        as u64;
+    let timeout_ms = coerce_int(
+        args.get("timeout_ms").unwrap_or(&json!(30000)),
+        30000,
+        0,
+        300000,
+    ) as u64;
     match bridge
-        .wait_for_event(after, opt_arg_str(args, "session_key").as_deref(), timeout_ms)
+        .wait_for_event(
+            after,
+            opt_arg_str(args, "session_key").as_deref(),
+            timeout_ms,
+        )
         .await
     {
         Some(event) => json!({"event": event}).to_string(),
@@ -935,9 +955,12 @@ mod tests {
     #[tokio::test]
     async fn notifications_get_no_reply_and_unknown_method_errors() {
         let bridge = EventBridge::new();
-        assert!(handle_line(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#, &bridge)
-            .await
-            .is_none());
+        assert!(handle_line(
+            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+            &bridge
+        )
+        .await
+        .is_none());
         let response = handle_line(r#"{"jsonrpc":"2.0","id":7,"method":"bogus/one"}"#, &bridge)
             .await
             .unwrap();

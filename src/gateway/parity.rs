@@ -90,7 +90,10 @@ pub struct ActionStatusQuery {
 }
 
 /// `GET /api/actions/:name/status` — tail a background action's output.
-pub async fn action_status(Path(name): Path<String>, Query(query): Query<ActionStatusQuery>) -> Response {
+pub async fn action_status(
+    Path(name): Path<String>,
+    Query(query): Query<ActionStatusQuery>,
+) -> Response {
     let record = actions().lock().unwrap().get(&name).cloned();
     match record {
         Some(record) => {
@@ -176,7 +179,10 @@ pub struct UsageQuery {
 /// `GET /api/analytics/usage` — daily + per-model + totals aggregation the
 /// Usage view charts (same numbers `/api/analytics/models` reports, plus
 /// the per-day window).
-pub async fn analytics_usage(State(state): State<Arc<GatewayState>>, Query(query): Query<UsageQuery>) -> Response {
+pub async fn analytics_usage(
+    State(state): State<Arc<GatewayState>>,
+    Query(query): Query<UsageQuery>,
+) -> Response {
     let days = query.days.unwrap_or(30).clamp(1, 365);
     let cutoff = chrono::Utc::now() - chrono::Duration::days(days);
     let cutoff_secs = cutoff.timestamp() as f64;
@@ -272,12 +278,15 @@ pub async fn analytics_usage(State(state): State<Arc<GatewayState>>, Query(query
     let mut top_skills: Vec<(String, i64, Value)> = usage
         .iter()
         .map(|(name, record)| {
-            let total = record
-                .get("use_count")
-                .and_then(Value::as_i64)
-                .unwrap_or(0)
-                + record.get("view_count").and_then(Value::as_i64).unwrap_or(0)
-                + record.get("patch_count").and_then(Value::as_i64).unwrap_or(0);
+            let total = record.get("use_count").and_then(Value::as_i64).unwrap_or(0)
+                + record
+                    .get("view_count")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0)
+                + record
+                    .get("patch_count")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0);
             (name.clone(), total, record.clone())
         })
         .collect::<Vec<_>>();
@@ -349,8 +358,14 @@ pub async fn skills_list(State(state): State<Arc<GatewayState>>) -> Response {
         .map(|skill| {
             let total = usage.get(&skill.name).map(|record| {
                 record.get("use_count").and_then(Value::as_i64).unwrap_or(0)
-                    + record.get("view_count").and_then(Value::as_i64).unwrap_or(0)
-                    + record.get("patch_count").and_then(Value::as_i64).unwrap_or(0)
+                    + record
+                        .get("view_count")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(0)
+                    + record
+                        .get("patch_count")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(0)
             });
             json!({
                 "name": skill.name,
@@ -434,7 +449,10 @@ pub struct HubSearchQuery {
 }
 
 /// `GET /api/skills/hub/search` — search the installed/local catalog.
-pub async fn hub_search(State(state): State<Arc<GatewayState>>, Query(query): Query<HubSearchQuery>) -> Response {
+pub async fn hub_search(
+    State(state): State<Arc<GatewayState>>,
+    Query(query): Query<HubSearchQuery>,
+) -> Response {
     let dir = skills_dir(&state);
     let needle = query.q.unwrap_or_default().to_lowercase();
     let limit = query.limit.unwrap_or(20).clamp(1, 100);
@@ -474,7 +492,10 @@ pub struct HubIdentifierQuery {
 }
 
 /// `GET /api/skills/hub/preview` — SKILL.md content without installing.
-pub async fn hub_preview(State(state): State<Arc<GatewayState>>, Query(query): Query<HubIdentifierQuery>) -> Response {
+pub async fn hub_preview(
+    State(state): State<Arc<GatewayState>>,
+    Query(query): Query<HubIdentifierQuery>,
+) -> Response {
     let dir = skills_dir(&state);
     let identifier = query.identifier.unwrap_or_default();
     let Some(skill) = crate::skills::find_skill(&dir, &identifier) else {
@@ -495,7 +516,10 @@ pub async fn hub_preview(State(state): State<Arc<GatewayState>>, Query(query): Q
 }
 
 /// `GET /api/skills/hub/scan` — security scan report for a local skill.
-pub async fn hub_scan(State(state): State<Arc<GatewayState>>, Query(query): Query<HubIdentifierQuery>) -> Response {
+pub async fn hub_scan(
+    State(state): State<Arc<GatewayState>>,
+    Query(query): Query<HubIdentifierQuery>,
+) -> Response {
     let dir = skills_dir(&state);
     let identifier = query.identifier.unwrap_or_default();
     let Some(skill) = crate::skills::find_skill(&dir, &identifier) else {
@@ -511,7 +535,10 @@ pub struct HubInstallBody {
 }
 
 /// `POST /api/skills/hub/install` — background install action.
-pub async fn hub_install(State(state): State<Arc<GatewayState>>, Json(body): Json<HubInstallBody>) -> Response {
+pub async fn hub_install(
+    State(state): State<Arc<GatewayState>>,
+    Json(body): Json<HubInstallBody>,
+) -> Response {
     let identifier = body.identifier.unwrap_or_default();
     let dir = skills_dir(&state);
     let response = start_action("skills-hub-install", move || {
@@ -533,7 +560,10 @@ pub struct HubUninstallBody {
 }
 
 /// `POST /api/skills/hub/uninstall` — remove a local skill directory.
-pub async fn hub_uninstall(State(state): State<Arc<GatewayState>>, Json(body): Json<HubUninstallBody>) -> Response {
+pub async fn hub_uninstall(
+    State(state): State<Arc<GatewayState>>,
+    Json(body): Json<HubUninstallBody>,
+) -> Response {
     let name = body.name.unwrap_or_default();
     let dir = skills_dir(&state);
     let response = start_action("skills-hub-uninstall", move || {
@@ -554,7 +584,9 @@ pub async fn hub_update(State(_state): State<Arc<GatewayState>>) -> Response {
         let config = crate::config::UlncLawConfig::load(None).unwrap_or_default();
         match crate::skills_sync::inert_reason(&config.sync) {
             Some(reason) => Ok(vec![format!("sync inert: {reason}")]),
-            None => Ok(vec!["skills sync configured; run `ulnclaw skills sync` for a full sweep".into()]),
+            None => Ok(vec![
+                "skills sync configured; run `ulnclaw skills sync` for a full sweep".into(),
+            ]),
         }
         .map(|mut lines| {
             lines.insert(0, format!("skills home: {}", home.display()));
@@ -604,14 +636,19 @@ pub struct ToolsetUpdateBody {
 }
 
 /// `PUT /api/tools/toolsets/:name` — toggle one toolset in config.
-pub async fn toolset_update(Path(name): Path<String>, Json(body): Json<ToolsetUpdateBody>) -> Response {
+pub async fn toolset_update(
+    Path(name): Path<String>,
+    Json(body): Json<ToolsetUpdateBody>,
+) -> Response {
     if !crate::toolsets::toolsets().contains_key(name.as_str()) {
         return super::not_found(&format!("unknown toolset {name}"));
     }
     let enabled = body.enabled.unwrap_or(true);
     let path = crate::config_cmd::config_path();
     let raw = std::fs::read_to_string(&path).unwrap_or_default();
-    let mut doc: toml::Value = raw.parse().unwrap_or_else(|_| toml::Value::Table(Default::default()));
+    let mut doc: toml::Value = raw
+        .parse()
+        .unwrap_or_else(|_| toml::Value::Table(Default::default()));
     let table = doc
         .as_table_mut()
         .expect("toml root is a table after parse fallback");
@@ -630,10 +667,7 @@ pub async fn toolset_update(Path(name): Path<String>, Json(body): Json<ToolsetUp
     } else if !disabled.contains(&name) {
         disabled.push(name.clone());
     }
-    let values: Vec<toml::Value> = disabled
-        .into_iter()
-        .map(toml::Value::String)
-        .collect();
+    let values: Vec<toml::Value> = disabled.into_iter().map(toml::Value::String).collect();
     table.insert("disabled_toolsets".into(), toml::Value::Array(values));
     if let Err(err) = std::fs::write(&path, doc.to_string()) {
         return super::server_error(&err.to_string());
@@ -669,7 +703,11 @@ pub async fn toolset_noop(Path(name): Path<String>) -> Response {
 /// `GET /api/tools/terminal/backends` — execution backend rows.
 pub async fn terminal_backends(State(_state): State<Arc<GatewayState>>) -> Response {
     let config = crate::config::UlncLawConfig::load(None).unwrap_or_default();
-    let active = config.terminal.backend.clone().unwrap_or_else(|| "local".into());
+    let active = config
+        .terminal
+        .backend
+        .clone()
+        .unwrap_or_else(|| "local".into());
     let shell_ok = which_shell();
     let backends = json!([
         {
@@ -701,9 +739,9 @@ pub async fn terminal_backends(State(_state): State<Arc<GatewayState>>) -> Respo
 }
 
 fn which_shell() -> bool {
-    ["sh", "bash"]
-        .iter()
-        .any(|shell| std::env::var("SHELL").is_ok() || PathBuf::from(format!("/bin/{shell}")).exists())
+    ["sh", "bash"].iter().any(|shell| {
+        std::env::var("SHELL").is_ok() || PathBuf::from(format!("/bin/{shell}")).exists()
+    })
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -716,7 +754,9 @@ pub async fn terminal_backend_set(Json(body): Json<TerminalBackendBody>) -> Resp
     let backend = body.backend.unwrap_or_else(|| "local".into());
     let path = crate::config_cmd::config_path();
     let raw = std::fs::read_to_string(&path).unwrap_or_default();
-    let mut doc: toml::Value = raw.parse().unwrap_or_else(|_| toml::Value::Table(Default::default()));
+    let mut doc: toml::Value = raw
+        .parse()
+        .unwrap_or_else(|_| toml::Value::Table(Default::default()));
     let table = doc.as_table_mut().expect("toml table");
     let terminal = table
         .entry("terminal")
@@ -815,7 +855,9 @@ pub async fn cron_blueprints(State(state): State<Arc<GatewayState>>) -> Response
     let dir = skills_dir(&state);
     let mut blueprints = Vec::new();
     for skill in crate::skills::list_skills(&dir) {
-        if let Some(spec) = crate::skills::blueprint::blueprint_spec_for_installed(&dir, &skill.name) {
+        if let Some(spec) =
+            crate::skills::blueprint::blueprint_spec_for_installed(&dir, &skill.name)
+        {
             blueprints.push(json!({
                 "key": skill.name,
                 "title": skill.name,
@@ -852,13 +894,25 @@ pub async fn cron_blueprints_instantiate(
     let Some(mut spec) = crate::skills::blueprint::blueprint_spec_for_installed(&dir, &key) else {
         return super::not_found(&format!("unknown blueprint {key}"));
     };
-    if let Some(schedule) = body.values.get("schedule").filter(|value| !value.trim().is_empty()) {
+    if let Some(schedule) = body
+        .values
+        .get("schedule")
+        .filter(|value| !value.trim().is_empty())
+    {
         spec.schedule = schedule.clone();
     }
-    if let Some(deliver) = body.values.get("deliver").filter(|value| !value.trim().is_empty()) {
+    if let Some(deliver) = body
+        .values
+        .get("deliver")
+        .filter(|value| !value.trim().is_empty())
+    {
         spec.deliver = deliver.clone();
     }
-    if let Some(prompt) = body.values.get("prompt").filter(|value| !value.trim().is_empty()) {
+    if let Some(prompt) = body
+        .values
+        .get("prompt")
+        .filter(|value| !value.trim().is_empty())
+    {
         spec.prompt = Some(prompt.clone());
     }
     let job = match crate::skills::blueprint::blueprint_to_job(&spec, None) {
@@ -941,7 +995,8 @@ pub async fn ops_doctor(State(_state): State<Arc<GatewayState>>) -> Response {
 /// `POST /api/ops/backup` — zip the home dir (synchronous; fast enough).
 pub async fn ops_backup(State(_state): State<Arc<GatewayState>>) -> Response {
     let home = home();
-    let result = tokio::task::spawn_blocking(move || crate::backup::create_backup(&home, None)).await;
+    let result =
+        tokio::task::spawn_blocking(move || crate::backup::create_backup(&home, None)).await;
     match result {
         Ok(Ok(summary)) => {
             let archive = summary.out_path.display().to_string();
@@ -966,7 +1021,9 @@ pub async fn ops_backup(State(_state): State<Arc<GatewayState>>) -> Response {
             }))
             .into_response()
         }
-        Ok(Err(err)) => Json(json!({"name": "backup", "ok": false, "pid": null, "error": err})).into_response(),
+        Ok(Err(err)) => {
+            Json(json!({"name": "backup", "ok": false, "pid": null, "error": err})).into_response()
+        }
         Err(err) => super::server_error(&err.to_string()),
     }
 }

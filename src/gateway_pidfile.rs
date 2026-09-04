@@ -43,8 +43,8 @@ pub fn process_start_time(pid: u32) -> Option<u64> {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let close = stat.rfind(')')?;
     let rest = stat.get(close + 2..)?; // skip ") "
-    // stat field 22 == whitespace token index 19 after the comm field
-    // (token 0 is field 3, `state`).
+                                       // stat field 22 == whitespace token index 19 after the comm field
+                                       // (token 0 is field 3, `state`).
     let field = rest.split_whitespace().nth(19)?;
     field.parse().ok()
 }
@@ -106,8 +106,8 @@ pub fn process_image_name(pid: u32) -> Option<String> {
 pub fn process_image_name(pid: u32) -> Option<String> {
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
-        PROCESS_NAME_WIN32,
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION,
     };
     if pid == 0 {
         return None;
@@ -119,12 +119,8 @@ pub fn process_image_name(pid: u32) -> Option<String> {
         }
         let mut buf = [0u16; 512];
         let mut len = buf.len() as u32;
-        let ok = QueryFullProcessImageNameW(
-            handle,
-            PROCESS_NAME_WIN32,
-            buf.as_mut_ptr(),
-            &mut len,
-        ) != 0;
+        let ok =
+            QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut len) != 0;
         CloseHandle(handle);
         if !ok {
             return None;
@@ -181,9 +177,7 @@ pub fn running_gateway_pid(home: &Path) -> Option<u32> {
         let _ = std::fs::remove_file(&path);
         return None;
     }
-    if let (Some(recorded), Some(current)) =
-        (record.started_at, process_start_time(record.pid))
-    {
+    if let (Some(recorded), Some(current)) = (record.started_at, process_start_time(record.pid)) {
         if recorded != current {
             // The pid was recycled by the kernel for another process.
             let _ = std::fs::remove_file(&path);
@@ -241,10 +235,7 @@ mod tests {
     fn pidfile_roundtrip_detects_current_process() {
         let home = temp_home();
         write_pidfile(home.path()).unwrap();
-        assert_eq!(
-            running_gateway_pid(home.path()),
-            Some(std::process::id())
-        );
+        assert_eq!(running_gateway_pid(home.path()), Some(std::process::id()));
     }
 
     #[test]

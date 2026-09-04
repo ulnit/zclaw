@@ -308,7 +308,9 @@ fn check_image_gen() -> ToolAvailability {
     if openai_key().is_some() {
         ToolAvailability::available()
     } else {
-        ToolAvailability::unavailable("OPENAI_API_KEY not set (image generation needs an image API)")
+        ToolAvailability::unavailable(
+            "OPENAI_API_KEY not set (image generation needs an image API)",
+        )
     }
 }
 
@@ -405,7 +407,9 @@ fn check_tts() -> ToolAvailability {
     if openai_key().is_some() || crate::config::get_env_value("ULNCLAW_TTS_ENDPOINT").is_some() {
         ToolAvailability::available()
     } else {
-        ToolAvailability::unavailable("no TTS backend configured (set OPENAI_API_KEY or ULNCLAW_TTS_ENDPOINT)")
+        ToolAvailability::unavailable(
+            "no TTS backend configured (set OPENAI_API_KEY or ULNCLAW_TTS_ENDPOINT)",
+        )
     }
 }
 

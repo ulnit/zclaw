@@ -87,19 +87,20 @@ enum KeyFamily {
 /// `kid` when `jwks_or_key` is a URL, or an inline PEM public key
 /// otherwise (test / pinned-key deployments). Returns the key plus its
 /// family.
-async fn resolve_decoding_key(
-    token: &str,
-    jwks_or_key: &str,
-) -> Option<(DecodingKey, KeyFamily)> {
+async fn resolve_decoding_key(token: &str, jwks_or_key: &str) -> Option<(DecodingKey, KeyFamily)> {
     if jwks_or_key.starts_with("http://") || jwks_or_key.starts_with("https://") {
         let jwks = fetch_jwks(jwks_or_key).await?;
         let header = jsonwebtoken::decode_header(token).ok()?;
         // Look up by kid; a kid-less token against a single-key set uses
         // that key (PyJWKClient parity for single-key deployments).
         let jwk = match header.kid.as_deref() {
-            Some(kid) => jwks
-                .find(kid)
-                .or_else(|| if jwks.keys.len() == 1 { jwks.keys.first() } else { None }),
+            Some(kid) => jwks.find(kid).or_else(|| {
+                if jwks.keys.len() == 1 {
+                    jwks.keys.first()
+                } else {
+                    None
+                }
+            }),
             None => {
                 if jwks.keys.len() == 1 {
                     jwks.keys.first()
@@ -156,7 +157,9 @@ pub async fn verify_fire_token(
     validation.algorithms = ALLOWED_ALGORITHMS
         .iter()
         .filter(|alg| match (family, alg) {
-            (KeyFamily::Rsa, alg) => matches!(alg, Algorithm::RS256 | Algorithm::RS384 | Algorithm::RS512),
+            (KeyFamily::Rsa, alg) => {
+                matches!(alg, Algorithm::RS256 | Algorithm::RS384 | Algorithm::RS512)
+            }
             (KeyFamily::Ec, alg) => matches!(alg, Algorithm::ES256 | Algorithm::ES384),
         })
         .copied()
@@ -168,8 +171,7 @@ pub async fn verify_fire_token(
         validation.set_issuer(&[issuer]);
     }
 
-    let token_data =
-        jsonwebtoken::decode::<Value>(token, &decoding_key, &validation).ok()?;
+    let token_data = jsonwebtoken::decode::<Value>(token, &decoding_key, &validation).ok()?;
     if token_data.claims.get("purpose").and_then(Value::as_str) != Some(FIRE_PURPOSE) {
         return None;
     }
@@ -260,30 +262,38 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let mut claims = fire_claims("agent:instance-1", now() + 300);
         claims["purpose"] = json!("general");
         let token = sign(claims);
-        assert!(verify_fire_token(&token, "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
-            .await
-            .is_none());
+        assert!(
+            verify_fire_token(&token, "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
+                .await
+                .is_none()
+        );
     }
 
     #[tokio::test]
     async fn test_verify_rejects_wrong_audience() {
         let token = sign(fire_claims("agent:other", now() + 300));
-        assert!(verify_fire_token(&token, "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
-            .await
-            .is_none());
+        assert!(
+            verify_fire_token(&token, "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
+                .await
+                .is_none()
+        );
     }
 
     #[tokio::test]
     async fn test_verify_rejects_expired_beyond_leeway() {
         let token = sign(fire_claims("agent:instance-1", now() - 120));
-        assert!(verify_fire_token(&token, "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
-            .await
-            .is_none());
+        assert!(
+            verify_fire_token(&token, "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
+                .await
+                .is_none()
+        );
         // Within leeway it passes.
         let token = sign(fire_claims("agent:instance-1", now() - 10));
-        assert!(verify_fire_token(&token, "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
-            .await
-            .is_some());
+        assert!(
+            verify_fire_token(&token, "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
+                .await
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -294,19 +304,31 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             &EncodingKey::from_secret(b"shared-secret"),
         )
         .unwrap();
-        assert!(verify_fire_token(&token, "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
-            .await
-            .is_none());
+        assert!(
+            verify_fire_token(&token, "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
+                .await
+                .is_none()
+        );
     }
 
     #[tokio::test]
     async fn test_verify_requires_key_and_audience() {
         let token = sign(fire_claims("agent:instance-1", now() + 300));
-        assert!(verify_fire_token(&token, "agent:instance-1", None, None, 30).await.is_none());
-        assert!(verify_fire_token(&token, "", Some(TEST_PUBLIC_PEM), None, 30).await.is_none());
-        assert!(verify_fire_token("", "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
-            .await
-            .is_none());
+        assert!(
+            verify_fire_token(&token, "agent:instance-1", None, None, 30)
+                .await
+                .is_none()
+        );
+        assert!(
+            verify_fire_token(&token, "", Some(TEST_PUBLIC_PEM), None, 30)
+                .await
+                .is_none()
+        );
+        assert!(
+            verify_fire_token("", "agent:instance-1", Some(TEST_PUBLIC_PEM), None, 30)
+                .await
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -336,7 +358,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
     /// Serve a JWKS document on a random port; returns (base_url,
     /// fetch_counter).
-    async fn jwks_server(jwks_body: String) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    async fn jwks_server(
+        jwks_body: String,
+    ) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         use axum::routing::get;
         use axum::Router;
         let counter = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -348,7 +372,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 let body = jwks_body.clone();
                 async move {
                     counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    ([(axum::http::header::CONTENT_TYPE, "application/json")], body)
+                    (
+                        [(axum::http::header::CONTENT_TYPE, "application/json")],
+                        body,
+                    )
                 }
             }),
         );
@@ -357,7 +384,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         tokio::spawn(async move {
             axum::serve(listener, app).await.ok();
         });
-        (format!("http://127.0.0.1:{}/jwks.json", addr.port()), counter)
+        (
+            format!("http://127.0.0.1:{}/jwks.json", addr.port()),
+            counter,
+        )
     }
 
     #[tokio::test]
@@ -371,9 +401,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(claims["purpose"], "cron_fire");
         assert_eq!(counter.load(std::sync::atomic::Ordering::SeqCst), 1);
         // Second fire: the cached key set is reused — no second fetch.
-        assert!(verify_fire_token(&token, "agent:instance-1", Some(&url), None, 30)
-            .await
-            .is_some());
+        assert!(
+            verify_fire_token(&token, "agent:instance-1", Some(&url), None, 30)
+                .await
+                .is_some()
+        );
         assert_eq!(counter.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
@@ -395,23 +427,29 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // Single-key JWKS fallback applies (one key in the set), so the
         // verification still succeeds — matching PyJWKClient behaviour
         // for single-key sets.
-        assert!(verify_fire_token(&token, "agent:instance-1", Some(&url), None, 30)
-            .await
-            .is_some());
+        assert!(
+            verify_fire_token(&token, "agent:instance-1", Some(&url), None, 30)
+                .await
+                .is_some()
+        );
         // Two keys and no matching kid → fails.
         let mut second: Value = serde_json::from_str(TEST_JWK).unwrap();
         second["kid"] = json!("another-key");
         let jwks = format!(r#"{{"keys":[{},{}]}}"#, renamed, second);
         let (url, _) = jwks_server(jwks).await;
-        assert!(verify_fire_token(&token, "agent:instance-1", Some(&url), None, 30)
-            .await
-            .is_none());
+        assert!(
+            verify_fire_token(&token, "agent:instance-1", Some(&url), None, 30)
+                .await
+                .is_none()
+        );
     }
 
     #[tokio::test]
     async fn test_verify_garbage_token_fails() {
-        assert!(verify_fire_token("not-a-jwt", "agent:x", Some(TEST_PUBLIC_PEM), None, 30)
-            .await
-            .is_none());
+        assert!(
+            verify_fire_token("not-a-jwt", "agent:x", Some(TEST_PUBLIC_PEM), None, 30)
+                .await
+                .is_none()
+        );
     }
 }

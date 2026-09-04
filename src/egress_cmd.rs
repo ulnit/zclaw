@@ -131,10 +131,7 @@ pub fn handle_setup(opts: SetupOptions) -> Result<(), String> {
                 bw_cfg.access_token_env
             ));
         }
-        let result = crate::secrets::fetch_bitwarden_source(
-            bw_cfg,
-            &crate::config::ulnclaw_home(),
-        );
+        let result = crate::secrets::fetch_bitwarden_source(bw_cfg, &crate::config::ulnclaw_home());
         if !result.ok {
             return Err(format!(
                 "Could not enumerate Bitwarden secrets: {}\n  Either fix the Bitwarden \
@@ -167,7 +164,10 @@ pub fn handle_setup(opts: SetupOptions) -> Result<(), String> {
         known.extend(ip::NON_BEARER_PROVIDERS.iter().copied());
         known.extend(ip::HEADER_AUTH_PROVIDERS.iter().map(|s| s.env_name));
         for name in known {
-            if std::env::var(name).map(|v| !v.trim().is_empty()).unwrap_or(false) {
+            if std::env::var(name)
+                .map(|v| !v.trim().is_empty())
+                .unwrap_or(false)
+            {
                 continue;
             }
             if let Some(value) = file_env.get(name).filter(|v| !v.trim().is_empty()) {
@@ -265,7 +265,10 @@ pub fn handle_setup(opts: SetupOptions) -> Result<(), String> {
     }
 
     println!();
-    println!("  {:<24} {:<44} {}", "Provider env", "Upstream hosts", "Proxy token");
+    println!(
+        "  {:<24} {:<44} {}",
+        "Provider env", "Upstream hosts", "Proxy token"
+    );
     for m in &mappings {
         println!(
             "  {:<24} {:<44} {}",
@@ -308,14 +311,19 @@ pub fn handle_setup(opts: SetupOptions) -> Result<(), String> {
                 .collect()
         })
         .unwrap_or_default();
-    let mut allowed: Vec<String> = ip::DEFAULT_ALLOWED_HOSTS.iter().map(|s| s.to_string()).collect();
+    let mut allowed: Vec<String> = ip::DEFAULT_ALLOWED_HOSTS
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
     for host in extra_hosts {
         if !allowed.contains(&host) {
             allowed.push(host);
         }
     }
 
-    let audit_log_path = crate::config::ulnclaw_home().join("proxy").join("audit.log");
+    let audit_log_path = crate::config::ulnclaw_home()
+        .join("proxy")
+        .join("audit.log");
     // Pre-create the audit log 0600. On v0.39 the daemon does NOT write
     // it (reserved for v0.40+), so failure is a WARNING, not an abort.
     let mut audit_log_ok = true;
@@ -361,9 +369,16 @@ pub fn handle_setup(opts: SetupOptions) -> Result<(), String> {
     {
         let table = proxy_table_mut(&mut cfg);
         table.insert("enabled".into(), toml::Value::Boolean(true));
-        table.insert("tunnel_port".into(), toml::Value::Integer(tunnel_port as i64));
-        table.entry("auto_install").or_insert(toml::Value::Boolean(true));
-        table.entry("enforce_on_docker").or_insert(toml::Value::Boolean(true));
+        table.insert(
+            "tunnel_port".into(),
+            toml::Value::Integer(tunnel_port as i64),
+        );
+        table
+            .entry("auto_install")
+            .or_insert(toml::Value::Boolean(true));
+        table
+            .entry("enforce_on_docker")
+            .or_insert(toml::Value::Boolean(true));
         // CRITICAL: do NOT silently downgrade credential_source on
         // re-run — require an explicit --no-bitwarden to switch back.
         let existing_source = table
@@ -377,7 +392,10 @@ pub fn handle_setup(opts: SetupOptions) -> Result<(), String> {
                 toml::Value::String("bitwarden".into()),
             );
         } else if opts.no_bitwarden {
-            table.insert("credential_source".into(), toml::Value::String("env".into()));
+            table.insert(
+                "credential_source".into(),
+                toml::Value::String("env".into()),
+            );
             if existing_source == "bitwarden" {
                 println!("Switched credential_source from bitwarden to env.");
             }
@@ -387,7 +405,10 @@ pub fn handle_setup(opts: SetupOptions) -> Result<(), String> {
                  --no-bitwarden to switch to env-based credentials."
             );
         } else {
-            table.insert("credential_source".into(), toml::Value::String("env".into()));
+            table.insert(
+                "credential_source".into(),
+                toml::Value::String("env".into()),
+            );
         }
     }
     save_config_toml(&cfg)?;
@@ -471,10 +492,8 @@ pub fn handle_setup(opts: SetupOptions) -> Result<(), String> {
     Ok(())
 }
 
-fn bitwarden_start_config() -> Result<
-    (bool, Option<crate::secrets::BitwardenSourceConfig>, bool),
-    String,
-> {
+fn bitwarden_start_config(
+) -> Result<(bool, Option<crate::secrets::BitwardenSourceConfig>, bool), String> {
     let cfg = load_config_toml()?;
     let proxy_cfg = proxy_table(&cfg);
     if !proxy_cfg
@@ -537,13 +556,11 @@ fn bitwarden_start_config() -> Result<
             ));
         }
         if bw_cfg.project_id.trim().is_empty() {
-            return Err(
-                "Refusing to start: credential_source=bitwarden but \
+            return Err("Refusing to start: credential_source=bitwarden but \
                  secrets.bitwarden.project_id is empty.\n  Run `ulnclaw secrets \
                  bitwarden setup` to configure the project, or switch back via \
                  `ulnclaw egress setup --no-bitwarden`."
-                    .into(),
-            );
+                .into());
         }
     }
 
@@ -698,7 +715,11 @@ pub fn format_status_text(show_tokens: bool) -> String {
         ),
         format!(
             "Binary version: {}",
-            status.binary_version.as_deref().unwrap_or("(unknown)").to_string()
+            status
+                .binary_version
+                .as_deref()
+                .unwrap_or("(unknown)")
+                .to_string()
         ),
         format!(
             "Config: {}",
@@ -770,9 +791,7 @@ pub fn format_status_text(show_tokens: bool) -> String {
 
     if enabled && !status.configured() {
         lines.push(String::new());
-        lines.push(
-            "Next: run `ulnclaw egress setup` to mint tokens and write proxy.yaml.".into(),
-        );
+        lines.push("Next: run `ulnclaw egress setup` to mint tokens and write proxy.yaml.".into());
     } else if enabled && !(status.pid.is_some() && status.listening) {
         lines.push(String::new());
         lines.push("Next: run `ulnclaw egress start` before launching Docker sandboxes.".into());

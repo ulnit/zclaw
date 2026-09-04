@@ -58,9 +58,8 @@ fn fsync_directory(path: &Path) {
 fn write_payload_named(dir: &Path, name: &str, payload: &Value) -> std::io::Result<PathBuf> {
     let final_path = dir.join(format!("{name}.json"));
     let tmp_path = dir.join(format!(".{name}.tmp"));
-    let bytes = serde_json::to_vec(payload).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-    })?;
+    let bytes = serde_json::to_vec(payload)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     std::fs::write(&tmp_path, &bytes)?;
     #[cfg(unix)]
     {
@@ -112,7 +111,10 @@ pub fn flush_parked_to_file(
         // Timestamp + batch index keep recovery FIFO within a flush
         // batch (the sorted-glob replay order matters for re-dispatch;
         // hermes could append to the DB out of order, ulnclaw re-runs).
-        let name = format!("pending-{ts}-{idx:04}-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
+        let name = format!(
+            "pending-{ts}-{idx:04}-{}",
+            &uuid::Uuid::new_v4().simple().to_string()[..8]
+        );
         match write_payload_named(&dir, &name, &payload) {
             Ok(_) => flushed += 1,
             Err(e) => {

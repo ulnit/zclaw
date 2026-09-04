@@ -297,7 +297,9 @@ pub fn apply_toolset_policy(
             .iter()
             .map(|t| t.definition.name.clone())
             .collect::<Vec<_>>();
-        let any_allowed = tools.iter().any(|t| allowed.contains(t) && !removed.contains(t));
+        let any_allowed = tools
+            .iter()
+            .any(|t| allowed.contains(t) && !removed.contains(t));
         if !any_allowed {
             registry.disable_toolset(&toolset);
         }
@@ -319,7 +321,11 @@ pub fn format_toolsets_digest(enabled: &[String]) -> String {
         } else {
             " "
         };
-        let description = def.description.split_whitespace().collect::<Vec<_>>().join(" ");
+        let description = def
+            .description
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
         let description = if description.chars().count() > 64 {
             let clipped: String = description.chars().take(61).collect();
             format!("{clipped}...")
@@ -361,7 +367,7 @@ mod tests {
         let mut registry = crate::tools::ToolRegistry::new();
         crate::tools::builtin::register_builtin_tools(&mut registry);
         // register clarify manually (lives in the CLI layer in hermes too)
-        apply_toolset_policy(&mut registry, &[ "web".to_string() ], &[]);
+        apply_toolset_policy(&mut registry, &["web".to_string()], &[]);
         let defs = registry.definitions();
         let names: Vec<String> = defs.iter().map(|d| d.name.clone()).collect();
         assert!(names.contains(&"web_search".to_string()));
@@ -376,6 +382,9 @@ mod tests {
         assert!(out.contains("\u{2713} web"), "{out}");
         assert!(out.contains("vision"), "{out}");
         // A long description gets clipped, not wrapped.
-        assert!(!out.contains("Available when xAI                           credentials"), "{out}");
+        assert!(
+            !out.contains("Available when xAI                           credentials"),
+            "{out}"
+        );
     }
 }

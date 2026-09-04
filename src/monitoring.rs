@@ -113,7 +113,10 @@ impl MonitoringConfig {
     }
 
     pub fn export_interval_seconds(&self) -> u64 {
-        self.gateway_health_export.export_interval_seconds.unwrap_or(60).max(5)
+        self.gateway_health_export
+            .export_interval_seconds
+            .unwrap_or(60)
+            .max(5)
     }
 
     pub fn logs_export_interval_seconds(&self) -> u64 {
@@ -183,8 +186,10 @@ fn bearer_re() -> &'static Regex {
 fn token_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"\b(xox[baprs]-[A-Za-z0-9-]+|sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9_]{8,})\b")
-            .expect("regex")
+        Regex::new(
+            r"\b(xox[baprs]-[A-Za-z0-9-]+|sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9_]{8,})\b",
+        )
+        .expect("regex")
     })
 }
 
@@ -208,8 +213,10 @@ fn email_re() -> &'static Regex {
 fn uuid_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
-            .expect("regex")
+        Regex::new(
+            r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
+        )
+        .expect("regex")
     })
 }
 
@@ -242,8 +249,14 @@ fn scrub_phones(text: &str) -> String {
             search_start = next_char_boundary(text, start + 1);
             continue;
         }
-        let prev_ok = text[..start].chars().next_back().map_or(true, |c| !is_word_char(c));
-        let next_ok = text[end..].chars().next().map_or(true, |c| !is_word_char(c));
+        let prev_ok = text[..start]
+            .chars()
+            .next_back()
+            .map_or(true, |c| !is_word_char(c));
+        let next_ok = text[end..]
+            .chars()
+            .next()
+            .map_or(true, |c| !is_word_char(c));
         if prev_ok && next_ok {
             out.push_str(&text[last_emit..start]);
             out.push_str("[phone]");
@@ -269,12 +282,15 @@ fn next_char_boundary(text: &str, mut pos: usize) -> usize {
 pub fn redact_for_export(text: Option<&str>) -> Option<String> {
     let text = text?;
     // Secrets first — the shared redactor plus belt-and-suspenders shapes.
-    let mut out =
-        crate::redact::redact_sensitive_text(text, crate::redact::RedactOpts::default());
+    let mut out = crate::redact::redact_sensitive_text(text, crate::redact::RedactOpts::default());
     out = bearer_re().replace_all(&out, "[redacted]").into_owned();
     out = token_re().replace_all(&out, "[redacted]").into_owned();
-    out = secret_literal_re().replace_all(&out, "[redacted]").into_owned();
-    out = bearer_residue_re().replace_all(&out, "[redacted]").into_owned();
+    out = secret_literal_re()
+        .replace_all(&out, "[redacted]")
+        .into_owned();
+    out = bearer_residue_re()
+        .replace_all(&out, "[redacted]")
+        .into_owned();
     // PII second.
     out = email_re().replace_all(&out, "[email]").into_owned();
     out = uuid_re().replace_all(&out, "[id]").into_owned();
@@ -477,7 +493,8 @@ fn otlp_value(value: &Value) -> Value {
                 Value::String(s) => s.clone(),
                 _ => other.to_string(),
             };
-            let redacted = redact_for_export(Some(&text)).unwrap_or_else(|| "[redaction-unavailable]".to_string());
+            let redacted = redact_for_export(Some(&text))
+                .unwrap_or_else(|| "[redaction-unavailable]".to_string());
             let clamped: String = redacted.chars().take(500).collect();
             json!({"stringValue": clamped})
         }
@@ -487,7 +504,10 @@ fn otlp_value(value: &Value) -> Value {
 /// Span attributes for one monitoring event (content-free by construction;
 /// strings pass the egress redactor + 500-char clamp — hermes `_span_attrs`).
 pub fn span_attrs(event: &Value) -> Vec<Value> {
-    let kind = event.get("event").and_then(Value::as_str).unwrap_or("unknown");
+    let kind = event
+        .get("event")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
     let mut attrs = vec![json!({
         "key": "ulnclaw.event",
         "value": {"stringValue": kind},
@@ -520,7 +540,10 @@ fn random_hex(bytes: usize) -> String {
 
 /// Map a batch of events onto the OTLP/HTTP JSON traces envelope (hermes
 /// `export_batch`: one span per event under the monitoring scope).
-pub fn build_otlp_traces_payload(events: &[Value], resource_attrs: &BTreeMap<String, String>) -> Value {
+pub fn build_otlp_traces_payload(
+    events: &[Value],
+    resource_attrs: &BTreeMap<String, String>,
+) -> Value {
     let resource_attributes: Vec<Value> = resource_attrs
         .iter()
         .map(|(k, v)| json!({"key": k, "value": {"stringValue": v}}))
@@ -528,7 +551,10 @@ pub fn build_otlp_traces_payload(events: &[Value], resource_attrs: &BTreeMap<Str
     let spans: Vec<Value> = events
         .iter()
         .map(|event| {
-            let kind = event.get("event").and_then(Value::as_str).unwrap_or("event");
+            let kind = event
+                .get("event")
+                .and_then(Value::as_str)
+                .unwrap_or("event");
             let ts = event
                 .get("ts_ns")
                 .and_then(Value::as_u64)
@@ -559,7 +585,11 @@ pub fn build_otlp_traces_payload(events: &[Value], resource_attrs: &BTreeMap<Str
 
 /// Resource attributes attached to every export (hermes
 /// `_resource_attributes`).
-pub fn resource_attributes(install_id: &str, version: &str, profile: Option<&str>) -> BTreeMap<String, String> {
+pub fn resource_attributes(
+    install_id: &str,
+    version: &str,
+    profile: Option<&str>,
+) -> BTreeMap<String, String> {
     let mut attrs = BTreeMap::new();
     attrs.insert("service.name".to_string(), "ulnclaw".to_string());
     attrs.insert("service.version".to_string(), version.to_string());
@@ -573,7 +603,9 @@ pub fn resource_attributes(install_id: &str, version: &str, profile: Option<&str
 /// Resolve `{header_name: ENV_VAR_NAME}` -> header values from the
 /// environment at export time (hermes `_resolve_headers`). Missing vars are
 /// skipped; values are never logged.
-pub fn resolve_headers(headers_env: &std::collections::HashMap<String, String>) -> Vec<(String, String)> {
+pub fn resolve_headers(
+    headers_env: &std::collections::HashMap<String, String>,
+) -> Vec<(String, String)> {
     let mut resolved = Vec::new();
     for (header, env_name) in headers_env {
         if let Some(value) = crate::config::get_env_value(env_name) {
@@ -686,28 +718,47 @@ pub fn render_status(config: &MonitoringConfig) -> String {
     out.push_str("Gateway monitoring\n");
     out.push_str(&format!(
         "  Health export:  {} (monitoring.gateway_health_export.enabled)\n",
-        if config.enabled() { "enabled" } else { "disabled" }
+        if config.enabled() {
+            "enabled"
+        } else {
+            "disabled"
+        }
     ));
     if config.enabled() {
         out.push_str(&format!(
             "    Metrics:            {} (interval {}s)\n",
-            if config.metrics_enabled() { "on" } else { "off" },
+            if config.metrics_enabled() {
+                "on"
+            } else {
+                "off"
+            },
             config.export_interval_seconds()
         ));
         out.push_str(&format!(
             "    Diagnostic events:  {}\n",
-            if config.diagnostic_events_enabled() { "on" } else { "off" }
+            if config.diagnostic_events_enabled() {
+                "on"
+            } else {
+                "off"
+            }
         ));
         out.push_str(&format!(
             "    Warning/error logs: {} (interval {}s)\n",
-            if config.warning_error_events_enabled() { "on" } else { "off" },
+            if config.warning_error_events_enabled() {
+                "on"
+            } else {
+                "off"
+            },
             config.logs_export_interval_seconds()
         ));
         out.push_str(
             "    Content safety:     always on (rendered messages are never exported; not configurable)\n",
         );
     }
-    match (config.otlp_enabled(), config.export.otlp.endpoint.as_deref()) {
+    match (
+        config.otlp_enabled(),
+        config.export.otlp.endpoint.as_deref(),
+    ) {
         (true, Some(endpoint)) if !endpoint.trim().is_empty() => {
             out.push_str(&format!("  OTLP endpoint:  {}\n", endpoint.trim()));
         }
@@ -838,9 +889,15 @@ mod tests {
             "gateway_busy": false,
         });
         let attrs = span_attrs(&event);
-        let agents = attrs.iter().find(|a| a["key"] == "ulnclaw.active_agents").unwrap();
+        let agents = attrs
+            .iter()
+            .find(|a| a["key"] == "ulnclaw.active_agents")
+            .unwrap();
         assert_eq!(agents["value"]["intValue"], "4");
-        let busy = attrs.iter().find(|a| a["key"] == "ulnclaw.gateway_busy").unwrap();
+        let busy = attrs
+            .iter()
+            .find(|a| a["key"] == "ulnclaw.gateway_busy")
+            .unwrap();
         assert_eq!(busy["value"]["boolValue"], false);
     }
 
@@ -894,11 +951,20 @@ mod tests {
         std::env::set_var("ULNCLAW_OTLP_TEST_TOKEN", "secret-value");
         std::env::remove_var("ULNCLAW_OTLP_TEST_MISSING");
         let mut headers_env = std::collections::HashMap::new();
-        headers_env.insert("Authorization".to_string(), "ULNCLAW_OTLP_TEST_TOKEN".to_string());
-        headers_env.insert("X-Missing".to_string(), "ULNCLAW_OTLP_TEST_MISSING".to_string());
+        headers_env.insert(
+            "Authorization".to_string(),
+            "ULNCLAW_OTLP_TEST_TOKEN".to_string(),
+        );
+        headers_env.insert(
+            "X-Missing".to_string(),
+            "ULNCLAW_OTLP_TEST_MISSING".to_string(),
+        );
         let resolved = resolve_headers(&headers_env);
         assert_eq!(resolved.len(), 1);
-        assert_eq!(resolved[0], ("Authorization".to_string(), "secret-value".to_string()));
+        assert_eq!(
+            resolved[0],
+            ("Authorization".to_string(), "secret-value".to_string())
+        );
         std::env::remove_var("ULNCLAW_OTLP_TEST_TOKEN");
     }
 
@@ -931,7 +997,10 @@ mod tests {
             .expect("export ok");
         assert_eq!(exported, 1);
         let body = received.lock().unwrap().clone();
-        assert_eq!(body["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["name"], "ulnclaw.gateway_health");
+        assert_eq!(
+            body["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["name"],
+            "ulnclaw.gateway_health"
+        );
     }
 
     #[tokio::test]

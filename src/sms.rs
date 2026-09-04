@@ -116,8 +116,7 @@ pub struct ResolvedSms {
 impl SmsConfig {
     pub fn resolve(&self) -> ResolvedSms {
         ResolvedSms {
-            account_sid: env_trim("TWILIO_ACCOUNT_SID")
-                .unwrap_or_else(|| self.account_sid.clone()),
+            account_sid: env_trim("TWILIO_ACCOUNT_SID").unwrap_or_else(|| self.account_sid.clone()),
             auth_token: env_trim("TWILIO_AUTH_TOKEN").unwrap_or_else(|| self.auth_token.clone()),
             from_number: env_trim("TWILIO_PHONE_NUMBER")
                 .unwrap_or_else(|| self.from_number.clone()),
@@ -239,7 +238,12 @@ fn strip_links(input: &str) -> String {
 
 /// hermes `_check_signature` — HMAC-SHA1 over `url + sorted(key+value)`,
 /// base64 digest, constant-time compare.
-pub fn twilio_check_signature(auth_token: &str, url: &str, params: &HashMap<String, String>, signature: &str) -> bool {
+pub fn twilio_check_signature(
+    auth_token: &str,
+    url: &str,
+    params: &HashMap<String, String>,
+    signature: &str,
+) -> bool {
     let mut data = url.to_string();
     let mut keys: Vec<&String> = params.keys().collect();
     keys.sort();
@@ -310,7 +314,10 @@ pub fn port_variant_url(url: &str) -> Option<String> {
         }
         None => {
             // No port → add the default.
-            Some(format!("{}://{}:{}{}", scheme, authority, default_port, tail))
+            Some(format!(
+                "{}://{}:{}{}",
+                scheme, authority, default_port, tail
+            ))
         }
     }
 }
@@ -350,7 +357,10 @@ pub async fn send_sms(
     let url = format!("{TWILIO_API_BASE}/{}/Messages.json", cfg.account_sid);
     let resp = client
         .post(&url)
-        .header("Authorization", basic_auth_header(&cfg.account_sid, &cfg.auth_token))
+        .header(
+            "Authorization",
+            basic_auth_header(&cfg.account_sid, &cfg.auth_token),
+        )
         .form(&[
             ("From", cfg.from_number.as_str()),
             ("To", to),
@@ -463,8 +473,18 @@ pub async fn sms_handle_webhook(
         return twiml(403);
     }
 
-    let from = flat.get("From").cloned().unwrap_or_default().trim().to_string();
-    let text = flat.get("Body").cloned().unwrap_or_default().trim().to_string();
+    let from = flat
+        .get("From")
+        .cloned()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let text = flat
+        .get("Body")
+        .cloned()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     let message_sid = flat
         .get("MessageSid")
         .cloned()
@@ -484,7 +504,9 @@ pub async fn sms_handle_webhook(
 
     crate::messaging::register_platform_sender(
         "sms",
-        Arc::new(SmsSender { cfg: resolved.clone() }),
+        Arc::new(SmsSender {
+            cfg: resolved.clone(),
+        }),
     );
 
     let event = crate::messaging::MessageEvent {
@@ -609,9 +631,24 @@ mod tests {
         .collect();
         let url = "https://example.com/webhooks/twilio";
         let sig = sig_for("secret-token", url, &params);
-        assert!(validate_twilio_signature("secret-token", url, &params, &sig));
-        assert!(!validate_twilio_signature("wrong-token", url, &params, &sig));
-        assert!(!validate_twilio_signature("secret-token", url, &params, "bogus"));
+        assert!(validate_twilio_signature(
+            "secret-token",
+            url,
+            &params,
+            &sig
+        ));
+        assert!(!validate_twilio_signature(
+            "wrong-token",
+            url,
+            &params,
+            &sig
+        ));
+        assert!(!validate_twilio_signature(
+            "secret-token",
+            url,
+            &params,
+            "bogus"
+        ));
     }
 
     #[test]
@@ -651,8 +688,9 @@ mod tests {
 
     #[test]
     fn port_variant_signature_fallback() {
-        let params: HashMap<String, String> =
-            [("Body".to_string(), "hi".to_string())].into_iter().collect();
+        let params: HashMap<String, String> = [("Body".to_string(), "hi".to_string())]
+            .into_iter()
+            .collect();
         // Signed against the :443 variant, validated with the bare URL.
         let sig = sig_for("tok", "https://example.com:443/webhooks/twilio", &params);
         assert!(validate_twilio_signature(
@@ -746,8 +784,7 @@ mod tests {
             ..Default::default()
         };
         let dispatcher = dummy_dispatcher().await;
-        let resp = sms_handle_webhook(&cfg, &dispatcher, None, b"From=%2B1&Body=hi", &[])
-            .await;
+        let resp = sms_handle_webhook(&cfg, &dispatcher, None, b"From=%2B1&Body=hi", &[]).await;
         assert_eq!(resp.status, 403);
     }
 
@@ -759,8 +796,7 @@ mod tests {
             ..Default::default()
         };
         let dispatcher = dummy_dispatcher().await;
-        let resp =
-            sms_handle_webhook(&cfg, &dispatcher, None, b"From=%2B1&Body=hi", &[]).await;
+        let resp = sms_handle_webhook(&cfg, &dispatcher, None, b"From=%2B1&Body=hi", &[]).await;
         assert_eq!(resp.status, 403);
     }
 

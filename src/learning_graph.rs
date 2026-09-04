@@ -70,7 +70,13 @@ fn fm_related(block: &str) -> Vec<String> {
         .unwrap_or(&raw);
     inner
         .split(',')
-        .map(|item| item.trim().trim_matches('"').trim_matches('\'').trim().to_string())
+        .map(|item| {
+            item.trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .trim()
+                .to_string()
+        })
         .filter(|item| !item.is_empty())
         .collect()
 }
@@ -192,7 +198,10 @@ pub fn build_skill_nodes(home: &Path, skill_roots: &[(&str, PathBuf)]) -> Vec<Sk
                 category,
                 source: source.to_string(),
                 timestamp: last_activity.or(file_ts),
-                use_count: record.get("use_count").and_then(|v| v.as_u64()).unwrap_or(0),
+                use_count: record
+                    .get("use_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0),
                 state: record
                     .get("state")
                     .and_then(|v| v.as_str())
@@ -202,7 +211,10 @@ pub fn build_skill_nodes(home: &Path, skill_roots: &[(&str, PathBuf)]) -> Vec<Sk
                     .get("created_by")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string()),
-                pinned: record.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false),
+                pinned: record
+                    .get("pinned")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
                 related,
             });
         }
@@ -213,8 +225,7 @@ pub fn build_skill_nodes(home: &Path, skill_roots: &[(&str, PathBuf)]) -> Vec<Sk
 /// Undirected `related_skills` edges where BOTH endpoints exist (deduped) —
 /// hermes `build_edges`.
 pub fn build_edges(nodes: &[SkillNode]) -> Vec<(String, String)> {
-    let names: std::collections::HashSet<&str> =
-        nodes.iter().map(|n| n.name.as_str()).collect();
+    let names: std::collections::HashSet<&str> = nodes.iter().map(|n| n.name.as_str()).collect();
     let mut seen: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
     let mut edges = Vec::new();
     for node in nodes {
@@ -280,7 +291,10 @@ pub fn memory_cards(home: &Path) -> Vec<Value> {
             continue;
         };
         let file_ts = file_mtime(&path);
-        for (idx, entry) in crate::tools::builtin::memory::read_entries(&text).iter().enumerate() {
+        for (idx, entry) in crate::tools::builtin::memory::read_entries(&text)
+            .iter()
+            .enumerate()
+        {
             let entry = entry.trim();
             if entry.is_empty() {
                 continue;
@@ -328,7 +342,10 @@ pub fn memory_skill_edges(cards: &[Value], skills: &[SkillNode]) -> Vec<(String,
         .map(|s| (s, tokenize(&s.name), s.name.to_ascii_lowercase()))
         .collect();
     for (idx, card) in cards.iter().enumerate() {
-        let source = card.get("source").and_then(|v| v.as_str()).unwrap_or("memory");
+        let source = card
+            .get("source")
+            .and_then(|v| v.as_str())
+            .unwrap_or("memory");
         let mem_id = format!("memory:{}:{}", source, idx);
         let text = format!(
             "{}\n{}",
@@ -374,7 +391,9 @@ pub fn build_learning_graph(home: &Path) -> Value {
     let all_skills = build_skill_nodes(home, &skill_roots(home));
     let learned: Vec<SkillNode> = all_skills
         .into_iter()
-        .filter(|n| n.source != "base" && (n.created_by.as_deref() == Some("agent") || n.use_count > 0))
+        .filter(|n| {
+            n.source != "base" && (n.created_by.as_deref() == Some("agent") || n.use_count > 0)
+        })
         .collect();
     let skill_edges = build_edges(&learned);
     let cards = memory_cards(home);
@@ -441,7 +460,6 @@ pub fn build_learning_graph(home: &Path) -> Value {
     })
 }
 
-
 /// Chronological learning-journey digest (P667 — the `/journey` slash,
 /// hermes "open the learning journey timeline" in text form). Pure over
 /// the [`build_learning_graph`] payload: newest `limit` events, one per
@@ -473,7 +491,11 @@ pub fn format_journey_digest(payload: &Value, limit: usize) -> String {
     ));
     for node in recent {
         let kind = node.get("kind").and_then(|v| v.as_str()).unwrap_or("skill");
-        let glyph = if kind == "memory" { "\u{25c6}" } else { "\u{2726}" };
+        let glyph = if kind == "memory" {
+            "\u{25c6}"
+        } else {
+            "\u{2726}"
+        };
         let label = node.get("label").and_then(|v| v.as_str()).unwrap_or("?");
         let date = crate::learning_graph_render::format_date(
             node.get("timestamp").and_then(|v| v.as_f64()),
@@ -487,7 +509,6 @@ pub fn format_journey_digest(payload: &Value, limit: usize) -> String {
 pub fn journey_digest(home: &Path, limit: usize) -> String {
     format_journey_digest(&build_learning_graph(home), limit)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -629,7 +650,11 @@ mod tests {
         let home = temp_home();
         make_skill(&home, "alpha", "---\nname: alpha\ncategory: devops\n---");
         make_skill(&home, "idle", "---\nname: idle\n---");
-        seed_usage(&home, "alpha", json!({"created_by": "agent", "use_count": 2}));
+        seed_usage(
+            &home,
+            "alpha",
+            json!({"created_by": "agent", "use_count": 2}),
+        );
         std::fs::write(home.join("memory/MEMORY.md"), "- alpha rollout notes\n").unwrap();
 
         let payload = build_learning_graph(&home);
@@ -645,9 +670,11 @@ mod tests {
         assert!(node_ids.contains(&"memory:memory:0"));
         assert_eq!(payload["stats"]["learned_skills"], 1);
         assert_eq!(payload["stats"]["memory_nodes"], 1);
-        assert!(payload["edges"].as_array().unwrap().iter().any(|e| {
-            e["source"] == "memory:memory:0" && e["target"] == "alpha"
-        }));
+        assert!(payload["edges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| { e["source"] == "memory:memory:0" && e["target"] == "alpha" }));
         // Count tie — insertion order (skill category first, then memory).
         assert_eq!(payload["clusters"][0]["category"], "devops");
         std::fs::remove_dir_all(&home).unwrap();

@@ -134,9 +134,7 @@ impl SimplexConfig {
 }
 
 type WsSink = futures::stream::SplitSink<
-    tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
     tokio_tungstenite::tungstenite::Message,
 >;
 
@@ -178,7 +176,11 @@ fn mime_for_ext(ext: &str) -> &'static str {
 
 fn is_voice_ext(path: &str) -> bool {
     matches!(
-        path.rsplit('.').next().unwrap_or("").to_lowercase().as_str(),
+        path.rsplit('.')
+            .next()
+            .unwrap_or("")
+            .to_lowercase()
+            .as_str(),
         "ogg" | "mp3" | "wav" | "m4a" | "opus"
     )
 }
@@ -357,13 +359,10 @@ async fn handle_event(
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             if let (Some(file_id), Some(file_path)) = (file_id, file_path) {
-                if let Some(mut pending_item) =
-                    runtime.pending_files.lock().await.remove(&file_id)
+                if let Some(mut pending_item) = runtime.pending_files.lock().await.remove(&file_id)
                 {
                     // Inject the completed file path and deliver.
-                    if let Some(file) = pending_item
-                        .pointer_mut("/chatItem/file")
-                    {
+                    if let Some(file) = pending_item.pointer_mut("/chatItem/file") {
                         file["fileSource"] = json!({ "filePath": file_path });
                     }
                     handle_chat_item(runtime, dispatcher, pairing, &pending_item).await;
@@ -384,10 +383,7 @@ async fn handle_chat_item(
 ) {
     let chat_info = chat_item.get("chatInfo").cloned().unwrap_or(json!({}));
     let item_data = chat_item.get("chatItem").cloned().unwrap_or(json!({}));
-    let chat_type = chat_info
-        .get("type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let chat_type = chat_info.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
     // Own messages never loop back.
     let direction_type = item_data
@@ -406,7 +402,10 @@ async fn handle_chat_item(
         .get("type")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let mut text = if matches!(msg_type_str, "text" | "file" | "image" | "voice" | "link" | "video") {
+    let mut text = if matches!(
+        msg_type_str,
+        "text" | "file" | "image" | "voice" | "link" | "video"
+    ) {
         msg_content
             .get("text")
             .and_then(|v| v.as_str())
@@ -433,7 +432,11 @@ async fn handle_chat_item(
             sender_name = contact
                 .get("localDisplayName")
                 .and_then(|v| v.as_str())
-                .or_else(|| contact.pointer("/profile/displayName").and_then(|v| v.as_str()))
+                .or_else(|| {
+                    contact
+                        .pointer("/profile/displayName")
+                        .and_then(|v| v.as_str())
+                })
                 .unwrap_or("")
                 .to_string();
             chat_id = sender_id.clone();
@@ -446,7 +449,10 @@ async fn handle_chat_item(
                 .unwrap_or_default();
             chat_id = format!("group:{group_id}");
             is_group = true;
-            let member = item_data.pointer("/chatDir/groupMember").cloned().unwrap_or(json!({}));
+            let member = item_data
+                .pointer("/chatDir/groupMember")
+                .cloned()
+                .unwrap_or(json!({}));
             sender_id = member
                 .get("memberId")
                 .map(|v| v.to_string())
@@ -465,9 +471,12 @@ async fn handle_chat_item(
             if runtime.cfg.group_allowed.is_empty() {
                 return;
             }
-            if !runtime.cfg.group_allowed.iter().any(|g| {
-                g == "*" || *g == group_id.trim_matches('"')
-            }) {
+            if !runtime
+                .cfg
+                .group_allowed
+                .iter()
+                .any(|g| g == "*" || *g == group_id.trim_matches('"'))
+            {
                 return;
             }
         }
@@ -488,7 +497,10 @@ async fn handle_chat_item(
         if let Some(store) = pairing {
             if !store.is_approved("simplex", &sender_id) {
                 if let Some(code_msg) = crate::messaging::pairing_offer_public(
-                    store, "simplex", &sender_id, &sender_name,
+                    store,
+                    "simplex",
+                    &sender_id,
+                    &sender_name,
                 ) {
                     send_chat_text(runtime, &chat_id, &code_msg).await;
                 }
@@ -642,7 +654,12 @@ async fn enqueue_text_batch(
     let key_clone = key.clone();
     let task = tokio::spawn(async move {
         tokio::time::sleep(delay).await;
-        let event = runtime.batches.lock().await.remove(&key_clone).map(|s| s.event);
+        let event = runtime
+            .batches
+            .lock()
+            .await
+            .remove(&key_clone)
+            .map(|s| s.event);
         if let Some(event) = event {
             dispatch_event(&runtime, &dispatcher, event).await;
         }
@@ -653,7 +670,11 @@ async fn enqueue_text_batch(
     }
 }
 
-async fn dispatch_event(runtime: &Arc<Runtime>, dispatcher: &Arc<Dispatcher>, mut event: MessageEvent) {
+async fn dispatch_event(
+    runtime: &Arc<Runtime>,
+    dispatcher: &Arc<Dispatcher>,
+    mut event: MessageEvent,
+) {
     if !crate::messaging::pre_gateway_dispatch_gate_public(&mut event).await {
         return;
     }
@@ -690,9 +711,10 @@ async fn dispatch_event(runtime: &Arc<Runtime>, dispatcher: &Arc<Dispatcher>, mu
 async fn send_chat_text(runtime: &Arc<Runtime>, chat_id: &str, content: &str) {
     for chunk in crate::messaging::chunk_text(content, MAX_MESSAGE_LENGTH) {
         let cmd = if let Some(group_id) = chat_id.strip_prefix("group:") {
-            let composed =
-                serde_json::to_string(&json!([{ "msgContent": { "type": "text", "text": chunk } }]))
-                    .unwrap_or_default();
+            let composed = serde_json::to_string(
+                &json!([{ "msgContent": { "type": "text", "text": chunk } }]),
+            )
+            .unwrap_or_default();
             format!("/_send #{group_id} json {composed}")
         } else {
             format!("@{chat_id} {chunk}")
@@ -731,10 +753,16 @@ fn queue_command(runtime: &Arc<Runtime>, cmd: &str) {
     match tx {
         Some(tx) => {
             if tx.send(frame.to_string()).is_err() {
-                eprintln!("[simplex] command dropped (session closed): {}", &cmd[..cmd.len().min(50)]);
+                eprintln!(
+                    "[simplex] command dropped (session closed): {}",
+                    &cmd[..cmd.len().min(50)]
+                );
             }
         }
-        None => eprintln!("[simplex] command dropped (no live session): {}", &cmd[..cmd.len().min(50)]),
+        None => eprintln!(
+            "[simplex] command dropped (no live session): {}",
+            &cmd[..cmd.len().min(50)]
+        ),
     }
 }
 
@@ -796,7 +824,10 @@ mod tests {
         std::env::set_var("HERMES_SIMPLEX_TEXT_BATCH_DELAY", "1.5");
         let resolved = SimplexConfig::default().resolve();
         assert_eq!(resolved.ws_url, "ws://10.1.1.5:5225");
-        assert_eq!(resolved.allowed_users, vec!["1".to_string(), "alice".to_string()]);
+        assert_eq!(
+            resolved.allowed_users,
+            vec!["1".to_string(), "alice".to_string()]
+        );
         assert!(!resolved.auto_accept);
         assert_eq!(resolved.text_batch_delay_ms, 1500);
         std::env::remove_var("SIMPLEX_WS_URL");

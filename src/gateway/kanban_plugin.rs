@@ -25,7 +25,14 @@ use super::GatewayState;
 /// Column order = hermes `BOARD_COLUMNS`; the archived lane is appended
 /// only when the client asks for it.
 const BOARD_COLUMNS: &[&str] = &[
-    "triage", "todo", "scheduled", "ready", "running", "blocked", "review", "done",
+    "triage",
+    "todo",
+    "scheduled",
+    "ready",
+    "running",
+    "blocked",
+    "review",
+    "done",
 ];
 
 fn store() -> Result<KanbanStore, Response> {
@@ -316,7 +323,9 @@ pub async fn update_board(Path(slug): Path<String>, Json(body): Json<Value>) -> 
     };
     let current = store.current_board().unwrap_or_else(|_| "default".into());
     match boards.iter().find(|board_row| board_row.slug == slug) {
-        Some(board_row) => Json(json!({ "board": board_meta(&store, board_row, &current) })).into_response(),
+        Some(board_row) => {
+            Json(json!({ "board": board_meta(&store, board_row, &current) })).into_response()
+        }
         None => super::not_found(&format!("board {slug} not found")),
     }
 }
@@ -395,8 +404,9 @@ pub async fn task_detail(Path(id): Path<String>, Query(query): Query<BoardQuery>
                 "size": Value::Null,
             });
             if kind == "file" {
-                let path = crate::kanban::task_attachments_dir(&crate::config::ulnclaw_home(), &task.id)
-                    .join(&value);
+                let path =
+                    crate::kanban::task_attachments_dir(&crate::config::ulnclaw_home(), &task.id)
+                        .join(&value);
                 if let Ok(metadata) = std::fs::metadata(&path) {
                     row["size"] = json!(metadata.len());
                 }
@@ -485,9 +495,7 @@ pub async fn list_attachments(Path(id): Path<String>) -> Response {
         .attachments_with_ids(&id)
         .unwrap_or_default()
         .into_iter()
-        .map(|(attachment_id, _kind, value)| {
-            json!({ "id": attachment_id, "filename": value })
-        })
+        .map(|(attachment_id, _kind, value)| json!({ "id": attachment_id, "filename": value }))
         .collect();
     Json(json!({ "attachments": rows })).into_response()
 }
@@ -691,7 +699,9 @@ async fn patch_one_task(id: &str, patch: &Value) -> Result<(), String> {
         match status {
             "done" => {
                 let result = patch.get("result").and_then(Value::as_str);
-                store.complete_task(&id, result).map_err(|e| e.to_string())?;
+                store
+                    .complete_task(&id, result)
+                    .map_err(|e| e.to_string())?;
             }
             "blocked" => {
                 let reason = patch
@@ -705,13 +715,17 @@ async fn patch_one_task(id: &str, patch: &Value) -> Result<(), String> {
                     .get("block_reason")
                     .and_then(Value::as_str)
                     .unwrap_or("scheduled from the desktop board");
-                store.schedule_task(&id, reason).map_err(|e| e.to_string())?;
+                store
+                    .schedule_task(&id, reason)
+                    .map_err(|e| e.to_string())?;
             }
             "ready" => {
                 if task.status == "blocked" || task.status == "scheduled" {
                     store.unblock_task(&id).map_err(|e| e.to_string())?;
                 } else {
-                    store.set_status_direct(&id, "ready").map_err(|e| e.to_string())?;
+                    store
+                        .set_status_direct(&id, "ready")
+                        .map_err(|e| e.to_string())?;
                 }
             }
             "archived" => {
@@ -719,12 +733,13 @@ async fn patch_one_task(id: &str, patch: &Value) -> Result<(), String> {
             }
             "running" => {
                 return Err(
-                    "Cannot set status to 'running' directly; use the dispatcher/claim path"
-                        .into(),
+                    "Cannot set status to 'running' directly; use the dispatcher/claim path".into(),
                 );
             }
             "todo" | "triage" | "review" => {
-                store.set_status_direct(&id, status).map_err(|e| e.to_string())?;
+                store
+                    .set_status_direct(&id, status)
+                    .map_err(|e| e.to_string())?;
             }
             other => return Err(format!("unknown status: {other}")),
         }
@@ -862,7 +877,8 @@ pub async fn reclaim(Path(id): Path<String>) -> Response {
         Err(e) => return e,
     };
     match store.reclaim_task(&id, "reclaimed from the desktop") {
-        Ok(task) => Json(json!({ "ok": true, "task": { "id": task.id, "status": task.status } })).into_response(),
+        Ok(task) => Json(json!({ "ok": true, "task": { "id": task.id, "status": task.status } }))
+            .into_response(),
         Err(e) => super::bad_request(&e.to_string(), None),
     }
 }
@@ -872,11 +888,7 @@ pub async fn reclaim(Path(id): Path<String>) -> Response {
 // HTTP error, failures answer `{ok: false, reason}`)
 // ---------------------------------------------------------------------------
 
-async fn run_estimate(
-    state: &Arc<GatewayState>,
-    title: &str,
-    body: Option<&str>,
-) -> Value {
+async fn run_estimate(state: &Arc<GatewayState>, title: &str, body: Option<&str>) -> Value {
     let title = title.trim();
     if title.is_empty() {
         return json!({ "ok": false, "reason": "a title is required to estimate" });
@@ -886,7 +898,10 @@ async fn run_estimate(
         Err(e) => return json!({ "ok": false, "reason": format!("config: {e}") }),
     };
     let cap_title: String = title.chars().take(400).collect();
-    let body_text = body.map(str::trim).filter(|b| !b.is_empty()).unwrap_or("(none)");
+    let body_text = body
+        .map(str::trim)
+        .filter(|b| !b.is_empty())
+        .unwrap_or("(none)");
     let cap_body: String = body_text.chars().take(4000).collect();
     let user_msg = format!(
         "Title: {cap_title}\n\nDescription:\n{cap_body}\n\n\
@@ -956,12 +971,23 @@ pub struct EstimateBody {
     body: Option<String>,
 }
 
-pub async fn estimate_text(State(state): State<Arc<GatewayState>>, Json(body): Json<EstimateBody>) -> Response {
-    let reply = run_estimate(&state, &body.title.unwrap_or_default(), body.body.as_deref()).await;
+pub async fn estimate_text(
+    State(state): State<Arc<GatewayState>>,
+    Json(body): Json<EstimateBody>,
+) -> Response {
+    let reply = run_estimate(
+        &state,
+        &body.title.unwrap_or_default(),
+        body.body.as_deref(),
+    )
+    .await;
     Json(reply).into_response()
 }
 
-pub async fn estimate_task(State(state): State<Arc<GatewayState>>, Path(id): Path<String>) -> Response {
+pub async fn estimate_task(
+    State(state): State<Arc<GatewayState>>,
+    Path(id): Path<String>,
+) -> Response {
     let store = match store() {
         Ok(s) => s,
         Err(e) => return e,
@@ -1082,7 +1108,11 @@ pub async fn projects() -> Response {
 
 pub async fn orchestration_get() -> Response {
     let config = crate::config::UlncLawConfig::load(None).unwrap_or_default();
-    let orchestrator = config.kanban.orchestrator_profile.clone().unwrap_or_default();
+    let orchestrator = config
+        .kanban
+        .orchestrator_profile
+        .clone()
+        .unwrap_or_default();
     let assignee = config.kanban.default_assignee.clone().unwrap_or_default();
     Json(json!({
         "orchestrator_profile": orchestrator,
@@ -1113,7 +1143,9 @@ pub async fn orchestration_put(Json(body): Json<Value>) -> Response {
         }
     }
     if let Some(auto) = body.get("auto_decompose").and_then(Value::as_bool) {
-        if let Err(e) = crate::config_cmd::set_config_value("kanban.auto_decompose", &auto.to_string(), true) {
+        if let Err(e) =
+            crate::config_cmd::set_config_value("kanban.auto_decompose", &auto.to_string(), true)
+        {
             return super::server_error(&e);
         }
     }

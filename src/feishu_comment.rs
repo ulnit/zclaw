@@ -35,7 +35,8 @@ const REACTION_URI: &str = "/open-apis/drive/v2/files/{file_token}/comments/reac
 const BATCH_QUERY_META_URI: &str = "/open-apis/drive/v1/metas/batch_query";
 const BATCH_QUERY_COMMENT_URI: &str = "/open-apis/drive/v1/files/{file_token}/comments/batch_query";
 const LIST_COMMENTS_URI: &str = "/open-apis/drive/v1/files/{file_token}/comments";
-const LIST_REPLIES_URI: &str = "/open-apis/drive/v1/files/{file_token}/comments/{comment_id}/replies";
+const LIST_REPLIES_URI: &str =
+    "/open-apis/drive/v1/files/{file_token}/comments/{comment_id}/replies";
 const ADD_COMMENT_URI: &str = "/open-apis/drive/v1/files/{file_token}/new_comments";
 const WIKI_GET_NODE_URI: &str = "/open-apis/wiki/v2/spaces/get_node";
 const BOT_INFO_URI: &str = "/open-apis/bot/v3/info";
@@ -246,7 +247,11 @@ fn load_pairing_approved() -> HashSet<String> {
 
 /// hermes `is_user_allowed`.
 pub fn is_user_allowed(rule: &ResolvedCommentRule, user_open_id: &str) -> bool {
-    if rule.allow_from.iter().any(|u| u == user_open_id || u == "*") {
+    if rule
+        .allow_from
+        .iter()
+        .any(|u| u == user_open_id || u == "*")
+    {
         return true;
     }
     if rule.policy == "pairing" {
@@ -275,7 +280,10 @@ pub struct DriveCommentEvent {
 pub fn parse_drive_comment_event(envelope: &Value) -> Option<DriveCommentEvent> {
     let event = envelope.get("event")?;
     let notice_meta = event.get("notice_meta").cloned().unwrap_or(json!({}));
-    let from_user = notice_meta.get("from_user_id").cloned().unwrap_or(json!({}));
+    let from_user = notice_meta
+        .get("from_user_id")
+        .cloned()
+        .unwrap_or(json!({}));
     let to_user = notice_meta.get("to_user_id").cloned().unwrap_or(json!({}));
     Some(DriveCommentEvent {
         event_id: event
@@ -419,7 +427,13 @@ impl CommentApi {
             "with_url": true,
         });
         let (code, msg, data) = self
-            .call(reqwest::Method::POST, BATCH_QUERY_META_URI, &[], &[], Some(&body))
+            .call(
+                reqwest::Method::POST,
+                BATCH_QUERY_META_URI,
+                &[],
+                &[],
+                Some(&body),
+            )
             .await;
         if code != 0 {
             eprintln!("[feishu-comment] meta batch_query failed: code={code} msg={msg}");
@@ -686,7 +700,9 @@ impl CommentApi {
 
 /// hermes `_sanitize_comment_text`.
 pub fn sanitize_comment_text(text: &str) -> String {
-    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// hermes `deliver_comment_reply` — chunked, whole-comment fallback on
@@ -711,7 +727,9 @@ async fn deliver_comment_reply(
             if success {
                 true
             } else if code == 1069302 {
-                eprintln!("[feishu-comment] reply not allowed (1069302), falling back to whole comment");
+                eprintln!(
+                    "[feishu-comment] reply not allowed (1069302), falling back to whole comment"
+                );
                 is_whole = true;
                 api.add_whole_comment(file_token, file_type, &chunk).await
             } else {
@@ -763,7 +781,11 @@ fn reply_content(reply: &Value) -> Value {
 pub fn extract_reply_text(reply: &Value) -> String {
     let content = reply_content(reply);
     let mut parts = Vec::new();
-    for elem in content.get("elements").and_then(|v| v.as_array()).unwrap_or(&vec![]) {
+    for elem in content
+        .get("elements")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&vec![])
+    {
         match elem.get("type").and_then(|v| v.as_str()).unwrap_or("") {
             "text_run" => {
                 if let Some(text) = elem.pointer("/text_run/text").and_then(|v| v.as_str()) {
@@ -807,7 +829,11 @@ pub fn get_reply_user_id(reply: &Value) -> String {
 pub fn extract_semantic_text(reply: &Value, self_open_id: &str) -> String {
     let content = reply_content(reply);
     let mut parts = Vec::new();
-    for elem in content.get("elements").and_then(|v| v.as_array()).unwrap_or(&vec![]) {
+    for elem in content
+        .get("elements")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&vec![])
+    {
         match elem.get("type").and_then(|v| v.as_str()).unwrap_or("") {
             "person" => {
                 let uid = elem
@@ -832,7 +858,11 @@ pub fn extract_semantic_text(reply: &Value, self_open_id: &str) -> String {
             _ => {}
         }
     }
-    parts.join("").split_whitespace().collect::<Vec<_>>().join(" ")
+    parts
+        .join("")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// hermes `_FEISHU_DOC_URL_RE`.
@@ -855,7 +885,11 @@ pub fn extract_docs_links(replies: &[Value]) -> Vec<Value> {
     let mut links = Vec::new();
     for reply in replies {
         let content = reply_content(reply);
-        for elem in content.get("elements").and_then(|v| v.as_array()).unwrap_or(&vec![]) {
+        for elem in content
+            .get("elements")
+            .and_then(|v| v.as_array())
+            .unwrap_or(&vec![])
+        {
             let elem_type = elem.get("type").and_then(|v| v.as_str()).unwrap_or("");
             if elem_type != "docs_link" && elem_type != "link" {
                 continue;
@@ -883,7 +917,10 @@ pub fn format_referenced_docs(links: &[Value], current_file_token: &str) -> Stri
     if links.is_empty() {
         return String::new();
     }
-    let mut lines = vec!["".to_string(), "Referenced documents in comments:".to_string()];
+    let mut lines = vec![
+        "".to_string(),
+        "Referenced documents in comments:".to_string(),
+    ];
     for link in links {
         let rtype = link
             .get("resolved_type")
@@ -919,7 +956,10 @@ type TimelineEntry = (String, String, bool);
 
 /// hermes `_select_local_timeline` — window around target, always keep
 /// first/target/last.
-pub fn select_local_timeline(timeline: &[TimelineEntry], target_index: isize) -> Vec<TimelineEntry> {
+pub fn select_local_timeline(
+    timeline: &[TimelineEntry],
+    target_index: isize,
+) -> Vec<TimelineEntry> {
     let n = timeline.len();
     if n <= LOCAL_TIMELINE_LIMIT {
         return timeline.to_vec();
@@ -1007,8 +1047,14 @@ pub fn build_local_comment_prompt(
     let selected = select_local_timeline(timeline, target_index);
     let mut lines = vec![
         format!("The user added a reply in \"{doc_title}\"."),
-        format!("Current user comment text: \"{}\"", truncate(target_reply_text, PROMPT_TEXT_LIMIT)),
-        format!("Original comment text: \"{}\"", truncate(root_comment_text, PROMPT_TEXT_LIMIT)),
+        format!(
+            "Current user comment text: \"{}\"",
+            truncate(target_reply_text, PROMPT_TEXT_LIMIT)
+        ),
+        format!(
+            "Original comment text: \"{}\"",
+            truncate(root_comment_text, PROMPT_TEXT_LIMIT)
+        ),
         format!("Quoted content: \"{}\"", truncate(quote_text, 500)),
         "This comment mentioned you (@mention is for routing, not task content).".to_string(),
         format!("Document link: {doc_url}"),
@@ -1025,7 +1071,10 @@ pub fn build_local_comment_prompt(
     ];
     for (user_id, text, is_self) in &selected {
         let marker = if *is_self { " <-- YOU" } else { "" };
-        lines.push(format!("[{user_id}] {}{marker}", truncate(text, PROMPT_TEXT_LIMIT)));
+        lines.push(format!(
+            "[{user_id}] {}{marker}",
+            truncate(text, PROMPT_TEXT_LIMIT)
+        ));
     }
     if !referenced_docs.is_empty() {
         lines.push(referenced_docs.to_string());
@@ -1050,7 +1099,10 @@ pub fn build_whole_comment_prompt(
     let selected = select_whole_timeline(timeline, current_index, nearest_self_index);
     let mut lines = vec![
         format!("The user added a comment in \"{doc_title}\"."),
-        format!("Current user comment text: \"{}\"", truncate(comment_text, PROMPT_TEXT_LIMIT)),
+        format!(
+            "Current user comment text: \"{}\"",
+            truncate(comment_text, PROMPT_TEXT_LIMIT)
+        ),
         "This is a whole-document comment.".to_string(),
         "This comment mentioned you (@mention is for routing, not task content).".to_string(),
         format!("Document link: {doc_url}"),
@@ -1066,7 +1118,10 @@ pub fn build_whole_comment_prompt(
     ];
     for (user_id, text, is_self) in &selected {
         let marker = if *is_self { " <-- YOU" } else { "" };
-        lines.push(format!("[{user_id}] {}{marker}", truncate(text, PROMPT_TEXT_LIMIT)));
+        lines.push(format!(
+            "[{user_id}] {}{marker}",
+            truncate(text, PROMPT_TEXT_LIMIT)
+        ));
     }
     if !referenced_docs.is_empty() {
         lines.push(referenced_docs.to_string());
@@ -1111,8 +1166,7 @@ pub async fn handle_drive_comment_event(
     {
         return;
     }
-    if parsed.file_token.is_empty() || parsed.file_type.is_empty() || parsed.comment_id.is_empty()
-    {
+    if parsed.file_token.is_empty() || parsed.file_type.is_empty() || parsed.comment_id.is_empty() {
         eprintln!("[feishu-comment] missing required fields, skipping");
         return;
     }
@@ -1121,10 +1175,17 @@ pub async fn handle_drive_comment_event(
     let comments_cfg = load_comments_config();
     let mut rule = resolve_rule(&comments_cfg, &parsed.file_type, &parsed.file_token, "");
     if matches!(rule.match_source.as_str(), "wildcard" | "top") && has_wiki_keys(&comments_cfg) {
-        let node = api.wiki_get_node(&parsed.file_token, &parsed.file_type).await;
+        let node = api
+            .wiki_get_node(&parsed.file_token, &parsed.file_type)
+            .await;
         if let Some(wiki_token) = node.get("node_token").and_then(|v| v.as_str()) {
             if !wiki_token.is_empty() {
-                rule = resolve_rule(&comments_cfg, &parsed.file_type, &parsed.file_token, wiki_token);
+                rule = resolve_rule(
+                    &comments_cfg,
+                    &parsed.file_type,
+                    &parsed.file_token,
+                    wiki_token,
+                );
             }
         }
     }
@@ -1145,13 +1206,19 @@ pub async fn handle_drive_comment_event(
 
     // OK reaction while the agent works.
     if !parsed.reply_id.is_empty() {
-        api.comment_reaction(&parsed.file_token, &parsed.file_type, &parsed.reply_id, "add")
-            .await;
+        api.comment_reaction(
+            &parsed.file_token,
+            &parsed.file_type,
+            &parsed.reply_id,
+            "add",
+        )
+        .await;
     }
 
     // Parallel fetch: doc meta + comment detail.
     let meta_fut = api.query_document_meta(&parsed.file_token, &parsed.file_type);
-    let comment_fut = api.batch_query_comment(&parsed.file_token, &parsed.file_type, &parsed.comment_id);
+    let comment_fut =
+        api.batch_query_comment(&parsed.file_token, &parsed.file_type, &parsed.comment_id);
     let (doc_meta, comment_detail) = tokio::join!(meta_fut, comment_fut);
     let doc_title = doc_meta
         .get("title")
@@ -1159,14 +1226,20 @@ pub async fn handle_drive_comment_event(
         .filter(|s| !s.is_empty())
         .unwrap_or("Untitled")
         .to_string();
-    let doc_url = doc_meta.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let doc_url = doc_meta
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let is_whole = comment_detail
         .get("is_whole")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
     let prompt = if is_whole {
-        let whole_comments = api.list_whole_comments(&parsed.file_token, &parsed.file_type).await;
+        let whole_comments = api
+            .list_whole_comments(&parsed.file_token, &parsed.file_type)
+            .await;
         let mut timeline: Vec<TimelineEntry> = Vec::new();
         let mut current_text = String::new();
         let mut current_index: isize = -1;
@@ -1177,7 +1250,11 @@ pub async fn handle_drive_comment_event(
                 Some(v) => v.clone(),
                 None => json!({}),
             };
-            for r in reply_list.get("replies").and_then(|v| v.as_array()).unwrap_or(&vec![]) {
+            for r in reply_list
+                .get("replies")
+                .and_then(|v| v.as_array())
+                .unwrap_or(&vec![])
+            {
                 let uid = get_reply_user_id(r);
                 let text = extract_reply_text(r);
                 let is_self = !self_open_id.is_empty() && uid == self_open_id;
@@ -1318,7 +1395,10 @@ pub async fn handle_drive_comment_event(
         )
         .await;
         if ok {
-            eprintln!("[feishu-comment] reply delivered ({} chars)", response.len());
+            eprintln!(
+                "[feishu-comment] reply delivered ({} chars)",
+                response.len()
+            );
         } else {
             eprintln!("[feishu-comment] failed to deliver reply");
         }
@@ -1326,8 +1406,13 @@ pub async fn handle_drive_comment_event(
 
     // Cleanup: remove the OK reaction (best-effort).
     if !parsed.reply_id.is_empty() {
-        api.comment_reaction(&parsed.file_token, &parsed.file_type, &parsed.reply_id, "delete")
-            .await;
+        api.comment_reaction(
+            &parsed.file_token,
+            &parsed.file_type,
+            &parsed.reply_id,
+            "delete",
+        )
+        .await;
     }
 }
 
@@ -1534,7 +1619,10 @@ mod tests {
 
     #[test]
     fn sanitize_escapes_markup() {
-        assert_eq!(sanitize_comment_text("a < b & c > d"), "a &lt; b &amp; c &gt; d");
+        assert_eq!(
+            sanitize_comment_text("a < b & c > d"),
+            "a &lt; b &amp; c &gt; d"
+        );
     }
 
     #[test]

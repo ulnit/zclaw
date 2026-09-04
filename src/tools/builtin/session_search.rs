@@ -126,9 +126,9 @@ fn session_search_tool() -> crate::tools::Tool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tools::ToolContext;
     use crate::provider::{Message, Role};
     use crate::session::sqlite::SqliteSessionStore;
+    use crate::tools::ToolContext;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -153,12 +153,16 @@ mod tests {
         let ctx = Arc::new(ToolContext::new().with_store(store.clone()));
         let tool = session_search_tool();
 
-        let result = (tool.handler)(json!({"query": "auth refactor"}), ctx.clone()).await.unwrap();
+        let result = (tool.handler)(json!({"query": "auth refactor"}), ctx.clone())
+            .await
+            .unwrap();
         assert_eq!(result["success"], json!(true));
         assert_eq!(result["sessions"].as_array().unwrap().len(), 1);
         assert_eq!(result["sessions"][0]["session_id"], json!(sid));
 
-        let result = (tool.handler)(json!({"session_id": sid}), ctx).await.unwrap();
+        let result = (tool.handler)(json!({"session_id": sid}), ctx)
+            .await
+            .unwrap();
         assert_eq!(result["total_messages"], json!(2));
     }
 }

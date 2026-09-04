@@ -117,7 +117,9 @@ pub enum ApprovalOutcome {
 /// Routes approval requests raised inside agent runs to the HTTP approval
 /// flow (and remembers `always`/`session` decisions).
 pub struct ApprovalRouter {
-    channels: std::sync::Mutex<HashMap<String, (String, tokio::sync::mpsc::UnboundedSender<PendingApproval>)>>,
+    channels: std::sync::Mutex<
+        HashMap<String, (String, tokio::sync::mpsc::UnboundedSender<PendingApproval>)>,
+    >,
     allow_always: tokio::sync::Mutex<std::collections::HashSet<String>>,
     allow_session: tokio::sync::Mutex<HashMap<String, std::collections::HashSet<String>>>,
     /// Fail-closed wait limit for a human decision (hermes default 300s).
@@ -134,7 +136,10 @@ impl ApprovalRouter {
     /// Build a router with a custom approval timeout and an optional
     /// persistence file for `always` grants (hermes keeps permanent
     /// approvals on disk so they survive restarts).
-    pub fn with_options(timeout: std::time::Duration, persist_path: Option<std::path::PathBuf>) -> Arc<Self> {
+    pub fn with_options(
+        timeout: std::time::Duration,
+        persist_path: Option<std::path::PathBuf>,
+    ) -> Arc<Self> {
         let mut allow_always = std::collections::HashSet::new();
         if let Some(path) = &persist_path {
             if let Ok(content) = std::fs::read_to_string(path) {
@@ -257,7 +262,9 @@ impl ApprovalRouter {
     /// restarts (when a persist path is configured).
     pub async fn grant_always(&self, command: String) {
         self.allow_always.lock().await.insert(command.clone());
-        let Some(path) = &self.persist_path else { return };
+        let Some(path) = &self.persist_path else {
+            return;
+        };
         let commands: Vec<Value> = self
             .allow_always
             .lock()
@@ -266,7 +273,11 @@ impl ApprovalRouter {
             .map(|c| Value::String(c.clone()))
             .collect();
         let payload = json!({"always": commands});
-        std::fs::write(path, serde_json::to_string_pretty(&payload).unwrap_or_default()).ok();
+        std::fs::write(
+            path,
+            serde_json::to_string_pretty(&payload).unwrap_or_default(),
+        )
+        .ok();
     }
 }
 
@@ -409,8 +420,9 @@ pub struct GatewayState {
     pub restart: Arc<std::sync::atomic::AtomicBool>,
     /// P680: per-session queued prompts (`/queue`) flushed as agent
     /// turns after the current turn finishes (hermes queue parity).
-    pub queued_prompts:
-        Arc<std::sync::Mutex<std::collections::HashMap<String, std::collections::VecDeque<String>>>>,
+    pub queued_prompts: Arc<
+        std::sync::Mutex<std::collections::HashMap<String, std::collections::VecDeque<String>>>,
+    >,
     /// P680: sessions with an active queue-drain task.
     pub queue_draining: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
     /// P683: per-session image paths staged by `/image` for the next
@@ -531,7 +543,9 @@ pub fn spawn_queue_drain(state: &Arc<GatewayState>, session_id: &str) {
         loop {
             let next = {
                 let mut queues = state.queued_prompts.lock().unwrap();
-                queues.get_mut(&session_id).and_then(|queue| queue.pop_front())
+                queues
+                    .get_mut(&session_id)
+                    .and_then(|queue| queue.pop_front())
             };
             let Some(prompt) = next else { break };
             let history = state
@@ -541,11 +555,17 @@ pub fn spawn_queue_drain(state: &Arc<GatewayState>, session_id: &str) {
                 .into_iter()
                 .filter(|m| m.role != Role::System)
                 .collect::<Vec<_>>();
-            let history_arg = if history.is_empty() { None } else { Some(history) };
+            let history_arg = if history.is_empty() {
+                None
+            } else {
+                Some(history)
+            };
             let override_model = session_model_override(&state, &session_id);
             let outcome = await_with_model_override(
                 override_model,
-                state.agent.run_with_session(&prompt, history_arg, Some(&session_id)),
+                state
+                    .agent
+                    .run_with_session(&prompt, history_arg, Some(&session_id)),
             )
             .await;
             if let Err(e) = outcome {
@@ -810,7 +830,9 @@ fn redact_config_value(value: &mut Value, prefix: &str, redacted: &mut Vec<Strin
                 redact_config_value(v, &format!("{prefix}[{i}]"), redacted);
             }
         }
-        Value::String(text) if looks_like_secret_key(prefix.rsplit(['.', '[']).next().unwrap_or(prefix)) => {
+        Value::String(text)
+            if looks_like_secret_key(prefix.rsplit(['.', '[']).next().unwrap_or(prefix)) =>
+        {
             if !text.is_empty() {
                 *text = CONFIG_REDACTED.to_string();
                 redacted.push(prefix.to_string());
@@ -886,11 +908,7 @@ async fn env_set(Json(body): Json<EnvKeyBody>) -> Response {
     let value = body.value.unwrap_or_default();
     match crate::config_cmd::set_config_value(&key, &value, true) {
         Ok(_) => Json(json!({"ok": true, "key": key})).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e})),
-        )
-            .into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response(),
     }
 }
 
@@ -915,11 +933,7 @@ async fn env_delete(Json(body): Json<EnvKeyBody>) -> Response {
     }
     match crate::config_cmd::unset_config_value(&key) {
         Ok(_) => Json(json!({"ok": true, "key": key})).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e})),
-        )
-            .into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response(),
     }
 }
 
@@ -1011,16 +1025,17 @@ async fn config_put(Json(body): Json<ConfigPutBody>) -> Response {
             skipped.push(key);
             continue;
         }
-        let toml_scalar = match json_to_toml(Value::clone(&value)) {
-            Ok(v) => v,
-            Err(_) => {
-                return (
+        let toml_scalar =
+            match json_to_toml(Value::clone(&value)) {
+                Ok(v) => v,
+                Err(_) => return (
                     StatusCode::BAD_REQUEST,
-                    Json(json!({"error": format!("value for '{key}' is not representable in TOML")})),
+                    Json(
+                        json!({"error": format!("value for '{key}' is not representable in TOML")}),
+                    ),
                 )
-                    .into_response()
-            }
-        };
+                    .into_response(),
+            };
         if let Err(e) = crate::config_cmd::set_nested(&mut toml_value, &key, toml_scalar) {
             return (StatusCode::BAD_REQUEST, Json(json!({"error": e}))).into_response();
         }
@@ -1059,8 +1074,8 @@ async fn env_reveal(Json(body): Json<Value>) -> Response {
     }
     {
         let mut window = REVEAL_WINDOW.lock().unwrap_or_else(|e| e.into_inner());
-        let cutoff = std::time::Instant::now()
-            - std::time::Duration::from_secs(REVEAL_WINDOW_SECONDS);
+        let cutoff =
+            std::time::Instant::now() - std::time::Duration::from_secs(REVEAL_WINDOW_SECONDS);
         while let Some(front) = window.front() {
             if *front < cutoff {
                 window.pop_front();
@@ -1128,8 +1143,8 @@ fn flatten_schema_rows(value: &Value, prefix: &str, out: &mut Vec<Value>) {
 /// from the default config (lean hermes parity: types + defaults, no
 /// per-field labels/options).
 async fn config_schema() -> Json<Value> {
-    let defaults = serde_json::to_value(crate::config::UlncLawConfig::default())
-        .unwrap_or_else(|_| json!({}));
+    let defaults =
+        serde_json::to_value(crate::config::UlncLawConfig::default()).unwrap_or_else(|_| json!({}));
     let mut fields = Vec::new();
     flatten_schema_rows(&defaults, "", &mut fields);
     fields.sort_by(|a, b| {
@@ -1187,9 +1202,18 @@ async fn custom_endpoints_list() -> Response {
     let mut endpoints = Vec::new();
     if let Some(table) = doc.get("providers").and_then(|v| v.as_table()) {
         for (id, entry) in table {
-            let base_url = entry.get("base_url").and_then(|v| v.as_str()).unwrap_or_default();
-            let model = entry.get("model").and_then(|v| v.as_str()).unwrap_or_default();
-            let mode = entry.get("mode").and_then(|v| v.as_str()).unwrap_or("openai");
+            let base_url = entry
+                .get("base_url")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let model = entry
+                .get("model")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let mode = entry
+                .get("mode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("openai");
             let literal_key = entry
                 .get("api_key")
                 .and_then(|v| v.as_str())
@@ -1230,11 +1254,19 @@ async fn custom_endpoints_upsert(Json(body): Json<Value>) -> Response {
         Ok(v) => v,
         Err(response) => return response,
     };
-    let base_url = body["base_url"].as_str().unwrap_or_default().trim().to_string();
+    let base_url = body["base_url"]
+        .as_str()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     if base_url.is_empty() {
         return bad_request("base_url is required", None);
     }
-    let model = body["model"].as_str().unwrap_or_default().trim().to_string();
+    let model = body["model"]
+        .as_str()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     let mode = match body["mode"]
         .as_str()
         .unwrap_or_default()
@@ -1321,21 +1353,17 @@ async fn probe_models_url(base_url: &str, api_key: Option<&str>) -> Response {
     if let Some(key) = api_key.map(|v| v.trim()).filter(|v| !v.is_empty()) {
         request = request.bearer_auth(key);
     }
-    let response = match tokio::time::timeout(
-        std::time::Duration::from_secs(8),
-        request.send(),
-    )
-    .await
-    {
-        Ok(Ok(response)) => response,
-        _ => {
-            return Json(json!({
-                "ok": false, "reachable": false,
-                "message": format!("Could not reach {url}."), "models": [],
-            }))
-            .into_response()
-        }
-    };
+    let response =
+        match tokio::time::timeout(std::time::Duration::from_secs(8), request.send()).await {
+            Ok(Ok(response)) => response,
+            _ => {
+                return Json(json!({
+                    "ok": false, "reachable": false,
+                    "message": format!("Could not reach {url}."), "models": [],
+                }))
+                .into_response()
+            }
+        };
     let status = response.status().as_u16();
     if status == 401 || status == 403 {
         return Json(json!({
@@ -1360,8 +1388,7 @@ async fn probe_models_url(base_url: &str, api_key: Option<&str>) -> Response {
                 .collect()
         })
         .unwrap_or_default();
-    Json(json!({ "ok": true, "reachable": true, "message": "", "models": models }))
-        .into_response()
+    Json(json!({ "ok": true, "reachable": true, "message": "", "models": models })).into_response()
 }
 
 /// `POST /api/providers/custom-endpoints/validate` — probe the
@@ -1375,7 +1402,11 @@ async fn custom_endpoints_validate(Json(body): Json<Value>) -> Response {
 /// Live credential probes (hermes `_CREDENTIAL_PROBES`): env key →
 /// (probe URL, bearer auth vs `?key=` query).
 const CREDENTIAL_PROBES: &[(&str, &str, bool)] = &[
-    ("OPENROUTER_API_KEY", "https://openrouter.ai/api/v1/key", true),
+    (
+        "OPENROUTER_API_KEY",
+        "https://openrouter.ai/api/v1/key",
+        true,
+    ),
     ("OPENAI_API_KEY", "https://api.openai.com/v1/models", true),
     ("XAI_API_KEY", "https://api.x.ai/v1/models", true),
     (
@@ -1392,7 +1423,11 @@ const CREDENTIAL_PROBES: &[(&str, &str, bool)] = &[
 /// (`ok: true, reachable: false`) so unprobable providers never block.
 async fn providers_validate(Json(body): Json<Value>) -> Response {
     let key = body["key"].as_str().unwrap_or_default().trim().to_string();
-    let value = body["value"].as_str().unwrap_or_default().trim().to_string();
+    let value = body["value"]
+        .as_str()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     if value.is_empty() {
         return Json(json!({
             "ok": false, "reachable": true, "message": "Enter a value first.",
@@ -1402,7 +1437,9 @@ async fn providers_validate(Json(body): Json<Value>) -> Response {
     if key == "OPENAI_BASE_URL" {
         return probe_models_url(&value, body["api_key"].as_str()).await;
     }
-    let Some((_, url, bearer)) = CREDENTIAL_PROBES.iter().find(|(probe_key, _, _)| *probe_key == key)
+    let Some((_, url, bearer)) = CREDENTIAL_PROBES
+        .iter()
+        .find(|(probe_key, _, _)| *probe_key == key)
     else {
         return Json(json!({ "ok": true, "reachable": false, "message": "" })).into_response();
     };
@@ -1414,21 +1451,17 @@ async fn providers_validate(Json(body): Json<Value>) -> Response {
     } else {
         request = request.query(&[("key", value.as_str())]);
     }
-    let response = match tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        request.send(),
-    )
-    .await
-    {
-        Ok(Ok(response)) => response,
-        _ => {
-            return Json(json!({
-                "ok": false, "reachable": false,
-                "message": "Could not reach the provider to verify the key.",
-            }))
-            .into_response()
-        }
-    };
+    let response =
+        match tokio::time::timeout(std::time::Duration::from_secs(10), request.send()).await {
+            Ok(Ok(response)) => response,
+            _ => {
+                return Json(json!({
+                    "ok": false, "reachable": false,
+                    "message": "Could not reach the provider to verify the key.",
+                }))
+                .into_response()
+            }
+        };
     let status = response.status().as_u16();
     if status == 401 || status == 403 {
         return Json(json!({
@@ -1463,19 +1496,27 @@ async fn custom_endpoint_activate(Path(id): Path<String>) -> Response {
         Some(entry) => entry.clone(),
         None => return not_found("custom endpoint not found"),
     };
-    let model = entry.get("model").and_then(|v| v.as_str()).unwrap_or_default().trim().to_string();
-    let base_url = entry.get("base_url").and_then(|v| v.as_str()).unwrap_or_default().trim().to_string();
+    let model = entry
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let base_url = entry
+        .get("base_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     if model.is_empty() || base_url.is_empty() {
         return bad_request("custom endpoint is incomplete", None);
     }
     if let Err(e) = crate::model_cmd::apply_model_choice(&mut doc, &id, &model) {
         return bad_request(&e, None);
     }
-    if let Err(e) = crate::config_cmd::set_nested(
-        &mut doc,
-        "model.base_url",
-        toml::Value::String(base_url),
-    ) {
+    if let Err(e) =
+        crate::config_cmd::set_nested(&mut doc, "model.base_url", toml::Value::String(base_url))
+    {
         return bad_request(&e, None);
     }
     if let Err(e) = crate::config_cmd::save_toml(&path, &doc) {
@@ -1497,10 +1538,7 @@ async fn custom_endpoint_delete(Path(id): Path<String>) -> Response {
         Ok(v) => v,
         Err(e) => return server_error(&e),
     };
-    let exists = doc
-        .get("providers")
-        .and_then(|t| t.get(&id))
-        .is_some();
+    let exists = doc.get("providers").and_then(|t| t.get(&id)).is_some();
     if !exists {
         return not_found("custom endpoint not found");
     }
@@ -1511,10 +1549,7 @@ async fn custom_endpoint_delete(Path(id): Path<String>) -> Response {
         .map(|p| p.trim().to_lowercase() == id)
         .unwrap_or(false);
     if active {
-        return bad_request(
-            "provider is active — switch the gateway model first",
-            None,
-        );
+        return bad_request("provider is active — switch the gateway model first", None);
     }
     crate::config_cmd::unset_nested(&mut doc, &format!("providers.{id}"));
     let _ = crate::config_cmd::remove_env_value(&custom_endpoint_key_env(&id));
@@ -1558,8 +1593,16 @@ async fn model_info_api(State(state): State<Arc<GatewayState>>) -> Json<Value> {
 /// restarts; per-session hot-swap stays `POST /api/sessions/:id/model`.
 async fn model_set_api(Json(body): Json<Value>) -> Response {
     let scope = body["scope"].as_str().unwrap_or("main").trim().to_string();
-    let provider = body["provider"].as_str().unwrap_or_default().trim().to_string();
-    let model = body["model"].as_str().unwrap_or_default().trim().to_string();
+    let provider = body["provider"]
+        .as_str()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let model = body["model"]
+        .as_str()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     if scope == "auxiliary" {
         return model_set_auxiliary(body, provider, model);
     }
@@ -1592,9 +1635,7 @@ async fn model_set_api(Json(body): Json<Value>) -> Response {
 /// Persist (or clear) `agent.reasoning_effort` in config.toml; returns
 /// the normalized level written (None = cleared). Shared by the
 /// `/reasoning` slash command and `PUT /api/reasoning` (P615).
-fn persist_reasoning_effort(
-    effort: Option<&str>,
-) -> std::result::Result<Option<String>, String> {
+fn persist_reasoning_effort(effort: Option<&str>) -> std::result::Result<Option<String>, String> {
     let normalized =
         crate::kanban::normalize_reasoning_effort(effort).map_err(|e| e.to_string())?;
     let path = crate::config_cmd::config_path();
@@ -1653,13 +1694,11 @@ async fn resolve_pending_approval(
             waiting.sort_by(|a, b| {
                 let own_a = a.session_id.as_deref() == Some(session_id);
                 let own_b = b.session_id.as_deref() == Some(session_id);
-                own_b
-                    .cmp(&own_a)
-                    .then_with(|| {
-                        b.created_at
-                            .partial_cmp(&a.created_at)
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    })
+                own_b.cmp(&own_a).then_with(|| {
+                    b.created_at
+                        .partial_cmp(&a.created_at)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
             });
             match waiting.first() {
                 Some(run) => run.run_id.clone(),
@@ -1733,11 +1772,7 @@ fn persist_service_tier(mode: &str) -> std::result::Result<String, String> {
     let normalized = match mode.trim().to_ascii_lowercase().as_str() {
         "fast" | "on" | "priority" => "fast".to_string(),
         "normal" | "off" | "default" | "" => "normal".to_string(),
-        other => {
-            return Err(format!(
-                "service tier must be fast or normal, got: {other}"
-            ))
-        }
+        other => return Err(format!("service tier must be fast or normal, got: {other}")),
     };
     let path = crate::config_cmd::config_path();
     let mut doc = crate::config_cmd::load_toml(&path)?;
@@ -1852,7 +1887,11 @@ async fn personalities_get() -> Response {
 /// Body: {"name": "poet"} activates; {"name": "" | "none"} clears.
 async fn personality_set(Json(body): Json<Value>) -> Response {
     let raw = body["name"].as_str().map(str::trim).unwrap_or("");
-    let name = if raw.is_empty() || matches!(raw.to_ascii_lowercase().as_str(), "none" | "default" | "neutral") {
+    let name = if raw.is_empty()
+        || matches!(
+            raw.to_ascii_lowercase().as_str(),
+            "none" | "default" | "neutral"
+        ) {
         None
     } else {
         Some(raw)
@@ -1974,7 +2013,9 @@ async fn update_approvals_settings_api(Json(body): Json<Value>) -> (StatusCode, 
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown approvals key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown approvals key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -1988,7 +2029,9 @@ async fn update_approvals_settings_api(Json(body): Json<Value>) -> (StatusCode, 
                     if !v.is_u64() {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": format!("approvals key '{key}' must be a non-negative integer") })),
+                            Json(
+                                json!({ "error": format!("approvals key '{key}' must be a non-negative integer") }),
+                            ),
                         );
                     }
                     raw = Some(v.to_string());
@@ -2000,7 +2043,9 @@ async fn update_approvals_settings_api(Json(body): Json<Value>) -> (StatusCode, 
                     _ => {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "approvals.cron_mode must be one of deny|approve" })),
+                            Json(
+                                json!({ "error": "approvals.cron_mode must be one of deny|approve" }),
+                            ),
                         )
                     }
                 },
@@ -2017,7 +2062,9 @@ async fn update_approvals_settings_api(Json(body): Json<Value>) -> (StatusCode, 
                     if !v.is_boolean() {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "approvals.mcp_reload_confirm must be a boolean" })),
+                            Json(
+                                json!({ "error": "approvals.mcp_reload_confirm must be a boolean" }),
+                            ),
                         );
                     }
                     raw = Some(v.to_string());
@@ -2028,7 +2075,9 @@ async fn update_approvals_settings_api(Json(body): Json<Value>) -> (StatusCode, 
                         None => {
                             return (
                                 StatusCode::BAD_REQUEST,
-                                Json(json!({ "error": "approvals.deny must be an array of command globs" })),
+                                Json(
+                                    json!({ "error": "approvals.deny must be an array of command globs" }),
+                                ),
                             )
                         }
                     };
@@ -2038,7 +2087,9 @@ async fn update_approvals_settings_api(Json(body): Json<Value>) -> (StatusCode, 
                         if text.is_empty() {
                             return (
                                 StatusCode::BAD_REQUEST,
-                                Json(json!({ "error": "approvals.deny entries must be non-empty strings" })),
+                                Json(
+                                    json!({ "error": "approvals.deny entries must be non-empty strings" }),
+                                ),
                             );
                         }
                         list.push(toml::Value::String(text.to_string()));
@@ -2106,21 +2157,13 @@ async fn fast_get(State(state): State<Arc<GatewayState>>) -> Json<Value> {
 /// `PUT /api/fast` — toggle Priority Processing for this gateway process
 /// (`{"mode": "fast"|"normal"}`); `"persist": true` additionally writes
 /// `agent.service_tier` to config.toml (hermes `/fast --global`).
-async fn fast_set(
-    State(state): State<Arc<GatewayState>>,
-    Json(body): Json<Value>,
-) -> Response {
+async fn fast_set(State(state): State<Arc<GatewayState>>, Json(body): Json<Value>) -> Response {
     let raw = body["mode"].as_str().map(str::trim).unwrap_or("");
     let tier: Option<String> = match raw.to_ascii_lowercase().as_str() {
         "fast" | "on" | "priority" => Some("priority".to_string()),
         "normal" | "off" | "default" => None,
         "" => return bad_request("mode must be fast or normal", None),
-        other => {
-            return bad_request(
-                &format!("mode must be fast or normal, got: {other}"),
-                None,
-            )
-        }
+        other => return bad_request(&format!("mode must be fast or normal, got: {other}"), None),
     };
     let provider = state.agent.provider();
     let supported = provider.supports_service_tier()
@@ -2240,10 +2283,13 @@ fn model_set_auxiliary(body: Value, provider: String, model: String) -> Response
     if !crate::provider::auxiliary::TASK_SLOTS.contains(&task.as_str()) {
         return bad_request(&format!("unknown auxiliary task: '{task}'"), None);
     }
-    let base_url = body["base_url"].as_str().unwrap_or_default().trim().to_string();
-    let reset = (provider.is_empty() || provider == "auto")
-        && model.is_empty()
-        && base_url.is_empty();
+    let base_url = body["base_url"]
+        .as_str()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let reset =
+        (provider.is_empty() || provider == "auto") && model.is_empty() && base_url.is_empty();
     let path = crate::config_cmd::config_path();
     let mut doc = match crate::config_cmd::load_toml(&path) {
         Ok(v) => v,
@@ -2326,7 +2372,8 @@ async fn model_moa_get() -> Response {
         value["default_preset"] = json!(name);
         value["reference_models"] =
             serde_json::to_value(&preset.reference_models).unwrap_or_else(|_| json!([]));
-        value["aggregator"] = serde_json::to_value(&preset.aggregator).unwrap_or_else(|_| json!({}));
+        value["aggregator"] =
+            serde_json::to_value(&preset.aggregator).unwrap_or_else(|_| json!({}));
         value["degraded_reference_policy"] = json!(preset.degraded_reference_policy);
     }
     Json(value).into_response()
@@ -2343,7 +2390,8 @@ async fn model_moa_put(Json(body): Json<Value>) -> Response {
         return bad_request("at least one preset is required", None);
     }
     for (name, preset) in &moa.presets {
-        if preset.aggregator.provider.trim().is_empty() || preset.aggregator.model.trim().is_empty() {
+        if preset.aggregator.provider.trim().is_empty() || preset.aggregator.model.trim().is_empty()
+        {
             return bad_request(
                 &format!("preset '{name}' aggregator needs provider and model"),
                 None,
@@ -2364,7 +2412,12 @@ async fn model_moa_put(Json(body): Json<Value>) -> Response {
             }
         }
     }
-    if let Some(default_name) = moa.default_preset.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+    if let Some(default_name) = moa
+        .default_preset
+        .as_deref()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+    {
         if !moa.presets.contains_key(default_name) {
             return bad_request(
                 &format!("default_preset '{default_name}' is not among the presets"),
@@ -2409,14 +2462,8 @@ struct RecommendedDefaultQuery {
 /// `GET /api/model/recommended-default` — sensible default model for a
 /// provider (hermes parity, lean: first curated models.dev catalog entry,
 /// then the built-in provider default; no Nous tier logic).
-async fn model_recommended_default(
-    Query(query): Query<RecommendedDefaultQuery>,
-) -> Json<Value> {
-    let provider = query
-        .provider
-        .unwrap_or_default()
-        .trim()
-        .to_lowercase();
+async fn model_recommended_default(Query(query): Query<RecommendedDefaultQuery>) -> Json<Value> {
+    let provider = query.provider.unwrap_or_default().trim().to_lowercase();
     let model = if provider.is_empty() {
         String::new()
     } else {
@@ -2529,9 +2576,7 @@ async fn provider_oauth_start(
 ) -> Response {
     if provider_id != OAUTH_PROVIDER_ID {
         return bad_request(
-            &format!(
-                "Unknown provider: {provider_id}. Available: {OAUTH_PROVIDER_ID}"
-            ),
+            &format!("Unknown provider: {provider_id}. Available: {OAUTH_PROVIDER_ID}"),
             Some("invalid_request"),
         );
     }
@@ -2558,7 +2603,10 @@ async fn provider_oauth_start(
         .and_then(|v| v.as_str())
         .unwrap_or_default()
         .to_string();
-    let expires_in = auth.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(600);
+    let expires_in = auth
+        .get("expires_in")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(600);
     let interval = auth.get("interval").and_then(|v| v.as_u64()).unwrap_or(5);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -2658,7 +2706,12 @@ async fn provider_oauth_session_cancel(
     State(state): State<Arc<GatewayState>>,
     Path(session_id): Path<String>,
 ) -> Json<Value> {
-    let removed = state.oauth_sessions.lock().await.remove(&session_id).is_some();
+    let removed = state
+        .oauth_sessions
+        .lock()
+        .await
+        .remove(&session_id)
+        .is_some();
     Json(json!({ "ok": true, "cancelled": removed }))
 }
 
@@ -2685,14 +2738,34 @@ async fn provider_oauth_disconnect(
 /// frontend owns the full definitions; the backend ships name/label/
 /// description and stores the active selection.
 const DASHBOARD_THEMES: &[(&str, &str, &str)] = &[
-    ("default", "Hermes Teal", "Classic dark teal — the canonical Hermes look"),
-    ("default-large", "Hermes Teal (Large)", "Hermes Teal with bigger fonts and roomier spacing"),
-    ("nous-blue", "Nous Blue", "Light mode — vivid Nous-blue accents on cream canvas"),
+    (
+        "default",
+        "Hermes Teal",
+        "Classic dark teal — the canonical Hermes look",
+    ),
+    (
+        "default-large",
+        "Hermes Teal (Large)",
+        "Hermes Teal with bigger fonts and roomier spacing",
+    ),
+    (
+        "nous-blue",
+        "Nous Blue",
+        "Light mode — vivid Nous-blue accents on cream canvas",
+    ),
     ("midnight", "Midnight", "Deep blue-violet with cool accents"),
     ("ember", "Ember", "Warm crimson and bronze — forge vibes"),
     ("mono", "Mono", "Clean grayscale — minimal and focused"),
-    ("cyberpunk", "Cyberpunk", "Neon green on black — matrix terminal"),
-    ("rose", "Rosé", "Soft pink and warm ivory — easy on the eyes"),
+    (
+        "cyberpunk",
+        "Cyberpunk",
+        "Neon green on black — matrix terminal",
+    ),
+    (
+        "rose",
+        "Rosé",
+        "Soft pink and warm ivory — easy on the eyes",
+    ),
 ];
 
 /// Curated font-override ids (hermes `_FONT_CHOICES`); `"theme"` clears
@@ -2729,11 +2802,7 @@ fn normalize_dashboard_font(raw: &str) -> String {
 fn persist_dashboard_key(key: &str, value: &str) -> std::result::Result<PathBuf, String> {
     let path = crate::config_cmd::config_path();
     let mut toml_value = crate::config_cmd::load_toml(&path)?;
-    crate::config_cmd::set_nested(
-        &mut toml_value,
-        key,
-        toml::Value::String(value.to_string()),
-    )?;
+    crate::config_cmd::set_nested(&mut toml_value, key, toml::Value::String(value.to_string()))?;
     crate::config_cmd::save_toml(&path, &toml_value)?;
     Ok(path)
 }
@@ -2767,7 +2836,11 @@ async fn dashboard_themes(State(state): State<Arc<GatewayState>>) -> Json<Value>
         .collect();
     let active = read_dashboard_value("dashboard.theme")
         .unwrap_or_else(|| config.dashboard.theme.trim().to_string());
-    let active = if active.is_empty() { "default".to_string() } else { active };
+    let active = if active.is_empty() {
+        "default".to_string()
+    } else {
+        active
+    };
     Json(json!({ "themes": themes, "active": active }))
 }
 
@@ -2985,10 +3058,7 @@ async fn serve_speak_stream(socket: axum::extract::ws::WebSocket) {
 }
 
 async fn speak_stream_session(
-    sink: &mut futures::stream::SplitSink<
-        axum::extract::ws::WebSocket,
-        axum::extract::ws::Message,
-    >,
+    sink: &mut futures::stream::SplitSink<axum::extract::ws::WebSocket, axum::extract::ws::Message>,
     rx: &mut tokio::sync::mpsc::UnboundedReceiver<SpeakClientFrame>,
     tts: &crate::tts::TtsConfig,
 ) {
@@ -3085,10 +3155,7 @@ fn apply_speak_frame(frame: &str, session: &mut SpeakSession) -> bool {
 /// watching for barge-in between chunks. False = session over
 /// (stop/disconnect) — the caller must not send the end frame.
 async fn speak_sentence_pcm(
-    sink: &mut futures::stream::SplitSink<
-        axum::extract::ws::WebSocket,
-        axum::extract::ws::Message,
-    >,
+    sink: &mut futures::stream::SplitSink<axum::extract::ws::WebSocket, axum::extract::ws::Message>,
     rx: &mut tokio::sync::mpsc::UnboundedReceiver<SpeakClientFrame>,
     session: &mut SpeakSession,
     tts: &crate::tts::TtsConfig,
@@ -3333,9 +3400,7 @@ async fn update_check_api() -> Json<Value> {
             Ok((outcome, log)) => {
                 let (behind, update_available) = match &outcome {
                     crate::update::CheckOutcome::UpToDate => (json!(0), false),
-                    crate::update::CheckOutcome::Behind { count, .. } => {
-                        (json!(count), *count > 0)
-                    }
+                    crate::update::CheckOutcome::Behind { count, .. } => (json!(count), *count > 0),
                     crate::update::CheckOutcome::BehindShallow { .. } => (json!(-1), true),
                 };
                 json!({
@@ -3408,8 +3473,19 @@ async fn update_apply_api() -> Response {
 // ---------------------------------------------------------------------
 
 const FS_READDIR_HIDDEN: &[&str] = &[
-    ".git", ".hg", ".svn", ".cache", ".next", ".turbo", ".venv",
-    "__pycache__", "build", "dist", "node_modules", "target", "venv",
+    ".git",
+    ".hg",
+    ".svn",
+    ".cache",
+    ".next",
+    ".turbo",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+    "target",
+    "venv",
 ];
 const FS_TEXT_SOURCE_MAX_BYTES: u64 = 64 * 1024 * 1024;
 const FS_TEXT_PREVIEW_MAX_BYTES: u64 = 512 * 1024;
@@ -3456,7 +3532,12 @@ fn fs_query_path(query: &FsPathQuery) -> std::result::Result<PathBuf, Response> 
 }
 
 fn fs_mime_type(path: &std::path::Path) -> &'static str {
-    match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).as_deref() {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .as_deref()
+    {
         Some("md") | Some("markdown") => "text/markdown",
         Some("txt") | Some("log") => "text/plain",
         Some("rs") => "text/x-rust",
@@ -3504,26 +3585,50 @@ fn fs_regular_file(path: &std::path::Path) -> std::result::Result<std::fs::Metad
     let meta = match std::fs::metadata(path) {
         Ok(meta) => meta,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Err((StatusCode::NOT_FOUND, Json(json!({ "error": "File not found" }))).into_response());
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "File not found" })),
+            )
+                .into_response());
         }
         Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
-            return Err((StatusCode::FORBIDDEN, Json(json!({ "error": "File is not readable" }))).into_response());
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({ "error": "File is not readable" })),
+            )
+                .into_response());
         }
         Err(err) => {
-            return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err.to_string() }))).into_response());
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": err.to_string() })),
+            )
+                .into_response());
         }
     };
     if meta.is_dir() {
-        return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": "Path points to a directory" }))).into_response());
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Path points to a directory" })),
+        )
+            .into_response());
     }
     if !meta.is_file() {
-        return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": "Only regular files can be read" }))).into_response());
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Only regular files can be read" })),
+        )
+            .into_response());
     }
     Ok(meta)
 }
 
 fn fs_find_git_root(start: &std::path::Path) -> Option<PathBuf> {
-    let mut directory = if start.is_dir() { start.to_path_buf() } else { start.parent()?.to_path_buf() };
+    let mut directory = if start.is_dir() {
+        start.to_path_buf()
+    } else {
+        start.parent()?.to_path_buf()
+    };
     for _ in 0..50 {
         if directory.join(".git").exists() {
             return Some(directory);
@@ -3590,21 +3695,41 @@ async fn fs_read_text(Query(query): Query<FsPathQuery>) -> Response {
         Err(response) => return response,
     };
     if meta.len() > FS_TEXT_SOURCE_MAX_BYTES {
-        return (StatusCode::PAYLOAD_TOO_LARGE, Json(json!({ "error": "File too large" }))).into_response();
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(json!({ "error": "File too large" })),
+        )
+            .into_response();
     }
     let data = match std::fs::read(&target) {
         Ok(data) => data,
         Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
-            return (StatusCode::FORBIDDEN, Json(json!({ "error": "File is not readable" }))).into_response();
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({ "error": "File is not readable" })),
+            )
+                .into_response();
         }
         Err(err) => {
-            return (StatusCode::BAD_REQUEST, Json(json!({ "error": err.to_string() }))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": err.to_string() })),
+            )
+                .into_response();
         }
     };
     let truncated = data.len() as u64 > FS_TEXT_PREVIEW_MAX_BYTES;
-    let preview: Vec<u8> = data.into_iter().take(FS_TEXT_PREVIEW_MAX_BYTES as usize).collect();
+    let preview: Vec<u8> = data
+        .into_iter()
+        .take(FS_TEXT_PREVIEW_MAX_BYTES as usize)
+        .collect();
     let binary = fs_looks_binary(&preview[..preview.len().min(4096)]);
-    let language = match target.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).as_deref() {
+    let language = match target
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .as_deref()
+    {
         Some("rs") => "rust",
         Some("py") => "python",
         Some("ts") | Some("tsx") => "typescript",
@@ -3648,22 +3773,42 @@ async fn fs_write_text(Json(request): Json<FsWriteTextRequest>) -> Response {
     };
     let bytes = request.content.as_bytes();
     if bytes.len() > FS_TEXT_WRITE_MAX_BYTES {
-        return (StatusCode::PAYLOAD_TOO_LARGE, Json(json!({ "error": "Content too large" }))).into_response();
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(json!({ "error": "Content too large" })),
+        )
+            .into_response();
     }
     match std::fs::metadata(&target) {
         Ok(meta) if meta.is_dir() => {
-            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Path points to a directory" }))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "Path points to a directory" })),
+            )
+                .into_response();
         }
         Ok(meta) if !meta.is_file() => {
-            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Only regular files can be written" }))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "Only regular files can be written" })),
+            )
+                .into_response();
         }
         _ => {}
     }
     let Some(parent) = target.parent() else {
-        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid path" }))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Invalid path" })),
+        )
+            .into_response();
     };
     if !parent.is_dir() {
-        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Parent directory does not exist" }))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Parent directory does not exist" })),
+        )
+            .into_response();
     }
     let file_name = target
         .file_name()
@@ -3677,11 +3822,19 @@ async fn fs_write_text(Json(request): Json<FsWriteTextRequest>) -> Response {
         } else {
             StatusCode::INTERNAL_SERVER_ERROR
         };
-        return (status, Json(json!({ "error": format!("Could not write file: {err}") }))).into_response();
+        return (
+            status,
+            Json(json!({ "error": format!("Could not write file: {err}") })),
+        )
+            .into_response();
     }
     if let Err(err) = std::fs::rename(&tmp, &target) {
         std::fs::remove_file(&tmp).ok();
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": format!("Could not write file: {err}") }))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": format!("Could not write file: {err}") })),
+        )
+            .into_response();
     }
     Json(json!({ "ok": true, "path": target, "byteSize": bytes.len() })).into_response()
 }
@@ -3699,19 +3852,32 @@ async fn fs_read_data_url(Query(query): Query<FsPathQuery>) -> Response {
         Err(response) => return response,
     };
     if meta.len() > FS_DATA_URL_MAX_BYTES {
-        return (StatusCode::PAYLOAD_TOO_LARGE, Json(json!({ "error": "File too large" }))).into_response();
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(json!({ "error": "File too large" })),
+        )
+            .into_response();
     }
     let data = match std::fs::read(&target) {
         Ok(data) => data,
         Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
-            return (StatusCode::FORBIDDEN, Json(json!({ "error": "File is not readable" }))).into_response();
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({ "error": "File is not readable" })),
+            )
+                .into_response();
         }
         Err(err) => {
-            return (StatusCode::BAD_REQUEST, Json(json!({ "error": err.to_string() }))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": err.to_string() })),
+            )
+                .into_response();
         }
     };
     let encoded = base64::engine::general_purpose::STANDARD.encode(&data);
-    Json(json!({ "dataUrl": format!("data:{};base64,{}", fs_mime_type(&target), encoded) })).into_response()
+    Json(json!({ "dataUrl": format!("data:{};base64,{}", fs_mime_type(&target), encoded) }))
+        .into_response()
 }
 
 /// Media-serving roots for `GET /api/media` (lean hermes
@@ -3837,7 +4003,10 @@ async fn fs_download(Query(query): Query<FsPathQuery>) -> Response {
                 .into_response();
         }
         Err(err) => {
-            return (StatusCode::BAD_REQUEST, Json(json!({ "error": err.to_string() })))
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": err.to_string() })),
+            )
                 .into_response();
         }
     };
@@ -3867,7 +4036,9 @@ async fn fs_mkdir(Json(body): Json<Value>) -> Response {
     }
     let target = match fs_resolve_path(&raw) {
         Ok(target) => target,
-        Err((status, message)) => return (status, Json(json!({ "error": message }))).into_response(),
+        Err((status, message)) => {
+            return (status, Json(json!({ "error": message }))).into_response()
+        }
     };
     if target.exists() {
         if !target.is_dir() {
@@ -3966,7 +4137,9 @@ fn git_action_target(body: &GitActionBody) -> std::result::Result<PathBuf, Respo
 /// `GET /api/git/status` — branch, ahead/behind and per-area path
 /// lists (hermes `/api/git/status` parity, lean port).
 async fn git_status(Query(query): Query<FsPathQuery>) -> Response {
-    let query = FsPathQuery { path: query.path.or_else(|| Some(".".to_string())) };
+    let query = FsPathQuery {
+        path: query.path.or_else(|| Some(".".to_string())),
+    };
     let target = match fs_query_path(&query) {
         Ok(target) => target,
         Err(response) => return response,
@@ -3989,7 +4162,9 @@ async fn git_status(Query(query): Query<FsPathQuery>) -> Response {
 /// `GET /api/git/branches` — local branches, current first (hermes
 /// `/api/git/branches` parity, lean port).
 async fn git_branches(Query(query): Query<FsPathQuery>) -> Response {
-    let query = FsPathQuery { path: query.path.or_else(|| Some(".".to_string())) };
+    let query = FsPathQuery {
+        path: query.path.or_else(|| Some(".".to_string())),
+    };
     let target = match fs_query_path(&query) {
         Ok(target) => target,
         Err(response) => return response,
@@ -4076,7 +4251,9 @@ async fn git_push(Json(body): Json<GitActionBody>) -> Response {
 /// `GET /api/git/worktrees` — linked worktrees of the checkout
 /// (hermes `/api/git/worktrees` parity).
 async fn git_worktrees(Query(query): Query<FsPathQuery>) -> Response {
-    let query = FsPathQuery { path: query.path.or_else(|| Some(".".to_string())) };
+    let query = FsPathQuery {
+        path: query.path.or_else(|| Some(".".to_string())),
+    };
     let target = match fs_query_path(&query) {
         Ok(target) => target,
         Err(response) => return response,
@@ -4109,12 +4286,21 @@ struct GitWorktreeBody {
 /// `POST /api/git/worktree/add` — link a new worktree (hermes
 /// `/api/git/worktree/add` parity).
 async fn git_worktree_add(Json(body): Json<GitWorktreeBody>) -> Response {
-    let repo = match git_action_target(&GitActionBody { path: body.path.clone(), ..Default::default() }) {
+    let repo = match git_action_target(&GitActionBody {
+        path: body.path.clone(),
+        ..Default::default()
+    }) {
         Ok(target) => target,
         Err(response) => return response,
     };
-    match crate::git_diff::add_worktree(&repo, &body.target, body.branch.as_deref(), body.new_branch.as_deref()) {
-        Ok(output) => Json(json!({ "ok": true, "target": body.target, "output": output.trim() })).into_response(),
+    match crate::git_diff::add_worktree(
+        &repo,
+        &body.target,
+        body.branch.as_deref(),
+        body.new_branch.as_deref(),
+    ) {
+        Ok(output) => Json(json!({ "ok": true, "target": body.target, "output": output.trim() }))
+            .into_response(),
         Err(e) => bad_request(&e.to_string(), None),
     }
 }
@@ -4122,12 +4308,16 @@ async fn git_worktree_add(Json(body): Json<GitWorktreeBody>) -> Response {
 /// `POST /api/git/worktree/remove` — unlink a worktree (hermes
 /// `/api/git/worktree/remove` parity).
 async fn git_worktree_remove(Json(body): Json<GitWorktreeBody>) -> Response {
-    let repo = match git_action_target(&GitActionBody { path: body.path.clone(), ..Default::default() }) {
+    let repo = match git_action_target(&GitActionBody {
+        path: body.path.clone(),
+        ..Default::default()
+    }) {
         Ok(target) => target,
         Err(response) => return response,
     };
     match crate::git_diff::remove_worktree(&repo, &body.target) {
-        Ok(output) => Json(json!({ "ok": true, "target": body.target, "output": output.trim() })).into_response(),
+        Ok(output) => Json(json!({ "ok": true, "target": body.target, "output": output.trim() }))
+            .into_response(),
         Err(e) => bad_request(&e.to_string(), None),
     }
 }
@@ -4146,7 +4336,9 @@ struct GitFileDiffQuery {
 /// `/api/git/file-diff` parity). Untracked files fold in via
 /// `--no-index` in working/all modes.
 async fn git_file_diff(Query(query): Query<GitFileDiffQuery>) -> Response {
-    let target = match fs_query_path(&FsPathQuery { path: query.path.or_else(|| Some(".".to_string())) }) {
+    let target = match fs_query_path(&FsPathQuery {
+        path: query.path.or_else(|| Some(".".to_string())),
+    }) {
         Ok(target) => target,
         Err(response) => return response,
     };
@@ -4156,7 +4348,9 @@ async fn git_file_diff(Query(query): Query<GitFileDiffQuery>) -> Response {
         _ => crate::git_diff::DiffMode::Working,
     };
     match crate::git_diff::file_diff(&target, &query.file, mode) {
-        Ok(diff) => Json(json!({ "file": query.file, "mode": mode.as_str(), "diff": diff })).into_response(),
+        Ok(diff) => {
+            Json(json!({ "file": query.file, "mode": mode.as_str(), "diff": diff })).into_response()
+        }
         Err(e) => bad_request(&e.to_string(), None),
     }
 }
@@ -4174,12 +4368,18 @@ struct GitBranchBody {
 /// `POST /api/git/branch/create` — create a branch (hermes
 /// `/api/git/branch` parity, lean port).
 async fn git_branch_create(Json(body): Json<GitBranchBody>) -> Response {
-    let target = match git_action_target(&GitActionBody { path: body.path.clone(), ..Default::default() }) {
+    let target = match git_action_target(&GitActionBody {
+        path: body.path.clone(),
+        ..Default::default()
+    }) {
         Ok(target) => target,
         Err(response) => return response,
     };
     match crate::git_diff::create_branch(&target, body.name.trim(), body.start_point.as_deref()) {
-        Ok(output) => Json(json!({ "ok": true, "name": body.name.trim(), "output": output.trim() })).into_response(),
+        Ok(output) => {
+            Json(json!({ "ok": true, "name": body.name.trim(), "output": output.trim() }))
+                .into_response()
+        }
         Err(e) => bad_request(&e.to_string(), None),
     }
 }
@@ -4187,12 +4387,18 @@ async fn git_branch_create(Json(body): Json<GitBranchBody>) -> Response {
 /// `POST /api/git/branch/switch` — switch the checkout to a branch
 /// (hermes `/api/git/branch/switch` parity).
 async fn git_branch_switch(Json(body): Json<GitBranchBody>) -> Response {
-    let target = match git_action_target(&GitActionBody { path: body.path.clone(), ..Default::default() }) {
+    let target = match git_action_target(&GitActionBody {
+        path: body.path.clone(),
+        ..Default::default()
+    }) {
         Ok(target) => target,
         Err(response) => return response,
     };
     match crate::git_diff::switch_branch(&target, body.name.trim()) {
-        Ok(output) => Json(json!({ "ok": true, "name": body.name.trim(), "output": output.trim() })).into_response(),
+        Ok(output) => {
+            Json(json!({ "ok": true, "name": body.name.trim(), "output": output.trim() }))
+                .into_response()
+        }
         Err(e) => bad_request(&e.to_string(), None),
     }
 }
@@ -4212,7 +4418,13 @@ async fn fs_default_cwd(State(state): State<Arc<GatewayState>>) -> Json<Value> {
         .filter(|candidate| candidate.is_dir())
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let branch = std::process::Command::new("git")
-        .args(["-C", &cwd.to_string_lossy(), "rev-parse", "--abbrev-ref", "HEAD"])
+        .args([
+            "-C",
+            &cwd.to_string_lossy(),
+            "rev-parse",
+            "--abbrev-ref",
+            "HEAD",
+        ])
         .output()
         .ok()
         .filter(|output| output.status.success())
@@ -4264,14 +4476,22 @@ async fn credentials_pool_add(
         .unwrap_or_default()
         .trim()
         .to_lowercase();
-    let api_key = body["api_key"].as_str().unwrap_or_default().trim().to_string();
+    let api_key = body["api_key"]
+        .as_str()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     if provider.is_empty() || api_key.is_empty() {
         return bad_request("provider and api_key are required", None);
     }
     let home = state.agent.context().home.clone();
     let mut pool = crate::credential_pool::Pool::load(&home);
     let label = {
-        let raw = body["label"].as_str().unwrap_or_default().trim().to_string();
+        let raw = body["label"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
         if raw.is_empty() {
             format!("key #{}", pool.entries(&provider).len() + 1)
         } else {
@@ -4387,9 +4607,24 @@ struct ProfileSaveBody {
 async fn profiles_save(Json(body): Json<ProfileSaveBody>) -> Response {
     let name = body.name.trim().to_string();
     let spec = crate::profiles_cmd::ProfileSpec {
-        provider: body.provider.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
-        model: body.model.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
-        base_url: body.base_url.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
+        provider: body
+            .provider
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        model: body
+            .model
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        base_url: body
+            .base_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
         temperature: body.temperature,
         enabled_toolsets: body.enabled_toolsets.clone(),
         disabled_toolsets: body.disabled_toolsets.clone(),
@@ -4438,7 +4673,10 @@ struct ProfileRenameBody {
 
 /// `POST /api/profiles/:name/rename` — move `[profiles.<name>]` to a
 /// new key.
-async fn profiles_rename(Path(name): Path<String>, Json(body): Json<ProfileRenameBody>) -> Response {
+async fn profiles_rename(
+    Path(name): Path<String>,
+    Json(body): Json<ProfileRenameBody>,
+) -> Response {
     let new_name = body.new_name.trim().to_string();
     let exists = crate::profiles_cmd::list_profiles()
         .unwrap_or_default()
@@ -4462,7 +4700,11 @@ async fn memory_status_api(State(state): State<Arc<GatewayState>>) -> Json<Value
     let files = crate::memory_cmd::memory_files(&home);
     let mut builtin_files = serde_json::Map::new();
     for file in &files {
-        let key = if file.file == "MEMORY.md" { "memory" } else { "user" };
+        let key = if file.file == "MEMORY.md" {
+            "memory"
+        } else {
+            "user"
+        };
         builtin_files.insert(key.into(), json!(file.bytes));
     }
     Json(json!({
@@ -4513,7 +4755,9 @@ async fn memory_settings_set_api(Json(body): Json<Value>) -> (StatusCode, Json<V
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown memory key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown memory key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -4566,10 +4810,7 @@ async fn memory_reset_api(
     State(state): State<Arc<GatewayState>>,
     Json(request): Json<MemoryResetRequest>,
 ) -> Response {
-    let target = request
-        .target
-        .clone()
-        .unwrap_or_else(|| "all".to_string());
+    let target = request.target.clone().unwrap_or_else(|| "all".to_string());
     let Some(reset_target) = crate::memory_cmd::ResetTarget::parse(&target) else {
         return (
             StatusCode::BAD_REQUEST,
@@ -5055,7 +5296,9 @@ struct McpServerBody {
 
 /// `&mut` access to the `mcp.servers` array in a config document,
 /// creating the section when missing.
-fn mcp_servers_array_mut(root: &mut toml::Value) -> std::result::Result<&mut Vec<toml::Value>, String> {
+fn mcp_servers_array_mut(
+    root: &mut toml::Value,
+) -> std::result::Result<&mut Vec<toml::Value>, String> {
     let table = root
         .as_table_mut()
         .ok_or_else(|| "config root is not a table".to_string())?;
@@ -5085,7 +5328,10 @@ fn mcp_server_name(entry: &toml::Value) -> String {
 /// existing entry the provided fields are merged over it (unknown keys
 /// survive); without one the entry is built fresh and needs either a
 /// `command` or a `url`.
-fn mcp_server_table(body: &McpServerBody, existing: Option<&toml::Value>) -> std::result::Result<toml::Table, String> {
+fn mcp_server_table(
+    body: &McpServerBody,
+    existing: Option<&toml::Value>,
+) -> std::result::Result<toml::Table, String> {
     let mut table = match existing {
         Some(entry) => entry
             .as_table()
@@ -5097,11 +5343,23 @@ fn mcp_server_table(body: &McpServerBody, existing: Option<&toml::Value>) -> std
         table.insert(key.to_string(), value);
     };
     set("name", toml::Value::String(body.name.trim().to_string()));
-    if let Some(command) = body.command.as_deref().map(str::trim).filter(|raw| !raw.is_empty()) {
+    if let Some(command) = body
+        .command
+        .as_deref()
+        .map(str::trim)
+        .filter(|raw| !raw.is_empty())
+    {
         set("command", toml::Value::String(command.to_string()));
     }
     if let Some(args) = &body.args {
-        set("args", toml::Value::Array(args.iter().map(|arg| toml::Value::String(arg.clone())).collect()));
+        set(
+            "args",
+            toml::Value::Array(
+                args.iter()
+                    .map(|arg| toml::Value::String(arg.clone()))
+                    .collect(),
+            ),
+        );
     }
     if let Some(env) = &body.env {
         let mut env_table = toml::Table::new();
@@ -5110,10 +5368,20 @@ fn mcp_server_table(body: &McpServerBody, existing: Option<&toml::Value>) -> std
         }
         set("env", toml::Value::Table(env_table));
     }
-    if let Some(url) = body.url.as_deref().map(str::trim).filter(|raw| !raw.is_empty()) {
+    if let Some(url) = body
+        .url
+        .as_deref()
+        .map(str::trim)
+        .filter(|raw| !raw.is_empty())
+    {
         set("url", toml::Value::String(url.to_string()));
     }
-    if let Some(transport) = body.transport.as_deref().map(str::trim).filter(|raw| !raw.is_empty()) {
+    if let Some(transport) = body
+        .transport
+        .as_deref()
+        .map(str::trim)
+        .filter(|raw| !raw.is_empty())
+    {
         set("transport", toml::Value::String(transport.to_string()));
     }
     if let Some(headers) = &body.headers {
@@ -5123,7 +5391,12 @@ fn mcp_server_table(body: &McpServerBody, existing: Option<&toml::Value>) -> std
         }
         set("headers", toml::Value::Table(headers_table));
     }
-    if let Some(auth) = body.auth.as_deref().map(str::trim).filter(|raw| !raw.is_empty()) {
+    if let Some(auth) = body
+        .auth
+        .as_deref()
+        .map(str::trim)
+        .filter(|raw| !raw.is_empty())
+    {
         set("auth", toml::Value::String(auth.to_string()));
     }
     if let Some(lazy) = body.lazy {
@@ -5133,8 +5406,18 @@ fn mcp_server_table(body: &McpServerBody, existing: Option<&toml::Value>) -> std
         set("enabled", toml::Value::Boolean(enabled));
     }
     if existing.is_none() {
-        let has_command = table.get("command").and_then(|value| value.as_str()).map(str::trim).map(|raw| !raw.is_empty()).unwrap_or(false);
-        let has_url = table.get("url").and_then(|value| value.as_str()).map(str::trim).map(|raw| !raw.is_empty()).unwrap_or(false);
+        let has_command = table
+            .get("command")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .map(|raw| !raw.is_empty())
+            .unwrap_or(false);
+        let has_url = table
+            .get("url")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .map(|raw| !raw.is_empty())
+            .unwrap_or(false);
         if !has_command && !has_url {
             return Err("a server needs either a command (stdio) or a url (http/sse)".to_string());
         }
@@ -5200,7 +5483,10 @@ async fn mcp_server_update(Json(body): Json<McpServerBody>) -> Response {
             Ok(servers) => servers,
             Err(e) => return bad_request(&e, None),
         };
-        match servers.iter().position(|entry| mcp_server_name(entry) == name) {
+        match servers
+            .iter()
+            .position(|entry| mcp_server_name(entry) == name)
+        {
             Some(position) => position,
             None => return not_found(&format!("no MCP server named '{name}'")),
         }
@@ -5260,7 +5546,10 @@ struct McpEnabledBody {
 
 /// `PUT /api/mcp/servers/:name/enabled` — flip the enabled flag
 /// (hermes `PUT /api/mcp/servers/{name}/enabled` parity).
-async fn mcp_server_set_enabled(Path(name): Path<String>, Json(body): Json<McpEnabledBody>) -> Response {
+async fn mcp_server_set_enabled(
+    Path(name): Path<String>,
+    Json(body): Json<McpEnabledBody>,
+) -> Response {
     let path = crate::config_cmd::config_path();
     let mut root = match crate::config_cmd::load_toml(&path) {
         Ok(value) => value,
@@ -5271,7 +5560,10 @@ async fn mcp_server_set_enabled(Path(name): Path<String>, Json(body): Json<McpEn
             Ok(servers) => servers,
             Err(e) => return bad_request(&e, None),
         };
-        match servers.iter_mut().find(|entry| mcp_server_name(entry) == name) {
+        match servers
+            .iter_mut()
+            .find(|entry| mcp_server_name(entry) == name)
+        {
             Some(entry) => {
                 if let Some(table) = entry.as_table_mut() {
                     table.insert("enabled".to_string(), toml::Value::Boolean(body.enabled));
@@ -5301,9 +5593,18 @@ async fn mcp_server_set_enabled(Path(name): Path<String>, Json(body): Json<McpEn
 /// `POST /api/mcp/servers/:name/test` — connect + list tools against
 /// the in-memory config (hermes `POST /api/mcp/servers/{name}/test`
 /// parity).
-async fn mcp_server_test(State(state): State<Arc<GatewayState>>, Path(name): Path<String>) -> Response {
+async fn mcp_server_test(
+    State(state): State<Arc<GatewayState>>,
+    Path(name): Path<String>,
+) -> Response {
     let config = state.agent.context().config.clone();
-    let Some(server) = config.mcp.servers.iter().find(|server| server.name == name).cloned() else {
+    let Some(server) = config
+        .mcp
+        .servers
+        .iter()
+        .find(|server| server.name == name)
+        .cloned()
+    else {
         return not_found(&format!("no MCP server named '{name}'"));
     };
     match crate::mcp::test_server(&server).await {
@@ -5326,7 +5627,11 @@ async fn mcp_catalog_list() -> Response {
     let entries: Vec<Value> = crate::mcp_catalog::CATALOG
         .iter()
         .map(|entry| {
-            let installed = config.mcp.servers.iter().find(|server| server.name == entry.name);
+            let installed = config
+                .mcp
+                .servers
+                .iter()
+                .find(|server| server.name == entry.name);
             json!({
                 "name": entry.name,
                 "description": entry.description,
@@ -5367,10 +5672,19 @@ async fn mcp_catalog_install(Json(body): Json<McpCatalogInstallBody>) -> Respons
     };
     let mut table = toml::Table::new();
     table.insert("name".into(), toml::Value::String(entry.name.to_string()));
-    table.insert("command".into(), toml::Value::String(entry.command.to_string()));
+    table.insert(
+        "command".into(),
+        toml::Value::String(entry.command.to_string()),
+    );
     table.insert(
         "args".into(),
-        toml::Value::Array(entry.args.iter().map(|arg| toml::Value::String((*arg).to_string())).collect()),
+        toml::Value::Array(
+            entry
+                .args
+                .iter()
+                .map(|arg| toml::Value::String((*arg).to_string()))
+                .collect(),
+        ),
     );
     if let Some(env) = &body.env {
         let mut env_table = toml::Table::new();
@@ -5386,8 +5700,14 @@ async fn mcp_catalog_install(Json(body): Json<McpCatalogInstallBody>) -> Respons
             Ok(servers) => servers,
             Err(e) => return bad_request(&e, None),
         };
-        if servers.iter().any(|existing| mcp_server_name(existing) == entry.name) {
-            return bad_request(&format!("server '{}' is already installed", entry.name), None);
+        if servers
+            .iter()
+            .any(|existing| mcp_server_name(existing) == entry.name)
+        {
+            return bad_request(
+                &format!("server '{}' is already installed", entry.name),
+                None,
+            );
         }
         servers.push(toml::Value::Table(table));
     }
@@ -5419,13 +5739,17 @@ async fn search_sessions(
     State(state): State<Arc<GatewayState>>,
     Query(query): Query<SessionSearchQuery>,
 ) -> Response {
-    let Some(q) = query.q.map(|q| q.trim().to_string()).filter(|q| !q.is_empty()) else {
+    let Some(q) = query
+        .q
+        .map(|q| q.trim().to_string())
+        .filter(|q| !q.is_empty())
+    else {
         return bad_request("q is required", Some("invalid_request"));
     };
     let limit = query.limit.unwrap_or(30).min(200).max(1);
     let store = state.store.clone();
-    let result =
-        tokio::task::spawn_blocking(move || -> std::result::Result<Value, crate::error::AgentError> {
+    let result = tokio::task::spawn_blocking(
+        move || -> std::result::Result<Value, crate::error::AgentError> {
             let hits = store.search_messages(&q, limit)?;
             let results: Vec<Value> = hits
                 .into_iter()
@@ -5439,8 +5763,9 @@ async fn search_sessions(
                 })
                 .collect();
             Ok(json!({"query": q, "count": results.len(), "results": results}))
-        })
-        .await;
+        },
+    )
+    .await;
     match result {
         Ok(Ok(payload)) => Json(payload).into_response(),
         Ok(Err(e)) => (
@@ -5483,16 +5808,36 @@ fn build_prune_filters(
 ) -> std::result::Result<crate::session::filters::PruneFilters, String> {
     use crate::session::filters::{parse_point_in_time, PruneFilters};
     let mut filters = PruneFilters::default();
-    if let Some(value) = body.older_than.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+    if let Some(value) = body
+        .older_than
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
         filters.last_active_before = Some(parse_point_in_time(value, "older_than")?);
     }
-    if let Some(value) = body.newer_than.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+    if let Some(value) = body
+        .newer_than
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
         filters.last_active_after = Some(parse_point_in_time(value, "newer_than")?);
     }
-    if let Some(value) = body.before.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+    if let Some(value) = body
+        .before
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
         filters.started_before = Some(parse_point_in_time(value, "before")?);
     }
-    if let Some(value) = body.after.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+    if let Some(value) = body
+        .after
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
         filters.started_after = Some(parse_point_in_time(value, "after")?);
     }
     filters.source = body.source.clone().filter(|v| !v.trim().is_empty());
@@ -5511,8 +5856,8 @@ async fn apply_session_prune(
     dry_run: bool,
 ) -> Response {
     let store = state.store.clone();
-    let result =
-        tokio::task::spawn_blocking(move || -> std::result::Result<Value, crate::error::AgentError> {
+    let result = tokio::task::spawn_blocking(
+        move || -> std::result::Result<Value, crate::error::AgentError> {
             let candidates = store.list_prune_candidates(&filters)?;
             if dry_run {
                 let rows: Vec<Value> = candidates
@@ -5546,8 +5891,9 @@ async fn apply_session_prune(
                 "affected": affected,
                 "describe": filters.describe(),
             }))
-        })
-        .await;
+        },
+    )
+    .await;
     match result {
         Ok(Ok(payload)) => Json(payload).into_response(),
         Ok(Err(e)) => (
@@ -5568,7 +5914,10 @@ async fn apply_session_prune(
 /// applies hermes' implicit "older than 90 days" cutoff; archived
 /// sessions are skipped unless `include_archived`. `dry_run: true`
 /// previews the candidates without deleting anything.
-async fn prune_sessions(State(state): State<Arc<GatewayState>>, Json(body): Json<SessionPruneBody>) -> Response {
+async fn prune_sessions(
+    State(state): State<Arc<GatewayState>>,
+    Json(body): Json<SessionPruneBody>,
+) -> Response {
     let mut filters = match build_prune_filters(&body) {
         Ok(f) => f,
         Err(e) => return bad_request(&e, Some("invalid_request")),
@@ -5580,7 +5929,11 @@ async fn prune_sessions(State(state): State<Arc<GatewayState>>, Json(body): Json
         };
         filters.last_active_before = Some(cutoff);
     }
-    filters.archived = if body.include_archived { None } else { Some(false) };
+    filters.archived = if body.include_archived {
+        None
+    } else {
+        Some(false)
+    };
     apply_session_prune(state, filters, true, body.dry_run).await
 }
 
@@ -5588,7 +5941,10 @@ async fn prune_sessions(State(state): State<Arc<GatewayState>>, Json(body): Json
 /// filters (mirrors `ulnclaw sessions archive`; recoverable — nothing
 /// is deleted). Refuses filter-less requests so the whole store cannot
 /// be archived by accident. `dry_run: true` previews.
-async fn archive_sessions(State(state): State<Arc<GatewayState>>, Json(body): Json<SessionPruneBody>) -> Response {
+async fn archive_sessions(
+    State(state): State<Arc<GatewayState>>,
+    Json(body): Json<SessionPruneBody>,
+) -> Response {
     let mut filters = match build_prune_filters(&body) {
         Ok(f) => f,
         Err(e) => return bad_request(&e, Some("invalid_request")),
@@ -5639,8 +5995,8 @@ async fn retitle_skills(
     let mut changed = 0usize;
     let mut applied = 0usize;
     for row in &rows {
-        let typed = crate::session::retitle::describe_skill_invocation(&row.content)
-            .unwrap_or_default();
+        let typed =
+            crate::session::retitle::describe_skill_invocation(&row.content).unwrap_or_default();
         let first_reply = state
             .store
             .get_first_assistant_text(&row.id)
@@ -5818,7 +6174,11 @@ async fn insights(
         engine.generate(days, source.as_deref(), Some(&provider_hint))
     })
     .await
-    .unwrap_or_else(|e| Err(crate::error::AgentError::Tool(format!("insights task failed: {e}"))));
+    .unwrap_or_else(|e| {
+        Err(crate::error::AgentError::Tool(format!(
+            "insights task failed: {e}"
+        )))
+    });
     match result {
         Ok(report) => Json(serde_json::to_value(&report).unwrap_or(Value::Null)).into_response(),
         Err(e) => (
@@ -5907,7 +6267,10 @@ async fn channels_status(State(_state): State<Arc<GatewayState>>) -> Response {
                 })
             })
             .collect();
-        let enabled_count = rows.iter().filter(|r| r["enabled"] == Value::Bool(true)).count();
+        let enabled_count = rows
+            .iter()
+            .filter(|r| r["enabled"] == Value::Bool(true))
+            .count();
         let connected_count = rows
             .iter()
             .filter(|r| r["state"].as_str() == Some("connected"))
@@ -6116,7 +6479,9 @@ async fn update_display_api(
     if !valid_keys.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown display key '{key}'"), "valid_keys": valid_keys })),
+            Json(
+                json!({ "error": format!("unknown display key '{key}'"), "valid_keys": valid_keys }),
+            ),
         );
     }
     let platform = body
@@ -6212,7 +6577,9 @@ async fn update_terminal_api(
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown terminal key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown terminal key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -6220,16 +6587,11 @@ async fn update_terminal_api(
     if let Some(v) = value {
         if !v.is_null() {
             let ok = match key.as_str() {
-                "backend" => matches!(
-                    v.as_str(),
-                    Some("local") | Some("docker") | Some("ssh")
-                ),
+                "backend" => matches!(v.as_str(), Some("local") | Some("docker") | Some("ssh")),
                 "cwd" | "container" | "image" | "ssh_host" | "ssh_user" | "ssh_identity" => {
                     v.is_string()
                 }
-                "ssh_port" | "timeout" | "foreground_max_timeout" => {
-                    v.is_u64() || v.is_i64()
-                }
+                "ssh_port" | "timeout" | "foreground_max_timeout" => v.is_u64() || v.is_i64(),
                 "docker_mount_cwd_to_workspace" => v.is_boolean(),
                 _ => false,
             };
@@ -6314,7 +6676,9 @@ async fn update_toolsets_settings_api(Json(body): Json<Value>) -> (StatusCode, J
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown toolsets key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown toolsets key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -6333,7 +6697,9 @@ async fn update_toolsets_settings_api(Json(body): Json<Value>) -> (StatusCode, J
                 _ => {
                     return (
                         StatusCode::BAD_REQUEST,
-                        Json(json!({ "error": format!("{key} must be an array of toolset names or a comma-separated string") })),
+                        Json(
+                            json!({ "error": format!("{key} must be an array of toolset names or a comma-separated string") }),
+                        ),
                     )
                 }
             };
@@ -6401,8 +6767,8 @@ async fn oauth_settings_api(State(_state): State<Arc<GatewayState>>) -> Json<Val
     let config = crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
         .unwrap_or_default();
     let oauth = config.oauth;
-    let configured = !oauth.device_authorization_url.trim().is_empty()
-        && !oauth.token_url.trim().is_empty();
+    let configured =
+        !oauth.device_authorization_url.trim().is_empty() && !oauth.token_url.trim().is_empty();
     Json(json!({
         "device_authorization_url": oauth.device_authorization_url,
         "token_url": oauth.token_url,
@@ -6438,7 +6804,9 @@ async fn update_oauth_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown oauth key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown oauth key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -6447,13 +6815,17 @@ async fn update_oauth_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
         if !v.is_null() {
             let text = v.as_str().map(str::trim).unwrap_or_default();
             if !text.is_empty() {
-                if matches!(key.as_str(), "device_authorization_url" | "token_url" | "portal_url")
-                    && !text.starts_with("http://")
+                if matches!(
+                    key.as_str(),
+                    "device_authorization_url" | "token_url" | "portal_url"
+                ) && !text.starts_with("http://")
                     && !text.starts_with("https://")
                 {
                     return (
                         StatusCode::BAD_REQUEST,
-                        Json(json!({ "error": format!("oauth.{key} must be an http:// or https:// URL") })),
+                        Json(
+                            json!({ "error": format!("oauth.{key} must be an http:// or https:// URL") }),
+                        ),
                     );
                 }
                 raw = Some(text.to_string());
@@ -6616,7 +6988,9 @@ async fn update_hooks_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown hooks key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown hooks key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let dotted = match key.as_str() {
@@ -6648,7 +7022,9 @@ async fn update_hooks_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
                         None => {
                             return (
                                 StatusCode::BAD_REQUEST,
-                                Json(json!({ "error": format!("hooks.{key} must be a positive integer") })),
+                                Json(
+                                    json!({ "error": format!("hooks.{key} must be a positive integer") }),
+                                ),
                             )
                         }
                     };
@@ -6721,9 +7097,7 @@ async fn computer_use_settings_api(State(_state): State<Arc<GatewayState>>) -> J
 /// `capture_after_mode` (som|ax|vision), `no_overlay` (bool tri-state).
 /// null removes the override (fall back to the built-in defaults).
 /// Applies from the next computer-use session start.
-async fn update_computer_use_settings_api(
-    Json(body): Json<Value>,
-) -> (StatusCode, Json<Value>) {
+async fn update_computer_use_settings_api(Json(body): Json<Value>) -> (StatusCode, Json<Value>) {
     const VALID_KEYS: &[&str] = &[
         "cua_telemetry",
         "max_image_dimension",
@@ -6742,7 +7116,9 @@ async fn update_computer_use_settings_api(
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown computer-use key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown computer-use key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let dotted = format!("computer_use.{key}");
@@ -6755,7 +7131,9 @@ async fn update_computer_use_settings_api(
                     if !v.is_boolean() {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": format!("computer_use.{key} must be a boolean") })),
+                            Json(
+                                json!({ "error": format!("computer_use.{key} must be a boolean") }),
+                            ),
                         );
                     }
                     raw = Some(v.to_string());
@@ -6766,7 +7144,9 @@ async fn update_computer_use_settings_api(
                         None => {
                             return (
                                 StatusCode::BAD_REQUEST,
-                                Json(json!({ "error": "computer_use.max_image_dimension must be a non-negative integer" })),
+                                Json(
+                                    json!({ "error": "computer_use.max_image_dimension must be a non-negative integer" }),
+                                ),
                             )
                         }
                     };
@@ -6777,7 +7157,9 @@ async fn update_computer_use_settings_api(
                     if !matches!(text, "som" | "ax" | "vision") {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "computer_use.capture_after_mode must be one of: som, ax, vision" })),
+                            Json(
+                                json!({ "error": "computer_use.capture_after_mode must be one of: som, ax, vision" }),
+                            ),
                         );
                     }
                     raw = Some(text.to_string());
@@ -6891,7 +7273,9 @@ async fn update_providers_settings_api(Json(body): Json<Value>) -> (StatusCode, 
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown providers key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown providers key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -6992,12 +7376,7 @@ async fn auxiliary_settings_api(State(_state): State<Arc<GatewayState>>) -> Json
 /// Applies the next time the task is routed.
 async fn update_auxiliary_settings_api(Json(body): Json<Value>) -> (StatusCode, Json<Value>) {
     const VALID_KEYS: &[&str] = &[
-        "provider",
-        "model",
-        "base_url",
-        "key_env",
-        "enabled",
-        "language",
+        "provider", "model", "base_url", "key_env", "enabled", "language",
     ];
     let task = match body.get("task").and_then(Value::as_str) {
         Some(t) if !t.trim().is_empty() => t.trim().to_string(),
@@ -7029,7 +7408,9 @@ async fn update_auxiliary_settings_api(Json(body): Json<Value>) -> (StatusCode, 
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown auxiliary key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown auxiliary key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -7128,7 +7509,9 @@ async fn update_proxy_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown proxy key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown proxy key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -7160,14 +7543,18 @@ async fn update_proxy_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
                         None => {
                             return (
                                 StatusCode::BAD_REQUEST,
-                                Json(json!({ "error": "proxy.max_request_bytes must be an integer" })),
+                                Json(
+                                    json!({ "error": "proxy.max_request_bytes must be an integer" }),
+                                ),
                             )
                         }
                     };
                     if number < 1024 {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "proxy.max_request_bytes must be at least 1024" })),
+                            Json(
+                                json!({ "error": "proxy.max_request_bytes must be at least 1024" }),
+                            ),
                         );
                     }
                     raw = Some(number.to_string());
@@ -7178,7 +7565,9 @@ async fn update_proxy_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
                         if !text.starts_with("http://") && !text.starts_with("https://") {
                             return (
                                 StatusCode::BAD_REQUEST,
-                                Json(json!({ "error": "proxy.upstream_url must be an http:// or https:// URL" })),
+                                Json(
+                                    json!({ "error": "proxy.upstream_url must be an http:// or https:// URL" }),
+                                ),
                             );
                         }
                         raw = Some(text.to_string());
@@ -7190,7 +7579,9 @@ async fn update_proxy_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
                         None => {
                             return (
                                 StatusCode::BAD_REQUEST,
-                                Json(json!({ "error": "proxy.allowed_paths must be an array of /-prefixed paths" })),
+                                Json(
+                                    json!({ "error": "proxy.allowed_paths must be an array of /-prefixed paths" }),
+                                ),
                             )
                         }
                     };
@@ -7203,7 +7594,9 @@ async fn update_proxy_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
                         if !path.starts_with('/') {
                             return (
                                 StatusCode::BAD_REQUEST,
-                                Json(json!({ "error": format!("proxy.allowed_paths entry '{path}' must start with /") })),
+                                Json(
+                                    json!({ "error": format!("proxy.allowed_paths entry '{path}' must start with /") }),
+                                ),
                             );
                         }
                         list.push(toml::Value::String(path.to_string()));
@@ -7311,7 +7704,9 @@ async fn update_monitoring_settings_api(Json(body): Json<Value>) -> (StatusCode,
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown monitoring key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown monitoring key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let dotted = match key.as_str() {
@@ -7358,15 +7753,23 @@ async fn update_monitoring_settings_api(Json(body): Json<Value>) -> (StatusCode,
                         None => {
                             return (
                                 StatusCode::BAD_REQUEST,
-                                Json(json!({ "error": format!("monitoring.{key} must be a positive integer") })),
+                                Json(
+                                    json!({ "error": format!("monitoring.{key} must be a positive integer") }),
+                                ),
                             )
                         }
                     };
-                    let floor: u64 = if key == "export_interval_seconds" { 5 } else { 1 };
+                    let floor: u64 = if key == "export_interval_seconds" {
+                        5
+                    } else {
+                        1
+                    };
                     if number < floor {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": format!("monitoring.{key} must be at least {floor}") })),
+                            Json(
+                                json!({ "error": format!("monitoring.{key} must be at least {floor}") }),
+                            ),
                         );
                     }
                     raw = Some(number.to_string());
@@ -7455,7 +7858,9 @@ async fn update_timezone_settings_api(Json(body): Json<Value>) -> (StatusCode, J
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown timezone key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown timezone key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -7467,7 +7872,9 @@ async fn update_timezone_settings_api(Json(body): Json<Value>) -> (StatusCode, J
                 if text.parse::<chrono_tz::Tz>().is_err() {
                     return (
                         StatusCode::BAD_REQUEST,
-                        Json(json!({ "error": format!("timezone '{text}' is not a known IANA zone name") })),
+                        Json(
+                            json!({ "error": format!("timezone '{text}' is not a known IANA zone name") }),
+                        ),
                     );
                 }
                 raw = Some(text.to_string());
@@ -7486,7 +7893,8 @@ async fn update_timezone_settings_api(Json(body): Json<Value>) -> (StatusCode, J
                 }
             })
     } else {
-        crate::config_cmd::set_config_value("timezone", raw.as_deref().unwrap_or(""), true).map(|_| ())
+        crate::config_cmd::set_config_value("timezone", raw.as_deref().unwrap_or(""), true)
+            .map(|_| ())
     };
     match result {
         Ok(()) => {
@@ -7553,7 +7961,9 @@ async fn update_browser_settings_api(Json(body): Json<Value>) -> (StatusCode, Js
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown browser key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown browser key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -7572,7 +7982,9 @@ async fn update_browser_settings_api(Json(body): Json<Value>) -> (StatusCode, Js
                         if !ok {
                             return (
                                 StatusCode::BAD_REQUEST,
-                                Json(json!({ "error": "browser.cdp_url must be 'auto' or a ws://, wss://, http:// or https:// URL" })),
+                                Json(
+                                    json!({ "error": "browser.cdp_url must be 'auto' or a ws://, wss://, http:// or https:// URL" }),
+                                ),
                             );
                         }
                         raw = Some(text.to_string());
@@ -7780,7 +8192,9 @@ async fn update_discord_settings_api(Json(body): Json<Value>) -> (StatusCode, Js
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown discord key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown discord key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -7799,7 +8213,9 @@ async fn update_discord_settings_api(Json(body): Json<Value>) -> (StatusCode, Js
                 _ => {
                     return (
                         StatusCode::BAD_REQUEST,
-                        Json(json!({ "error": "discord.server_actions must be an array of action names or a comma-separated string" })),
+                        Json(
+                            json!({ "error": "discord.server_actions must be an array of action names or a comma-separated string" }),
+                        ),
                     )
                 }
             };
@@ -7886,7 +8302,12 @@ async fn moa_settings_api(State(_state): State<Arc<GatewayState>>) -> Json<Value
 /// configured preset; `privacy_filter` accepts off/display/full.
 /// Applies to new MoA runs.
 async fn update_moa_settings_api(Json(body): Json<Value>) -> (StatusCode, Json<Value>) {
-    const VALID_KEYS: &[&str] = &["default_preset", "save_traces", "trace_dir", "privacy_filter"];
+    const VALID_KEYS: &[&str] = &[
+        "default_preset",
+        "save_traces",
+        "trace_dir",
+        "privacy_filter",
+    ];
     let key = match body.get("key").and_then(Value::as_str) {
         Some(k) if !k.trim().is_empty() => k.trim().to_string(),
         _ => {
@@ -7949,7 +8370,11 @@ async fn update_moa_settings_api(Json(body): Json<Value>) -> (StatusCode, Json<V
                     }
                 }
                 "privacy_filter" => {
-                    let text = v.as_str().map(str::trim).map(str::to_lowercase).unwrap_or_default();
+                    let text = v
+                        .as_str()
+                        .map(str::trim)
+                        .map(str::to_lowercase)
+                        .unwrap_or_default();
                     if text.is_empty() || text == "off" {
                         raw = None;
                     } else if matches!(text.as_str(), "display" | "full") {
@@ -7957,7 +8382,9 @@ async fn update_moa_settings_api(Json(body): Json<Value>) -> (StatusCode, Json<V
                     } else {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "moa.privacy_filter must be one of off|display|full" })),
+                            Json(
+                                json!({ "error": "moa.privacy_filter must be one of off|display|full" }),
+                            ),
                         );
                     }
                 }
@@ -8000,10 +8427,9 @@ async fn update_moa_settings_api(Json(body): Json<Value>) -> (StatusCode, Json<V
 /// selection for the shell: the active provider, default model and
 /// the FAL model-family override (all null = auto-select).
 async fn video_gen_settings_api(State(_state): State<Arc<GatewayState>>) -> Json<Value> {
-    let video_gen =
-        crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
-            .map(|c| c.video_gen)
-            .unwrap_or_default();
+    let video_gen = crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
+        .map(|c| c.video_gen)
+        .unwrap_or_default();
     Json(json!({
         "provider": video_gen.provider,
         "model": video_gen.model,
@@ -8030,7 +8456,9 @@ async fn update_video_gen_settings_api(Json(body): Json<Value>) -> (StatusCode, 
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown video_gen key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown video_gen key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let dotted = match key.as_str() {
@@ -8085,10 +8513,9 @@ async fn update_video_gen_settings_api(Json(body): Json<Value>) -> (StatusCode, 
 /// for the shell: the Responses-API model, optional reasoning effort,
 /// request timeout (30s floor) and transient-failure retries.
 async fn x_search_settings_api(State(_state): State<Arc<GatewayState>>) -> Json<Value> {
-    let x_search =
-        crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
-            .map(|c| c.x_search)
-            .unwrap_or_default();
+    let x_search = crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
+        .map(|c| c.x_search)
+        .unwrap_or_default();
     Json(json!({
         "model": x_search.model,
         "reasoning_effort": x_search.reasoning_effort,
@@ -8117,7 +8544,9 @@ async fn update_x_search_settings_api(Json(body): Json<Value>) -> (StatusCode, J
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown x_search key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown x_search key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -8130,17 +8559,25 @@ async fn update_x_search_settings_api(Json(body): Json<Value>) -> (StatusCode, J
                     if text.is_empty() {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "x_search.model must be a non-empty model name" })),
+                            Json(
+                                json!({ "error": "x_search.model must be a non-empty model name" }),
+                            ),
                         );
                     }
                     raw = Some(text.to_string());
                 }
                 "reasoning_effort" => {
-                    let text = v.as_str().map(str::trim).map(str::to_lowercase).unwrap_or_default();
+                    let text = v
+                        .as_str()
+                        .map(str::trim)
+                        .map(str::to_lowercase)
+                        .unwrap_or_default();
                     if !matches!(text.as_str(), "" | "low" | "medium" | "high" | "xhigh") {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "x_search.reasoning_effort must be one of low|medium|high|xhigh (or empty)" })),
+                            Json(
+                                json!({ "error": "x_search.reasoning_effort must be one of low|medium|high|xhigh (or empty)" }),
+                            ),
                         );
                     }
                     raw = Some(text);
@@ -8149,13 +8586,17 @@ async fn update_x_search_settings_api(Json(body): Json<Value>) -> (StatusCode, J
                     let Some(number) = v.as_u64() else {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "x_search.timeout_seconds must be an integer of at least 30" })),
+                            Json(
+                                json!({ "error": "x_search.timeout_seconds must be an integer of at least 30" }),
+                            ),
                         );
                     };
                     if number < 30 {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "x_search.timeout_seconds must be at least 30" })),
+                            Json(
+                                json!({ "error": "x_search.timeout_seconds must be at least 30" }),
+                            ),
                         );
                     }
                     raw = Some(number.to_string());
@@ -8164,7 +8605,9 @@ async fn update_x_search_settings_api(Json(body): Json<Value>) -> (StatusCode, J
                     if !v.is_u64() {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "x_search.retries must be a non-negative integer" })),
+                            Json(
+                                json!({ "error": "x_search.retries must be a non-negative integer" }),
+                            ),
                         );
                     }
                     raw = Some(v.to_string());
@@ -8255,21 +8698,28 @@ async fn update_kanban_settings_api(Json(body): Json<Value>) -> (StatusCode, Jso
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown kanban key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown kanban key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
     if let Some(v) = value {
         if !v.is_null() {
             let ok = match key.as_str() {
-                "dispatch_in_gateway" | "worktrees" | "auto_promote_children"
+                "dispatch_in_gateway"
+                | "worktrees"
+                | "auto_promote_children"
                 | "auto_decompose" => v.is_boolean(),
                 _ => v.as_u64().map(|n| n >= 1).unwrap_or(false),
             };
             if !ok {
                 let expected = if matches!(
                     key.as_str(),
-                    "dispatch_in_gateway" | "worktrees" | "auto_promote_children" | "auto_decompose"
+                    "dispatch_in_gateway"
+                        | "worktrees"
+                        | "auto_promote_children"
+                        | "auto_decompose"
                 ) {
                     "a boolean"
                 } else {
@@ -8369,7 +8819,9 @@ async fn update_voice_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
                     if !v.is_boolean() {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": format!("voice key '{key}' must be a boolean") })),
+                            Json(
+                                json!({ "error": format!("voice key '{key}' must be a boolean") }),
+                            ),
                         );
                     }
                     raw = Some(v.to_string());
@@ -8379,7 +8831,9 @@ async fn update_voice_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
                     if !matches!(text, "edge" | "openai" | "elevenlabs") {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "tts.provider must be one of edge|openai|elevenlabs" })),
+                            Json(
+                                json!({ "error": "tts.provider must be one of edge|openai|elevenlabs" }),
+                            ),
                         );
                     }
                     raw = Some(text.to_string());
@@ -8389,7 +8843,9 @@ async fn update_voice_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
                     if text.is_empty() {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": format!("voice key '{key}' must be a non-empty string") })),
+                            Json(
+                                json!({ "error": format!("voice key '{key}' must be a non-empty string") }),
+                            ),
                         );
                     }
                     raw = Some(text.to_string());
@@ -8504,10 +8960,9 @@ async fn update_cron_settings_api(Json(body): Json<Value>) -> (StatusCode, Json<
 /// shell: the periodic `[MEMORY] rss=...` monitor switch and its
 /// cadence.
 async fn logging_settings_api(State(_state): State<Arc<GatewayState>>) -> Json<Value> {
-    let logging =
-        crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
-            .map(|c| c.logging)
-            .unwrap_or_default();
+    let logging = crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
+        .map(|c| c.logging)
+        .unwrap_or_default();
     Json(json!({
         "memory_monitor": logging.memory_monitor,
         "memory_monitor_interval_secs": logging.memory_monitor_interval_secs,
@@ -8533,7 +8988,9 @@ async fn update_logging_settings_api(Json(body): Json<Value>) -> (StatusCode, Js
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown logging key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown logging key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -8545,7 +9002,11 @@ async fn update_logging_settings_api(Json(body): Json<Value>) -> (StatusCode, Js
                 v.as_u64().map(|n| n >= 1).unwrap_or(false)
             };
             if !ok {
-                let expected = if key == "memory_monitor" { "a boolean" } else { "a positive integer" };
+                let expected = if key == "memory_monitor" {
+                    "a boolean"
+                } else {
+                    "a positive integer"
+                };
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(json!({ "error": format!("logging key '{key}' must be {expected}") })),
@@ -8587,10 +9048,9 @@ async fn update_logging_settings_api(Json(body): Json<Value>) -> (StatusCode, Js
 /// line cap and per-line length cap (resolved values — zeros are
 /// coerced to defaults, hermes `_coerce_positive_int`).
 async fn tool_output_settings_api(State(_state): State<Arc<GatewayState>>) -> Json<Value> {
-    let resolved =
-        crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
-            .map(|c| c.tool_output.resolved())
-            .unwrap_or_default();
+    let resolved = crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
+        .map(|c| c.tool_output.resolved())
+        .unwrap_or_default();
     Json(json!({
         "max_bytes": resolved.max_bytes,
         "max_lines": resolved.max_lines,
@@ -8617,7 +9077,9 @@ async fn update_tool_output_settings_api(Json(body): Json<Value>) -> (StatusCode
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown tool_output key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown tool_output key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -8625,7 +9087,9 @@ async fn update_tool_output_settings_api(Json(body): Json<Value>) -> (StatusCode
         if !v.is_null() && !v.as_u64().map(|n| n >= 1).unwrap_or(false) {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({ "error": format!("tool_output key '{key}' must be a positive integer") })),
+                Json(
+                    json!({ "error": format!("tool_output key '{key}' must be a positive integer") }),
+                ),
             );
         }
     }
@@ -8664,10 +9128,9 @@ async fn update_tool_output_settings_api(Json(body): Json<Value>) -> (StatusCode
 /// overrides (TIRITH_ENABLED/TIRITH_BIN/TIRITH_TIMEOUT) are flagged
 /// but never leaked.
 async fn security_settings_api(State(_state): State<Arc<GatewayState>>) -> Json<Value> {
-    let security =
-        crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
-            .map(|c| c.security)
-            .unwrap_or_default();
+    let security = crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
+        .map(|c| c.security)
+        .unwrap_or_default();
     let env_set = |name: &str| {
         std::env::var(name)
             .map(|v| !v.trim().is_empty())
@@ -8711,7 +9174,9 @@ async fn update_security_settings_api(Json(body): Json<Value>) -> (StatusCode, J
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown security key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown security key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -8773,10 +9238,9 @@ async fn update_security_settings_api(Json(body): Json<Value>) -> (StatusCode, J
 /// size ceiling, per-file skip size, retention window and auto-prune
 /// cadence.
 async fn checkpoint_settings_api(State(_state): State<Arc<GatewayState>>) -> Json<Value> {
-    let checkpoints =
-        crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
-            .map(|c| c.checkpoints)
-            .unwrap_or_default();
+    let checkpoints = crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
+        .map(|c| c.checkpoints)
+        .unwrap_or_default();
     Json(json!({
         "enabled": checkpoints.enabled,
         "max_snapshots": checkpoints.max_snapshots,
@@ -8814,7 +9278,9 @@ async fn update_checkpoint_settings_api(Json(body): Json<Value>) -> (StatusCode,
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown checkpoints key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown checkpoints key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -8826,7 +9292,11 @@ async fn update_checkpoint_settings_api(Json(body): Json<Value>) -> (StatusCode,
                 v.as_u64().map(|n| n >= 1).unwrap_or(false)
             };
             if !ok {
-                let expected = if key == "enabled" { "a boolean" } else { "a positive integer" };
+                let expected = if key == "enabled" {
+                    "a boolean"
+                } else {
+                    "a positive integer"
+                };
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(json!({ "error": format!("checkpoints key '{key}' must be {expected}") })),
@@ -8913,7 +9383,9 @@ async fn update_model_catalog_api(Json(body): Json<Value>) -> (StatusCode, Json<
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown model_catalog key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown model_catalog key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -8925,17 +9397,25 @@ async fn update_model_catalog_api(Json(body): Json<Value>) -> (StatusCode, Json<
                 None => {
                     return (
                         StatusCode::BAD_REQUEST,
-                        Json(json!({ "error": "model_catalog.excluded_providers must be an array of provider slugs" })),
+                        Json(
+                            json!({ "error": "model_catalog.excluded_providers must be an array of provider slugs" }),
+                        ),
                     )
                 }
             };
             let mut list: Vec<toml::Value> = Vec::new();
             for item in items {
-                let slug = item.as_str().map(str::trim).map(str::to_lowercase).unwrap_or_default();
+                let slug = item
+                    .as_str()
+                    .map(str::trim)
+                    .map(str::to_lowercase)
+                    .unwrap_or_default();
                 if slug.is_empty() {
                     return (
                         StatusCode::BAD_REQUEST,
-                        Json(json!({ "error": "model_catalog.excluded_providers entries must be non-empty slugs" })),
+                        Json(
+                            json!({ "error": "model_catalog.excluded_providers entries must be non-empty slugs" }),
+                        ),
                     );
                 }
                 list.push(toml::Value::String(slug));
@@ -8977,10 +9457,9 @@ async fn update_model_catalog_api(Json(body): Json<Value>) -> (StatusCode, Json<
 /// for the shell: concurrent children, child iteration budget and the
 /// maximum nesting depth.
 async fn delegation_settings_api(State(_state): State<Arc<GatewayState>>) -> Json<Value> {
-    let delegation =
-        crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
-            .map(|c| c.delegation)
-            .unwrap_or_default();
+    let delegation = crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
+        .map(|c| c.delegation)
+        .unwrap_or_default();
     Json(json!({
         "max_concurrent_children": delegation.max_concurrent_children,
         "child_max_iterations": delegation.child_max_iterations,
@@ -9011,7 +9490,9 @@ async fn update_delegation_settings_api(Json(body): Json<Value>) -> (StatusCode,
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown delegation key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown delegation key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -9019,7 +9500,9 @@ async fn update_delegation_settings_api(Json(body): Json<Value>) -> (StatusCode,
         if !v.is_null() && !v.as_u64().map(|n| n >= 1).unwrap_or(false) {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({ "error": format!("delegation key '{key}' must be a positive integer") })),
+                Json(
+                    json!({ "error": format!("delegation key '{key}' must be a positive integer") }),
+                ),
             );
         }
     }
@@ -9105,16 +9588,23 @@ async fn update_web_settings_api(Json(body): Json<Value>) -> (StatusCode, Json<V
         if !v.is_null() {
             let text = v.as_str().map(str::trim).unwrap_or("");
             if key == "search_backend" {
-                if !matches!(text, "auto" | "duckduckgo" | "ddgs" | "tavily" | "brave" | "searxng") {
+                if !matches!(
+                    text,
+                    "auto" | "duckduckgo" | "ddgs" | "tavily" | "brave" | "searxng"
+                ) {
                     return (
                         StatusCode::BAD_REQUEST,
-                        Json(json!({ "error": "web.search_backend must be one of auto|duckduckgo|tavily|brave|searxng" })),
+                        Json(
+                            json!({ "error": "web.search_backend must be one of auto|duckduckgo|tavily|brave|searxng" }),
+                        ),
                     );
                 }
             } else if text.is_empty() {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(json!({ "error": "web.extract_backend must be a non-empty backend name" })),
+                    Json(
+                        json!({ "error": "web.extract_backend must be a non-empty backend name" }),
+                    ),
                 );
             }
             raw = Some(text.to_string());
@@ -9204,7 +9694,9 @@ async fn update_agent_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown agent key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown agent key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -9217,7 +9709,9 @@ async fn update_agent_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
                     if !ok {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": format!("agent key '{key}' must be a positive integer") })),
+                            Json(
+                                json!({ "error": format!("agent key '{key}' must be a positive integer") }),
+                            ),
                         );
                     }
                     raw = Some(v.to_string());
@@ -9226,7 +9720,9 @@ async fn update_agent_settings_api(Json(body): Json<Value>) -> (StatusCode, Json
                     if !v.is_boolean() {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": format!("agent key '{key}' must be a boolean") })),
+                            Json(
+                                json!({ "error": format!("agent key '{key}' must be a boolean") }),
+                            ),
                         );
                     }
                     raw = Some(v.to_string());
@@ -9333,7 +9829,9 @@ async fn update_gateway_settings_api(Json(body): Json<Value>) -> (StatusCode, Js
     if !VALID_KEYS.contains(&key.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("unknown gateway key '{key}'"), "valid_keys": VALID_KEYS })),
+            Json(
+                json!({ "error": format!("unknown gateway key '{key}'"), "valid_keys": VALID_KEYS }),
+            ),
         );
     }
     let value = body.get("value");
@@ -9345,7 +9843,9 @@ async fn update_gateway_settings_api(Json(body): Json<Value>) -> (StatusCode, Js
                     if !v.is_boolean() {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": format!("gateway key '{key}' must be a boolean") })),
+                            Json(
+                                json!({ "error": format!("gateway key '{key}' must be a boolean") }),
+                            ),
                         );
                     }
                     raw = Some(v.to_string());
@@ -9354,19 +9854,21 @@ async fn update_gateway_settings_api(Json(body): Json<Value>) -> (StatusCode, Js
                     if !v.is_u64() {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": format!("gateway key '{key}' must be a non-negative integer") })),
+                            Json(
+                                json!({ "error": format!("gateway key '{key}' must be a non-negative integer") }),
+                            ),
                         );
                     }
                     raw = Some(v.to_string());
                 }
                 "session_stall_timeout_secs" => {
-                    let number = v
-                        .as_f64()
-                        .filter(|n| n.is_finite() && *n >= 0.0);
+                    let number = v.as_f64().filter(|n| n.is_finite() && *n >= 0.0);
                     let Some(number) = number else {
                         return (
                             StatusCode::BAD_REQUEST,
-                            Json(json!({ "error": "gateway.session_stall_timeout_secs must be a non-negative number" })),
+                            Json(
+                                json!({ "error": "gateway.session_stall_timeout_secs must be a non-negative number" }),
+                            ),
                         );
                     };
                     raw = Some(if number.fract() == 0.0 {
@@ -9450,9 +9952,7 @@ async fn status_phrases_api(State(_state): State<Arc<GatewayState>>) -> Json<Val
             })
             .collect();
 
-        let sample = |list: &[String]| -> Vec<String> {
-            list.iter().take(5).cloned().collect()
-        };
+        let sample = |list: &[String]| -> Vec<String> { list.iter().take(5).cloned().collect() };
 
         let mut platforms = serde_json::Map::new();
         let mut keys: Vec<String> = config.display.platforms.keys().cloned().collect();
@@ -9509,7 +10009,10 @@ async fn status_phrases_preview_api(
         .get("platform")
         .map(|v| v.trim().to_string())
         .filter(|p| !p.is_empty());
-    let kind = params.get("kind").cloned().unwrap_or_else(|| "status".to_string());
+    let kind = params
+        .get("kind")
+        .cloned()
+        .unwrap_or_else(|| "status".to_string());
     let count = params
         .get("count")
         .and_then(|v| v.parse::<usize>().ok())
@@ -9518,11 +10021,8 @@ async fn status_phrases_preview_api(
     let result = tokio::task::spawn_blocking(move || {
         let config = crate::config::UlncLawConfig::load(None).unwrap_or_default();
         let home = crate::config::ulnclaw_home();
-        let catalog = crate::status_phrases::resolve_catalog(
-            &config.display,
-            platform.as_deref(),
-            &home,
-        );
+        let catalog =
+            crate::status_phrases::resolve_catalog(&config.display, platform.as_deref(), &home);
         let source = if kind == "generic" {
             &catalog.generic
         } else {
@@ -9600,9 +10100,7 @@ async fn display_settings_api(State(_state): State<Arc<GatewayState>>) -> Json<V
                         Some(crate::display_config::DisplayValue::Text(text)) => {
                             Value::String(text)
                         }
-                        Some(crate::display_config::DisplayValue::Flag(flag)) => {
-                            Value::Bool(flag)
-                        }
+                        Some(crate::display_config::DisplayValue::Flag(flag)) => Value::Bool(flag),
                         Some(crate::display_config::DisplayValue::Number(num)) => json!(num),
                         None => Value::Null,
                     },
@@ -9766,8 +10264,14 @@ async fn stall_watch_api(State(state): State<Arc<GatewayState>>) -> Json<Value> 
         let stalled_a = a.get("stalled").and_then(Value::as_bool).unwrap_or(false);
         let stalled_b = b.get("stalled").and_then(Value::as_bool).unwrap_or(false);
         stalled_b.cmp(&stalled_a).then_with(|| {
-            let idle_a = a.get("idle_seconds").and_then(Value::as_f64).unwrap_or(-1.0);
-            let idle_b = b.get("idle_seconds").and_then(Value::as_f64).unwrap_or(-1.0);
+            let idle_a = a
+                .get("idle_seconds")
+                .and_then(Value::as_f64)
+                .unwrap_or(-1.0);
+            let idle_b = b
+                .get("idle_seconds")
+                .and_then(Value::as_f64)
+                .unwrap_or(-1.0);
             idle_b
                 .partial_cmp(&idle_a)
                 .unwrap_or(std::cmp::Ordering::Equal)
@@ -9792,8 +10296,14 @@ fn messaging_platform_payload(
     messaging_value: &Value,
     env_on_disk: &HashMap<String, String>,
 ) -> Value {
-    let section = messaging_value.get(entry.id).cloned().unwrap_or(Value::Null);
-    let enabled = section.get("enabled").and_then(Value::as_bool).unwrap_or(false);
+    let section = messaging_value
+        .get(entry.id)
+        .cloned()
+        .unwrap_or(Value::Null);
+    let enabled = section
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let configured = crate::messaging::platform_configured(&section, entry);
     let state = if !enabled {
         "disabled"
@@ -9986,7 +10496,9 @@ async fn messaging_platform_test(Path(platform_id): Path<String>) -> Response {
     }
     if payload["configured"] != Value::Bool(true) {
         let section = serde_json::to_value(
-            crate::config::UlncLawConfig::load(None).unwrap_or_default().messaging,
+            crate::config::UlncLawConfig::load(None)
+                .unwrap_or_default()
+                .messaging,
         )
         .unwrap_or_else(|_| json!({}))
         .get(entry.id)
@@ -10136,8 +10648,7 @@ async fn sync_transfer_api(is_pull: bool) -> Response {
 /// VALUES never appear in the response.
 async fn secrets_sync_api(Json(body): Json<Value>) -> Response {
     let apply = body.get("apply").and_then(Value::as_bool).unwrap_or(false);
-    let config = match crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path()))
-    {
+    let config = match crate::config::UlncLawConfig::load(Some(&crate::config_cmd::config_path())) {
         Ok(config) => config,
         Err(e) => return server_error(&format!("load config: {e}")),
     };
@@ -10542,7 +11053,10 @@ async fn plugins_inventory(State(_state): State<Arc<GatewayState>>) -> Response 
 
 /// `POST /api/plugins/:name/enable` — remove the plugin from the config
 /// deny-list (hermes `plugins enable`).
-async fn plugin_enable(State(_state): State<Arc<GatewayState>>, Path(name): Path<String>) -> Response {
+async fn plugin_enable(
+    State(_state): State<Arc<GatewayState>>,
+    Path(name): Path<String>,
+) -> Response {
     let result = tokio::task::spawn_blocking(move || {
         let home = crate::config::ulnclaw_home();
         crate::plugins::enable_plugin(&home, &name)
@@ -10551,11 +11065,7 @@ async fn plugin_enable(State(_state): State<Arc<GatewayState>>, Path(name): Path
     .unwrap_or_else(|e| Err(format!("enable task failed: {e}")));
     match result {
         Ok(message) => Json(json!({"ok": true, "message": message})).into_response(),
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": e})),
-        )
-            .into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"error": e}))).into_response(),
     }
 }
 
@@ -10573,11 +11083,7 @@ async fn plugin_disable(
     .unwrap_or_else(|e| Err(format!("disable task failed: {e}")));
     match result {
         Ok(message) => Json(json!({"ok": true, "message": message})).into_response(),
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": e})),
-        )
-            .into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"error": e}))).into_response(),
     }
 }
 
@@ -10664,7 +11170,9 @@ async fn dashboard_plugins_rescan(State(_state): State<Arc<GatewayState>>) -> Re
     let count = tokio::task::spawn_blocking(|| {
         let home = crate::config::ulnclaw_home();
         let disabled = crate::plugins::current_disabled(&home);
-        crate::plugins::discover_dir_plugins(&home, &disabled).0.len()
+        crate::plugins::discover_dir_plugins(&home, &disabled)
+            .0
+            .len()
     })
     .await
     .unwrap_or(0);
@@ -10679,10 +11187,7 @@ fn build_plugins_hub_payload() -> Value {
     let disabled = crate::plugins::current_disabled(&home);
     let hidden = read_hidden_plugins();
     let (plugins, _) = crate::plugins::discover_dir_plugins(&home, &disabled);
-    let installed_names: Vec<String> = plugins
-        .iter()
-        .map(|p| p.manifest.name.clone())
-        .collect();
+    let installed_names: Vec<String> = plugins.iter().map(|p| p.manifest.name.clone()).collect();
     let agent_plugins: Vec<Value> = plugins.iter().map(dashboard_plugin_row).collect();
     let catalog: Vec<Value> = crate::plugins::load_hub_catalog(&home)
         .into_iter()
@@ -10711,10 +11216,10 @@ fn build_plugins_hub_payload() -> Value {
         }
         names
     };
-    let selected_memory = read_dashboard_value("plugins.memory_provider")
-        .unwrap_or_else(|| "builtin".to_string());
-    let selected_context = read_dashboard_value("plugins.context_engine")
-        .unwrap_or_else(|| "builtin".to_string());
+    let selected_memory =
+        read_dashboard_value("plugins.memory_provider").unwrap_or_else(|| "builtin".to_string());
+    let selected_context =
+        read_dashboard_value("plugins.context_engine").unwrap_or_else(|| "builtin".to_string());
     json!({
         "agent_plugins": agent_plugins,
         "catalog": catalog,
@@ -10752,9 +11257,7 @@ async fn dashboard_plugins_hub(State(_state): State<Arc<GatewayState>>) -> Respo
     let result = tokio::task::spawn_blocking(build_plugins_hub_payload).await;
     match result {
         Ok(payload) => {
-            *PLUGINS_HUB_CACHE
-                .lock()
-                .unwrap_or_else(|e| e.into_inner()) =
+            *PLUGINS_HUB_CACHE.lock().unwrap_or_else(|e| e.into_inner()) =
                 Some((std::time::Instant::now(), payload.clone()));
             Json(payload).into_response()
         }
@@ -10894,7 +11397,9 @@ async fn dashboard_agent_plugin_update(
     .unwrap_or_else(|e| Err(format!("update task failed: {e}")));
     invalidate_plugins_hub_cache();
     match result {
-        Ok(output) => Json(json!({"ok": true, "name": name, "output": output.trim()})).into_response(),
+        Ok(output) => {
+            Json(json!({"ok": true, "name": name, "output": output.trim()})).into_response()
+        }
         Err(e) => bad_request(&e, None),
     }
 }
@@ -11028,14 +11533,8 @@ async fn dashboard_plugin_visibility(
             } else {
                 list.retain(|entry| entry != &name);
             }
-            let array = toml::Value::Array(
-                list.into_iter().map(toml::Value::String).collect(),
-            );
-            crate::config_cmd::set_nested(
-                &mut toml_value,
-                "dashboard.hidden_plugins",
-                array,
-            )?;
+            let array = toml::Value::Array(list.into_iter().map(toml::Value::String).collect());
+            crate::config_cmd::set_nested(&mut toml_value, "dashboard.hidden_plugins", array)?;
             crate::config_cmd::save_toml(&path, &toml_value)?;
             Ok(())
         }
@@ -11151,48 +11650,144 @@ pub fn router(state: Arc<GatewayState>) -> Router {
         .route("/api/model/set", post(model_set_api))
         .route("/api/model/auxiliary", get(model_auxiliary))
         .route("/api/model/moa", get(model_moa_get).put(model_moa_put))
-        .route("/api/model/recommended-default", get(model_recommended_default))
+        .route(
+            "/api/model/recommended-default",
+            get(model_recommended_default),
+        )
         .route("/api/reasoning", get(reasoning_get).put(reasoning_set))
         .route("/api/fast", get(fast_get).put(fast_set))
         .route("/api/approvals", get(approvals_get).put(approvals_set))
-        .route("/api/approvals/settings", put(update_approvals_settings_api))
-        .route("/api/gateway-settings", get(gateway_settings_api).put(update_gateway_settings_api))
-        .route("/api/agent-settings", get(agent_settings_api).put(update_agent_settings_api))
-        .route("/api/web-settings", get(web_settings_api).put(update_web_settings_api))
-        .route("/api/delegation-settings", get(delegation_settings_api).put(update_delegation_settings_api))
-        .route("/api/model-catalog", get(model_catalog_api).put(update_model_catalog_api))
-        .route("/api/checkpoints/settings", get(checkpoint_settings_api).put(update_checkpoint_settings_api))
-        .route("/api/security-settings", get(security_settings_api).put(update_security_settings_api))
-        .route("/api/tool-output-settings", get(tool_output_settings_api).put(update_tool_output_settings_api))
-        .route("/api/logging-settings", get(logging_settings_api).put(update_logging_settings_api))
-        .route("/api/cron-settings", get(cron_settings_api).put(update_cron_settings_api))
-        .route("/api/voice-settings", get(voice_settings_api).put(update_voice_settings_api))
-        .route("/api/kanban-settings", get(kanban_settings_api).put(update_kanban_settings_api))
-        .route("/api/x-search-settings", get(x_search_settings_api).put(update_x_search_settings_api))
-        .route("/api/video-gen-settings", get(video_gen_settings_api).put(update_video_gen_settings_api))
-        .route("/api/moa-settings", get(moa_settings_api).put(update_moa_settings_api))
-        .route("/api/discord-settings", get(discord_settings_api).put(update_discord_settings_api))
-        .route("/api/pets-settings", get(pets_settings_api).put(update_pets_settings_api))
-        .route("/api/browser-settings", get(browser_settings_api).put(update_browser_settings_api))
-        .route("/api/timezone-settings", get(timezone_settings_api).put(update_timezone_settings_api))
-        .route("/api/monitoring-settings", get(monitoring_settings_api).put(update_monitoring_settings_api))
-        .route("/api/proxy-settings", get(proxy_settings_api).put(update_proxy_settings_api))
-        .route("/api/auxiliary-settings", get(auxiliary_settings_api).put(update_auxiliary_settings_api))
-        .route("/api/providers-settings", get(providers_settings_api).put(update_providers_settings_api))
-        .route("/api/hooks-settings", get(hooks_settings_api).put(update_hooks_settings_api))
-        .route("/api/sync-settings", get(sync_settings_api).put(update_sync_settings_api))
-        .route("/api/oauth-settings", get(oauth_settings_api).put(update_oauth_settings_api))
-        .route("/api/toolsets-settings", get(toolsets_settings_api).put(update_toolsets_settings_api))
         .route(
-            "/api/personalities",
-            get(personalities_get),
+            "/api/approvals/settings",
+            put(update_approvals_settings_api),
         )
+        .route(
+            "/api/gateway-settings",
+            get(gateway_settings_api).put(update_gateway_settings_api),
+        )
+        .route(
+            "/api/agent-settings",
+            get(agent_settings_api).put(update_agent_settings_api),
+        )
+        .route(
+            "/api/web-settings",
+            get(web_settings_api).put(update_web_settings_api),
+        )
+        .route(
+            "/api/delegation-settings",
+            get(delegation_settings_api).put(update_delegation_settings_api),
+        )
+        .route(
+            "/api/model-catalog",
+            get(model_catalog_api).put(update_model_catalog_api),
+        )
+        .route(
+            "/api/checkpoints/settings",
+            get(checkpoint_settings_api).put(update_checkpoint_settings_api),
+        )
+        .route(
+            "/api/security-settings",
+            get(security_settings_api).put(update_security_settings_api),
+        )
+        .route(
+            "/api/tool-output-settings",
+            get(tool_output_settings_api).put(update_tool_output_settings_api),
+        )
+        .route(
+            "/api/logging-settings",
+            get(logging_settings_api).put(update_logging_settings_api),
+        )
+        .route(
+            "/api/cron-settings",
+            get(cron_settings_api).put(update_cron_settings_api),
+        )
+        .route(
+            "/api/voice-settings",
+            get(voice_settings_api).put(update_voice_settings_api),
+        )
+        .route(
+            "/api/kanban-settings",
+            get(kanban_settings_api).put(update_kanban_settings_api),
+        )
+        .route(
+            "/api/x-search-settings",
+            get(x_search_settings_api).put(update_x_search_settings_api),
+        )
+        .route(
+            "/api/video-gen-settings",
+            get(video_gen_settings_api).put(update_video_gen_settings_api),
+        )
+        .route(
+            "/api/moa-settings",
+            get(moa_settings_api).put(update_moa_settings_api),
+        )
+        .route(
+            "/api/discord-settings",
+            get(discord_settings_api).put(update_discord_settings_api),
+        )
+        .route(
+            "/api/pets-settings",
+            get(pets_settings_api).put(update_pets_settings_api),
+        )
+        .route(
+            "/api/browser-settings",
+            get(browser_settings_api).put(update_browser_settings_api),
+        )
+        .route(
+            "/api/timezone-settings",
+            get(timezone_settings_api).put(update_timezone_settings_api),
+        )
+        .route(
+            "/api/monitoring-settings",
+            get(monitoring_settings_api).put(update_monitoring_settings_api),
+        )
+        .route(
+            "/api/proxy-settings",
+            get(proxy_settings_api).put(update_proxy_settings_api),
+        )
+        .route(
+            "/api/auxiliary-settings",
+            get(auxiliary_settings_api).put(update_auxiliary_settings_api),
+        )
+        .route(
+            "/api/providers-settings",
+            get(providers_settings_api).put(update_providers_settings_api),
+        )
+        .route(
+            "/api/hooks-settings",
+            get(hooks_settings_api).put(update_hooks_settings_api),
+        )
+        .route(
+            "/api/sync-settings",
+            get(sync_settings_api).put(update_sync_settings_api),
+        )
+        .route(
+            "/api/oauth-settings",
+            get(oauth_settings_api).put(update_oauth_settings_api),
+        )
+        .route(
+            "/api/toolsets-settings",
+            get(toolsets_settings_api).put(update_toolsets_settings_api),
+        )
+        .route("/api/personalities", get(personalities_get))
         .route("/api/personality", put(personality_set))
-        .route("/api/providers/custom-endpoints", get(custom_endpoints_list).post(custom_endpoints_upsert))
-        .route("/api/providers/custom-endpoints/validate", post(custom_endpoints_validate))
+        .route(
+            "/api/providers/custom-endpoints",
+            get(custom_endpoints_list).post(custom_endpoints_upsert),
+        )
+        .route(
+            "/api/providers/custom-endpoints/validate",
+            post(custom_endpoints_validate),
+        )
         .route("/api/providers/validate", post(providers_validate))
-        .route("/api/providers/custom-endpoints/:id/activate", post(custom_endpoint_activate))
-        .route("/api/providers/custom-endpoints/:id", delete(custom_endpoint_delete))
+        .route(
+            "/api/providers/custom-endpoints/:id/activate",
+            post(custom_endpoint_activate),
+        )
+        .route(
+            "/api/providers/custom-endpoints/:id",
+            delete(custom_endpoint_delete),
+        )
         .route("/api/providers/oauth", get(list_provider_oauth))
         .route(
             "/api/providers/oauth/sessions/:session_id",
@@ -11214,12 +11809,21 @@ pub fn router(state: Arc<GatewayState>) -> Router {
             "/api/providers/oauth/:provider_id",
             delete(provider_oauth_disconnect),
         )
-        .route("/api/credentials/pool", get(credentials_pool_list).post(credentials_pool_add))
-        .route("/api/credentials/pool/:provider/:index", delete(credentials_pool_remove))
+        .route(
+            "/api/credentials/pool",
+            get(credentials_pool_list).post(credentials_pool_add),
+        )
+        .route(
+            "/api/credentials/pool/:provider/:index",
+            delete(credentials_pool_remove),
+        )
         .route("/api/profiles", get(profiles_list).post(profiles_save))
         .route("/api/profiles/:name", delete(profiles_delete))
         .route("/api/profiles/:name/rename", post(profiles_rename))
-        .route("/api/memory", get(memory_status_api).put(memory_settings_set_api))
+        .route(
+            "/api/memory",
+            get(memory_status_api).put(memory_settings_set_api),
+        )
         .route("/api/memory/reset", post(memory_reset_api))
         .route("/api/update/check", get(update_check_api))
         .route("/api/update", post(update_apply_api))
@@ -11230,9 +11834,15 @@ pub fn router(state: Arc<GatewayState>) -> Router {
         .route("/api/oauth/status", get(oauth_status))
         .route("/api/dashboard/themes", get(dashboard_themes))
         .route("/api/dashboard/theme", put(dashboard_theme_set))
-        .route("/api/dashboard/font", get(dashboard_font_get).put(dashboard_font_set))
+        .route(
+            "/api/dashboard/font",
+            get(dashboard_font_get).put(dashboard_font_set),
+        )
         .route("/api/dashboard/plugins", get(dashboard_plugins))
-        .route("/api/dashboard/plugins/rescan", get(dashboard_plugins_rescan))
+        .route(
+            "/api/dashboard/plugins/rescan",
+            get(dashboard_plugins_rescan),
+        )
         .route("/api/dashboard/plugins/hub", get(dashboard_plugins_hub))
         .route(
             "/api/dashboard/plugins/:name/visibility",
@@ -11273,9 +11883,15 @@ pub fn router(state: Arc<GatewayState>) -> Router {
         .route("/api/logs/tail", get(logs_tail))
         .route("/api/logs", get(logs_api))
         .route("/api/mcp/servers", get(mcp_servers_list))
-        .route("/api/mcp/servers", post(mcp_server_add).put(mcp_server_update))
+        .route(
+            "/api/mcp/servers",
+            post(mcp_server_add).put(mcp_server_update),
+        )
         .route("/api/mcp/servers/:name", delete(mcp_server_delete))
-        .route("/api/mcp/servers/:name/enabled", put(mcp_server_set_enabled))
+        .route(
+            "/api/mcp/servers/:name/enabled",
+            put(mcp_server_set_enabled),
+        )
         .route("/api/mcp/servers/:name/test", post(mcp_server_test))
         .route("/api/mcp/catalog", get(mcp_catalog_list))
         .route("/api/mcp/catalog/install", post(mcp_catalog_install))
@@ -11291,20 +11907,38 @@ pub fn router(state: Arc<GatewayState>) -> Router {
                 .delete(drain_cancel_api),
         )
         .route("/api/lifecycle", get(lifecycle_api))
-        .route("/api/display", get(display_settings_api).put(update_display_api))
+        .route(
+            "/api/display",
+            get(display_settings_api).put(update_display_api),
+        )
         .route("/api/status-phrases", get(status_phrases_api))
-        .route("/api/status-phrases/preview", get(status_phrases_preview_api))
-        .route("/api/terminal", get(terminal_info_api).put(update_terminal_api))
+        .route(
+            "/api/status-phrases/preview",
+            get(status_phrases_preview_api),
+        )
+        .route(
+            "/api/terminal",
+            get(terminal_info_api).put(update_terminal_api),
+        )
         .route("/api/cgroup", get(cgroup_info_api))
         .route("/api/hooks", get(hooks_info_api))
         .route("/api/portal", get(portal_status_api))
         .route("/api/messaging/platforms", get(messaging_platforms))
-        .route("/api/messaging/platforms/:id", put(messaging_platform_update))
-        .route("/api/messaging/platforms/:id/test", post(messaging_platform_test))
+        .route(
+            "/api/messaging/platforms/:id",
+            put(messaging_platform_update),
+        )
+        .route(
+            "/api/messaging/platforms/:id/test",
+            post(messaging_platform_test),
+        )
         .route("/api/egress/status", get(egress_status))
         .route("/api/system", get(system_info))
         .route("/api/computer-use", get(computer_use_status))
-        .route("/api/computer-use-settings", get(computer_use_settings_api).put(update_computer_use_settings_api))
+        .route(
+            "/api/computer-use-settings",
+            get(computer_use_settings_api).put(update_computer_use_settings_api),
+        )
         .route("/api/secrets", get(secrets_status))
         .route("/api/secrets/sync", post(secrets_sync_api))
         .route("/api/sync", get(sync_status))
@@ -11334,9 +11968,18 @@ pub fn router(state: Arc<GatewayState>) -> Router {
         .route("/api/checkpoints", get(checkpoints_list))
         .route("/api/checkpoints/restore", post(checkpoints_restore))
         .route("/api/checkpoints/prune", post(checkpoints_prune))
-        .route("/api/webhooks/subscriptions", get(webhook_subscriptions_list).post(webhook_subscriptions_create))
-        .route("/api/webhooks/subscriptions/:name", delete(webhook_subscriptions_delete))
-        .route("/api/webhooks/subscriptions/:name/test", post(webhook_subscriptions_test))
+        .route(
+            "/api/webhooks/subscriptions",
+            get(webhook_subscriptions_list).post(webhook_subscriptions_create),
+        )
+        .route(
+            "/api/webhooks/subscriptions/:name",
+            delete(webhook_subscriptions_delete),
+        )
+        .route(
+            "/api/webhooks/subscriptions/:name/test",
+            post(webhook_subscriptions_test),
+        )
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/responses", post(create_response))
         .route(
@@ -11368,15 +12011,36 @@ pub fn router(state: Arc<GatewayState>) -> Router {
         .route("/api/skills/hub/update", post(parity::hub_update))
         .route("/api/tools/toolsets", get(parity::toolsets_list))
         .route("/api/tools/toolsets/:name", put(parity::toolset_update))
-        .route("/api/tools/toolsets/:name/config", get(parity::toolset_config))
-        .route("/api/tools/toolsets/:name/models", get(parity::toolset_models))
+        .route(
+            "/api/tools/toolsets/:name/config",
+            get(parity::toolset_config),
+        )
+        .route(
+            "/api/tools/toolsets/:name/models",
+            get(parity::toolset_models),
+        )
         .route("/api/tools/toolsets/:name/model", put(parity::toolset_noop))
-        .route("/api/tools/toolsets/:name/provider", put(parity::toolset_noop))
+        .route(
+            "/api/tools/toolsets/:name/provider",
+            put(parity::toolset_noop),
+        )
         .route("/api/tools/toolsets/:name/env", put(parity::toolset_noop))
-        .route("/api/tools/toolsets/:name/post-setup", post(parity::toolset_noop))
-        .route("/api/tools/terminal/backends", get(parity::terminal_backends))
-        .route("/api/tools/terminal/backend", put(parity::terminal_backend_set))
-        .route("/api/tools/computer-use/status", get(parity::computer_use_status))
+        .route(
+            "/api/tools/toolsets/:name/post-setup",
+            post(parity::toolset_noop),
+        )
+        .route(
+            "/api/tools/terminal/backends",
+            get(parity::terminal_backends),
+        )
+        .route(
+            "/api/tools/terminal/backend",
+            put(parity::terminal_backend_set),
+        )
+        .route(
+            "/api/tools/computer-use/status",
+            get(parity::computer_use_status),
+        )
         .route(
             "/api/tools/computer-use/permissions/grant",
             post(parity::computer_use_grant),
@@ -11386,7 +12050,10 @@ pub fn router(state: Arc<GatewayState>) -> Router {
             "/api/cron/blueprints/instantiate",
             post(parity::cron_blueprints_instantiate),
         )
-        .route("/api/cron/delivery-targets", get(parity::cron_delivery_targets))
+        .route(
+            "/api/cron/delivery-targets",
+            get(parity::cron_delivery_targets),
+        )
         .route("/api/ops/doctor", post(parity::ops_doctor))
         .route("/api/ops/backup", post(parity::ops_backup))
         .route("/api/ops/debug-share", post(parity::ops_debug_share))
@@ -11454,10 +12121,7 @@ pub fn router(state: Arc<GatewayState>) -> Router {
             post(instantiate_job_blueprint),
         )
         .route("/api/jobs/suggestions", get(list_job_suggestions))
-        .route(
-            "/api/jobs/suggestions/accept",
-            post(accept_job_suggestion),
-        )
+        .route("/api/jobs/suggestions/accept", post(accept_job_suggestion))
         .route(
             "/api/jobs/suggestions/dismiss",
             post(dismiss_job_suggestion),
@@ -11480,10 +12144,7 @@ pub fn router(state: Arc<GatewayState>) -> Router {
         .route("/api/pets/hatch/:id", get(pets::hatch_status))
         .route("/api/pets/hatch/:id/pick", post(pets::pick_draft))
         .route("/api/pets/hatch/:id/cancel", post(pets::cancel_hatch))
-        .route(
-            "/api/pets/hatch/:id/draft/:index",
-            get(pets::draft_image),
-        )
+        .route("/api/pets/hatch/:id/draft/:index", get(pets::draft_image))
         .route(
             "/api/projects",
             get(projects::list_projects).post(projects::create_project),
@@ -11504,56 +12165,142 @@ pub fn router(state: Arc<GatewayState>) -> Router {
         .route("/api/projects/:id/primary", post(projects::set_primary))
         .route("/api/projects/:id/archive", post(projects::archive_project))
         .route("/api/projects/:id/restore", post(projects::restore_project))
-        .route("/api/kanban/boards", get(kanban::list_boards).post(kanban::create_board))
-        .route("/api/kanban/boards/:slug/switch", post(kanban::switch_board))
-        .route("/api/kanban/boards/:slug/rename", post(kanban::rename_board))
-        .route("/api/kanban/boards/:slug/workdir", post(kanban::set_board_workdir))
+        .route(
+            "/api/kanban/boards",
+            get(kanban::list_boards).post(kanban::create_board),
+        )
+        .route(
+            "/api/kanban/boards/:slug/switch",
+            post(kanban::switch_board),
+        )
+        .route(
+            "/api/kanban/boards/:slug/rename",
+            post(kanban::rename_board),
+        )
+        .route(
+            "/api/kanban/boards/:slug/workdir",
+            post(kanban::set_board_workdir),
+        )
         .route("/api/kanban/boards/:slug", delete(kanban::remove_board))
         .route("/api/kanban/stats", get(kanban::board_stats))
         .route("/api/kanban/diagnostics", get(kanban::board_diagnostics))
-        .route("/api/kanban/tasks", get(kanban::list_tasks).post(kanban::create_task))
+        .route(
+            "/api/kanban/tasks",
+            get(kanban::list_tasks).post(kanban::create_task),
+        )
         .route("/api/kanban/dispatch", post(kanban::dispatch))
-        .route("/api/kanban/tasks/:id", get(kanban::get_task).delete(kanban::delete_task))
-        .route("/api/kanban/tasks/:id/complete", post(kanban::complete_task))
+        .route(
+            "/api/kanban/tasks/:id",
+            get(kanban::get_task).delete(kanban::delete_task),
+        )
+        .route(
+            "/api/kanban/tasks/:id/complete",
+            post(kanban::complete_task),
+        )
         .route("/api/kanban/tasks/:id/block", post(kanban::block_task))
         .route("/api/kanban/tasks/:id/unblock", post(kanban::unblock_task))
         .route("/api/kanban/tasks/:id/comment", post(kanban::comment_task))
         .route("/api/kanban/tasks/:id/link", post(kanban::link_task))
         .route("/api/kanban/tasks/:id/unlink", post(kanban::unlink_task))
         .route("/api/kanban/tasks/:id/claim", post(kanban::claim_task))
-        .route("/api/kanban/tasks/:id/set-reasoning", post(kanban::set_reasoning))
+        .route(
+            "/api/kanban/tasks/:id/set-reasoning",
+            post(kanban::set_reasoning),
+        )
         .route("/api/kanban/tasks/:id/set-model", post(kanban::set_model))
         .route("/api/kanban/tasks/:id/edit", post(kanban::edit_task))
         .route("/api/kanban/tasks/:id/archive", post(kanban::archive_task))
         .route("/api/kanban/tasks/:id/attach", post(kanban::attach_task))
-        .route("/api/kanban/tasks/:id/schedule", post(kanban::schedule_task))
-        .route("/api/kanban/tasks/:id/reassign", post(kanban::reassign_task))
+        .route(
+            "/api/kanban/tasks/:id/schedule",
+            post(kanban::schedule_task),
+        )
+        .route(
+            "/api/kanban/tasks/:id/reassign",
+            post(kanban::reassign_task),
+        )
         .route("/api/kanban/tasks/:id/promote", post(kanban::promote_task))
         .route("/api/kanban/tasks/:id/reclaim", post(kanban::reclaim_task))
         .route("/api/kanban/tasks/:id/assign", post(kanban::assign_task))
         .route("/api/kanban/tasks/:id/runs", get(kanban::task_runs))
-        .route("/api/kanban/tasks/:id/diagnostics", get(kanban::task_diagnostics))
-        .route("/api/kanban/attachments/:aid", delete(kanban::remove_attachment))
+        .route(
+            "/api/kanban/tasks/:id/diagnostics",
+            get(kanban::task_diagnostics),
+        )
+        .route(
+            "/api/kanban/attachments/:aid",
+            delete(kanban::remove_attachment),
+        )
         // Desktop kanban plugin REST namespace (hermes plugin_api mount).
         .route("/api/plugins/kanban/board", get(kanban_plugin::board))
-        .route("/api/plugins/kanban/boards", get(kanban_plugin::list_boards).post(kanban_plugin::create_board))
-        .route("/api/plugins/kanban/boards/:slug", patch(kanban_plugin::update_board))
-        .route("/api/plugins/kanban/tasks", post(kanban_plugin::create_task))
-        .route("/api/plugins/kanban/tasks/bulk", post(kanban_plugin::bulk_tasks))
-        .route("/api/plugins/kanban/tasks/:id", get(kanban_plugin::task_detail).patch(kanban_plugin::update_task).delete(kanban_plugin::delete_task))
-        .route("/api/plugins/kanban/tasks/:id/log", get(kanban_plugin::task_log))
-        .route("/api/plugins/kanban/tasks/:id/comments", post(kanban_plugin::add_comment))
-        .route("/api/plugins/kanban/tasks/:id/reassign", post(kanban_plugin::reassign))
-        .route("/api/plugins/kanban/tasks/:id/reclaim", post(kanban_plugin::reclaim))
-        .route("/api/plugins/kanban/tasks/:id/estimate", post(kanban_plugin::estimate_task))
-        .route("/api/plugins/kanban/tasks/:id/attachments", get(kanban_plugin::list_attachments).post(kanban_plugin::upload_attachment))
-        .route("/api/plugins/kanban/estimate", post(kanban_plugin::estimate_text))
+        .route(
+            "/api/plugins/kanban/boards",
+            get(kanban_plugin::list_boards).post(kanban_plugin::create_board),
+        )
+        .route(
+            "/api/plugins/kanban/boards/:slug",
+            patch(kanban_plugin::update_board),
+        )
+        .route(
+            "/api/plugins/kanban/tasks",
+            post(kanban_plugin::create_task),
+        )
+        .route(
+            "/api/plugins/kanban/tasks/bulk",
+            post(kanban_plugin::bulk_tasks),
+        )
+        .route(
+            "/api/plugins/kanban/tasks/:id",
+            get(kanban_plugin::task_detail)
+                .patch(kanban_plugin::update_task)
+                .delete(kanban_plugin::delete_task),
+        )
+        .route(
+            "/api/plugins/kanban/tasks/:id/log",
+            get(kanban_plugin::task_log),
+        )
+        .route(
+            "/api/plugins/kanban/tasks/:id/comments",
+            post(kanban_plugin::add_comment),
+        )
+        .route(
+            "/api/plugins/kanban/tasks/:id/reassign",
+            post(kanban_plugin::reassign),
+        )
+        .route(
+            "/api/plugins/kanban/tasks/:id/reclaim",
+            post(kanban_plugin::reclaim),
+        )
+        .route(
+            "/api/plugins/kanban/tasks/:id/estimate",
+            post(kanban_plugin::estimate_task),
+        )
+        .route(
+            "/api/plugins/kanban/tasks/:id/attachments",
+            get(kanban_plugin::list_attachments).post(kanban_plugin::upload_attachment),
+        )
+        .route(
+            "/api/plugins/kanban/estimate",
+            post(kanban_plugin::estimate_text),
+        )
         .route("/api/plugins/kanban/profiles", get(kanban_plugin::profiles))
-        .route("/api/plugins/kanban/profiles/:name", patch(kanban_plugin::update_profile))
+        .route(
+            "/api/plugins/kanban/profiles/:name",
+            patch(kanban_plugin::update_profile),
+        )
         .route("/api/plugins/kanban/projects", get(kanban_plugin::projects))
-        .route("/api/plugins/kanban/orchestration", get(kanban_plugin::orchestration_get).put(kanban_plugin::orchestration_put))
-        .route("/api/plugins/kanban/dispatch", post(kanban_plugin::dispatch))
-        .route("/api/plugins/kanban/assignees", get(kanban_plugin::assignees))
+        .route(
+            "/api/plugins/kanban/orchestration",
+            get(kanban_plugin::orchestration_get).put(kanban_plugin::orchestration_put),
+        )
+        .route(
+            "/api/plugins/kanban/dispatch",
+            post(kanban_plugin::dispatch),
+        )
+        .route(
+            "/api/plugins/kanban/assignees",
+            get(kanban_plugin::assignees),
+        )
         .route("/api/jobs/:id/pause", post(pause_job))
         .route("/api/jobs/:id/resume", post(resume_job))
         .route("/api/jobs/:id/run", post(run_job_now))
@@ -11575,10 +12322,16 @@ pub fn router(state: Arc<GatewayState>) -> Router {
         .route("/v1/runs/:id/stop", post(stop_run))
         .route("/api/mcp/servers/:name/auth", post(mcp_server_auth))
         .route("/api/mcp/oauth/flows/:flow_id", get(mcp_oauth_flow_status))
-        .route("/api/mcp/oauth/callback/:server_name", get(mcp_oauth_callback));
+        .route(
+            "/api/mcp/oauth/callback/:server_name",
+            get(mcp_oauth_callback),
+        );
     let router = attach_webhook_routes(router, &state);
     router
-        .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ))
         .with_state(state)
 }
 
@@ -11721,7 +12474,11 @@ async fn dynamic_webhook_route(
 
 // ── Webhook subscription management API (desktop Webhooks panel) ─────────
 
-fn subscription_row(name: &str, sub: &crate::webhook_subscriptions::Subscription, base: &str) -> Value {
+fn subscription_row(
+    name: &str,
+    sub: &crate::webhook_subscriptions::Subscription,
+    base: &str,
+) -> Value {
     let preview: String = if sub.secret.len() > 4 {
         format!("{}…", &sub.secret[..4])
     } else {
@@ -11856,7 +12613,11 @@ async fn process_generic_webhook(
     use crate::webhook_platforms as wp;
     let name = route.name.clone();
     let ack = |status: &str| -> Response {
-        (StatusCode::OK, Json(json!({ "status": status, "route": name }))).into_response()
+        (
+            StatusCode::OK,
+            Json(json!({ "status": status, "route": name })),
+        )
+            .into_response()
     };
     let config = &state.agent.context().config;
     if body.len() > WEBHOOK_BODY_LIMIT {
@@ -11868,14 +12629,21 @@ async fn process_generic_webhook(
     }
     let header_pairs: Vec<(String, String)> = headers
         .iter()
-        .filter_map(|(k, v)| v.to_str().ok().map(|s| (k.as_str().to_string(), s.to_string())))
+        .filter_map(|(k, v)| {
+            v.to_str()
+                .ok()
+                .map(|s| (k.as_str().to_string(), s.to_string()))
+        })
         .collect();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
     if !wp::webhook_signature_ok(&route.name, &body, &header_pairs, &route.secret, now as i64) {
-        tracing::warn!("[webhook] route '{}' rejected: invalid signature", route.name);
+        tracing::warn!(
+            "[webhook] route '{}' rejected: invalid signature",
+            route.name
+        );
         return (
             StatusCode::FORBIDDEN,
             Json(json!({ "error": "invalid signature" })),
@@ -11895,11 +12663,18 @@ async fn process_generic_webhook(
     let delivery_id = header_pairs
         .iter()
         .find(|(k, _)| k.eq_ignore_ascii_case("x-webhook-delivery-id"))
-        .or_else(|| header_pairs.iter().find(|(k, _)| k.eq_ignore_ascii_case("svix-id")))
+        .or_else(|| {
+            header_pairs
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("svix-id"))
+        })
         .map(|(_, v)| v.clone())
         .unwrap_or_default();
     if wp::webhook_already_seen(&runtime, &delivery_id, now).await {
-        tracing::info!("[webhook] route '{}' duplicate delivery '{delivery_id}' acked", route.name);
+        tracing::info!(
+            "[webhook] route '{}' duplicate delivery '{delivery_id}' acked",
+            route.name
+        );
         return ack("duplicate");
     }
     let (allowed, event) = wp::webhook_event_allowed(&route, &header_pairs);
@@ -11967,7 +12742,9 @@ async fn whatsapp_webhook_route(
         .to_string();
     let dispatcher = crate::messaging::Dispatcher::new(state.agent.clone(), state.store.clone());
     let pairing = if config.messaging.pairing {
-        Some(crate::pairing::PairingStore::open(&crate::config::ulnclaw_home()))
+        Some(crate::pairing::PairingStore::open(
+            &crate::config::ulnclaw_home(),
+        ))
     } else {
         None
     };
@@ -12010,7 +12787,9 @@ async fn feishu_webhook_route(
         .collect();
     let dispatcher = crate::messaging::Dispatcher::new(state.agent.clone(), state.store.clone());
     let pairing = if config.messaging.pairing {
-        Some(crate::pairing::PairingStore::open(&crate::config::ulnclaw_home()))
+        Some(crate::pairing::PairingStore::open(
+            &crate::config::ulnclaw_home(),
+        ))
     } else {
         None
     };
@@ -12045,18 +12824,15 @@ async fn twilio_webhook_route(
         .collect();
     let dispatcher = crate::messaging::Dispatcher::new(state.agent.clone(), state.store.clone());
     let pairing = if config.messaging.pairing {
-        Some(crate::pairing::PairingStore::open(&crate::config::ulnclaw_home()))
+        Some(crate::pairing::PairingStore::open(
+            &crate::config::ulnclaw_home(),
+        ))
     } else {
         None
     };
-    let result = crate::sms::sms_handle_webhook(
-        cfg,
-        &dispatcher,
-        pairing.as_ref(),
-        &body,
-        &header_pairs,
-    )
-    .await;
+    let result =
+        crate::sms::sms_handle_webhook(cfg, &dispatcher, pairing.as_ref(), &body, &header_pairs)
+            .await;
     let status = match result.status {
         200 => StatusCode::OK,
         400 => StatusCode::BAD_REQUEST,
@@ -12079,7 +12855,9 @@ async fn teams_webhook_route(
     let config = &state.agent.context().config;
     let dispatcher = crate::messaging::Dispatcher::new(state.agent.clone(), state.store.clone());
     let pairing = if config.messaging.pairing {
-        Some(crate::pairing::PairingStore::open(&crate::config::ulnclaw_home()))
+        Some(crate::pairing::PairingStore::open(
+            &crate::config::ulnclaw_home(),
+        ))
     } else {
         None
     };
@@ -12100,13 +12878,14 @@ async fn line_webhook_route(
         .collect();
     let dispatcher = crate::messaging::Dispatcher::new(state.agent.clone(), state.store.clone());
     let pairing = if config.messaging.pairing {
-        Some(crate::pairing::PairingStore::open(&crate::config::ulnclaw_home()))
+        Some(crate::pairing::PairingStore::open(
+            &crate::config::ulnclaw_home(),
+        ))
     } else {
         None
     };
     let result =
-        crate::line::line_handle_webhook(&dispatcher, pairing.as_ref(), &body, &header_pairs)
-            .await;
+        crate::line::line_handle_webhook(&dispatcher, pairing.as_ref(), &body, &header_pairs).await;
     let status = StatusCode::from_u16(result.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     (status, axum::Json(result.body)).into_response()
 }
@@ -12143,7 +12922,9 @@ async fn google_chat_webhook_route(
         .collect();
     let dispatcher = crate::messaging::Dispatcher::new(state.agent.clone(), state.store.clone());
     let pairing = if config.messaging.pairing {
-        Some(crate::pairing::PairingStore::open(&crate::config::ulnclaw_home()))
+        Some(crate::pairing::PairingStore::open(
+            &crate::config::ulnclaw_home(),
+        ))
     } else {
         None
     };
@@ -12169,13 +12950,9 @@ async fn raft_wake_route(
         .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
         .collect();
     let dispatcher = crate::messaging::Dispatcher::new(state.agent.clone(), state.store.clone());
-    let result = crate::raft::raft_handle_wake(
-        &config.messaging.raft,
-        &dispatcher,
-        &body,
-        &header_pairs,
-    )
-    .await;
+    let result =
+        crate::raft::raft_handle_wake(&config.messaging.raft, &dispatcher, &body, &header_pairs)
+            .await;
     let status = StatusCode::from_u16(result.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     (status, axum::Json(result.body)).into_response()
 }
@@ -12218,7 +12995,9 @@ async fn bluebubbles_webhook_route(
     let body_text = String::from_utf8_lossy(&body).to_string();
     let dispatcher = crate::messaging::Dispatcher::new(state.agent.clone(), state.store.clone());
     let pairing = if config.messaging.pairing {
-        Some(crate::pairing::PairingStore::open(&crate::config::ulnclaw_home()))
+        Some(crate::pairing::PairingStore::open(
+            &crate::config::ulnclaw_home(),
+        ))
     } else {
         None
     };
@@ -12244,11 +13023,7 @@ async fn bluebubbles_webhook_route(
                     .into_response()
             } else if message.contains("parse") || message.contains("invalid") {
                 tracing::warn!("bluebubbles webhook bad payload: {message}");
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({ "error": message })),
-                )
-                    .into_response()
+                (StatusCode::BAD_REQUEST, Json(json!({ "error": message }))).into_response()
             } else {
                 // Ack everything else so the BlueBubbles server does not
                 // retry-storm us (hermes logs and returns 200).
@@ -12281,8 +13056,7 @@ async fn msgraph_webhook_route(
     // was ingested or deduped (Graph acks and stops retrying), 403 when
     // the whole batch failed clientState auth, 400 for malformed /
     // resource-not-accepted batches, 413 oversize.
-    match crate::webhook_platforms::msgraph_handle_webhook(cfg, &dispatcher, &body, &query).await
-    {
+    match crate::webhook_platforms::msgraph_handle_webhook(cfg, &dispatcher, &body, &query).await {
         Ok(outcome) => {
             if outcome.accepted > 0 || outcome.duplicates > 0 {
                 StatusCode::ACCEPTED.into_response()
@@ -12427,12 +13201,19 @@ async fn profile_dispatch(
     };
     // Rewrite the URI: strip `/p/<profile>` keeping the query string.
     let path = format!("/{}", rest.trim_start_matches('/'));
-    let query = request.uri().query().map(|q| format!("?{}", q)).unwrap_or_default();
+    let query = request
+        .uri()
+        .query()
+        .map(|q| format!("?{}", q))
+        .unwrap_or_default();
     let new_uri = format!("{}{}", path, query);
     *request.uri_mut() = match new_uri.parse() {
         Ok(uri) => uri,
         Err(_) => {
-            return (StatusCode::BAD_REQUEST, Json(json!({"error": "bad profile path"})))
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "bad profile path"})),
+            )
                 .into_response()
         }
     };
@@ -12476,7 +13257,9 @@ pub async fn serve_multiplex(
     // any credential read outside a profile scope errors loudly instead
     // of leaking another profile's process-env value.
     crate::secret_scope::set_multiplex_active(
-        hub.as_ref().map(|hub| hub.multiplex_enabled()).unwrap_or(false),
+        hub.as_ref()
+            .map(|hub| hub.multiplex_enabled())
+            .unwrap_or(false),
     );
     let mut app = router(state.clone());
     if let Some(hub) = hub {
@@ -12496,7 +13279,11 @@ pub async fn serve_multiplex(
         app = app.merge(mirror);
         tracing::info!(
             "gateway profile multiplexing: {} ({} profile(s) configured)",
-            if hub.multiplex { "on" } else { "off (prefix ignored)" },
+            if hub.multiplex {
+                "on"
+            } else {
+                "off (prefix ignored)"
+            },
             hub.profiles.len()
         );
     }
@@ -12512,17 +13299,29 @@ pub async fn serve_multiplex(
     let bound = listener
         .local_addr()
         .map_err(|e| AgentError::config(format!("gateway local_addr {}: {}", addr, e)))?;
-    let bound_host = if bound.ip().is_unspecified() { "127.0.0.1" } else { &bound.ip().to_string() };
+    let bound_host = if bound.ip().is_unspecified() {
+        "127.0.0.1"
+    } else {
+        &bound.ip().to_string()
+    };
     let bound_display = format!("{bound_host}:{}", bound.port());
     tracing::info!(
         "ulnclaw gateway listening on http://{} (auth: {})",
         bound_display,
-        if state.key.is_some() { "bearer token" } else { "none" }
+        if state.key.is_some() {
+            "bearer token"
+        } else {
+            "none"
+        }
     );
     println!(
         "ulnclaw gateway listening on http://{} (auth: {})",
         bound_display,
-        if state.key.is_some() { "bearer token" } else { "none" }
+        if state.key.is_some() {
+            "bearer token"
+        } else {
+            "none"
+        }
     );
     // P712: READY=1 + STATUS once the listener is bound (hermes
     // `watchdog.ready` after a configured gateway is truly running).
@@ -12548,7 +13347,12 @@ pub async fn serve_multiplex(
     // "appears stalled" notice in the chat. Progress stamps come from
     // the shared activity contract; 0 disables the watchdog.
     let stall_timeout = crate::session_stall::resolve_stall_timeout(
-        state.agent.context().config.gateway.session_stall_timeout_secs,
+        state
+            .agent
+            .context()
+            .config
+            .gateway
+            .session_stall_timeout_secs,
     );
     let stall_watcher = if stall_timeout > 0.0 {
         tracing::info!(
@@ -12575,14 +13379,20 @@ pub async fn serve_multiplex(
     // alive" from "runtime frozen", and a frozen runtime is hard-exited
     // after 3 missed probes so the supervisor revives the gateway.
     let heartbeat_task = tokio::spawn(crate::shutdown_watchdog::loop_heartbeat_forever(
-        std::time::Duration::from_secs(crate::shutdown_watchdog::DEFAULT_HEARTBEAT_INTERVAL_S as u64),
+        std::time::Duration::from_secs(
+            crate::shutdown_watchdog::DEFAULT_HEARTBEAT_INTERVAL_S as u64,
+        ),
         None,
     ));
     let mut loop_watchdog = if state.agent.context().config.gateway.loop_watchdog {
         crate::shutdown_watchdog::start_loop_liveness_watchdog(
             tokio::runtime::Handle::current(),
-            std::time::Duration::from_secs(crate::shutdown_watchdog::DEFAULT_LOOP_WATCHDOG_INTERVAL_S as u64),
-            std::time::Duration::from_secs(crate::shutdown_watchdog::DEFAULT_LOOP_WATCHDOG_TIMEOUT_S as u64),
+            std::time::Duration::from_secs(
+                crate::shutdown_watchdog::DEFAULT_LOOP_WATCHDOG_INTERVAL_S as u64,
+            ),
+            std::time::Duration::from_secs(
+                crate::shutdown_watchdog::DEFAULT_LOOP_WATCHDOG_TIMEOUT_S as u64,
+            ),
             crate::shutdown_watchdog::DEFAULT_LOOP_WATCHDOG_MAX_STRIKES,
             GATEWAY_SERVICE_RESTART_EXIT_CODE,
         )
@@ -12652,10 +13462,8 @@ pub async fn serve_multiplex(
 #[cfg(unix)]
 async fn shutdown_signal_arrived() -> i32 {
     use tokio::signal::unix::{signal, SignalKind};
-    let mut sigterm =
-        signal(SignalKind::terminate()).expect("SIGTERM signal handler installs");
-    let mut sigint =
-        signal(SignalKind::interrupt()).expect("SIGINT signal handler installs");
+    let mut sigterm = signal(SignalKind::terminate()).expect("SIGTERM signal handler installs");
+    let mut sigint = signal(SignalKind::interrupt()).expect("SIGINT signal handler installs");
     tokio::select! {
         _ = sigterm.recv() => libc::SIGTERM,
         _ = sigint.recv() => libc::SIGINT,
@@ -12731,7 +13539,10 @@ fn constant_time_eq(left: &str, right: &str) -> bool {
     if left.len() != right.len() {
         return false;
     }
-    left.iter().zip(right).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0
+    left.iter()
+        .zip(right)
+        .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+        == 0
 }
 
 /// The Chronos fire webhook is public like hermes' `PUBLIC_API_PATHS`
@@ -12838,7 +13649,11 @@ async fn health(State(state): State<Arc<GatewayState>>) -> Json<Value> {
 /// pid, updated_at). Probes expose status and counts only — never
 /// config values or credentials.
 async fn health_detailed(State(state): State<Arc<GatewayState>>) -> Json<Value> {
-    let sessions = state.store.list_session_rows(1).map(|rows| rows.len()).unwrap_or(0);
+    let sessions = state
+        .store
+        .list_session_rows(1)
+        .map(|rows| rows.len())
+        .unwrap_or(0);
     let runs = state.runs.lock().await.len();
     let queued_depth: usize = state
         .queued_prompts
@@ -12914,8 +13729,7 @@ async fn models(State(state): State<Arc<GatewayState>>) -> Json<Value> {
     }))
 }
 
-#[derive(serde::Deserialize)]
-#[derive(Default)]
+#[derive(serde::Deserialize, Default)]
 struct ModelOptionsQuery {
     refresh: Option<String>,
     include_unconfigured: Option<String>,
@@ -13133,19 +13947,27 @@ async fn get_delegation_http(
         let home = state.agent.context().home.clone();
         let result = crate::async_delegation::read_result(&home, &id);
         return Json(json!({
-            "id": record.id,
-            "status": record.status,
-            "tasks": record.tasks,
-            "parent_session_key": record.parent_session_key,
-            "created_ms": record.created_ms,
-            "finished_ms": record.finished_ms,
-            "log_dir": record.log_dir.display().to_string(),
-        "result": result,
-    }))
-    .into_response();
+                "id": record.id,
+                "status": record.status,
+                "tasks": record.tasks,
+                "parent_session_key": record.parent_session_key,
+                "created_ms": record.created_ms,
+                "finished_ms": record.finished_ms,
+                "log_dir": record.log_dir.display().to_string(),
+            "result": result,
+        }))
+        .into_response();
     }
     // Durable-registry fallback: delegations from previous processes.
-    if let Some((_, origin, row_state, dispatched_at, completed_at, result_json, delivery_attempts)) = state
+    if let Some((
+        _,
+        origin,
+        row_state,
+        dispatched_at,
+        completed_at,
+        result_json,
+        delivery_attempts,
+    )) = state
         .store
         .delegation_rows(500)
         .into_iter()
@@ -13182,7 +14004,11 @@ async fn get_delegation_http(
 /// routes `terminal.close` / `pane.reveal` / `preview.open` /
 /// `message.reaction` to its panes and answers `terminal.read` requests
 /// via `POST /api/desktop/read-response`.
-async fn desktop_events() -> axum::response::Sse<impl futures::Stream<Item = std::result::Result<axum::response::sse::Event, std::convert::Infallible>>> {
+async fn desktop_events() -> axum::response::Sse<
+    impl futures::Stream<
+        Item = std::result::Result<axum::response::sse::Event, std::convert::Infallible>,
+    >,
+> {
     let rx = crate::desktop_bridge::subscribe();
     let stream = futures::stream::unfold(rx, |mut rx| async move {
         loop {
@@ -13193,9 +14019,7 @@ async fn desktop_events() -> axum::response::Sse<impl futures::Stream<Item = std
                         "event": envelope.event,
                         "payload": envelope.payload,
                     });
-                    let event = axum::response::sse::Event::default()
-                        .json_data(data)
-                        .ok()?;
+                    let event = axum::response::sse::Event::default().json_data(data).ok()?;
                     return Some((Ok(event), rx));
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
@@ -13203,8 +14027,7 @@ async fn desktop_events() -> axum::response::Sse<impl futures::Stream<Item = std
             }
         }
     });
-    axum::response::Sse::new(stream)
-        .keep_alive(axum::response::sse::KeepAlive::new())
+    axum::response::Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::new())
 }
 
 /// `POST /api/desktop/read-response` — the webview's answer to a pending
@@ -13225,10 +14048,8 @@ async fn desktop_read_response(Json(body): Json<Value>) -> Response {
             other => other.to_string(),
         })
         .unwrap_or_default();
-    let resolved = crate::desktop_bridge::resolve_read(
-        id,
-        if ok { Ok(result) } else { Err(result) },
-    );
+    let resolved =
+        crate::desktop_bridge::resolve_read(id, if ok { Ok(result) } else { Err(result) });
     if resolved {
         Json(json!({"resolved": true})).into_response()
     } else {
@@ -13478,7 +14299,12 @@ async fn chat_completions(
                     role: Role::Tool,
                     content: Some(text),
                     tool_calls: None,
-                    tool_call_id: message.content.as_ref().and_then(|c| c.get("tool_call_id")).and_then(|v| v.as_str()).map(String::from),
+                    tool_call_id: message
+                        .content
+                        .as_ref()
+                        .and_then(|c| c.get("tool_call_id"))
+                        .and_then(|v| v.as_str())
+                        .map(String::from),
                     name: None,
                 }),
                 _ => {}
@@ -13499,7 +14325,11 @@ async fn chat_completions(
         .metrics
         .chat_completions
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let history_arg = if history.is_empty() { None } else { Some(history) };
+    let history_arg = if history.is_empty() {
+        None
+    } else {
+        Some(history)
+    };
     if request.stream {
         return stream_agent_response(state, prompt, history_arg, session_id, Vec::new());
     }
@@ -13508,7 +14338,9 @@ async fn chat_completions(
         .and_then(|sid| session_model_override(&state, sid));
     let outcome = await_with_model_override(
         override_model,
-        state.agent.run_with_session(&prompt, history_arg, session_id.as_deref()),
+        state
+            .agent
+            .run_with_session(&prompt, history_arg, session_id.as_deref()),
     )
     .await;
     match outcome {
@@ -13531,7 +14363,9 @@ async fn chat_completions(
                 "session_id": result.session_id,
             }))
             .into_response();
-            state.metrics.record_run(&result.usage, result.tool_calls.len());
+            state
+                .metrics
+                .record_run(&result.usage, result.tool_calls.len());
             if let Some(ref sid) = result.session_id {
                 if let Ok(value) = sid.parse() {
                     response.headers_mut().insert(SESSION_HEADER, value);
@@ -13627,31 +14461,22 @@ fn stream_agent_response(
     images: Vec<crate::provider::MessageImage>,
 ) -> Response {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<crate::agent::StreamEvent>();
-    let emitter: Arc<dyn Fn(crate::agent::StreamEvent) + Send + Sync> =
-        Arc::new(move |event| {
-            let _ = tx.send(event);
-        });
+    let emitter: Arc<dyn Fn(crate::agent::StreamEvent) + Send + Sync> = Arc::new(move |event| {
+        let _ = tx.send(event);
+    });
 
     let runner = state.agent.clone();
     let run_session_id = session_id.clone();
     let override_model = session_id
         .as_deref()
         .and_then(|sid| session_model_override(&state, sid));
-    let task = tokio::spawn(crate::agent::stream_scope(
-        emitter,
-        async move {
-            await_with_model_override(
-                override_model,
-                runner.run_with_session_images(
-                    &prompt,
-                    images,
-                    history,
-                    run_session_id.as_deref(),
-                ),
-            )
-            .await
-        },
-    ));
+    let task = tokio::spawn(crate::agent::stream_scope(emitter, async move {
+        await_with_model_override(
+            override_model,
+            runner.run_with_session_images(&prompt, images, history, run_session_id.as_deref()),
+        )
+        .await
+    }));
 
     let sse_state = SseState {
         rx,
@@ -13662,9 +14487,7 @@ fn stream_agent_response(
         started: false,
         pending: std::collections::VecDeque::new(),
         finished: false,
-        flush: session_id
-            .clone()
-            .map(|sid| (state.clone(), sid)),
+        flush: session_id.clone().map(|sid| (state.clone(), sid)),
     };
 
     let stream = futures::stream::unfold(sse_state, |mut st| async move {
@@ -13682,7 +14505,10 @@ fn stream_agent_response(
             if !st.started {
                 st.started = true;
                 let chunk = make_chunk(&st, json!({"role": "assistant"}), Value::Null);
-                return Some((Ok::<_, std::convert::Infallible>(Event::default().json_data(chunk).unwrap()), st));
+                return Some((
+                    Ok::<_, std::convert::Infallible>(Event::default().json_data(chunk).unwrap()),
+                    st,
+                ));
             }
             if let Some(event) = st.pending.pop_front() {
                 return Some((Ok(event), st));
@@ -13927,26 +14753,22 @@ fn stream_responses_response(
     prev_response_id: Option<String>,
 ) -> Response {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<crate::agent::StreamEvent>();
-    let emitter: Arc<dyn Fn(crate::agent::StreamEvent) + Send + Sync> =
-        Arc::new(move |event| {
-            let _ = tx.send(event);
-        });
+    let emitter: Arc<dyn Fn(crate::agent::StreamEvent) + Send + Sync> = Arc::new(move |event| {
+        let _ = tx.send(event);
+    });
 
     let runner = state.agent.clone();
     let run_session_id = session_id.clone();
     let override_model = session_id
         .as_deref()
         .and_then(|sid| session_model_override(&state, sid));
-    let task = tokio::spawn(crate::agent::stream_scope(
-        emitter,
-        async move {
-            await_with_model_override(
-                override_model,
-                runner.run_with_session(&prompt, history, run_session_id.as_deref()),
-            )
-            .await
-        },
-    ));
+    let task = tokio::spawn(crate::agent::stream_scope(emitter, async move {
+        await_with_model_override(
+            override_model,
+            runner.run_with_session(&prompt, history, run_session_id.as_deref()),
+        )
+        .await
+    }));
 
     let gateway_state = state.clone();
     let sse_state = ResponsesSseState {
@@ -14009,7 +14831,11 @@ fn stream_responses_response(
                 Some(crate::agent::StreamEvent::ToolProgress { .. }) => {
                     // Responses clients get structured items instead.
                 }
-                Some(crate::agent::StreamEvent::ToolStarted { name, call_id, arguments }) => {
+                Some(crate::agent::StreamEvent::ToolStarted {
+                    name,
+                    call_id,
+                    arguments,
+                }) => {
                     let item_id = format!("fc_{}", uuid::Uuid::new_v4().simple());
                     let idx = st.output_index;
                     st.output_index += 1;
@@ -14248,12 +15074,16 @@ async fn create_response(
         .and_then(|sid| session_model_override(&state, sid));
     let outcome = await_with_model_override(
         override_model,
-        state.agent.run_with_session(&prompt, history, session_id.as_deref()),
+        state
+            .agent
+            .run_with_session(&prompt, history, session_id.as_deref()),
     )
     .await;
     match outcome {
         Ok(result) => {
-            state.metrics.record_run(&result.usage, result.tool_calls.len());
+            state
+                .metrics
+                .record_run(&result.usage, result.tool_calls.len());
             let response_id = format!("resp_{}", uuid::Uuid::new_v4());
             let body = json!({
                 "id": response_id,
@@ -14310,8 +15140,7 @@ async fn delete_response(
 // Session management API
 // ---------------------------------------------------------------------------
 
-#[derive(Deserialize)]
-#[derive(Default)]
+#[derive(Deserialize, Default)]
 struct SessionsQuery {
     limit: Option<usize>,
     /// P509: `?preview=true` attaches a `last_message` snippet to each
@@ -14347,9 +15176,7 @@ struct SessionsQuery {
 /// renders it as a project badge (hermes desktop session grouping by
 /// project). Best-effort: a closed/missing projects store leaves rows
 /// with `project: null` instead of failing the listing.
-fn enrich_sessions_with_projects(
-    rows: Vec<crate::session::sqlite::SessionRow>,
-) -> Vec<Value> {
+fn enrich_sessions_with_projects(rows: Vec<crate::session::sqlite::SessionRow>) -> Vec<Value> {
     let cwds: Vec<String> = rows
         .iter()
         .filter_map(|row| row.cwd.clone())
@@ -14478,8 +15305,7 @@ async fn list_sessions(
                         .into_iter()
                         .filter(|m| m.role != Role::System)
                         .collect();
-                    let conversation =
-                        crate::context::ContextCompressor::estimate_tokens(&history);
+                    let conversation = crate::context::ContextCompressor::estimate_tokens(&history);
                     let used = static_cost + conversation;
                     if let Some(object) = row.as_object_mut() {
                         object.insert("context_used".to_string(), json!(used));
@@ -14710,7 +15536,11 @@ async fn create_session(
                 "session.created",
                 &json!({"session_id": id, "source": source}),
             );
-            (StatusCode::CREATED, Json(json!({"id": id, "source": source}))).into_response()
+            (
+                StatusCode::CREATED,
+                Json(json!({"id": id, "source": source})),
+            )
+                .into_response()
         }
         Err(e) => server_error(&e.to_string()),
     }
@@ -14764,11 +15594,8 @@ async fn get_session(State(state): State<Arc<GatewayState>>, Path(id): Path<Stri
                     crate::context::ContextCompressor::estimate_tokens(&history);
                 let parts = state.agent.context_breakdown_parts().await;
                 let budget = state.agent.context_budget_tokens();
-                let breakdown = crate::context::breakdown::compute(
-                    &parts,
-                    conversation_tokens,
-                    budget,
-                );
+                let breakdown =
+                    crate::context::breakdown::compute(&parts, conversation_tokens, budget);
                 object.insert(
                     "context".to_string(),
                     json!({
@@ -14793,11 +15620,7 @@ async fn delete_session(
         Ok(Some(_)) => match state.store.delete_session(&id) {
             Ok(()) => {
                 // P445: tell the desktop shell the session disappeared.
-                crate::desktop_bridge::publish(
-                    &id,
-                    "session.deleted",
-                    &json!({"session_id": id}),
-                );
+                crate::desktop_bridge::publish(&id, "session.deleted", &json!({"session_id": id}));
                 Json(json!({"deleted": id})).into_response()
             }
             Err(e) => server_error(&e.to_string()),
@@ -14836,7 +15659,11 @@ fn window_messages<T: Clone>(
     let len = messages.len();
     let start = after.unwrap_or(0).min(len);
     let end = before.unwrap_or(len).min(len);
-    let mut window: Vec<T> = if start < end { messages[start..end].to_vec() } else { Vec::new() };
+    let mut window: Vec<T> = if start < end {
+        messages[start..end].to_vec()
+    } else {
+        Vec::new()
+    };
     if let Some(limit) = limit {
         if window.len() > limit {
             window = window.split_off(window.len() - limit);
@@ -14857,7 +15684,8 @@ async fn session_messages(
                 let data: Vec<Value> = rows
                     .into_iter()
                     .map(|(timestamp, message)| {
-                        let mut value = serde_json::to_value(&message).unwrap_or_else(|_| json!({}));
+                        let mut value =
+                            serde_json::to_value(&message).unwrap_or_else(|_| json!({}));
                         if let Value::Object(map) = &mut value {
                             map.insert("timestamp".to_string(), json!(timestamp));
                         }
@@ -14866,7 +15694,8 @@ async fn session_messages(
                     .collect();
                 // P462/P468/P476: trailing-window + cursor pagination.
                 let data = window_messages(data, query.after, query.before, query.limit);
-                Json(json!({"object": "list", "session_id": id, "total": total, "data": data})).into_response()
+                Json(json!({"object": "list", "session_id": id, "total": total, "data": data}))
+                    .into_response()
             }
             Err(e) => server_error(&e.to_string()),
         };
@@ -14876,7 +15705,8 @@ async fn session_messages(
             let total = messages.len();
             // P462/P468/P476: trailing-window + cursor pagination.
             let messages = window_messages(messages, query.after, query.before, query.limit);
-            Json(json!({"object": "list", "session_id": id, "total": total, "data": messages})).into_response()
+            Json(json!({"object": "list", "session_id": id, "total": total, "data": messages}))
+                .into_response()
         }
         Err(e) => server_error(&e.to_string()),
     }
@@ -15262,11 +16092,9 @@ async fn create_backup(
             "message": "No state files found to snapshot.",
         }))
         .into_response(),
-        Ok(Err(e)) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e})),
-        )
-            .into_response(),
+        Ok(Err(e)) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("backup task failed: {e}")})),
@@ -15293,12 +16121,16 @@ async fn prune_backups(
         tokio::task::spawn_blocking(move || crate::backup::prune_quick_snapshots(&home, keep))
             .await
             .unwrap_or(0);
-    Json(json!({"object": "ulnclaw.backup_prune", "removed": removed, "keep": keep})).into_response()
+    Json(json!({"object": "ulnclaw.backup_prune", "removed": removed, "keep": keep}))
+        .into_response()
 }
 
 /// `POST /api/backups/:id/restore` — overlay a snapshot onto the home
 /// (`ulnclaw backup restore <id>`). 404 when the snapshot is unknown.
-async fn restore_backup(State(state): State<Arc<GatewayState>>, Path(id): Path<String>) -> Response {
+async fn restore_backup(
+    State(state): State<Arc<GatewayState>>,
+    Path(id): Path<String>,
+) -> Response {
     let home = state.agent.context().home.clone();
     let snapshot_id = id.clone();
     let result = tokio::task::spawn_blocking(move || {
@@ -15306,17 +16138,17 @@ async fn restore_backup(State(state): State<Arc<GatewayState>>, Path(id): Path<S
     })
     .await;
     match result {
-        Ok(Ok(true)) => Json(json!({"object": "ulnclaw.backup_restore", "restored": true})).into_response(),
+        Ok(Ok(true)) => {
+            Json(json!({"object": "ulnclaw.backup_restore", "restored": true})).into_response()
+        }
         Ok(Ok(false)) => (
             StatusCode::NOT_FOUND,
             Json(json!({"error": format!("snapshot '{id}' not found or empty")})),
         )
             .into_response(),
-        Ok(Err(e)) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e})),
-        )
-            .into_response(),
+        Ok(Err(e)) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("restore task failed: {e}")})),
@@ -15327,7 +16159,10 @@ async fn restore_backup(State(state): State<Arc<GatewayState>>, Path(id): Path<S
 
 /// `GET /api/backups/:id/download` — zip a quick snapshot on demand and
 /// serve it as an attachment (hermes `/api/ops/backup/download` parity).
-async fn download_backup(State(state): State<Arc<GatewayState>>, Path(id): Path<String>) -> Response {
+async fn download_backup(
+    State(state): State<Arc<GatewayState>>,
+    Path(id): Path<String>,
+) -> Response {
     let home = state.agent.context().home.clone();
     let snapshot_id = id.clone();
     let result = tokio::task::spawn_blocking(move || {
@@ -15348,11 +16183,9 @@ async fn download_backup(State(state): State<Arc<GatewayState>>, Path(id): Path<
             ];
             (headers, bytes).into_response()
         }
-        Ok(Err(e)) if e.contains("not found") || e.contains("invalid") || e.contains("empty") => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": e })),
-        )
-            .into_response(),
+        Ok(Err(e)) if e.contains("not found") || e.contains("invalid") || e.contains("empty") => {
+            (StatusCode::NOT_FOUND, Json(json!({ "error": e }))).into_response()
+        }
         Ok(Err(e)) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": e })),
@@ -15380,7 +16213,11 @@ async fn curator_status(State(state): State<Arc<GatewayState>>) -> Response {
             .collect::<Vec<_>>();
         let archived = crate::skill_usage::list_archived_skill_names(&home);
         let mut rows = crate::skill_usage::usage_report(&home);
-        rows.sort_by(|a, b| b.activity_count.cmp(&a.activity_count).then(a.name.cmp(&b.name)));
+        rows.sort_by(|a, b| {
+            b.activity_count
+                .cmp(&a.activity_count)
+                .then(a.name.cmp(&b.name))
+        });
         let usage = rows
             .iter()
             .map(|r| {
@@ -15444,7 +16281,9 @@ async fn curator_run(
     .await;
     match result {
         Ok(Ok(payload)) => Json(payload).into_response(),
-        Ok(Err(message)) => (StatusCode::CONFLICT, Json(json!({ "error": message }))).into_response(),
+        Ok(Err(message)) => {
+            (StatusCode::CONFLICT, Json(json!({ "error": message }))).into_response()
+        }
         Err(e) => server_error(&format!("curator task failed: {e}")),
     }
 }
@@ -15544,8 +16383,7 @@ async fn curator_restore(
     let home = state.agent.context().home.clone();
     let skill = body.skill.clone();
     let result =
-        tokio::task::spawn_blocking(move || crate::skill_usage::restore_skill(&home, &skill))
-            .await;
+        tokio::task::spawn_blocking(move || crate::skill_usage::restore_skill(&home, &skill)).await;
     match result {
         Ok((true, message)) => {
             Json(json!({"ok": true, "skill": body.skill, "message": message})).into_response()
@@ -15588,7 +16426,11 @@ async fn checkpoints_list(
     State(state): State<Arc<GatewayState>>,
     Query(query): Query<CheckpointsListQuery>,
 ) -> Response {
-    let Some(dir) = query.dir.map(|d| d.trim().to_string()).filter(|d| !d.is_empty()) else {
+    let Some(dir) = query
+        .dir
+        .map(|d| d.trim().to_string())
+        .filter(|d| !d.is_empty())
+    else {
         return bad_request("dir is required", Some("invalid_request"));
     };
     let home = state.agent.context().home.clone();
@@ -15625,7 +16467,10 @@ async fn checkpoints_restore(
     let config = crate::config::UlncLawConfig::load(None).unwrap_or_default();
     let manager =
         crate::checkpoint::CheckpointManager::new(home.join("checkpoints"), &config.checkpoints);
-    match manager.restore(&body.dir, &body.hash, body.file.as_deref()).await {
+    match manager
+        .restore(&body.dir, &body.hash, body.file.as_deref())
+        .await
+    {
         Ok(result) => Json(result).into_response(),
         Err(e) => (
             StatusCode::BAD_REQUEST,
@@ -15653,7 +16498,8 @@ async fn checkpoints_prune(
     let manager =
         crate::checkpoint::CheckpointManager::new(home.join("checkpoints"), &config.checkpoints);
     let stats = manager.prune(days, true).await;
-    Json(json!({"object": "ulnclaw.checkpoint_prune", "stats": stats, "days": days})).into_response()
+    Json(json!({"object": "ulnclaw.checkpoint_prune", "stats": stats, "days": days}))
+        .into_response()
 }
 
 // ── Learning graph (hermes web_server /api/learning/* parity) ─────────────
@@ -15662,9 +16508,10 @@ async fn checkpoints_prune(
 /// edges (desktop "star map" / journey panel).
 async fn learning_graph(State(state): State<Arc<GatewayState>>) -> Response {
     let home = state.agent.context().home.clone();
-    let payload = tokio::task::spawn_blocking(move || crate::learning_graph::build_learning_graph(&home))
-        .await
-        .unwrap_or_else(|e| json!({"error": format!("learning graph task failed: {e}")}));
+    let payload =
+        tokio::task::spawn_blocking(move || crate::learning_graph::build_learning_graph(&home))
+            .await
+            .unwrap_or_else(|e| json!({"error": format!("learning graph task failed: {e}")}));
     axum::Json(payload).into_response()
 }
 
@@ -15680,17 +16527,14 @@ async fn learning_node_get(
 ) -> Response {
     let home = state.agent.context().home.clone();
     let id = params.id.clone();
-    let result = tokio::task::spawn_blocking(move || crate::learning_mutations::node_detail(&home, &id))
-        .await
-        .unwrap_or_else(|e| json!({"ok": false, "message": format!("task failed: {e}")}));
+    let result =
+        tokio::task::spawn_blocking(move || crate::learning_mutations::node_detail(&home, &id))
+            .await
+            .unwrap_or_else(|e| json!({"ok": false, "message": format!("task failed: {e}")}));
     if result.get("ok").and_then(|v| v.as_bool()) == Some(true) {
         axum::Json(result).into_response()
     } else {
-        (
-            StatusCode::NOT_FOUND,
-            axum::Json(result),
-        )
-            .into_response()
+        (StatusCode::NOT_FOUND, axum::Json(result)).into_response()
     }
 }
 
@@ -15713,9 +16557,10 @@ async fn learning_node_delete(
 ) -> Response {
     let home = state.agent.context().home.clone();
     let id = body.id.clone();
-    let result = tokio::task::spawn_blocking(move || crate::learning_mutations::delete_node(&home, &id))
-        .await
-        .unwrap_or_else(|e| json!({"ok": false, "message": format!("task failed: {e}")}));
+    let result =
+        tokio::task::spawn_blocking(move || crate::learning_mutations::delete_node(&home, &id))
+            .await
+            .unwrap_or_else(|e| json!({"ok": false, "message": format!("task failed: {e}")}));
     if result.get("ok").and_then(|v| v.as_bool()) == Some(true) {
         axum::Json(result).into_response()
     } else {
@@ -15926,9 +16771,7 @@ fn moa_presets_digest(config: &crate::config::UlncLawConfig) -> String {
             preset.aggregator.label()
         ));
     }
-    lines.push(
-        "usage: /moa <prompt>  (runs one prompt through the default preset)".to_string(),
-    );
+    lines.push("usage: /moa <prompt>  (runs one prompt through the default preset)".to_string());
     lines.join("\n")
 }
 
@@ -15947,9 +16790,7 @@ async fn resolve_gateway_slash(
     let rest = parts.next().unwrap_or("").trim();
     let skills_dir = state.agent.context().home.join("skills");
     match cmd {
-        "/help" | "/commands" => {
-            Some(GatewaySlash::Direct(GATEWAY_SLASH_HELP.to_string()))
-        }
+        "/help" | "/commands" => Some(GatewaySlash::Direct(GATEWAY_SLASH_HELP.to_string())),
         "/skills" => {
             let skills = crate::skills::list_skills(&skills_dir);
             if skills.is_empty() {
@@ -16040,12 +16881,7 @@ async fn resolve_gateway_slash(
             let final_title = match state.store.set_session_title(session_id, &new_title) {
                 Ok(()) => new_title,
                 Err(_) => match state.store.get_next_title_in_lineage(&new_title) {
-                    Ok(deduped)
-                        if state
-                            .store
-                            .set_session_title(session_id, &deduped)
-                            .is_ok() =>
-                    {
+                    Ok(deduped) if state.store.set_session_title(session_id, &deduped).is_ok() => {
                         deduped
                     }
                     _ => {
@@ -16084,9 +16920,7 @@ async fn resolve_gateway_slash(
             }
             let store = match crate::kanban::KanbanStore::open_default() {
                 Ok(store) => store,
-                Err(e) => {
-                    return Some(GatewaySlash::Direct(format!("kanban failed: {e}")))
-                }
+                Err(e) => return Some(GatewaySlash::Direct(format!("kanban failed: {e}"))),
             };
             match store.create_task(&crate::kanban::NewTask {
                 title: rest.to_string(),
@@ -16156,10 +16990,9 @@ async fn resolve_gateway_slash(
                 .into_iter()
                 .filter(|m| m.role != Role::System)
                 .collect();
-            let compressor = crate::context::ContextCompressor::new(
-                state.agent.context_budget_tokens(),
-            )
-            .with_timezone(state.agent.context().config.timezone.clone());
+            let compressor =
+                crate::context::ContextCompressor::new(state.agent.context_budget_tokens())
+                    .with_timezone(state.agent.context().config.timezone.clone());
             let before_messages = history.len();
             if before_messages <= compressor.keep_recent + 2 {
                 return Some(GatewaySlash::Direct(format!(
@@ -16238,9 +17071,7 @@ async fn resolve_gateway_slash(
                 "context budget: {} tokens",
                 state.agent.context_budget_tokens()
             ));
-            lines.push(format!(
-                "gateway uptime: {hours}h {minutes}m {seconds}s"
-            ));
+            lines.push(format!("gateway uptime: {hours}h {minutes}m {seconds}s"));
             Some(GatewaySlash::Direct(lines.join("\n")))
         }
         "/context" => {
@@ -16257,8 +17088,7 @@ async fn resolve_gateway_slash(
             let conversation_tokens = crate::context::ContextCompressor::estimate_tokens(&history);
             let parts = state.agent.context_breakdown_parts().await;
             let budget = state.agent.context_budget_tokens();
-            let payload =
-                crate::context::breakdown::compute(&parts, conversation_tokens, budget);
+            let payload = crate::context::breakdown::compute(&parts, conversation_tokens, budget);
             let mut lines = crate::context::breakdown::render_breakdown_lines(&payload, true);
             if rest.eq_ignore_ascii_case("all") {
                 let config = state.agent.context().config.clone();
@@ -16271,8 +17101,8 @@ async fn resolve_gateway_slash(
                         &config.enabled_toolsets,
                         &config.disabled_toolsets,
                     );
-                    let cwd = std::env::current_dir()
-                        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+                    let cwd =
+                        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
                     crate::prompt_size::compute_prompt_breakdown(&config, &home, &cwd, &registry)
                 })
                 .await
@@ -16299,9 +17129,7 @@ async fn resolve_gateway_slash(
                     }
                     if !data.skills.is_empty() {
                         lines.push(String::new());
-                        lines.push(
-                            "Skills by cost (SKILL.md = cost when loaded)".to_string(),
-                        );
+                        lines.push("Skills by cost (SKILL.md = cost when loaded)".to_string());
                         for skill in data.skills.iter().take(DETAILS_TABLE_LIMIT) {
                             let mut name = skill.name.clone();
                             if name.chars().count() > 28 {
@@ -16362,9 +17190,7 @@ async fn resolve_gateway_slash(
                             .unwrap_or_default();
                         lines.push(format!("  - {name}{model}"));
                     }
-                    lines.push(
-                        "restart the gateway with --profile <name> to switch".to_string(),
-                    );
+                    lines.push("restart the gateway with --profile <name> to switch".to_string());
                     Some(GatewaySlash::Direct(lines.join("\n")))
                 }
                 Err(e) => Some(GatewaySlash::Direct(format!("profiles failed: {e}"))),
@@ -16393,9 +17219,7 @@ async fn resolve_gateway_slash(
             let path = crate::config_cmd::config_path();
             let mut doc = match crate::config_cmd::load_toml(&path) {
                 Ok(v) => v,
-                Err(e) => {
-                    return Some(GatewaySlash::Direct(format!("config load failed: {e}")))
-                }
+                Err(e) => return Some(GatewaySlash::Direct(format!("config load failed: {e}"))),
             };
             if let Err(e) = crate::model_cmd::apply_model_choice(&mut doc, provider, model) {
                 return Some(GatewaySlash::Direct(format!("model switch failed: {e}")));
@@ -16464,7 +17288,11 @@ async fn resolve_gateway_slash(
                 };
                 return Some(GatewaySlash::Direct(format!(
                     "priority processing: {mode}\nsupported: {}\nusage: /fast on|off [--global]",
-                    if supported { "yes" } else { "no (OpenAI gpt-/o-series on OpenAI-compatible endpoints only)" }
+                    if supported {
+                        "yes"
+                    } else {
+                        "no (OpenAI gpt-/o-series on OpenAI-compatible endpoints only)"
+                    }
                 )));
             }
             if !supported {
@@ -16505,7 +17333,9 @@ async fn resolve_gateway_slash(
         }
         "/memory" => {
             let home = state.agent.context().home.clone();
-            Some(GatewaySlash::Direct(crate::memory_cmd::memory_status(&home)))
+            Some(GatewaySlash::Direct(crate::memory_cmd::memory_status(
+                &home,
+            )))
         }
         "/learn" => {
             // hermes /learn parity: rewrite the turn into the
@@ -16518,9 +17348,9 @@ async fn resolve_gateway_slash(
         "/platform" => {
             // hermes /platform parity: list connected + retry/pause
             // queue; pause/resume a failing platform's retries.
-            Some(GatewaySlash::Direct(
-                crate::messaging::run_platform_slash(rest),
-            ))
+            Some(GatewaySlash::Direct(crate::messaging::run_platform_slash(
+                rest,
+            )))
         }
         "/handoff" => {
             // hermes /handoff parity (lean): bind this session to a
@@ -16542,11 +17372,7 @@ async fn resolve_gateway_slash(
                     )));
                 }
             } else {
-                let wanted = rest
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .to_lowercase();
+                let wanted = rest.split_whitespace().next().unwrap_or("").to_lowercase();
                 if live.iter().any(|p| p == &wanted) {
                     wanted
                 } else {
@@ -16585,8 +17411,9 @@ async fn resolve_gateway_slash(
                     Some(title) => format!(
                         "\u{21AA} Session **{title}** handed off here — send a message to continue."
                     ),
-                    None => "\u{21AA} Session handed off here — send a message to continue."
-                        .to_string(),
+                    None => {
+                        "\u{21AA} Session handed off here — send a message to continue.".to_string()
+                    }
                 };
                 sender.send_text(&chat_id, &notice).await;
             }
@@ -16631,9 +17458,7 @@ async fn resolve_gateway_slash(
                         .unwrap_or(false);
                 if is_user || is_assistant_text {
                     if hidden_tools > 0 {
-                        lines.push(format!(
-                            "  [tools] ({hidden_tools} tool messages hidden)"
-                        ));
+                        lines.push(format!("  [tools] ({hidden_tools} tool messages hidden)"));
                         hidden_tools = 0;
                     }
                     let (glyph, label) = if is_user {
@@ -16703,9 +17528,7 @@ async fn resolve_gateway_slash(
                 .clamp(1, 50);
             let rows = match state.store.list_session_rows(limit) {
                 Ok(rows) => rows,
-                Err(e) => {
-                    return Some(GatewaySlash::Direct(format!("sessions failed: {e}")))
-                }
+                Err(e) => return Some(GatewaySlash::Direct(format!("sessions failed: {e}"))),
             };
             if rows.is_empty() {
                 return Some(GatewaySlash::Direct("no sessions yet.".to_string()));
@@ -16774,15 +17597,17 @@ async fn resolve_gateway_slash(
                 return Some(GatewaySlash::Direct(if staged.is_empty() {
                     "usage: /image <path> — attach a local image to your next prompt".to_string()
                 } else {
-                    format!("{} image(s) staged for your next prompt: {}", staged.len(), staged.join(", "))
+                    format!(
+                        "{} image(s) staged for your next prompt: {}",
+                        staged.len(),
+                        staged.join(", ")
+                    )
                 }));
             }
             let path = std::path::Path::new(rest.trim());
             match std::fs::metadata(path) {
                 Ok(meta) if meta.is_file() => {}
-                Ok(_) => {
-                    return Some(GatewaySlash::Direct(format!("{rest}: not a file")))
-                }
+                Ok(_) => return Some(GatewaySlash::Direct(format!("{rest}: not a file"))),
                 Err(e) => return Some(GatewaySlash::Direct(format!("{rest}: {e}"))),
             }
             let mime = crate::media_cache::mime_for_ext(path);
@@ -16837,11 +17662,7 @@ async fn resolve_gateway_slash(
             };
             let home = match crate::config::ensure_home() {
                 Ok(home) => home,
-                Err(e) => {
-                    return Some(GatewaySlash::Direct(format!(
-                        "debug bundle failed: {e}"
-                    )))
-                }
+                Err(e) => return Some(GatewaySlash::Direct(format!("debug bundle failed: {e}"))),
             };
             let output = home
                 .join("debug-bundles")
@@ -16915,7 +17736,10 @@ async fn resolve_gateway_slash(
                     "usage: /steer <prompt> — injected after the next tool call without interrupting".to_string(),
                 ));
             }
-            let depth = state.agent.steer_message(session_id, rest.to_string()).await;
+            let depth = state
+                .agent
+                .steer_message(session_id, rest.to_string())
+                .await;
             Some(GatewaySlash::Direct(format!(
                 "steered (depth {depth}) — the message is injected after the next tool call"
             )))
@@ -16950,9 +17774,9 @@ async fn resolve_gateway_slash(
                                 crate::shutdown_watchdog::DEFAULT_SHUTDOWN_WATCHDOG_GRACE_S,
                             ),
                         ),
-                        snapshot_fn: Some(std::sync::Arc::new(|| {
-                            serde_json::json!({"trigger": "restart_drain"})
-                        })),
+                        snapshot_fn: Some(std::sync::Arc::new(
+                            || serde_json::json!({"trigger": "restart_drain"}),
+                        )),
                         exit_code: GATEWAY_SERVICE_RESTART_EXIT_CODE,
                         dump_path: None,
                         home: None,
@@ -17030,9 +17854,7 @@ async fn resolve_gateway_slash(
                 Some(raw) => match raw.parse::<usize>() {
                     Ok(parsed) => parsed.max(1),
                     Err(_) => {
-                        return Some(GatewaySlash::Direct(format!(
-                            "invalid turn count: {raw}"
-                        )))
+                        return Some(GatewaySlash::Direct(format!("invalid turn count: {raw}")))
                     }
                 },
             };
@@ -17043,8 +17865,7 @@ async fn resolve_gateway_slash(
                 .filter(|(_, m)| is_real_user_turn(m))
                 .map(|(index, _)| index)
                 .collect();
-            let Some(&cut) = user_cuts.iter().rev().nth(turns - 1).or(user_cuts.first())
-            else {
+            let Some(&cut) = user_cuts.iter().rev().nth(turns - 1).or(user_cuts.first()) else {
                 return Some(GatewaySlash::Direct("nothing to undo.".to_string()));
             };
             let removed: Vec<Message> = history.iter().skip(cut).cloned().collect();
@@ -17107,9 +17928,7 @@ async fn resolve_gateway_slash(
             }
             for message in &messages {
                 if let Err(e) = state.store.append_message(&fork_id, message) {
-                    return Some(GatewaySlash::Direct(format!(
-                        "branch copy failed: {e}"
-                    )));
+                    return Some(GatewaySlash::Direct(format!("branch copy failed: {e}")));
                 }
             }
             let name = rest.trim();
@@ -17168,8 +17987,7 @@ async fn resolve_gateway_slash(
                 let home = state.agent.context().home.clone();
                 if !config.checkpoints.enabled {
                     return Some(GatewaySlash::Direct(
-                        "checkpoints are not enabled ([checkpoints] enabled = true)"
-                            .to_string(),
+                        "checkpoints are not enabled ([checkpoints] enabled = true)".to_string(),
                     ));
                 }
                 let manager = crate::checkpoint::CheckpointManager::new(
@@ -17212,9 +18030,7 @@ async fn resolve_gateway_slash(
                             ));
                         }
                     }
-                    Ok(Err(e)) => {
-                        return Some(GatewaySlash::Direct(format!("diff failed: {e}")))
-                    }
+                    Ok(Err(e)) => return Some(GatewaySlash::Direct(format!("diff failed: {e}"))),
                     Err(e) => return Some(GatewaySlash::Direct(format!("diff failed: {e}"))),
                 }
             }
@@ -17569,17 +18385,11 @@ async fn resolve_gateway_slash(
             let value = match arg.as_str() {
                 "on" | "true" | "1" => true,
                 "off" | "false" | "0" => false,
-                _ => {
-                    return Some(GatewaySlash::Direct(
-                        "usage: /verbose on|off".to_string(),
-                    ))
-                }
+                _ => return Some(GatewaySlash::Direct("usage: /verbose on|off".to_string())),
             };
             let mut doc = match crate::config_cmd::load_toml(&path) {
                 Ok(v) => v,
-                Err(e) => {
-                    return Some(GatewaySlash::Direct(format!("config load failed: {e}")))
-                }
+                Err(e) => return Some(GatewaySlash::Direct(format!("config load failed: {e}"))),
             };
             let Some(root) = doc.as_table_mut() else {
                 return Some(GatewaySlash::Direct(
@@ -17620,11 +18430,7 @@ async fn resolve_gateway_slash(
             let mode = match arg.as_str() {
                 "on" | "true" | "1" => "off",
                 "off" | "false" | "0" => "manual",
-                _ => {
-                    return Some(GatewaySlash::Direct(
-                        "usage: /yolo on|off".to_string(),
-                    ))
-                }
+                _ => return Some(GatewaySlash::Direct("usage: /yolo on|off".to_string())),
             };
             match persist_approvals_mode(mode) {
                 Ok(_) => {}
@@ -17633,7 +18439,8 @@ async fn resolve_gateway_slash(
             Some(GatewaySlash::Direct(if mode == "off" {
                 "yolo ON \u{2014} approvals.mode=\"off\" persisted: dangerous commands auto-approve except approvals.deny rules; applies to new runs".to_string()
             } else {
-                "yolo OFF \u{2014} approvals.mode=\"manual\" persisted; applies to new runs".to_string()
+                "yolo OFF \u{2014} approvals.mode=\"manual\" persisted; applies to new runs"
+                    .to_string()
             }))
         }
         "/personality" => {
@@ -17643,9 +18450,7 @@ async fn resolve_gateway_slash(
             let path = crate::config_cmd::config_path();
             let config = match crate::config::UlncLawConfig::load(Some(&path)) {
                 Ok(c) => c,
-                Err(e) => {
-                    return Some(GatewaySlash::Direct(format!("config load failed: {e}")))
-                }
+                Err(e) => return Some(GatewaySlash::Direct(format!("config load failed: {e}"))),
             };
             if config.agent.personalities.is_empty() {
                 return Some(GatewaySlash::Direct(
@@ -17701,7 +18506,10 @@ async fn resolve_gateway_slash(
             let mut lines = vec![format!("tracked runs ({}):", data.len())];
             for run in data.iter().take(10) {
                 let session = run.session_id.as_deref().unwrap_or("-");
-                let mut line = format!("  {} \u{2014} {} (session {session})", run.run_id, run.status);
+                let mut line = format!(
+                    "  {} \u{2014} {} (session {session})",
+                    run.run_id, run.status
+                );
                 if let Some(error) = run.error.as_deref().filter(|e| !e.is_empty()) {
                     let clipped: String = error.chars().take(80).collect();
                     line.push_str(&format!(": {clipped}"));
@@ -17787,9 +18595,7 @@ async fn resolve_gateway_slash(
                             Ok(removed) => Some(GatewaySlash::Direct(format!(
                                 "removed subgoal {n}: {removed}"
                             ))),
-                            Err(e) => Some(GatewaySlash::Direct(format!(
-                                "/subgoal remove: {e}"
-                            ))),
+                            Err(e) => Some(GatewaySlash::Direct(format!("/subgoal remove: {e}"))),
                         },
                         Err(_) => Some(GatewaySlash::Direct(
                             "/subgoal remove: <n> must be a 1-based integer".to_string(),
@@ -17797,9 +18603,7 @@ async fn resolve_gateway_slash(
                     }
                 }
                 "clear" => match manager.clear_subgoals() {
-                    Ok(count) => Some(GatewaySlash::Direct(format!(
-                        "cleared {count} subgoal(s)"
-                    ))),
+                    Ok(count) => Some(GatewaySlash::Direct(format!("cleared {count} subgoal(s)"))),
                     Err(e) => Some(GatewaySlash::Direct(format!("/subgoal clear: {e}"))),
                 },
                 _ => match manager.add_subgoal(rest) {
@@ -17813,16 +18617,8 @@ async fn resolve_gateway_slash(
             // There is no interactive prompt over HTTP, so the
             // approvals.mcp_reload_confirm gate becomes a confirm
             // round-trip: warn first, reload on `/reload-mcp confirm`.
-            let confirm_required = state
-                .agent
-                .context()
-                .config
-                .approvals
-                .mcp_reload_confirm;
-            let confirmed = matches!(
-                rest.trim().to_ascii_lowercase().as_str(),
-                "confirm" | "yes"
-            );
+            let confirm_required = state.agent.context().config.approvals.mcp_reload_confirm;
+            let confirmed = matches!(rest.trim().to_ascii_lowercase().as_str(), "confirm" | "yes");
             if confirm_required && !confirmed {
                 return Some(GatewaySlash::Direct(
                     "\u{26A0}\u{FE0F} /reload-mcp rebuilds the MCP tool surface and invalidates                      the provider prompt cache (the next message re-sends full input tokens).                      Send `/reload-mcp confirm` to proceed."
@@ -17864,7 +18660,12 @@ async fn resolve_gateway_slash(
 
 /// Persist a direct slash exchange so the transcript stays whole, and
 /// answer with a single-chunk SSE stream (chat-completions shape).
-fn direct_sse_response(state: &Arc<GatewayState>, session_id: &str, request: &str, text: String) -> Response {
+fn direct_sse_response(
+    state: &Arc<GatewayState>,
+    session_id: &str,
+    request: &str,
+    text: String,
+) -> Response {
     let user_msg = Message {
         role: Role::User,
         content: Some(request.to_string()),
@@ -17895,11 +18696,14 @@ fn direct_sse_response(state: &Arc<GatewayState>, session_id: &str, request: &st
         })
     };
     let mut final_chunk = chunk(json!({}), json!("stop"));
-    final_chunk["usage"] =
-        json!({"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0});
+    final_chunk["usage"] = json!({"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0});
     let events: Vec<Event> = vec![
-        Event::default().json_data(chunk(json!({"role": "assistant"}), Value::Null)).unwrap(),
-        Event::default().json_data(chunk(json!({"content": text}), Value::Null)).unwrap(),
+        Event::default()
+            .json_data(chunk(json!({"role": "assistant"}), Value::Null))
+            .unwrap(),
+        Event::default()
+            .json_data(chunk(json!({"content": text}), Value::Null))
+            .unwrap(),
         Event::default().json_data(final_chunk).unwrap(),
         Event::default().data("[DONE]"),
     ];
@@ -17916,9 +18720,7 @@ fn direct_sse_response(state: &Arc<GatewayState>, session_id: &str, request: &st
 /// process session key; ulnclaw runs one profile per gateway process).
 fn drain_delegations_into_session(state: &GatewayState, session_id: &str) {
     let key = state.agent.context().session_id.clone();
-    for completion in
-        crate::async_delegation::drain_completions(Some(&state.store), &key)
-    {
+    for completion in crate::async_delegation::drain_completions(Some(&state.store), &key) {
         let message = crate::provider::Message {
             role: crate::provider::Role::User,
             content: Some(completion.message),
@@ -17980,11 +18782,22 @@ async fn session_chat(
         .into_iter()
         .filter(|m| m.role != Role::System)
         .collect::<Vec<_>>();
-    let history_arg = if history.is_empty() { None } else { Some(history) };
+    let history_arg = if history.is_empty() {
+        None
+    } else {
+        Some(history)
+    };
     // P683: request-attached images plus anything `/image` staged for
     // this session ride natively in the model call.
     let mut image_paths = request.images.clone().unwrap_or_default();
-    image_paths.extend(state.pending_images.lock().unwrap().remove(&id).unwrap_or_default());
+    image_paths.extend(
+        state
+            .pending_images
+            .lock()
+            .unwrap()
+            .remove(&id)
+            .unwrap_or_default(),
+    );
     let images = match load_chat_images(&image_paths) {
         Ok(images) => images,
         Err(e) => return bad_request(&e, None),
@@ -17996,12 +18809,16 @@ async fn session_chat(
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let outcome = await_with_model_override(
         override_model,
-        state.agent.run_with_session_images(&message, images, history_arg, Some(&id)),
+        state
+            .agent
+            .run_with_session_images(&message, images, history_arg, Some(&id)),
     )
     .await;
     match outcome {
         Ok(result) => {
-            state.metrics.record_run(&result.usage, result.tool_calls.len());
+            state
+                .metrics
+                .record_run(&result.usage, result.tool_calls.len());
             // P680: flush queued prompts as follow-up turns.
             spawn_queue_drain(&state, &id);
             Json(json!({
@@ -18046,10 +18863,21 @@ async fn session_chat_stream(
         .into_iter()
         .filter(|m| m.role != Role::System)
         .collect::<Vec<_>>();
-    let history_arg = if history.is_empty() { None } else { Some(history) };
+    let history_arg = if history.is_empty() {
+        None
+    } else {
+        Some(history)
+    };
     // P683: request-attached images plus `/image` staged paths.
     let mut image_paths = request.images.clone().unwrap_or_default();
-    image_paths.extend(state.pending_images.lock().unwrap().remove(&id).unwrap_or_default());
+    image_paths.extend(
+        state
+            .pending_images
+            .lock()
+            .unwrap()
+            .remove(&id)
+            .unwrap_or_default(),
+    );
     let images = match load_chat_images(&image_paths) {
         Ok(images) => images,
         Err(e) => return bad_request(&e, None),
@@ -18076,9 +18904,7 @@ async fn patch_session(
     };
     let unknown: Vec<&String> = obj
         .keys()
-        .filter(|k| {
-            k.as_str() != "title" && k.as_str() != "end_reason" && k.as_str() != "archived"
-        })
+        .filter(|k| k.as_str() != "title" && k.as_str() != "end_reason" && k.as_str() != "archived")
         .collect();
     if !unknown.is_empty() {
         let names = unknown
@@ -18131,11 +18957,7 @@ async fn patch_session(
     match state.store.get_session_row(&id) {
         Ok(Some(row)) => {
             // P445: tell the desktop shell the session changed.
-            crate::desktop_bridge::publish(
-                &id,
-                "session.updated",
-                &json!({"session_id": id}),
-            );
+            crate::desktop_bridge::publish(&id, "session.updated", &json!({"session_id": id}));
             Json(json!({"object": "ulnclaw.session", "session": row})).into_response()
         }
         Ok(None) => not_found(&format!("session {} not found", id)),
@@ -18208,9 +19030,7 @@ async fn fork_session(
         .get("title")
         .and_then(|v| v.as_str())
         .map(|v| v.to_string())
-        .unwrap_or_else(|| {
-            format!("{} fork", source.title.as_deref().unwrap_or("fork"))
-        });
+        .unwrap_or_else(|| format!("{} fork", source.title.as_deref().unwrap_or("fork")));
     if let Err(e) = state.store.set_session_title(&fork_id, &title) {
         return bad_request(&e.to_string(), Some("invalid_title"));
     }
@@ -18321,7 +19141,10 @@ fn validate_job_fields(name: &str, prompt: &str) -> std::result::Result<(), Resp
     Ok(())
 }
 
-async fn create_job(State(state): State<Arc<GatewayState>>, Json(request): Json<CreateJobRequest>) -> Response {
+async fn create_job(
+    State(state): State<Arc<GatewayState>>,
+    Json(request): Json<CreateJobRequest>,
+) -> Response {
     let store = match cron_store(&state) {
         Ok(store) => store,
         Err(response) => return response,
@@ -18337,10 +19160,7 @@ async fn create_job(State(state): State<Arc<GatewayState>>, Json(request): Json<
     }
     if let Some(repeat) = request.repeat {
         if repeat < 1 {
-            return jobs_error(
-                StatusCode::BAD_REQUEST,
-                "Repeat must be a positive integer",
-            );
+            return jobs_error(StatusCode::BAD_REQUEST, "Repeat must be a positive integer");
         }
     }
     // `deliver` is stored verbatim (normalized) and resolved at fire
@@ -18349,12 +19169,7 @@ async fn create_job(State(state): State<Arc<GatewayState>>, Json(request): Json<
     let deliver = crate::cron::delivery::normalize_deliver_value(request.deliver.as_ref());
     let parsed = match crate::cron::parse_schedule(&schedule) {
         Ok(parsed) => parsed,
-        Err(e) => {
-            return jobs_error(
-                StatusCode::BAD_REQUEST,
-                &format!("Invalid schedule: {}", e),
-            )
-        }
+        Err(e) => return jobs_error(StatusCode::BAD_REQUEST, &format!("Invalid schedule: {}", e)),
     };
     let job = CronJob {
         id: uuid::Uuid::new_v4().simple().to_string()[..12].to_string(),
@@ -18428,12 +19243,7 @@ async fn instantiate_job_blueprint(
     let deliver = crate::cron::delivery::normalize_deliver_value(Some(&deliver_value));
     let parsed = match crate::cron::parse_schedule(&filled.schedule) {
         Ok(parsed) => parsed,
-        Err(e) => {
-            return jobs_error(
-                StatusCode::BAD_REQUEST,
-                &format!("Invalid schedule: {}", e),
-            )
-        }
+        Err(e) => return jobs_error(StatusCode::BAD_REQUEST, &format!("Invalid schedule: {}", e)),
     };
     let job = CronJob {
         id: uuid::Uuid::new_v4().simple().to_string()[..12].to_string(),
@@ -18555,10 +19365,7 @@ async fn update_job(
                     job.repeat = n.as_i64();
                 }
                 _ => {
-                    return jobs_error(
-                        StatusCode::BAD_REQUEST,
-                        "Repeat must be a positive integer",
-                    )
+                    return jobs_error(StatusCode::BAD_REQUEST, "Repeat must be a positive integer")
                 }
             },
             "enabled" => {
@@ -18720,7 +19527,10 @@ async fn dismiss_job_suggestion(Json(request): Json<SuggestionReferenceRequest>)
 async fn seed_job_suggestion_catalog() -> Response {
     let store = crate::cron::suggestions::SuggestionStore::open_default();
     let created = crate::cron::suggestions::seed_catalog_suggestions(&store);
-    let titles: Vec<String> = created.iter().map(|suggestion| suggestion.title.clone()).collect();
+    let titles: Vec<String> = created
+        .iter()
+        .map(|suggestion| suggestion.title.clone())
+        .collect();
     Json(json!({ "created": titles })).into_response()
 }
 
@@ -18801,9 +19611,7 @@ async fn fire_job(
         Ok(Some(job)) => job,
         // Job is gone (cancelled / completed) — nothing to fire. 200 so
         // NAS does not retry a fire that is intentionally absent.
-        Ok(None) => {
-            return Json(json!({ "status": "gone", "job_id": job_id })).into_response()
-        }
+        Ok(None) => return Json(json!({ "status": "gone", "job_id": job_id })).into_response(),
         Err(e) => return server_error(&e.to_string()),
     };
     // CAS claim: a NAS retry that lands while the previous fire is still
@@ -18878,7 +19686,12 @@ fn release_fire_claim(job_id: &str) {
 /// configured, strips `MEDIA:` tags (senders are text-only), and sends
 /// via each platform's registered sender. Returns None on success /
 /// nothing-to-deliver, or an error string.
-async fn deliver_job_result(store: &crate::session::SqliteSessionStore, job: &CronJob, content: &str, wrap_response: bool) -> Option<String> {
+async fn deliver_job_result(
+    store: &crate::session::SqliteSessionStore,
+    job: &CronJob,
+    content: &str,
+    wrap_response: bool,
+) -> Option<String> {
     let targets = crate::cron::delivery::resolve_delivery_targets(job);
     if targets.is_empty() {
         let deliver = crate::cron::delivery::normalize_deliver_value(
@@ -18929,8 +19742,7 @@ async fn deliver_job_result(store: &crate::session::SqliteSessionStore, job: &Cr
         // against flood control. Reported as a delivery error so the
         // job's last_delivery_error stays observable; a successful
         // send to the target later clears the flag (self-healing).
-        if !target.chat_id.trim().is_empty()
-            && crate::dead_targets::is_dead(&key, &target.chat_id)
+        if !target.chat_id.trim().is_empty() && crate::dead_targets::is_dead(&key, &target.chat_id)
         {
             tracing::info!(
                 "[cron] skipping delivery to known-dead target {}:{} (send to it again to clear)",
@@ -19063,13 +19875,11 @@ async fn spawn_job_run(
     tokio::spawn(async move {
         let outcome = loop {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            let snapshot = runs.lock().await.get(&outcome_run_id).map(|run| {
-                (
-                    run.status.clone(),
-                    run.error.clone(),
-                    run.result.clone(),
-                )
-            });
+            let snapshot = runs
+                .lock()
+                .await
+                .get(&outcome_run_id)
+                .map(|run| (run.status.clone(), run.error.clone(), run.result.clone()));
             match snapshot {
                 None => break ("failed".to_string(), Some("run lost".to_string()), None),
                 Some((status, error, result))
@@ -19102,7 +19912,8 @@ async fn spawn_job_run(
         if success {
             if !crate::cron::delivery::is_cron_silence_response(&result_text) {
                 delivery_error =
-                    deliver_job_result(&session_store, &job_snapshot, &result_text, wrap_response).await;
+                    deliver_job_result(&session_store, &job_snapshot, &result_text, wrap_response)
+                        .await;
             }
         } else {
             let summary = crate::cron::delivery::summarize_cron_failure_for_delivery(
@@ -19111,7 +19922,8 @@ async fn spawn_job_run(
             );
             if !summary.trim().is_empty() {
                 delivery_error =
-                    deliver_job_result(&session_store, &job_snapshot, &summary, wrap_response).await;
+                    deliver_job_result(&session_store, &job_snapshot, &summary, wrap_response)
+                        .await;
             }
         }
         let delivery_failed = delivery_error.is_some();
@@ -19130,7 +19942,11 @@ async fn spawn_job_run(
         // CronExecutionEvent) — monitoring egress only.
         crate::monitoring::emit(
             crate::monitoring::CronExecutionEvent {
-                status: if success { "ok".to_string() } else { "error".to_string() },
+                status: if success {
+                    "ok".to_string()
+                } else {
+                    "error".to_string()
+                },
                 job_key: job_id.clone(),
                 source: job_snapshot
                     .origin
@@ -19242,9 +20058,7 @@ pub fn spawn_kanban_dispatcher(
                 match store.dispatch_once(
                     &home,
                     use_worktrees,
-                    |task, workspace| {
-                        crate::kanban::dispatch_spawn(&home, task, workspace)
-                    },
+                    |task, workspace| crate::kanban::dispatch_spawn(&home, task, workspace),
                     Some(max_spawn.max(1)),
                     false,
                     2,
@@ -19364,7 +20178,10 @@ async fn auto_decompose_tick(provider_factory: Option<&DispatcherProviderFactory
         } else {
             // Common no-op reasons (no aux client configured) must not
             // spam logs every tick (hermes logs them at debug).
-            tracing::debug!("kanban auto-decompose: {task_id} skipped: {}", outcome.reason);
+            tracing::debug!(
+                "kanban auto-decompose: {task_id} skipped: {}",
+                outcome.reason
+            );
         }
     }
 }
@@ -19459,11 +20276,7 @@ pub async fn deliver_session_wake(
                         "wake self-post got HTTP 429 (concurrency cap) \
                          for session {session_id}"
                     );
-                    tracing::warn!(
-                        "{last_err}; attempt {}/{}",
-                        attempt + 1,
-                        attempts
-                    );
+                    tracing::warn!("{last_err}; attempt {}/{}", attempt + 1, attempts);
                     continue;
                 }
                 if status.is_client_error() || status.is_server_error() {
@@ -19482,14 +20295,9 @@ pub async fn deliver_session_wake(
                 return Ok(());
             }
             Err(e) => {
-                last_err = format!(
-                    "wake self-post transient failure for session {session_id}: {e}"
-                );
-                tracing::warn!(
-                    "{last_err} (attempt {}/{})",
-                    attempt + 1,
-                    attempts
-                );
+                last_err =
+                    format!("wake self-post transient failure for session {session_id}: {e}");
+                tracing::warn!("{last_err} (attempt {}/{})", attempt + 1, attempts);
             }
         }
     }
@@ -19499,9 +20307,7 @@ pub async fn deliver_session_wake(
     ))
 }
 
-pub fn spawn_kanban_notifier(
-    wake: Option<WakeEndpoint>,
-) -> tokio::task::JoinHandle<()> {
+pub fn spawn_kanban_notifier(wake: Option<WakeEndpoint>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         // Initial delay so the gateway can finish wiring platform
         // adapters (hermes does the same 5 s wait).
@@ -19548,7 +20354,10 @@ async fn notifier_tick(wake: Option<&WakeEndpoint>) {
         ) {
             Ok(page) => page,
             Err(e) => {
-                tracing::debug!("kanban notifier: unseen events for {} failed ({e})", sub.task_id);
+                tracing::debug!(
+                    "kanban notifier: unseen events for {} failed ({e})",
+                    sub.task_id
+                );
                 continue;
             }
         };
@@ -19572,13 +20381,9 @@ async fn notifier_tick(wake: Option<&WakeEndpoint>) {
                 sub.chat_id
             );
         }
-        if let Err(e) = store.advance_notify_cursor(
-            &sub.task_id,
-            &sub.platform,
-            &sub.chat_id,
-            thread,
-            cursor,
-        ) {
+        if let Err(e) =
+            store.advance_notify_cursor(&sub.task_id, &sub.platform, &sub.chat_id, thread, cursor)
+        {
             tracing::debug!("kanban notifier: cursor advance failed ({e})");
         }
         // Wake routing (hermes): terminal events ALSO resume the
@@ -19606,17 +20411,12 @@ async fn notifier_tick(wake: Option<&WakeEndpoint>) {
                         .map(|kind| kind.to_string())
                         .collect();
                     if !wake_kinds.is_empty() {
-                        let text = crate::kanban::wake_message(
-                            task,
-                            &wake_kinds,
-                            &task.board,
-                        );
+                        let text = crate::kanban::wake_message(task, &wake_kinds, &task.board);
                         let session_id = session_id.to_string();
                         let endpoint = endpoint.clone();
                         tokio::spawn(async move {
                             if let Err(e) =
-                                deliver_session_wake(&endpoint, &session_id, &text)
-                                    .await
+                                deliver_session_wake(&endpoint, &session_id, &text).await
                             {
                                 tracing::warn!(
                                     "kanban notifier: wakeup failed for \
@@ -19647,9 +20447,7 @@ fn format_notify_message(
     task: Option<&crate::kanban::Task>,
     event: &crate::kanban::TaskEvent,
 ) -> Option<String> {
-    let board_tag = task
-        .map(|t| format!("[{}] ", t.board))
-        .unwrap_or_default();
+    let board_tag = task.map(|t| format!("[{}] ", t.board)).unwrap_or_default();
     let who_tag = task
         .and_then(|t| t.assignee.as_deref())
         .filter(|a| !a.is_empty())
@@ -19773,8 +20571,13 @@ pub fn spawn_monitoring(
         let streamer_resource = resource.clone();
         let flush = std::time::Duration::from_secs(monitoring.logs_export_interval_seconds());
         handles.push(tokio::spawn(async move {
-            crate::monitoring::run_streamer(streamer_endpoint, headers_env, streamer_resource, flush)
-                .await;
+            crate::monitoring::run_streamer(
+                streamer_endpoint,
+                headers_env,
+                streamer_resource,
+                flush,
+            )
+            .await;
         }));
     }
 
@@ -19817,7 +20620,10 @@ pub fn spawn_monitoring(
     handles
 }
 
-pub fn spawn_cron_scheduler(state: Arc<GatewayState>, poll_secs: u64) -> Option<tokio::task::JoinHandle<()>> {
+pub fn spawn_cron_scheduler(
+    state: Arc<GatewayState>,
+    poll_secs: u64,
+) -> Option<tokio::task::JoinHandle<()>> {
     let store = state.cron.get().cloned()?;
     Some(tokio::spawn(crate::cron::run_scheduler(
         store,
@@ -19856,11 +20662,11 @@ pub fn spawn_cron_scheduler(state: Arc<GatewayState>, poll_secs: u64) -> Option<
 
 /// `GET /v1/skills` — list installed skills (hermes `_handle_skills`).
 async fn skills_list(State(state): State<Arc<GatewayState>>) -> Json<Value> {
-    let dir = state
-        .skills_dir
-        .get()
-        .cloned()
-        .or_else(|| crate::config::ensure_home().ok().map(|home| home.join("skills")));
+    let dir = state.skills_dir.get().cloned().or_else(|| {
+        crate::config::ensure_home()
+            .ok()
+            .map(|home| home.join("skills"))
+    });
     let skills = dir
         .map(|dir| crate::skills::list_skills(&dir))
         .unwrap_or_default();
@@ -19960,9 +20766,19 @@ async fn start_run(
     };
     state.runs.lock().await.insert(run_id.clone(), run.clone());
 
-    spawn_tracked_run(state, run_id.clone(), session_id.clone(), request.message.clone(), false);
+    spawn_tracked_run(
+        state,
+        run_id.clone(),
+        session_id.clone(),
+        request.message.clone(),
+        false,
+    );
 
-    (StatusCode::ACCEPTED, Json(json!({"run_id": run_id, "status": "running", "session_id": session_id}))).into_response()
+    (
+        StatusCode::ACCEPTED,
+        Json(json!({"run_id": run_id, "status": "running", "session_id": session_id})),
+    )
+        .into_response()
 }
 
 /// Approval pump (extracted in P437): wire a run's approval channel into
@@ -20028,66 +20844,78 @@ fn spawn_tracked_run(
     let run_future = RUN_ID.scope(
         run_id.clone(),
         crate::agent::cron_scope(cron, async move {
-        let history = runner
-            .store
-            .load_messages(&session_id)
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|m| m.role != Role::System)
-            .collect::<Vec<_>>();
-        let history = if history.is_empty() { None } else { Some(history) };
-        let override_model = session_model_override(&runner, &session_id);
-        let outcome = await_with_model_override(
-            override_model,
-            runner.agent.run_with_session(&message, history, Some(session_id.as_str())),
-        )
-        .await;
-        let mut runs = runner.runs.lock().await;
-        let mut settle: Option<(bool, String)> = None;
-        if let Some(run) = runs.get_mut(&spawn_run_id) {
-            match outcome {
-                Ok(result) => {
-                    run.status = "completed".to_string();
-                    runner.metrics.record_run(&result.usage, result.tool_calls.len());
-                    runner
-                        .metrics
-                        .runs_completed
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let snippet = result.content.chars().take(140).collect::<String>();
-                    run.result = Some(result.content);
-                    run.session_id = result.session_id.or(run.session_id.take());
-                    run.iterations = Some(result.iterations);
-                    settle = Some((true, snippet));
+            let history = runner
+                .store
+                .load_messages(&session_id)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|m| m.role != Role::System)
+                .collect::<Vec<_>>();
+            let history = if history.is_empty() {
+                None
+            } else {
+                Some(history)
+            };
+            let override_model = session_model_override(&runner, &session_id);
+            let outcome = await_with_model_override(
+                override_model,
+                runner
+                    .agent
+                    .run_with_session(&message, history, Some(session_id.as_str())),
+            )
+            .await;
+            let mut runs = runner.runs.lock().await;
+            let mut settle: Option<(bool, String)> = None;
+            if let Some(run) = runs.get_mut(&spawn_run_id) {
+                match outcome {
+                    Ok(result) => {
+                        run.status = "completed".to_string();
+                        runner
+                            .metrics
+                            .record_run(&result.usage, result.tool_calls.len());
+                        runner
+                            .metrics
+                            .runs_completed
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let snippet = result.content.chars().take(140).collect::<String>();
+                        run.result = Some(result.content);
+                        run.session_id = result.session_id.or(run.session_id.take());
+                        run.iterations = Some(result.iterations);
+                        settle = Some((true, snippet));
+                    }
+                    Err(e) => {
+                        run.status = "failed".to_string();
+                        runner
+                            .metrics
+                            .runs_failed
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let message = e.to_string();
+                        run.error = Some(message.clone());
+                        settle = Some((false, message.chars().take(140).collect()));
+                    }
                 }
-                Err(e) => {
-                    run.status = "failed".to_string();
-                    runner
-                        .metrics
-                        .runs_failed
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let message = e.to_string();
-                    run.error = Some(message.clone());
-                    settle = Some((false, message.chars().take(140).collect()));
-                }
+                run.finished_at = Some(now_secs());
             }
-            run.finished_at = Some(now_secs());
-        }
-        drop(runs);
-        runner.router.unregister(&spawn_run_id);
-        // Desktop shell notification (P433): surface the settled run on the
-        // UI bridge so the desktop webview can toast it. Inert unless a
-        // desktop consumer is subscribed to /api/desktop/events.
-        if let Some((succeeded, snippet)) = settle {
-            crate::desktop_bridge::publish(
-                &session_id,
-                if succeeded { "run.completed" } else { "run.failed" },
-                &json!({
-                    "run_id": spawn_run_id,
-                    "status": if succeeded { "completed" } else { "failed" },
-                    "snippet": snippet,
-                }),
-            );
-        }
+            drop(runs);
+            runner.router.unregister(&spawn_run_id);
+            // Desktop shell notification (P433): surface the settled run on the
+            // UI bridge so the desktop webview can toast it. Inert unless a
+            // desktop consumer is subscribed to /api/desktop/events.
+            if let Some((succeeded, snippet)) = settle {
+                crate::desktop_bridge::publish(
+                    &session_id,
+                    if succeeded {
+                        "run.completed"
+                    } else {
+                        "run.failed"
+                    },
+                    &json!({
+                        "run_id": spawn_run_id,
+                        "status": if succeeded { "completed" } else { "failed" },
+                        "snippet": snippet,
+                    }),
+                );
+            }
         }),
     );
     // Profile secret scope inheritance (hermes copy_context parity): a
@@ -20100,7 +20928,11 @@ fn spawn_tracked_run(
 async fn list_runs(State(state): State<Arc<GatewayState>>) -> Json<Value> {
     let runs = state.runs.lock().await;
     let mut data: Vec<&RunState> = runs.values().collect();
-    data.sort_by(|a, b| b.created_at.partial_cmp(&a.created_at).unwrap_or(std::cmp::Ordering::Equal));
+    data.sort_by(|a, b| {
+        b.created_at
+            .partial_cmp(&a.created_at)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Json(json!({"object": "list", "data": data}))
 }
 
@@ -20114,10 +20946,7 @@ async fn get_run(State(state): State<Arc<GatewayState>>, Path(id): Path<String>)
 
 /// SSE stream of run lifecycle events (`run.progress` / `run.completed` /
 /// `run.failed`), closing once the run reaches a terminal state.
-async fn run_events(
-    State(state): State<Arc<GatewayState>>,
-    Path(id): Path<String>,
-) -> Response {
+async fn run_events(State(state): State<Arc<GatewayState>>, Path(id): Path<String>) -> Response {
     let exists = state.runs.lock().await.contains_key(&id);
     if !exists {
         return not_found(&format!("run {} not found", id));
@@ -20277,8 +21106,7 @@ fn mcp_oauth_callback_url(headers: &HeaderMap, server_name: &str) -> String {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or("http");
-    let encoded: String =
-        url::form_urlencoded::byte_serialize(server_name.as_bytes()).collect();
+    let encoded: String = url::form_urlencoded::byte_serialize(server_name.as_bytes()).collect();
     format!("{scheme}://{host}/api/mcp/oauth/callback/{encoded}")
 }
 
@@ -20293,7 +21121,13 @@ async fn mcp_server_auth(
 
     bridge::registry().gc();
     let config = crate::config::UlncLawConfig::load(None).unwrap_or_default();
-    let Some(server) = config.mcp.servers.iter().find(|srv| srv.name == name).cloned() else {
+    let Some(server) = config
+        .mcp
+        .servers
+        .iter()
+        .find(|srv| srv.name == name)
+        .cloned()
+    else {
         return (
             StatusCode::NOT_FOUND,
             Json(json!({"detail": format!("Server '{}' not found", name)})),
@@ -20503,9 +21337,8 @@ mod tests {
 
     fn test_state() -> Arc<GatewayState> {
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
         let provider = Arc::new(
             OpenAiProvider::builder()
@@ -20516,8 +21349,14 @@ mod tests {
                 .expect("provider builds"),
         );
         let agent = Agent::new(provider, ToolRegistry::new()).with_store(store);
-        GatewayState::new(Arc::new(agent), "test-model".into(), "test".into(), Some("sekret".into()), ApprovalRouter::new())
-            .expect("state builds")
+        GatewayState::new(
+            Arc::new(agent),
+            "test-model".into(),
+            "test".into(),
+            Some("sekret".into()),
+            ApprovalRouter::new(),
+        )
+        .expect("state builds")
     }
 
     async fn get_json(app: Router, uri: &str, token: Option<&str>) -> (StatusCode, Value) {
@@ -20530,7 +21369,9 @@ mod tests {
             .await
             .unwrap();
         let status = response.status();
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let value: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
         (status, value)
     }
@@ -20606,9 +21447,8 @@ mod tests {
 
     fn learning_state(home: &std::path::Path) -> Arc<GatewayState> {
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
         let provider = Arc::new(
             OpenAiProvider::builder()
@@ -20621,8 +21461,14 @@ mod tests {
         let agent = Agent::new(provider, ToolRegistry::new())
             .with_store(store)
             .with_context(crate::tools::context::ToolContext::default().with_home(home));
-        GatewayState::new(Arc::new(agent), "test-model".into(), "test".into(), Some("sekret".into()), ApprovalRouter::new())
-            .expect("state builds")
+        GatewayState::new(
+            Arc::new(agent),
+            "test-model".into(),
+            "test".into(),
+            Some("sekret".into()),
+            ApprovalRouter::new(),
+        )
+        .expect("state builds")
     }
 
     async fn send_json(
@@ -20770,8 +21616,12 @@ mod tests {
             .store
             .create_session("cli", Some("test-model"), None)
             .expect("session created");
-        state.store.set_session_title(&sid, "work").expect("title set");
-        let scaffold = "[IMPORTANT: The user has invoked the \"/work\" skill. The user's request follows.";
+        state
+            .store
+            .set_session_title(&sid, "work")
+            .expect("title set");
+        let scaffold =
+            "[IMPORTANT: The user has invoked the \"/work\" skill. The user's request follows.";
         state
             .store
             .append_message(
@@ -20822,13 +21672,19 @@ mod tests {
             .unwrap();
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
-        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let created: Value = serde_json::from_slice(&body_bytes).unwrap();
         let session_id = created["id"].as_str().unwrap().to_string();
 
         let (status, body) = get_json(app.clone(), "/api/sessions?limit=10", Some(token)).await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body["data"].as_array().unwrap().iter().any(|s| s["id"] == session_id));
+        assert!(body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["id"] == session_id));
 
         let (status, body) = get_json(
             app.clone(),
@@ -20857,7 +21713,8 @@ mod tests {
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let (status, _) = get_json(app, &format!("/api/sessions/{}", session_id), Some(token)).await;
+        let (status, _) =
+            get_json(app, &format!("/api/sessions/{}", session_id), Some(token)).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
@@ -20890,8 +21747,14 @@ mod tests {
             tool_call_id: None,
             name: None,
         };
-        state.store.append_message(&with_messages, &user_msg).unwrap();
-        state.store.append_message(&with_messages, &assistant_msg).unwrap();
+        state
+            .store
+            .append_message(&with_messages, &user_msg)
+            .unwrap();
+        state
+            .store
+            .append_message(&with_messages, &assistant_msg)
+            .unwrap();
 
         // Default listing carries no preview field.
         let (status, body) = get_json(app.clone(), "/api/sessions?limit=10", Some(token)).await;
@@ -20902,8 +21765,12 @@ mod tests {
 
         // preview=true attaches a whitespace-collapsed snippet of the
         // last message; empty sessions get null.
-        let (status, body) =
-            get_json(app.clone(), "/api/sessions?limit=10&preview=true", Some(token)).await;
+        let (status, body) = get_json(
+            app.clone(),
+            "/api/sessions?limit=10&preview=true",
+            Some(token),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let rows = body["data"].as_array().unwrap();
         let with_row = rows.iter().find(|row| row["id"] == with_messages).unwrap();
@@ -21000,22 +21867,34 @@ mod tests {
         };
 
         // ?source= narrows to one source.
-        let (status, body) =
-            get_json(app.clone(), "/api/sessions?limit=10&source=cli", Some(token)).await;
+        let (status, body) = get_json(
+            app.clone(),
+            "/api/sessions?limit=10&source=cli",
+            Some(token),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let listed = ids(&body);
         assert!(listed.contains(&cli));
         assert!(!listed.contains(&cron));
 
         // ?end_reason= matches ended sessions; `none` selects open ones.
-        let (status, body) =
-            get_json(app.clone(), "/api/sessions?limit=10&end_reason=complete", Some(token)).await;
+        let (status, body) = get_json(
+            app.clone(),
+            "/api/sessions?limit=10&end_reason=complete",
+            Some(token),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let listed = ids(&body);
         assert_eq!(listed, vec![cron.clone()]);
 
-        let (status, body) =
-            get_json(app.clone(), "/api/sessions?limit=10&end_reason=none", Some(token)).await;
+        let (status, body) = get_json(
+            app.clone(),
+            "/api/sessions?limit=10&end_reason=none",
+            Some(token),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let listed = ids(&body);
         assert!(listed.contains(&cli));
@@ -21141,12 +22020,10 @@ mod tests {
 
     fn streaming_state() -> Arc<GatewayState> {
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
-        let agent =
-            Agent::new(Arc::new(FakeStreamProvider), ToolRegistry::new()).with_store(store);
+        let agent = Agent::new(Arc::new(FakeStreamProvider), ToolRegistry::new()).with_store(store);
         GatewayState::new(
             Arc::new(agent),
             "fake-stream".into(),
@@ -21182,10 +22059,18 @@ mod tests {
             .await
             .unwrap();
         let text = String::from_utf8_lossy(&body).to_string();
-        assert!(text.contains(r#""delta":{"role":"assistant"}"#), "role chunk: {}", text);
+        assert!(
+            text.contains(r#""delta":{"role":"assistant"}"#),
+            "role chunk: {}",
+            text
+        );
         assert!(text.contains(r#""content":"Hel""#), "first delta: {}", text);
         assert!(text.contains(r#""content":"lo""#), "second delta: {}", text);
-        assert!(text.contains(r#""finish_reason":"stop""#), "finish: {}", text);
+        assert!(
+            text.contains(r#""finish_reason":"stop""#),
+            "finish: {}",
+            text
+        );
         assert!(text.contains("data: [DONE]"), "done sentinel: {}", text);
     }
 
@@ -21312,10 +22197,7 @@ mod tests {
         assert!(text.contains("provider: fake"), "{text}");
 
         let reply = post_chat(app.clone(), &sid, "/version").await;
-        assert!(reply["response"]
-            .as_str()
-            .unwrap()
-            .starts_with("ulnclaw "));
+        assert!(reply["response"].as_str().unwrap().starts_with("ulnclaw "));
 
         let reply = post_chat(app.clone(), &sid, "/commands").await;
         assert!(reply["response"]
@@ -21355,12 +22237,8 @@ mod tests {
         let reply = post_chat(app.clone(), &sid, "hello there").await;
         assert_eq!(reply["response"], "Hello");
 
-        let (status, body) = get_json(
-            app.clone(),
-            &format!("/api/sessions/{sid}/context"),
-            None,
-        )
-        .await;
+        let (status, body) =
+            get_json(app.clone(), &format!("/api/sessions/{sid}/context"), None).await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["context_max"].as_u64().unwrap() > 0, "{body}");
         assert!(body["estimated_total"].as_u64().unwrap() > 0, "{body}");
@@ -21380,7 +22258,10 @@ mod tests {
         assert!(ids.contains(&"conversation"), "{ids:?}");
         // Declaration order mirrors hermes (system before tools, tools
         // before conversation).
-        assert!(ids.iter().position(|i| *i == "system_prompt") < ids.iter().position(|i| *i == "conversation"));
+        assert!(
+            ids.iter().position(|i| *i == "system_prompt")
+                < ids.iter().position(|i| *i == "conversation")
+        );
 
         // Unknown session → 404.
         let (status, _) = get_json(app, "/api/sessions/nope/context", None).await;
@@ -21450,12 +22331,7 @@ mod tests {
         assert_eq!(jobs[0].deliver.as_deref(), Some("local"));
 
         // Inline validation error stays a direct reply.
-        let reply = post_chat(
-            app.clone(),
-            &sid,
-            "/blueprint morning-brief time=25:99",
-        )
-        .await;
+        let reply = post_chat(app.clone(), &sid, "/blueprint morning-brief time=25:99").await;
         let text = reply["response"].as_str().unwrap();
         assert!(text.contains("Can't set up"), "{text}");
         assert!(text.contains("invalid time"), "{text}");
@@ -21465,9 +22341,8 @@ mod tests {
     /// calls — only the service-tier plumbing is exercised).
     fn fast_state() -> Arc<GatewayState> {
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
         let provider = crate::provider::openai::OpenAiProvider::builder()
             .endpoint("http://127.0.0.1:9")
@@ -21497,10 +22372,13 @@ mod tests {
             .create_session("branch-empty", Some("fake-stream"), None)
             .expect("session created");
         let reply = post_chat(app.clone(), &empty_sid, "/branch").await;
-        assert!(reply["response"]
-            .as_str()
-            .unwrap()
-            .contains("no conversation"), "{reply}");
+        assert!(
+            reply["response"]
+                .as_str()
+                .unwrap()
+                .contains("no conversation"),
+            "{reply}"
+        );
 
         // Seed an exchange, then branch with an explicit name.
         let sid = state
@@ -21539,22 +22417,25 @@ mod tests {
             )
             .expect("session created");
         let reply = post_chat(app.clone(), &did, "/diff").await;
-        assert!(reply["response"]
-            .as_str()
-            .unwrap()
-            .contains("diff failed"), "{reply}");
+        assert!(
+            reply["response"].as_str().unwrap().contains("diff failed"),
+            "{reply}"
+        );
         let reply = post_chat(app.clone(), &did, "/diff bogus").await;
-        assert!(reply["response"]
-            .as_str()
-            .unwrap()
-            .contains("unknown /diff argument"), "{reply}");
+        assert!(
+            reply["response"]
+                .as_str()
+                .unwrap()
+                .contains("unknown /diff argument"),
+            "{reply}"
+        );
 
         // /rollback while checkpoints stay disabled (the default).
         let reply = post_chat(app.clone(), &did, "/rollback").await;
-        assert!(reply["response"]
-            .as_str()
-            .unwrap()
-            .contains("not enabled"), "{reply}");
+        assert!(
+            reply["response"].as_str().unwrap().contains("not enabled"),
+            "{reply}"
+        );
     }
 
     #[tokio::test]
@@ -21615,8 +22496,14 @@ mod tests {
         assert_eq!(body["mode"], "normal", "{body}");
 
         // HTTP twin: switch on, then off.
-        let (status, body) =
-            send_json(app.clone(), "PUT", "/api/fast", None, json!({"mode": "fast"})).await;
+        let (status, body) = send_json(
+            app.clone(),
+            "PUT",
+            "/api/fast",
+            None,
+            json!({"mode": "fast"}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["mode"], "fast", "{body}");
         let (_, body) = get_json(app.clone(), "/api/fast", None).await;
@@ -21638,8 +22525,14 @@ mod tests {
         assert_eq!(body["mode"], "normal", "{body}");
 
         // Invalid mode → 400 with the error envelope.
-        let (status, body) =
-            send_json(app.clone(), "PUT", "/api/fast", None, json!({"mode": "warp"})).await;
+        let (status, body) = send_json(
+            app.clone(),
+            "PUT",
+            "/api/fast",
+            None,
+            json!({"mode": "warp"}),
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert!(body["error"]["message"]
             .as_str()
@@ -21660,8 +22553,14 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["supported"], false, "{body}");
 
-        let (status, _) =
-            send_json(app.clone(), "PUT", "/api/fast", None, json!({"mode": "fast"})).await;
+        let (status, _) = send_json(
+            app.clone(),
+            "PUT",
+            "/api/fast",
+            None,
+            json!({"mode": "fast"}),
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         let reply = post_chat(app.clone(), &sid, "/fast on").await;
@@ -21692,7 +22591,11 @@ mod tests {
 
         // Switch to smart, verify on disk.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/approvals", None, json!({"mode": "smart"}),
+            app.clone(),
+            "PUT",
+            "/api/approvals",
+            None,
+            json!({"mode": "smart"}),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -21704,7 +22607,11 @@ mod tests {
 
         // Invalid mode → 400 with the allowed-list message.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/approvals", None, json!({"mode": "yolo"}),
+            app.clone(),
+            "PUT",
+            "/api/approvals",
+            None,
+            json!({"mode": "yolo"}),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -21769,25 +22676,37 @@ mod tests {
 
         // Validation: unknown key, bad enum, wrong types.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/approvals/settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/approvals/settings",
+            Some("sekret"),
             json!({ "key": "yolo", "value": 1 }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/approvals/settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/approvals/settings",
+            Some("sekret"),
             json!({ "key": "cron_mode", "value": "maybe" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/approvals/settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/approvals/settings",
+            Some("sekret"),
             json!({ "key": "timeout", "value": "soon" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/approvals/settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/approvals/settings",
+            Some("sekret"),
             json!({ "key": "deny", "value": "sudo *" }),
         )
         .await;
@@ -21795,7 +22714,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/approvals/settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/approvals/settings",
+            Some("sekret"),
             json!({ "key": "timeout", "value": null }),
         )
         .await;
@@ -21869,19 +22791,28 @@ mod tests {
 
         // Listener identity is not editable through this surface.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/gateway-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/gateway-settings",
+            Some("sekret"),
             json!({ "key": "port", "value": 1234 }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/gateway-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/gateway-settings",
+            Some("sekret"),
             json!({ "key": "loop_watchdog", "value": "yes" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/gateway-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/gateway-settings",
+            Some("sekret"),
             json!({ "key": "session_stall_timeout_secs", "value": -5 }),
         )
         .await;
@@ -21889,7 +22820,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/gateway-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/gateway-settings",
+            Some("sekret"),
             json!({ "key": "message_timestamps", "value": null }),
         )
         .await;
@@ -21966,7 +22900,11 @@ mod tests {
             json!({ "key": "verbose", "value": "yes" }),
         ] {
             let (status, _) = send_json(
-                app.clone(), "PUT", "/api/agent-settings", Some("sekret"), payload,
+                app.clone(),
+                "PUT",
+                "/api/agent-settings",
+                Some("sekret"),
+                payload,
             )
             .await;
             assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -21974,7 +22912,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/agent-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/agent-settings",
+            Some("sekret"),
             json!({ "key": "max_iterations", "value": null }),
         )
         .await;
@@ -22014,13 +22955,19 @@ mod tests {
 
         // Persist both knobs.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/web-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/web-settings",
+            Some("sekret"),
             json!({ "key": "search_backend", "value": "tavily" }),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/web-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/web-settings",
+            Some("sekret"),
             json!({ "key": "extract_backend", "value": "firecrawl" }),
         )
         .await;
@@ -22031,19 +22978,28 @@ mod tests {
 
         // Validation.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/web-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/web-settings",
+            Some("sekret"),
             json!({ "key": "search_backend", "value": "bing" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/web-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/web-settings",
+            Some("sekret"),
             json!({ "key": "extract_backend", "value": "  " }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/web-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/web-settings",
+            Some("sekret"),
             json!({ "key": "yolo", "value": "x" }),
         )
         .await;
@@ -22051,7 +23007,10 @@ mod tests {
 
         // Null removes the override.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/web-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/web-settings",
+            Some("sekret"),
             json!({ "key": "search_backend", "value": null }),
         )
         .await;
@@ -22079,7 +23038,8 @@ mod tests {
         let app = router(test_state());
 
         // Defaults: 3 children, 30 iterations each, depth 1.
-        let (status, body) = get_json(app.clone(), "/api/delegation-settings", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/delegation-settings", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["max_concurrent_children"], 3, "{body}");
         assert_eq!(body["child_max_iterations"], 30, "{body}");
@@ -22113,7 +23073,11 @@ mod tests {
             json!({ "key": "yolo", "value": 1 }),
         ] {
             let (status, _) = send_json(
-                app.clone(), "PUT", "/api/delegation-settings", Some("sekret"), payload,
+                app.clone(),
+                "PUT",
+                "/api/delegation-settings",
+                Some("sekret"),
+                payload,
             )
             .await;
             assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -22121,7 +23085,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/delegation-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/delegation-settings",
+            Some("sekret"),
             json!({ "key": "max_concurrent_children", "value": null }),
         )
         .await;
@@ -22175,13 +23142,19 @@ mod tests {
 
         // Validation.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/memory", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/memory",
+            Some("sekret"),
             json!({ "key": "memory_char_limit", "value": 0 }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/memory", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/memory",
+            Some("sekret"),
             json!({ "key": "yolo", "value": 1 }),
         )
         .await;
@@ -22189,7 +23162,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/memory", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/memory",
+            Some("sekret"),
             json!({ "key": "memory_char_limit", "value": null }),
         )
         .await;
@@ -22224,34 +23200,56 @@ mod tests {
         let (status, body) = get_json(app.clone(), "/api/model-catalog", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["excluded_providers"], json!([]), "{body}");
-        assert!(body["canonical_providers"].as_array().unwrap().contains(&json!("openai")), "{body}");
+        assert!(
+            body["canonical_providers"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("openai")),
+            "{body}"
+        );
         assert_eq!(body["custom_providers"], json!(["localbox"]), "{body}");
 
         // Exclude two providers.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/model-catalog", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/model-catalog",
+            Some("sekret"),
             json!({ "key": "excluded_providers", "value": ["Ollama ", "llamacpp"] }),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let (_, body) = get_json(app.clone(), "/api/model-catalog", Some("sekret")).await;
-        assert_eq!(body["excluded_providers"], json!(["ollama", "llamacpp"]), "{body}");
+        assert_eq!(
+            body["excluded_providers"],
+            json!(["ollama", "llamacpp"]),
+            "{body}"
+        );
 
         // Validation: not an array, blank slug, unknown key.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/model-catalog", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/model-catalog",
+            Some("sekret"),
             json!({ "key": "excluded_providers", "value": "ollama" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/model-catalog", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/model-catalog",
+            Some("sekret"),
             json!({ "key": "excluded_providers", "value": ["ollama", "  "] }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/model-catalog", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/model-catalog",
+            Some("sekret"),
             json!({ "key": "yolo", "value": [] }),
         )
         .await;
@@ -22259,7 +23257,10 @@ mod tests {
 
         // Null removes the override.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/model-catalog", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/model-catalog",
+            Some("sekret"),
             json!({ "key": "excluded_providers", "value": null }),
         )
         .await;
@@ -22288,7 +23289,8 @@ mod tests {
 
         // Defaults: opt-in off, 20 snapshots, 500 MB store, 10 MB file
         // skip, 7-day retention, daily prune.
-        let (status, body) = get_json(app.clone(), "/api/checkpoints/settings", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/checkpoints/settings", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["enabled"], false, "{body}");
         assert_eq!(body["max_snapshots"], 20, "{body}");
@@ -22326,19 +23328,28 @@ mod tests {
 
         // Validation.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/checkpoints/settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/checkpoints/settings",
+            Some("sekret"),
             json!({ "key": "enabled", "value": "yes" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/checkpoints/settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/checkpoints/settings",
+            Some("sekret"),
             json!({ "key": "max_snapshots", "value": 0 }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/checkpoints/settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/checkpoints/settings",
+            Some("sekret"),
             json!({ "key": "yolo", "value": 1 }),
         )
         .await;
@@ -22346,7 +23357,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/checkpoints/settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/checkpoints/settings",
+            Some("sekret"),
             json!({ "key": "enabled", "value": null }),
         )
         .await;
@@ -22410,19 +23424,28 @@ mod tests {
 
         // Validation.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/security-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/security-settings",
+            Some("sekret"),
             json!({ "key": "tirith_path", "value": "  " }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/security-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/security-settings",
+            Some("sekret"),
             json!({ "key": "tirith_timeout", "value": 0 }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/security-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/security-settings",
+            Some("sekret"),
             json!({ "key": "allow_private_urls", "value": "yes" }),
         )
         .await;
@@ -22430,7 +23453,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/security-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/security-settings",
+            Some("sekret"),
             json!({ "key": "tirith_timeout", "value": null }),
         )
         .await;
@@ -22458,7 +23484,8 @@ mod tests {
         let app = router(test_state());
 
         // Defaults: 100k bytes, 2000 lines, 2000 chars per line.
-        let (status, body) = get_json(app.clone(), "/api/tool-output-settings", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/tool-output-settings", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["max_bytes"], 100_000, "{body}");
         assert_eq!(body["max_lines"], 2000, "{body}");
@@ -22487,13 +23514,19 @@ mod tests {
 
         // Validation.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/tool-output-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/tool-output-settings",
+            Some("sekret"),
             json!({ "key": "max_bytes", "value": 0 }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/tool-output-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/tool-output-settings",
+            Some("sekret"),
             json!({ "key": "max_lines", "value": "all" }),
         )
         .await;
@@ -22501,7 +23534,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/tool-output-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/tool-output-settings",
+            Some("sekret"),
             json!({ "key": "max_bytes", "value": null }),
         )
         .await;
@@ -22536,13 +23572,19 @@ mod tests {
 
         // Persist both knobs.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/logging-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/logging-settings",
+            Some("sekret"),
             json!({ "key": "memory_monitor", "value": false }),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/logging-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/logging-settings",
+            Some("sekret"),
             json!({ "key": "memory_monitor_interval_secs", "value": 60 }),
         )
         .await;
@@ -22553,13 +23595,19 @@ mod tests {
 
         // Validation.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/logging-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/logging-settings",
+            Some("sekret"),
             json!({ "key": "memory_monitor", "value": "on" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/logging-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/logging-settings",
+            Some("sekret"),
             json!({ "key": "memory_monitor_interval_secs", "value": 0 }),
         )
         .await;
@@ -22567,7 +23615,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/logging-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/logging-settings",
+            Some("sekret"),
             json!({ "key": "memory_monitor", "value": null }),
         )
         .await;
@@ -22602,13 +23653,19 @@ mod tests {
 
         // Flip both knobs.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/cron-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/cron-settings",
+            Some("sekret"),
             json!({ "key": "wrap_response", "value": false }),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/cron-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/cron-settings",
+            Some("sekret"),
             json!({ "key": "mirror_delivery", "value": true }),
         )
         .await;
@@ -22619,13 +23676,19 @@ mod tests {
 
         // Validation.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/cron-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/cron-settings",
+            Some("sekret"),
             json!({ "key": "wrap_response", "value": "yes" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/cron-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/cron-settings",
+            Some("sekret"),
             json!({ "key": "yolo", "value": true }),
         )
         .await;
@@ -22633,7 +23696,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/cron-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/cron-settings",
+            Some("sekret"),
             json!({ "key": "mirror_delivery", "value": null }),
         )
         .await;
@@ -22700,19 +23766,28 @@ mod tests {
 
         // Validation.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/voice-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/voice-settings",
+            Some("sekret"),
             json!({ "key": "tts_provider", "value": "espeak" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/voice-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/voice-settings",
+            Some("sekret"),
             json!({ "key": "stt_enabled", "value": "on" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/voice-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/voice-settings",
+            Some("sekret"),
             json!({ "key": "stt_language", "value": "  " }),
         )
         .await;
@@ -22720,7 +23795,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/voice-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/voice-settings",
+            Some("sekret"),
             json!({ "key": "tts_provider", "value": null }),
         )
         .await;
@@ -22789,19 +23867,28 @@ mod tests {
 
         // Validation.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/kanban-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/kanban-settings",
+            Some("sekret"),
             json!({ "key": "max_spawn", "value": 0 }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/kanban-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/kanban-settings",
+            Some("sekret"),
             json!({ "key": "worktrees", "value": "yes" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/kanban-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/kanban-settings",
+            Some("sekret"),
             json!({ "key": "yolo", "value": 1 }),
         )
         .await;
@@ -22809,7 +23896,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/kanban-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/kanban-settings",
+            Some("sekret"),
             json!({ "key": "max_spawn", "value": null }),
         )
         .await;
@@ -22869,19 +23959,28 @@ mod tests {
 
         // Validation: blank model, bad effort, sub-floor timeout.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/x-search-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/x-search-settings",
+            Some("sekret"),
             json!({ "key": "model", "value": "  " }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/x-search-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/x-search-settings",
+            Some("sekret"),
             json!({ "key": "reasoning_effort", "value": "ultra" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/x-search-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/x-search-settings",
+            Some("sekret"),
             json!({ "key": "timeout_seconds", "value": 5 }),
         )
         .await;
@@ -22889,7 +23988,10 @@ mod tests {
 
         // Null removes the override and restores the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/x-search-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/x-search-settings",
+            Some("sekret"),
             json!({ "key": "reasoning_effort", "value": null }),
         )
         .await;
@@ -22946,7 +24048,10 @@ mod tests {
 
         // Empty string clears back to auto.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/video-gen-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/video-gen-settings",
+            Some("sekret"),
             json!({ "key": "provider", "value": "" }),
         )
         .await;
@@ -22957,7 +24062,10 @@ mod tests {
 
         // Validation: unknown key.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/video-gen-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/video-gen-settings",
+            Some("sekret"),
             json!({ "key": "yolo", "value": "x" }),
         )
         .await;
@@ -22965,7 +24073,10 @@ mod tests {
 
         // Null removes the override too.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/video-gen-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/video-gen-settings",
+            Some("sekret"),
             json!({ "key": "fal_model", "value": null }),
         )
         .await;
@@ -23030,20 +24141,29 @@ mod tests {
 
         // Validation: unknown preset, bad filter, wrong type.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/moa-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/moa-settings",
+            Some("sekret"),
             json!({ "key": "default_preset", "value": "nope" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
         assert_eq!(body["preset_names"], json!(["council"]), "{body}");
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/moa-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/moa-settings",
+            Some("sekret"),
             json!({ "key": "privacy_filter", "value": "some" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/moa-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/moa-settings",
+            Some("sekret"),
             json!({ "key": "save_traces", "value": "yes" }),
         )
         .await;
@@ -23051,7 +24171,10 @@ mod tests {
 
         // "off" clears the privacy filter back to unset.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/moa-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/moa-settings",
+            Some("sekret"),
             json!({ "key": "privacy_filter", "value": "off" }),
         )
         .await;
@@ -23086,8 +24209,15 @@ mod tests {
         // surface for the editor.
         let (status, body) = get_json(app.clone(), "/api/discord-settings", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["server_actions"], json!(["fetch_messages", "list_pins"]), "{body}");
-        assert!(body["known_actions"].as_array().unwrap().len() > 10, "{body}");
+        assert_eq!(
+            body["server_actions"],
+            json!(["fetch_messages", "list_pins"]),
+            "{body}"
+        );
+        assert!(
+            body["known_actions"].as_array().unwrap().len() > 10,
+            "{body}"
+        );
 
         // Persist an array of valid actions.
         let (status, body) = send_json(
@@ -23100,7 +24230,11 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let (_, body) = get_json(app.clone(), "/api/discord-settings", Some("sekret")).await;
-        assert_eq!(body["server_actions"], json!(["list_guilds", "server_info"]), "{body}");
+        assert_eq!(
+            body["server_actions"],
+            json!(["list_guilds", "server_info"]),
+            "{body}"
+        );
 
         // Comma-separated strings are accepted too.
         let (status, body) = send_json(
@@ -23117,7 +24251,10 @@ mod tests {
 
         // Unknown actions are rejected with the known list.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/discord-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/discord-settings",
+            Some("sekret"),
             json!({ "key": "server_actions", "value": ["nuke_guild"] }),
         )
         .await;
@@ -23126,7 +24263,10 @@ mod tests {
 
         // null removes the allowlist (every action exposed again).
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/discord-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/discord-settings",
+            Some("sekret"),
             json!({ "key": "server_actions", "value": Value::Null }),
         )
         .await;
@@ -23183,12 +24323,18 @@ mod tests {
             assert_eq!(status, StatusCode::OK, "{key}: {body}");
         }
         let (_, body) = get_json(app.clone(), "/api/pets-settings", Some("sekret")).await;
-        assert_eq!(body["image_base_url"], "http://localhost:11434/v1", "{body}");
+        assert_eq!(
+            body["image_base_url"], "http://localhost:11434/v1",
+            "{body}"
+        );
         assert_eq!(body["image_model"], "custom-image-1", "{body}");
 
         // The API key is not editable through the shell.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/pets-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/pets-settings",
+            Some("sekret"),
             json!({ "key": "image_api_key", "value": "sk-other" }),
         )
         .await;
@@ -23196,7 +24342,10 @@ mod tests {
 
         // Empty string clears a knob back to the default.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/pets-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/pets-settings",
+            Some("sekret"),
             json!({ "key": "image_base_url", "value": "" }),
         )
         .await;
@@ -23264,13 +24413,19 @@ mod tests {
 
         // Validation: bad URL shape, unknown provider, non-bool flag.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/browser-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/browser-settings",
+            Some("sekret"),
             json!({ "key": "cdp_url", "value": "ftp://nope" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/browser-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/browser-settings",
+            Some("sekret"),
             json!({ "key": "cloud_provider", "value": "netscape" }),
         )
         .await;
@@ -23281,7 +24436,10 @@ mod tests {
             "{body}"
         );
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/browser-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/browser-settings",
+            Some("sekret"),
             json!({ "key": "use_gateway", "value": "yes" }),
         )
         .await;
@@ -23289,7 +24447,10 @@ mod tests {
 
         // Empty string clears back to unset.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/browser-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/browser-settings",
+            Some("sekret"),
             json!({ "key": "cloud_provider", "value": "" }),
         )
         .await;
@@ -23340,7 +24501,10 @@ mod tests {
 
         // Unknown zones are rejected.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/timezone-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/timezone-settings",
+            Some("sekret"),
             json!({ "key": "timezone", "value": "Mars/Olympus_Mons" }),
         )
         .await;
@@ -23348,7 +24512,10 @@ mod tests {
 
         // null removes the key back to server-local.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/timezone-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/timezone-settings",
+            Some("sekret"),
             json!({ "key": "timezone", "value": Value::Null }),
         )
         .await;
@@ -23381,7 +24548,8 @@ mod tests {
         let app = router(test_state());
 
         // Defaults: install id from fixture, everything else unset.
-        let (status, body) = get_json(app.clone(), "/api/monitoring-settings", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/monitoring-settings", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["install_id"], "abc123", "{body}");
         assert_eq!(body["gateway_health_export_enabled"], Value::Null, "{body}");
@@ -23417,19 +24585,28 @@ mod tests {
 
         // Validation: floor breaches, wrong types.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/monitoring-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/monitoring-settings",
+            Some("sekret"),
             json!({ "key": "export_interval_seconds", "value": 2 }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/monitoring-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/monitoring-settings",
+            Some("sekret"),
             json!({ "key": "logs_export_interval_seconds", "value": 0 }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/monitoring-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/monitoring-settings",
+            Some("sekret"),
             json!({ "key": "metrics_enabled", "value": "on" }),
         )
         .await;
@@ -23437,7 +24614,10 @@ mod tests {
 
         // Clearing the install id rotates it on the next start.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/monitoring-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/monitoring-settings",
+            Some("sekret"),
             json!({ "key": "install_id", "value": Value::Null }),
         )
         .await;
@@ -23475,7 +24655,10 @@ mod tests {
         assert_eq!(body["host"], "127.0.0.1", "{body}");
         assert_eq!(body["port"], 8645, "{body}");
         assert_eq!(body["upstream_url"], "https://example.com/v1", "{body}");
-        assert!(body["allowed_paths"].as_array().unwrap().len() >= 5, "{body}");
+        assert!(
+            body["allowed_paths"].as_array().unwrap().len() >= 5,
+            "{body}"
+        );
         assert_eq!(body["authenticated"], false, "{body}");
 
         // Persist each knob.
@@ -23501,29 +24684,45 @@ mod tests {
         assert_eq!(body["port"], 9000, "{body}");
         assert_eq!(body["upstream_url"], "https://other.example/v1", "{body}");
         assert_eq!(body["max_request_bytes"], 2048, "{body}");
-        assert_eq!(body["allowed_paths"], json!(["/chat/completions", "/responses"]), "{body}");
+        assert_eq!(
+            body["allowed_paths"],
+            json!(["/chat/completions", "/responses"]),
+            "{body}"
+        );
 
         // Validation: bad port, scheme-less URL, unrooted path, tiny cap.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/proxy-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/proxy-settings",
+            Some("sekret"),
             json!({ "key": "port", "value": 70000 }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/proxy-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/proxy-settings",
+            Some("sekret"),
             json!({ "key": "upstream_url", "value": "example.com/v1" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/proxy-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/proxy-settings",
+            Some("sekret"),
             json!({ "key": "allowed_paths", "value": ["chat/completions"] }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/proxy-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/proxy-settings",
+            Some("sekret"),
             json!({ "key": "max_request_bytes", "value": 10 }),
         )
         .await;
@@ -23531,7 +24730,10 @@ mod tests {
 
         // null clears the upstream back to unconfigured.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/proxy-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/proxy-settings",
+            Some("sekret"),
             json!({ "key": "upstream_url", "value": Value::Null }),
         )
         .await;
@@ -23566,10 +24768,20 @@ mod tests {
         // inherit (all null) and no secret value leaks.
         let (status, body) = get_json(app.clone(), "/api/auxiliary-settings", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["tasks"], json!(["vision", "compression", "approval", "title_generation"]), "{body}");
-        assert_eq!(body["config"]["compression"]["provider"], "ollama", "{body}");
+        assert_eq!(
+            body["tasks"],
+            json!(["vision", "compression", "approval", "title_generation"]),
+            "{body}"
+        );
+        assert_eq!(
+            body["config"]["compression"]["provider"], "ollama",
+            "{body}"
+        );
         assert_eq!(body["config"]["compression"]["model"], "qwen3:8b", "{body}");
-        assert_eq!(body["config"]["compression"]["api_key_configured"], true, "{body}");
+        assert_eq!(
+            body["config"]["compression"]["api_key_configured"], true,
+            "{body}"
+        );
         assert_eq!(body["config"]["vision"]["provider"], Value::Null, "{body}");
         assert!(!body.to_string().contains("sk-secret"), "{body}");
 
@@ -23593,26 +24805,45 @@ mod tests {
         let (_, body) = get_json(app.clone(), "/api/auxiliary-settings", Some("sekret")).await;
         assert_eq!(body["config"]["vision"]["provider"], "anthropic", "{body}");
         assert_eq!(body["config"]["vision"]["model"], "claude-haiku", "{body}");
-        assert_eq!(body["config"]["title_generation"]["enabled"], false, "{body}");
-        assert_eq!(body["config"]["title_generation"]["language"], "zh-CN", "{body}");
+        assert_eq!(
+            body["config"]["title_generation"]["enabled"], false,
+            "{body}"
+        );
+        assert_eq!(
+            body["config"]["title_generation"]["language"], "zh-CN",
+            "{body}"
+        );
 
         // Validation: unknown task, unknown key, api_key refused,
         // non-bool enabled.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/auxiliary-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/auxiliary-settings",
+            Some("sekret"),
             json!({ "task": "teleportation", "key": "provider", "value": "openai" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert_eq!(body["tasks"], json!(["vision", "compression", "approval", "title_generation"]), "{body}");
+        assert_eq!(
+            body["tasks"],
+            json!(["vision", "compression", "approval", "title_generation"]),
+            "{body}"
+        );
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/auxiliary-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/auxiliary-settings",
+            Some("sekret"),
             json!({ "task": "vision", "key": "api_key", "value": "sk-other" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/auxiliary-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/auxiliary-settings",
+            Some("sekret"),
             json!({ "task": "title_generation", "key": "enabled", "value": "off" }),
         )
         .await;
@@ -23620,14 +24851,21 @@ mod tests {
 
         // Empty string clears an override back to inherit.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/auxiliary-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/auxiliary-settings",
+            Some("sekret"),
             json!({ "task": "title_generation", "key": "language", "value": "" }),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["removed"], true, "{body}");
         let (_, body) = get_json(app.clone(), "/api/auxiliary-settings", Some("sekret")).await;
-        assert_eq!(body["config"]["title_generation"]["language"], Value::Null, "{body}");
+        assert_eq!(
+            body["config"]["title_generation"]["language"],
+            Value::Null,
+            "{body}"
+        );
 
         match saved_home {
             Some(value) => std::env::set_var("ULNCLAW_HOME", value),
@@ -23654,10 +24892,20 @@ mod tests {
         // Fixture provider surfaces; the secret never leaks.
         let (status, body) = get_json(app.clone(), "/api/providers-settings", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["providers"]["mycloud"]["base_url"], "https://my.cloud/v1", "{body}");
+        assert_eq!(
+            body["providers"]["mycloud"]["base_url"], "https://my.cloud/v1",
+            "{body}"
+        );
         assert_eq!(body["providers"]["mycloud"]["model"], "mc-1", "{body}");
-        assert_eq!(body["providers"]["mycloud"]["api_key_configured"], true, "{body}");
-        assert_eq!(body["valid_modes"], json!(["openai", "anthropic"]), "{body}");
+        assert_eq!(
+            body["providers"]["mycloud"]["api_key_configured"], true,
+            "{body}"
+        );
+        assert_eq!(
+            body["valid_modes"],
+            json!(["openai", "anthropic"]),
+            "{body}"
+        );
         assert!(!body.to_string().contains("sk-secret"), "{body}");
 
         // Persist each editable knob.
@@ -23680,26 +24928,45 @@ mod tests {
         let (_, body) = get_json(app.clone(), "/api/providers-settings", Some("sekret")).await;
         assert_eq!(body["providers"]["mycloud"]["model"], "mc-2", "{body}");
         assert_eq!(body["providers"]["mycloud"]["mode"], "anthropic", "{body}");
-        assert_eq!(body["providers"]["mycloud"]["key_env"], "MYCLOUD_KEY", "{body}");
-        assert_eq!(body["providers"]["mycloud"]["base_url"], "https://other.cloud/v1", "{body}");
+        assert_eq!(
+            body["providers"]["mycloud"]["key_env"], "MYCLOUD_KEY",
+            "{body}"
+        );
+        assert_eq!(
+            body["providers"]["mycloud"]["base_url"], "https://other.cloud/v1",
+            "{body}"
+        );
 
         // Validation: unknown provider, unknown dialect, api_key refused.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/providers-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/providers-settings",
+            Some("sekret"),
             json!({ "provider": "ghost", "key": "model", "value": "x" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
         assert_eq!(body["providers"], json!(["mycloud"]), "{body}");
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/providers-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/providers-settings",
+            Some("sekret"),
             json!({ "provider": "mycloud", "key": "mode", "value": "carrier-pigeon" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert_eq!(body["valid_modes"], json!(["openai", "anthropic"]), "{body}");
+        assert_eq!(
+            body["valid_modes"],
+            json!(["openai", "anthropic"]),
+            "{body}"
+        );
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/providers-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/providers-settings",
+            Some("sekret"),
             json!({ "provider": "mycloud", "key": "api_key", "value": "sk-other" }),
         )
         .await;
@@ -23707,7 +24974,10 @@ mod tests {
 
         // Empty string clears a knob.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/providers-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/providers-settings",
+            Some("sekret"),
             json!({ "provider": "mycloud", "key": "mode", "value": "" }),
         )
         .await;
@@ -23775,13 +25045,19 @@ mod tests {
 
         // Validation: wrong types, zero floors.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/hooks-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/hooks-settings",
+            Some("sekret"),
             json!({ "key": "auto_accept", "value": "yes" }),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/hooks-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/hooks-settings",
+            Some("sekret"),
             json!({ "key": "spill_max_chars", "value": 0 }),
         )
         .await;
@@ -23789,7 +25065,10 @@ mod tests {
 
         // Empty string clears the directory override.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/hooks-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/hooks-settings",
+            Some("sekret"),
             json!({ "key": "spill_directory", "value": "" }),
         )
         .await;
@@ -23849,7 +25128,10 @@ mod tests {
 
         // The API key is not editable through the shell.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/sync-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/sync-settings",
+            Some("sekret"),
             json!({ "key": "api_key", "value": "sk-other" }),
         )
         .await;
@@ -23857,7 +25139,10 @@ mod tests {
 
         // Empty string clears back to inert.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/sync-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/sync-settings",
+            Some("sekret"),
             json!({ "key": "base_url", "value": "" }),
         )
         .await;
@@ -23968,8 +25253,7 @@ mod tests {
             .await;
             assert_eq!(status, StatusCode::OK, "{key}: {body}");
         }
-        let (_, body) =
-            get_json(app.clone(), "/api/computer-use-settings", Some("sekret")).await;
+        let (_, body) = get_json(app.clone(), "/api/computer-use-settings", Some("sekret")).await;
         assert_eq!(body["cua_telemetry"], true, "{body}");
         assert_eq!(body["max_image_dimension"], 1024, "{body}");
         assert_eq!(body["capture_after_mode"], "ax", "{body}");
@@ -24006,8 +25290,7 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["removed"], true, "{body}");
-        let (_, body) =
-            get_json(app.clone(), "/api/computer-use-settings", Some("sekret")).await;
+        let (_, body) = get_json(app.clone(), "/api/computer-use-settings", Some("sekret")).await;
         assert_eq!(body["max_image_dimension"], 1456, "{body}");
 
         match saved_home {
@@ -24036,7 +25319,10 @@ mod tests {
 
         // Persist each knob.
         for (key, value) in [
-            ("device_authorization_url", json!("https://auth.example/device")),
+            (
+                "device_authorization_url",
+                json!("https://auth.example/device"),
+            ),
             ("token_url", json!("https://auth.example/token")),
             ("client_id", json!("ulnclaw-desktop")),
             ("scopes", json!("inference sync")),
@@ -24053,7 +25339,10 @@ mod tests {
             assert_eq!(status, StatusCode::OK, "{key}: {body}");
         }
         let (_, body) = get_json(app.clone(), "/api/oauth-settings", Some("sekret")).await;
-        assert_eq!(body["device_authorization_url"], "https://auth.example/device", "{body}");
+        assert_eq!(
+            body["device_authorization_url"], "https://auth.example/device",
+            "{body}"
+        );
         assert_eq!(body["token_url"], "https://auth.example/token", "{body}");
         assert_eq!(body["client_id"], "ulnclaw-desktop", "{body}");
         assert_eq!(body["scopes"], "inference sync", "{body}");
@@ -24062,7 +25351,10 @@ mod tests {
 
         // URL fields reject scheme-less values.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/oauth-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/oauth-settings",
+            Some("sekret"),
             json!({ "key": "token_url", "value": "auth.example/token" }),
         )
         .await;
@@ -24070,7 +25362,10 @@ mod tests {
 
         // Clearing a flow URL flips the configured gate back off.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/oauth-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/oauth-settings",
+            Some("sekret"),
             json!({ "key": "token_url", "value": Value::Null }),
         )
         .await;
@@ -24107,7 +25402,10 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["disabled_toolsets"], json!(["kanban"]), "{body}");
         assert_eq!(body["enabled_toolsets"], json!([]), "{body}");
-        assert!(body["available_toolsets"].as_array().unwrap().len() > 5, "{body}");
+        assert!(
+            body["available_toolsets"].as_array().unwrap().len() > 5,
+            "{body}"
+        );
 
         // Persist both gates.
         let (status, body) = send_json(
@@ -24129,12 +25427,23 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let (_, body) = get_json(app.clone(), "/api/toolsets-settings", Some("sekret")).await;
-        assert_eq!(body["enabled_toolsets"], json!(["coding", "browser"]), "{body}");
-        assert_eq!(body["disabled_toolsets"], json!(["kanban", "discord"]), "{body}");
+        assert_eq!(
+            body["enabled_toolsets"],
+            json!(["coding", "browser"]),
+            "{body}"
+        );
+        assert_eq!(
+            body["disabled_toolsets"],
+            json!(["kanban", "discord"]),
+            "{body}"
+        );
 
         // Unknown toolsets are rejected with the registry list.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/toolsets-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/toolsets-settings",
+            Some("sekret"),
             json!({ "key": "enabled_toolsets", "value": ["warp-drive"] }),
         )
         .await;
@@ -24143,7 +25452,10 @@ mod tests {
 
         // null removes a gate.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/toolsets-settings", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/toolsets-settings",
+            Some("sekret"),
             json!({ "key": "enabled_toolsets", "value": Value::Null }),
         )
         .await;
@@ -24233,17 +25545,26 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let saved_home = std::env::var("ULNCLAW_HOME").ok();
         std::env::set_var("ULNCLAW_HOME", dir.path());
-        std::fs::write(dir.path().join(".env"), "HANDOFFTEST_HOME_CHANNEL=home-chat\n").unwrap();
+        std::fs::write(
+            dir.path().join(".env"),
+            "HANDOFFTEST_HOME_CHANNEL=home-chat\n",
+        )
+        .unwrap();
 
         let sends = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         crate::messaging::register_platform_sender(
             "handofftest",
-            std::sync::Arc::new(HandoffCapture { sends: sends.clone() }),
+            std::sync::Arc::new(HandoffCapture {
+                sends: sends.clone(),
+            }),
         );
 
         let state = test_state();
         let sid = "sess-handoff";
-        state.store.create_named_session(sid, "test", None, None).unwrap();
+        state
+            .store
+            .create_named_session(sid, "test", None, None)
+            .unwrap();
         state.store.set_session_title(sid, "Handoff me").unwrap();
 
         // Unknown platform → lists live platforms.
@@ -24283,7 +25604,10 @@ mod tests {
         // collapsed into hidden counts.
         let state = test_state();
         let sid = "sess-history";
-        state.store.create_named_session(sid, "test", None, None).unwrap();
+        state
+            .store
+            .create_named_session(sid, "test", None, None)
+            .unwrap();
         let mk = |role: Role, content: &str| Message {
             role,
             content: Some(content.to_string()),
@@ -24291,7 +25615,10 @@ mod tests {
             tool_call_id: None,
             name: None,
         };
-        state.store.append_message(sid, &mk(Role::User, "hello\nworld")).unwrap();
+        state
+            .store
+            .append_message(sid, &mk(Role::User, "hello\nworld"))
+            .unwrap();
         state
             .store
             .append_message(
@@ -24305,8 +25632,14 @@ mod tests {
                 },
             )
             .unwrap();
-        state.store.append_message(sid, &mk(Role::Tool, "tool output")).unwrap();
-        state.store.append_message(sid, &mk(Role::Assistant, "the answer")).unwrap();
+        state
+            .store
+            .append_message(sid, &mk(Role::Tool, "tool output"))
+            .unwrap();
+        state
+            .store
+            .append_message(sid, &mk(Role::Assistant, "the answer"))
+            .unwrap();
 
         match resolve_gateway_slash(&state, sid, "/history").await {
             Some(GatewaySlash::Direct(text)) => {
@@ -24354,7 +25687,10 @@ mod tests {
             }
             _ => panic!("expected /reload to answer directly"),
         }
-        assert_eq!(std::env::var("ULNCLAW_RELOAD_GW").ok().as_deref(), Some("1"));
+        assert_eq!(
+            std::env::var("ULNCLAW_RELOAD_GW").ok().as_deref(),
+            Some("1")
+        );
 
         std::env::remove_var("ULNCLAW_RELOAD_GW");
         match saved_home {
@@ -24390,7 +25726,10 @@ mod tests {
         // Bare /learn falls back to the conversation-workflow prompt.
         match resolve_gateway_slash(&state, "sess-1", "/learn").await {
             Some(GatewaySlash::AgentTurn(message)) => {
-                assert!(message.contains("the workflow we just went through"), "{message}");
+                assert!(
+                    message.contains("the workflow we just went through"),
+                    "{message}"
+                );
             }
             _ => panic!("expected bare /learn to resolve to an agent turn"),
         }
@@ -24452,8 +25791,7 @@ mod tests {
         let mut state = test_state();
         // Replace the process-exit hook with a recorder so the drain
         // task cannot kill the test binary.
-        let exits: Arc<std::sync::Mutex<Vec<i32>>> =
-            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let exits: Arc<std::sync::Mutex<Vec<i32>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
         let recorded = exits.clone();
         Arc::get_mut(&mut state).expect("fresh state").restart_exit =
             Arc::new(move |code| recorded.lock().unwrap().push(code));
@@ -24480,8 +25818,7 @@ mod tests {
         let completer = state.clone();
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-            completer.runs.lock().await.get_mut(&run_id).unwrap().status =
-                "completed".to_string();
+            completer.runs.lock().await.get_mut(&run_id).unwrap().status = "completed".to_string();
         });
 
         match resolve_gateway_slash(&state, "sess-1", "/restart").await {
@@ -24504,7 +25841,10 @@ mod tests {
         // The draining gateway refuses new runs.
         let app = router(state.clone());
         let (status, _) = send_json(
-            app.clone(), "POST", "/v1/runs", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/v1/runs",
+            Some("sekret"),
             json!({"message": "late run"}),
         )
         .await;
@@ -24714,8 +26054,8 @@ mod tests {
         std::fs::write(
             &png_path,
             [
-                0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-                0x49, 0x48, 0x44, 0x52,
+                0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+                0x44, 0x52,
             ],
         )
         .unwrap();
@@ -24724,7 +26064,11 @@ mod tests {
         // Direct loader: data URL with the right media type.
         let images = load_chat_images(&[png_str.clone()]).unwrap();
         assert_eq!(images.len(), 1);
-        assert!(images[0].url.starts_with("data:image/png;base64,"), "{}", &images[0].url[..40]);
+        assert!(
+            images[0].url.starts_with("data:image/png;base64,"),
+            "{}",
+            &images[0].url[..40]
+        );
         assert_eq!(images[0].media_type.as_deref(), Some("image/png"));
         assert!(load_chat_images(&["/definitely/missing.png".to_string()]).is_err());
         assert!(load_chat_images(&["not-an-image.txt".to_string()]).is_err());
@@ -24746,7 +26090,12 @@ mod tests {
             _ => panic!("expected attach reply"),
         }
         assert_eq!(
-            state.pending_images.lock().unwrap().get("sess-i").map(Vec::len),
+            state
+                .pending_images
+                .lock()
+                .unwrap()
+                .get("sess-i")
+                .map(Vec::len),
             Some(1)
         );
 
@@ -24811,7 +26160,11 @@ mod tests {
 
         // Seed a waiting run + responder for this session.
         let (tx, rx) = tokio::sync::oneshot::channel::<String>();
-        state.pending_approvals.lock().await.insert("run-wait".into(), tx);
+        state
+            .pending_approvals
+            .lock()
+            .await
+            .insert("run-wait".into(), tx);
         state.runs.lock().await.insert(
             "run-wait".into(),
             RunState {
@@ -24966,7 +26319,10 @@ mod tests {
         let app = router(state.clone());
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks",
+            None,
             json!({"title": "reasoning pin test"}),
         )
         .await;
@@ -24976,34 +26332,43 @@ mod tests {
 
         // Pin "high"; surfaces on the task JSON.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/set-reasoning"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/set-reasoning"),
+            None,
             json!({"reasoning_effort": "high"}),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["task"]["reasoning_effort"], "high", "{body}");
-        let (status, body) = get_json(
-            app.clone(), &format!("/api/kanban/tasks/{id}"), None,
-        )
-        .await;
+        let (status, body) = get_json(app.clone(), &format!("/api/kanban/tasks/{id}"), None).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["task"]["reasoning_effort"], "high", "{body}");
 
         // Invalid level -> 400 with the allowed-list message.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/set-reasoning"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/set-reasoning"),
+            None,
             json!({"reasoning_effort": "extreme"}),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert!(body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("reasoning_effort must be one of"), "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("reasoning_effort must be one of"),
+            "{body}"
+        );
 
         // Empty string clears the pin -> null (inherit profile).
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/set-reasoning"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/set-reasoning"),
+            None,
             json!({"reasoning_effort": ""}),
         )
         .await;
@@ -25012,7 +26377,10 @@ mod tests {
 
         // Unknown task -> 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks/nope123/set-reasoning", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks/nope123/set-reasoning",
+            None,
             json!({"reasoning_effort": "high"}),
         )
         .await;
@@ -25067,7 +26435,8 @@ mod tests {
 
         // Inert gate: both directions refuse with the gate reason.
         for path in ["/api/sync/pull", "/api/sync/push"] {
-            let (status, body) = send_json(app.clone(), "POST", path, Some("sekret"), json!({})).await;
+            let (status, body) =
+                send_json(app.clone(), "POST", path, Some("sekret"), json!({})).await;
             assert_eq!(status, StatusCode::OK, "{body}");
             assert_eq!(body["ok"], false, "{body}");
             let error = body["error"].as_str().unwrap_or_default();
@@ -25082,11 +26451,20 @@ mod tests {
 ",
         )
         .unwrap();
-        let (status, body) =
-            send_json(app.clone(), "POST", "/api/sync/pull", Some("sekret"), json!({})).await;
+        let (status, body) = send_json(
+            app.clone(),
+            "POST",
+            "/api/sync/pull",
+            Some("sekret"),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["ok"], false, "{body}");
-        assert!(body["error"].as_str().unwrap_or_default().len() > 0, "{body}");
+        assert!(
+            body["error"].as_str().unwrap_or_default().len() > 0,
+            "{body}"
+        );
 
         match saved_home {
             Some(value) => std::env::set_var("ULNCLAW_HOME", value),
@@ -25132,7 +26510,10 @@ mod tests {
         let (status, body) = get_json(app.clone(), "/api/computer-use", None).await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert!(body["installed"].is_boolean(), "{body}");
-        assert!(body["install_hint"].as_str().map(str::len).unwrap_or(0) > 0, "{body}");
+        assert!(
+            body["install_hint"].as_str().map(str::len).unwrap_or(0) > 0,
+            "{body}"
+        );
         assert!(body["config"]["max_image_dimension"].is_number(), "{body}");
         assert!(body["config"]["capture_after_mode"].is_string(), "{body}");
         // Shallow call never carries a health payload.
@@ -25153,13 +26534,19 @@ mod tests {
 
         // Create a scratch board and rename it.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/boards", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/boards",
+            None,
             json!({"slug": "temp-board", "name": "Temp"}),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/boards/temp-board/rename", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/boards/temp-board/rename",
+            None,
             json!({"name": "Renamed"}),
         )
         .await;
@@ -25168,13 +26555,19 @@ mod tests {
 
         // Blank name -> 400; unknown slug -> 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/boards/temp-board/rename", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/boards/temp-board/rename",
+            None,
             json!({"name": "   "}),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/boards/nope/rename", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/boards/nope/rename",
+            None,
             json!({"name": "x"}),
         )
         .await;
@@ -25182,44 +26575,73 @@ mod tests {
 
         // Default board is protected.
         let (status, body) = send_json(
-            app.clone(), "DELETE", "/api/kanban/boards/default", None, json!(null),
+            app.clone(),
+            "DELETE",
+            "/api/kanban/boards/default",
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert!(body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("default board"), "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("default board"),
+            "{body}"
+        );
 
         // A board with an active task refuses removal until archived.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/boards/temp-board/switch", None, json!(null),
+            app.clone(),
+            "POST",
+            "/api/kanban/boards/temp-board/switch",
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::OK);
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks",
+            None,
             json!({"title": "blocker"}),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let task_id = body["task"]["id"].as_str().unwrap().to_string();
         let (status, body) = send_json(
-            app.clone(), "DELETE", "/api/kanban/boards/temp-board", None, json!(null),
+            app.clone(),
+            "DELETE",
+            "/api/kanban/boards/temp-board",
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert!(body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("active task"), "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("active task"),
+            "{body}"
+        );
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{task_id}/archive"), None, json!(null),
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{task_id}/archive"),
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::OK);
         let (status, body) = send_json(
-            app.clone(), "DELETE", "/api/kanban/boards/temp-board", None, json!(null),
+            app.clone(),
+            "DELETE",
+            "/api/kanban/boards/temp-board",
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -25227,7 +26649,11 @@ mod tests {
 
         // Removing it again 404s.
         let (status, _) = send_json(
-            app.clone(), "DELETE", "/api/kanban/boards/temp-board", None, json!(null),
+            app.clone(),
+            "DELETE",
+            "/api/kanban/boards/temp-board",
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
@@ -25252,7 +26678,10 @@ mod tests {
         let app = router(state.clone());
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/boards", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/boards",
+            None,
             json!({"slug": "wd-board"}),
         )
         .await;
@@ -25263,7 +26692,10 @@ mod tests {
         std::fs::create_dir_all(&workdir).unwrap();
         let expected = std::fs::canonicalize(&workdir).unwrap();
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/boards/wd-board/workdir", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/boards/wd-board/workdir",
+            None,
             json!({"workdir": workdir.to_str().unwrap()}),
         )
         .await;
@@ -25276,7 +26708,10 @@ mod tests {
 
         // Missing directory or a plain file -> 400.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/boards/wd-board/workdir", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/boards/wd-board/workdir",
+            None,
             json!({"workdir": dir.path().join("nope").to_str().unwrap()}),
         )
         .await;
@@ -25284,7 +26719,10 @@ mod tests {
         let file_path = dir.path().join("file.txt");
         std::fs::write(&file_path, "x").unwrap();
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/boards/wd-board/workdir", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/boards/wd-board/workdir",
+            None,
             json!({"workdir": file_path.to_str().unwrap()}),
         )
         .await;
@@ -25292,7 +26730,10 @@ mod tests {
 
         // Null / empty workdir clears it.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/boards/wd-board/workdir", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/boards/wd-board/workdir",
+            None,
             json!({"workdir": null}),
         )
         .await;
@@ -25301,7 +26742,10 @@ mod tests {
 
         // Unknown board -> 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/boards/nope/workdir", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/boards/nope/workdir",
+            None,
             json!({"workdir": null}),
         )
         .await;
@@ -25327,7 +26771,10 @@ mod tests {
         let app = router(state.clone());
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks",
+            None,
             json!({"title": "lifecycle task"}),
         )
         .await;
@@ -25337,7 +26784,10 @@ mod tests {
 
         // Promote todo -> ready.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{task_id}/promote"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{task_id}/promote"),
+            None,
             json!({"reason": "urgent"}),
         )
         .await;
@@ -25346,7 +26796,10 @@ mod tests {
 
         // Promoting a ready task fails (only todo/blocked promote).
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{task_id}/promote"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{task_id}/promote"),
+            None,
             json!({}),
         )
         .await;
@@ -25354,7 +26807,10 @@ mod tests {
 
         // Assign, claim (ready -> running), reclaim back to ready.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{task_id}/assign"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{task_id}/assign"),
+            None,
             json!({"assignee": "alice"}),
         )
         .await;
@@ -25362,14 +26818,21 @@ mod tests {
         assert_eq!(body["task"]["assignee"], "alice", "{body}");
 
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{task_id}/claim"), None, json!(null),
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{task_id}/claim"),
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["task"]["status"], "running", "{body}");
 
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{task_id}/reclaim"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{task_id}/reclaim"),
+            None,
             json!({"reason": "worker stuck"}),
         )
         .await;
@@ -25378,14 +26841,20 @@ mod tests {
 
         // Reclaiming a non-running task fails.
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{task_id}/reclaim"), None, json!({}),
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{task_id}/reclaim"),
+            None,
+            json!({}),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Run history records the reclaimed run.
         let (status, body) = get_json(
-            app.clone(), &format!("/api/kanban/tasks/{task_id}/runs"), None,
+            app.clone(),
+            &format!("/api/kanban/tasks/{task_id}/runs"),
+            None,
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -25427,7 +26896,10 @@ mod tests {
         let app = router(state.clone());
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks",
+            None,
             json!({"title": "Haunted", "body": "depends on t_missingcard12"}),
         )
         .await;
@@ -25436,17 +26908,27 @@ mod tests {
 
         // Per-task diagnostics: hallucinated_cards fires.
         let (status, body) = get_json(
-            app.clone(), &format!("/api/kanban/tasks/{task_id}/diagnostics"), None,
+            app.clone(),
+            &format!("/api/kanban/tasks/{task_id}/diagnostics"),
+            None,
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let diagnostics = body["diagnostics"].as_array().unwrap();
         assert!(
-            diagnostics.iter().any(|d| d["kind"] == "hallucinated_cards"),
+            diagnostics
+                .iter()
+                .any(|d| d["kind"] == "hallucinated_cards"),
             "{body}"
         );
         let action = &diagnostics[0]["actions"][0];
-        assert!(action["hint"].as_str().unwrap_or_default().starts_with("ulnclaw "), "{body}");
+        assert!(
+            action["hint"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("ulnclaw "),
+            "{body}"
+        );
 
         // Board scan flags the same task.
         let (status, body) = get_json(app.clone(), "/api/kanban/diagnostics", None).await;
@@ -25457,7 +26939,8 @@ mod tests {
         assert!(row["diagnostics"].as_array().unwrap().len() >= 1, "{body}");
 
         // Unknown task 404s.
-        let (status, _) = get_json(app.clone(), "/api/kanban/tasks/nope123/diagnostics", None).await;
+        let (status, _) =
+            get_json(app.clone(), "/api/kanban/tasks/nope123/diagnostics", None).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         match saved_home {
@@ -25479,14 +26962,20 @@ mod tests {
         let app = router(state.clone());
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks",
+            None,
             json!({"title": "parent task"}),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let parent = body["task"]["id"].as_str().unwrap().to_string();
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks",
+            None,
             json!({"title": "child task"}),
         )
         .await;
@@ -25495,7 +26984,10 @@ mod tests {
 
         // Link child -> parent.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{child}/link"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{child}/link"),
+            None,
             json!({"parent_id": parent}),
         )
         .await;
@@ -25505,7 +26997,10 @@ mod tests {
 
         // Self-link is refused.
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{child}/link"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{child}/link"),
+            None,
             json!({"parent_id": child}),
         )
         .await;
@@ -25513,18 +27008,27 @@ mod tests {
 
         // Unlink removes it.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{child}/unlink"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{child}/unlink"),
+            None,
             json!({"parent_id": parent}),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["ok"], true, "{body}");
         let (_, body) = get_json(app.clone(), &format!("/api/kanban/tasks/{child}"), None).await;
-        assert!(body["task"]["parents"].as_array().unwrap().is_empty(), "{body}");
+        assert!(
+            body["task"]["parents"].as_array().unwrap().is_empty(),
+            "{body}"
+        );
 
         // Unlink is idempotent store-side (still 200, nothing removed).
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{child}/unlink"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{child}/unlink"),
+            None,
             json!({"parent_id": parent}),
         )
         .await;
@@ -25532,13 +27036,19 @@ mod tests {
 
         // Unknown ids 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks/nope123/unlink", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks/nope123/unlink",
+            None,
             json!({"parent_id": parent}),
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{child}/unlink"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{child}/unlink"),
+            None,
             json!({"parent_id": "nope123"}),
         )
         .await;
@@ -25563,7 +27073,10 @@ mod tests {
         let app = router(state.clone());
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks",
+            None,
             json!({"title": "lifecycle test"}),
         )
         .await;
@@ -25572,7 +27085,10 @@ mod tests {
 
         // Schedule it.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/schedule"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/schedule"),
+            None,
             json!({"reason": "waiting on upstream"}),
         )
         .await;
@@ -25581,7 +27097,10 @@ mod tests {
 
         // Scheduling again fails the transition.
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/schedule"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/schedule"),
+            None,
             json!({}),
         )
         .await;
@@ -25589,14 +27108,20 @@ mod tests {
 
         // Reassign to a worker, then unassign with "none".
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/reassign"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/reassign"),
+            None,
             json!({"assignee": "worker-a"}),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["task"]["assignee"], "worker-a", "{body}");
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/reassign"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/reassign"),
+            None,
             json!({"assignee": "none"}),
         )
         .await;
@@ -25605,35 +27130,55 @@ mod tests {
 
         // Terminal task -> 400 on reassign.
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/unblock"), None, json!(null),
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/unblock"),
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::OK);
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/complete"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/complete"),
+            None,
             json!({"result": "done"}),
         )
         .await;
         assert_eq!(status, StatusCode::OK);
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/reassign"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/reassign"),
+            None,
             json!({"assignee": "worker-b"}),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert!(body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("already terminal"), "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("already terminal"),
+            "{body}"
+        );
 
         // Unknown ids 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks/nope123/schedule", None, json!({}),
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks/nope123/schedule",
+            None,
+            json!({}),
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks/nope123/reassign", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks/nope123/reassign",
+            None,
             json!({"assignee": "x"}),
         )
         .await;
@@ -25659,7 +27204,10 @@ mod tests {
         let app = router(state.clone());
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks",
+            None,
             json!({"title": "attach test"}),
         )
         .await;
@@ -25668,20 +27216,29 @@ mod tests {
 
         // File attachment: must exist.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/attach"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/attach"),
+            None,
             json!({"kind": "file", "value": "/nonexistent/nope.txt"}),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert!(body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("is not a file"), "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("is not a file"),
+            "{body}"
+        );
 
         let file_path = dir.path().join("artifact.txt");
         std::fs::write(&file_path, "deliverable").unwrap();
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/attach"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/attach"),
+            None,
             json!({"kind": "file", "value": file_path.display().to_string()}),
         )
         .await;
@@ -25689,7 +27246,10 @@ mod tests {
 
         // Link attachment (no existence check).
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/attach"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/attach"),
+            None,
             json!({"kind": "link", "value": "https://example.com/pr/1"}),
         )
         .await;
@@ -25704,7 +27264,11 @@ mod tests {
 
         // Delete the first attachment.
         let (status, body) = send_json(
-            app.clone(), "DELETE", &format!("/api/kanban/attachments/{aid}"), None, json!(null),
+            app.clone(),
+            "DELETE",
+            &format!("/api/kanban/attachments/{aid}"),
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -25714,14 +27278,21 @@ mod tests {
 
         // Deleting again 404s.
         let (status, _) = send_json(
-            app.clone(), "DELETE", &format!("/api/kanban/attachments/{aid}"), None, json!(null),
+            app.clone(),
+            "DELETE",
+            &format!("/api/kanban/attachments/{aid}"),
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         // Unknown task 404s on attach.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks/nope123/attach", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks/nope123/attach",
+            None,
             json!({"kind": "link", "value": "x"}),
         )
         .await;
@@ -25746,7 +27317,10 @@ mod tests {
         let app = router(state.clone());
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks",
+            None,
             json!({"title": "archive me"}),
         )
         .await;
@@ -25755,18 +27329,29 @@ mod tests {
 
         // Deleting a non-archived task is refused.
         let (status, body) = send_json(
-            app.clone(), "DELETE", &format!("/api/kanban/tasks/{id}"), None, json!(null),
+            app.clone(),
+            "DELETE",
+            &format!("/api/kanban/tasks/{id}"),
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert!(body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("archived before deletion"), "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("archived before deletion"),
+            "{body}"
+        );
 
         // Archive it.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/archive"), None, json!(null),
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/archive"),
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -25774,14 +27359,22 @@ mod tests {
 
         // Archiving again fails the transition.
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/archive"), None, json!(null),
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/archive"),
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Now deletion succeeds.
         let (status, body) = send_json(
-            app.clone(), "DELETE", &format!("/api/kanban/tasks/{id}"), None, json!(null),
+            app.clone(),
+            "DELETE",
+            &format!("/api/kanban/tasks/{id}"),
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -25791,12 +27384,20 @@ mod tests {
 
         // Unknown ids 404 on both.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks/nope123/archive", None, json!(null),
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks/nope123/archive",
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         let (status, _) = send_json(
-            app.clone(), "DELETE", "/api/kanban/tasks/nope123", None, json!(null),
+            app.clone(),
+            "DELETE",
+            "/api/kanban/tasks/nope123",
+            None,
+            json!(null),
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
@@ -25819,7 +27420,10 @@ mod tests {
         let app = router(state.clone());
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks",
+            None,
             json!({"title": "draft title", "body": "draft body"}),
         )
         .await;
@@ -25828,7 +27432,10 @@ mod tests {
 
         // Rewrite the title only.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/edit"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/edit"),
+            None,
             json!({"title": "final title"}),
         )
         .await;
@@ -25838,7 +27445,10 @@ mod tests {
 
         // Rewrite the body only (empty string clears).
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/edit"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/edit"),
+            None,
             json!({"body": ""}),
         )
         .await;
@@ -25847,45 +27457,66 @@ mod tests {
 
         // Blank title -> 400.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/edit"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/edit"),
+            None,
             json!({"title": "   "}),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert!(body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("title cannot be blank"), "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("title cannot be blank"),
+            "{body}"
+        );
 
         // Nothing to edit -> 400.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/edit"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/edit"),
+            None,
             json!({}),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert!(body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("nothing to edit"), "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("nothing to edit"),
+            "{body}"
+        );
 
         // Archived task -> 400.
         let store = crate::kanban::KanbanStore::open_default().unwrap();
         store.archive_task(&id).unwrap();
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/edit"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/edit"),
+            None,
             json!({"title": "nope"}),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert!(body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("not found or archived"), "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("not found or archived"),
+            "{body}"
+        );
 
         // Unknown task -> 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks/nope123/edit", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks/nope123/edit",
+            None,
             json!({"title": "x"}),
         )
         .await;
@@ -25910,7 +27541,10 @@ mod tests {
         let app = router(state.clone());
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks",
+            None,
             json!({"title": "model pin test"}),
         )
         .await;
@@ -25920,7 +27554,10 @@ mod tests {
 
         // Pin model + provider.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/set-model"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/set-model"),
+            None,
             json!({"model": "gpt-5", "provider": "openai"}),
         )
         .await;
@@ -25932,19 +27569,28 @@ mod tests {
 
         // Provider without model -> 400 (hermes contract).
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/set-model"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/set-model"),
+            None,
             json!({"provider": "anthropic"}),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert!(body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("provider override requires a model"), "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("provider override requires a model"),
+            "{body}"
+        );
 
         // Empty model clears model + provider.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/set-model"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/set-model"),
+            None,
             json!({"model": ""}),
         )
         .await;
@@ -25954,25 +27600,37 @@ mod tests {
 
         // Terminal task -> 400.
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/complete"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/complete"),
+            None,
             json!({"result": "done"}),
         )
         .await;
         assert_eq!(status, StatusCode::OK);
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/kanban/tasks/{id}/set-model"), None,
+            app.clone(),
+            "POST",
+            &format!("/api/kanban/tasks/{id}/set-model"),
+            None,
             json!({"model": "gpt-5"}),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert!(body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("already terminal"), "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("already terminal"),
+            "{body}"
+        );
 
         // Unknown task -> 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/kanban/tasks/nope123/set-model", None,
+            app.clone(),
+            "POST",
+            "/api/kanban/tasks/nope123/set-model",
+            None,
             json!({"model": "gpt-5"}),
         )
         .await;
@@ -26005,7 +27663,10 @@ mod tests {
             .unwrap()
             .contains("saved to agent.service_tier"));
         let config_text = std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
-        assert!(config_text.contains("service_tier = \"fast\""), "{config_text}");
+        assert!(
+            config_text.contains("service_tier = \"fast\""),
+            "{config_text}"
+        );
 
         match saved_home {
             Some(value) => std::env::set_var("ULNCLAW_HOME", value),
@@ -26036,8 +27697,7 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("reasoning effort set to high"));
-        let config_text =
-            std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
+        let config_text = std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
         assert!(
             config_text.contains("reasoning_effort = \"high\""),
             "{config_text}"
@@ -26061,8 +27721,7 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("reasoning effort cleared"));
-        let config_text =
-            std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
+        let config_text = std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
         assert!(!config_text.contains("reasoning_effort"), "{config_text}");
 
         // /model persists provider+model.
@@ -26071,8 +27730,7 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("model set to openrouter/moonshotai/kimi-k2"));
-        let config_text =
-            std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
+        let config_text = std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
         assert!(config_text.contains("openrouter"), "{config_text}");
         assert!(config_text.contains("moonshotai/kimi-k2"), "{config_text}");
 
@@ -26112,10 +27770,7 @@ mod tests {
 
         // No run in flight for this session: /stop says so.
         let reply = post_chat(app.clone(), &sid, "/stop").await;
-        assert_eq!(
-            reply["response"],
-            "no running run found for this session."
-        );
+        assert_eq!(reply["response"], "no running run found for this session.");
 
         match saved_home {
             Some(v) => std::env::set_var("ULNCLAW_HOME", v),
@@ -26145,10 +27800,7 @@ mod tests {
         assert_eq!(reply["response"], "Hello");
 
         let messages = state.store.load_messages(&sid).expect("messages load");
-        let texts: Vec<String> = messages
-            .iter()
-            .filter_map(|m| m.content.clone())
-            .collect();
+        let texts: Vec<String> = messages.iter().filter_map(|m| m.content.clone()).collect();
         // The slash row and the first answer were truncated; the retried
         // question + its fresh answer are the only turns left.
         assert_eq!(texts, vec!["first question", "Hello"], "{texts:?}");
@@ -26185,10 +27837,7 @@ mod tests {
         let text = reply["response"].as_str().unwrap();
         assert!(text.contains("> second question"), "{text}");
         let messages = state.store.load_messages(&sid).expect("messages load");
-        let texts: Vec<String> = messages
-            .iter()
-            .filter_map(|m| m.content.clone())
-            .collect();
+        let texts: Vec<String> = messages.iter().filter_map(|m| m.content.clone()).collect();
         assert_eq!(&texts[..2], ["first question", "Hello"], "{texts:?}");
         assert_eq!(texts.len(), 4, "{texts:?}");
         assert_eq!(texts[2], "/undo");
@@ -26200,10 +27849,7 @@ mod tests {
             .unwrap()
             .contains("> first question"));
         let messages = state.store.load_messages(&sid).expect("messages load");
-        let texts: Vec<String> = messages
-            .iter()
-            .filter_map(|m| m.content.clone())
-            .collect();
+        let texts: Vec<String> = messages.iter().filter_map(|m| m.content.clone()).collect();
         assert_eq!(texts.len(), 2, "{texts:?}");
         assert_eq!(texts[0], "/undo 5");
 
@@ -26325,7 +27971,9 @@ mod tests {
         let text = std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
         let doc: toml::Value = toml::from_str(&text).expect("config parses");
         assert!(
-            doc.get("agent").and_then(|agent| agent.get("system_prompt")).is_none(),
+            doc.get("agent")
+                .and_then(|agent| agent.get("system_prompt"))
+                .is_none(),
             "{text}"
         );
 
@@ -26483,9 +28131,7 @@ mod tests {
             "---\nname: work\ndescription: Do the work\n---\n\nDo the thing.\n",
         )
         .unwrap();
-        let store = Arc::new(
-            SqliteSessionStore::open(home.join("state.db")).expect("store opens"),
-        );
+        let store = Arc::new(SqliteSessionStore::open(home.join("state.db")).expect("store opens"));
         let provider = Arc::new(FakeStreamProvider);
         let agent = Agent::new(provider.clone(), ToolRegistry::new())
             .with_store(store)
@@ -26655,19 +28301,17 @@ mod tests {
     #[tokio::test]
     async fn test_responses_stream_sse_with_tool_call() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
         let mut registry = ToolRegistry::new();
-        registry
-            .register(
-                crate::tools::tool("echo")
-                    .description("echo tool")
-                    .handler(|_args, _ctx| async move { Ok(serde_json::json!({"echoed": true})) })
-                    .build()
-                    .expect("tool builds"),
-            );
+        registry.register(
+            crate::tools::tool("echo")
+                .description("echo tool")
+                .handler(|_args, _ctx| async move { Ok(serde_json::json!({"echoed": true})) })
+                .build()
+                .expect("tool builds"),
+        );
         let provider = Arc::new(FakeToolStreamProvider {
             calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         });
@@ -26686,20 +28330,52 @@ mod tests {
             .uri("/v1/responses")
             .method("POST")
             .header("content-type", "application/json")
-            .body(axum::body::Body::from(r#"{"stream": true, "input": "run echo"}"#))
+            .body(axum::body::Body::from(
+                r#"{"stream": true, "input": "run echo"}"#,
+            ))
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let text = String::from_utf8_lossy(&body).to_string();
 
-        assert!(text.contains("event: response.created"), "created: {}", text);
-        assert!(text.contains("event: response.output_item.added"), "item added: {}", text);
-        assert!(text.contains(r#""type":"function_call""#), "function_call: {}", text);
-        assert!(text.contains(r#""type":"function_call_output""#), "fn output: {}", text);
-        assert!(text.contains("event: response.output_text.delta"), "text delta: {}", text);
-        assert!(text.contains("event: response.output_text.done"), "text done: {}", text);
-        assert!(text.contains("event: response.completed"), "completed: {}", text);
+        assert!(
+            text.contains("event: response.created"),
+            "created: {}",
+            text
+        );
+        assert!(
+            text.contains("event: response.output_item.added"),
+            "item added: {}",
+            text
+        );
+        assert!(
+            text.contains(r#""type":"function_call""#),
+            "function_call: {}",
+            text
+        );
+        assert!(
+            text.contains(r#""type":"function_call_output""#),
+            "fn output: {}",
+            text
+        );
+        assert!(
+            text.contains("event: response.output_text.delta"),
+            "text delta: {}",
+            text
+        );
+        assert!(
+            text.contains("event: response.output_text.done"),
+            "text done: {}",
+            text
+        );
+        assert!(
+            text.contains("event: response.completed"),
+            "completed: {}",
+            text
+        );
         assert!(text.contains(r#""sequence_number""#), "seq: {}", text);
 
         let responses = state.responses.lock().await;
@@ -26711,19 +28387,17 @@ mod tests {
     #[tokio::test]
     async fn test_session_chat_stream_tool_cards_sse() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
         let mut registry = ToolRegistry::new();
-        registry
-            .register(
-                crate::tools::tool("echo")
-                    .description("echo tool")
-                    .handler(|_args, _ctx| async move { Ok(serde_json::json!({"echoed": true})) })
-                    .build()
-                    .expect("tool builds"),
-            );
+        registry.register(
+            crate::tools::tool("echo")
+                .description("echo tool")
+                .handler(|_args, _ctx| async move { Ok(serde_json::json!({"echoed": true})) })
+                .build()
+                .expect("tool builds"),
+        );
         let provider = Arc::new(FakeToolStreamProvider {
             calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         });
@@ -26753,10 +28427,18 @@ mod tests {
             .await
             .unwrap();
         let text = String::from_utf8_lossy(&body).to_string();
-        assert!(text.contains("event: hermes.tool.started"), "started: {}", text);
+        assert!(
+            text.contains("event: hermes.tool.started"),
+            "started: {}",
+            text
+        );
         assert!(text.contains(r#""name":"echo""#), "name: {}", text);
         assert!(text.contains(r#""call_id":"call_1""#), "call id: {}", text);
-        assert!(text.contains("event: hermes.tool.completed"), "completed: {}", text);
+        assert!(
+            text.contains("event: hermes.tool.completed"),
+            "completed: {}",
+            text
+        );
         assert!(text.contains("echoed"), "result: {}", text);
         assert!(text.contains("data: [DONE]"), "done: {}", text);
     }
@@ -26790,19 +28472,14 @@ mod tests {
     async fn test_approval_always_persisted_and_reloaded() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let path = tmp.path().join("approvals.json");
-        let router = ApprovalRouter::with_options(
-            std::time::Duration::from_secs(5),
-            Some(path.clone()),
-        );
+        let router =
+            ApprovalRouter::with_options(std::time::Duration::from_secs(5), Some(path.clone()));
         router.grant_always("git push --force".into()).await;
         assert!(path.exists());
 
         // A fresh router reloads the grant and auto-approves without a
         // channel registered.
-        let reloaded = ApprovalRouter::with_options(
-            std::time::Duration::from_secs(5),
-            Some(path),
-        );
+        let reloaded = ApprovalRouter::with_options(std::time::Duration::from_secs(5), Some(path));
         let outcome = reloaded
             .request_outcome("no-run", "test".into(), "git push --force".into())
             .await;
@@ -26829,9 +28506,8 @@ mod tests {
     /// State with a cron store + skills dir attached (phase 9 endpoints).
     fn jobs_state() -> (Arc<GatewayState>, tempfile::TempDir) {
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         let provider = Arc::new(
             OpenAiProvider::builder()
                 .endpoint("http://127.0.0.1:9/v1")
@@ -26871,22 +28547,34 @@ mod tests {
 
         // Validation errors.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/jobs", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs",
+            Some(token),
             json!({"schedule": "30m", "prompt": "x"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"], "Name is required");
 
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/jobs", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs",
+            Some(token),
             json!({"name": "j", "schedule": "not-a-schedule", "prompt": "x"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/jobs", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs",
+            Some(token),
             json!({"name": "j", "schedule": "30m", "prompt": "x", "repeat": 0}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Create.
@@ -26908,7 +28596,8 @@ mod tests {
         assert_eq!(body["jobs"].as_array().unwrap().len(), 1);
 
         // Get + 404.
-        let (status, body) = get_json(app.clone(), &format!("/api/jobs/{}", job_id), Some(token)).await;
+        let (status, body) =
+            get_json(app.clone(), &format!("/api/jobs/{}", job_id), Some(token)).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["job"]["id"], job_id);
         let (status, _) = get_json(app.clone(), "/api/jobs/nope", Some(token)).await;
@@ -26916,25 +28605,38 @@ mod tests {
 
         // Patch name + schedule; unknown fields are dropped.
         let (status, body) = send_json(
-            app.clone(), "PATCH", &format!("/api/jobs/{}", job_id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/jobs/{}", job_id),
+            Some(token),
             json!({"name": "renamed", "schedule": "0 9 * * *", "bogus": 1}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["job"]["name"], "renamed");
         assert_eq!(body["job"]["schedule"], "0 9 * * *");
 
         // Patch with only unknown fields → 400.
         let (status, body) = send_json(
-            app.clone(), "PATCH", &format!("/api/jobs/{}", job_id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/jobs/{}", job_id),
+            Some(token),
             json!({"bogus": 1}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"], "No valid fields to update");
 
         // Pause → hidden from list, visible with include_disabled.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/jobs/{}/pause", job_id), Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "POST",
+            &format!("/api/jobs/{}/pause", job_id),
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["job"]["enabled"], false);
         let (_, body) = get_json(app.clone(), "/api/jobs", Some(token)).await;
@@ -26944,19 +28646,30 @@ mod tests {
 
         // Resume recomputes next_run.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/jobs/{}/resume", job_id), Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "POST",
+            &format!("/api/jobs/{}/resume", job_id),
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["job"]["enabled"], true);
         assert!(body["job"]["next_run"].as_f64().unwrap() > 0.0);
 
         // Delete.
         let (status, body) = send_json(
-            app.clone(), "DELETE", &format!("/api/jobs/{}", job_id), Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "DELETE",
+            &format!("/api/jobs/{}", job_id),
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
-        let (status, _) = get_json(app.clone(), &format!("/api/jobs/{}", job_id), Some(token)).await;
+        let (status, _) =
+            get_json(app.clone(), &format!("/api/jobs/{}", job_id), Some(token)).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
@@ -26977,11 +28690,20 @@ mod tests {
         assert_eq!(first["key"], "morning-brief", "{body}");
         assert!(first["fields"].is_array(), "{body}");
         assert!(first["scheduleHuman"].as_str().unwrap().len() > 0, "{body}");
-        assert!(first["command"].as_str().unwrap().starts_with("/blueprint morning-brief"), "{body}");
+        assert!(
+            first["command"]
+                .as_str()
+                .unwrap()
+                .starts_with("/blueprint morning-brief"),
+            "{body}"
+        );
 
         // Instantiate with slot overrides creates a job.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/jobs/blueprints/instantiate", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs/blueprints/instantiate",
+            Some(token),
             json!({"blueprint": "morning-brief", "values": {"time": "07:15", "deliver": "local"}}),
         )
         .await;
@@ -26989,20 +28711,35 @@ mod tests {
         assert_eq!(body["job"]["name"], "Morning briefing", "{body}");
         assert_eq!(body["job"]["schedule"], "15 7 * * *", "{body}");
         assert_eq!(body["job"]["deliver"], "local", "{body}");
-        assert!(body["job"]["prompt"].as_str().unwrap().contains("morning briefing"), "{body}");
+        assert!(
+            body["job"]["prompt"]
+                .as_str()
+                .unwrap()
+                .contains("morning briefing"),
+            "{body}"
+        );
 
         // Slot validation error -> 422 with the field message.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/jobs/blueprints/instantiate", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs/blueprints/instantiate",
+            Some(token),
             json!({"blueprint": "morning-brief", "values": {"time": "25:99"}}),
         )
         .await;
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
-        assert!(body["error"].as_str().unwrap().contains("invalid time"), "{body}");
+        assert!(
+            body["error"].as_str().unwrap().contains("invalid time"),
+            "{body}"
+        );
 
         // Unknown slot names are rejected.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/jobs/blueprints/instantiate", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs/blueprints/instantiate",
+            Some(token),
             json!({"blueprint": "morning-brief", "values": {"tiem": "07:15"}}),
         )
         .await;
@@ -27010,7 +28747,10 @@ mod tests {
 
         // Unknown blueprint -> 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/jobs/blueprints/instantiate", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs/blueprints/instantiate",
+            Some(token),
             json!({"blueprint": "nope", "values": {}}),
         )
         .await;
@@ -27038,7 +28778,11 @@ mod tests {
 
         // Seed the curated catalog.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/jobs/suggestions/catalog", Some(token), json!({}),
+            app.clone(),
+            "POST",
+            "/api/jobs/suggestions/catalog",
+            Some(token),
+            json!({}),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -27052,7 +28796,10 @@ mod tests {
 
         // Accept schedules a real cron job into the default store.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/jobs/suggestions/accept", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs/suggestions/accept",
+            Some(token),
             json!({"reference": reference}),
         )
         .await;
@@ -27066,7 +28813,10 @@ mod tests {
         let remaining = body["suggestions"].as_array().unwrap().clone();
         let second = remaining[0]["id"].as_str().unwrap().to_string();
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/jobs/suggestions/dismiss", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs/suggestions/dismiss",
+            Some(token),
             json!({"reference": second}),
         )
         .await;
@@ -27075,7 +28825,10 @@ mod tests {
 
         // Unknown reference -> 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/jobs/suggestions/accept", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs/suggestions/accept",
+            Some(token),
             json!({"reference": "nope"}),
         )
         .await;
@@ -27083,7 +28836,11 @@ mod tests {
 
         // Clear drops accepted records.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/jobs/suggestions/clear", Some(token), json!({}),
+            app.clone(),
+            "POST",
+            "/api/jobs/suggestions/clear",
+            Some(token),
+            json!({}),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -27105,7 +28862,10 @@ mod tests {
 
         // Create a job.
         let (_, body) = send_json(
-            app.clone(), "POST", "/api/jobs", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs",
+            Some(token),
             json!({"name": "histogram", "schedule": "1h", "prompt": "say hi"}),
         )
         .await;
@@ -27113,7 +28873,9 @@ mod tests {
 
         // Empty history at first.
         let (status, body) = get_json(
-            app.clone(), &format!("/api/jobs/{job_id}/runs"), Some(token),
+            app.clone(),
+            &format!("/api/jobs/{job_id}/runs"),
+            Some(token),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -27177,7 +28939,9 @@ mod tests {
         }
 
         let (status, body) = get_json(
-            app.clone(), &format!("/api/jobs/{job_id}/runs"), Some(token),
+            app.clone(),
+            &format!("/api/jobs/{job_id}/runs"),
+            Some(token),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -27190,7 +28954,9 @@ mod tests {
 
         // limit=1 keeps only the newest.
         let (_, body) = get_json(
-            app.clone(), &format!("/api/jobs/{job_id}/runs?limit=1"), Some(token),
+            app.clone(),
+            &format!("/api/jobs/{job_id}/runs?limit=1"),
+            Some(token),
         )
         .await;
         assert_eq!(body["runs"].as_array().unwrap().len(), 1, "{body}");
@@ -27203,22 +28969,35 @@ mod tests {
         let app = router(state.clone());
 
         let (_, body) = send_json(
-            app.clone(), "POST", "/api/jobs", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs",
+            Some(token),
             json!({"name": "runnable", "schedule": "1h", "prompt": "say hi"}),
-        ).await;
+        )
+        .await;
         let job_id = body["job"]["id"].as_str().unwrap().to_string();
 
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/jobs/{}/run", job_id), Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "POST",
+            &format!("/api/jobs/{}/run", job_id),
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
-        let run_id = body["run_id"].as_str().expect("run id returned").to_string();
+        let run_id = body["run_id"]
+            .as_str()
+            .expect("run id returned")
+            .to_string();
 
         // The run is tracked; the provider is unreachable so it settles to
         // failed quickly.
         let mut settled = String::new();
         for _ in 0..40 {
-            let (_, run) = get_json(app.clone(), &format!("/v1/runs/{}", run_id), Some(token)).await;
+            let (_, run) =
+                get_json(app.clone(), &format!("/v1/runs/{}", run_id), Some(token)).await;
             settled = run["status"].as_str().unwrap_or("").to_string();
             if settled == "completed" || settled == "failed" {
                 break;
@@ -27233,8 +29012,13 @@ mod tests {
 
         // Unknown job → 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/jobs/nope/run", Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "POST",
+            "/api/jobs/nope/run",
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
@@ -27334,7 +29118,11 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert!(body["effort"].is_null(), "{body}");
         assert!(
-            body["levels"].as_array().unwrap().iter().any(|l| l == "xhigh"),
+            body["levels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|l| l == "xhigh"),
             "{body}"
         );
 
@@ -27429,9 +29217,13 @@ mod tests {
 
         // Explicit platform target accepted and persisted.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/jobs", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs",
+            Some(token),
             json!({"name": "d1", "schedule": "1h", "prompt": "x", "deliver": "telegram"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["job"]["deliver"], "telegram");
         let job_id = body["job"]["id"].as_str().unwrap().to_string();
@@ -27445,16 +29237,24 @@ mod tests {
 
         // Omitted deliver defaults to local.
         let (_, body) = send_json(
-            app.clone(), "POST", "/api/jobs", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs",
+            Some(token),
             json!({"name": "d3", "schedule": "1h", "prompt": "x"}),
-        ).await;
+        )
+        .await;
         assert_eq!(body["job"]["deliver"], "local");
 
         // PATCH deliver updates it.
         let (status, body) = send_json(
-            app.clone(), "PATCH", &format!("/api/jobs/{}", job_id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/jobs/{}", job_id),
+            Some(token),
             json!({"deliver": "origin"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["job"]["deliver"], "origin");
         let (_, body) = get_json(app.clone(), &format!("/api/jobs/{}", job_id), Some(token)).await;
@@ -27528,9 +29328,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // No chronos config → verification cannot succeed. The route is
         // public (no bearer key needed) but the JWT gate rejects.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/jobs/fire", None,
+            app.clone(),
+            "POST",
+            "/api/jobs/fire",
+            None,
             json!({"job_id": "anything"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
         assert_eq!(body["error"], "invalid fire token");
         // Garbage token also 401s.
@@ -27568,9 +29372,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Create a job to fire.
         let (_, body) = send_json(
-            app.clone(), "POST", "/api/jobs", Some(token),
+            app.clone(),
+            "POST",
+            "/api/jobs",
+            Some(token),
             json!({"name": "fireable", "schedule": "1h", "prompt": "say hi"}),
-        ).await;
+        )
+        .await;
         let job_id = body["job"]["id"].as_str().unwrap().to_string();
 
         let fire_token = sign_fire_token("agent:test-instance");
@@ -27584,7 +29392,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .header("authorization", &fire_auth)
             .body(axum::body::Body::from("{}"))
             .unwrap();
-        let response = tower::ServiceExt::oneshot(app.clone(), request).await.unwrap();
+        let response = tower::ServiceExt::oneshot(app.clone(), request)
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         // Unknown job → 200 gone (so NAS does not retry).
@@ -27595,10 +29405,14 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .header("authorization", &fire_auth)
             .body(axum::body::Body::from(r#"{"job_id":"nope"}"#))
             .unwrap();
-        let response = tower::ServiceExt::oneshot(app.clone(), request).await.unwrap();
+        let response = tower::ServiceExt::oneshot(app.clone(), request)
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let body: Value = serde_json::from_slice(
-            &axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap(),
+            &axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap(),
         )
         .unwrap();
         assert_eq!(body["status"], "gone");
@@ -27609,12 +29423,18 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .uri("/api/jobs/fire")
             .header("content-type", "application/json")
             .header("authorization", &fire_auth)
-            .body(axum::body::Body::from(serde_json::to_string(&json!({"job_id": job_id})).unwrap()))
+            .body(axum::body::Body::from(
+                serde_json::to_string(&json!({"job_id": job_id})).unwrap(),
+            ))
             .unwrap();
-        let response = tower::ServiceExt::oneshot(app.clone(), request).await.unwrap();
+        let response = tower::ServiceExt::oneshot(app.clone(), request)
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::ACCEPTED);
         let body: Value = serde_json::from_slice(
-            &axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap(),
+            &axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap(),
         )
         .unwrap();
         assert_eq!(body["status"], "accepted");
@@ -27627,7 +29447,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .uri("/api/jobs/fire")
             .header("content-type", "application/json")
             .header("authorization", format!("Bearer {}", bad_token))
-            .body(axum::body::Body::from(serde_json::to_string(&json!({"job_id": job_id})).unwrap()))
+            .body(axum::body::Body::from(
+                serde_json::to_string(&json!({"job_id": job_id})).unwrap(),
+            ))
             .unwrap();
         let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -27658,7 +29480,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             Arc::new(std::sync::Mutex::new(Vec::new()));
         crate::messaging::register_platform_sender(
             "testdeliv",
-            Arc::new(RecordingSender { texts: texts.clone() }),
+            Arc::new(RecordingSender {
+                texts: texts.clone(),
+            }),
         );
 
         let (state, _temp) = jobs_state();
@@ -27674,8 +29498,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let job_id = body["job"]["id"].as_str().unwrap().to_string();
 
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/jobs/{}/run", job_id), Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "POST",
+            &format!("/api/jobs/{}/run", job_id),
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
 
         // The provider is unreachable, so the run fails and the failure
@@ -27693,7 +29522,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert!(delivered[0].1.contains("Cron 'delivered' failed"));
         // Job row: run failed, but delivery itself succeeded.
         let (_, body) = get_json(app.clone(), &format!("/api/jobs/{}", job_id), Some(token)).await;
-        assert!(body["job"]["last_status"].as_str().unwrap().starts_with("error:"));
+        assert!(body["job"]["last_status"]
+            .as_str()
+            .unwrap()
+            .starts_with("error:"));
         assert!(body["job"]["last_delivery_error"].is_null());
     }
 
@@ -27725,7 +29557,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::OK);
         let data = body["data"].as_array().unwrap();
         assert!(!data.is_empty());
-        let coding = data.iter().find(|t| t["name"] == "coding").expect("coding toolset");
+        let coding = data
+            .iter()
+            .find(|t| t["name"] == "coding")
+            .expect("coding toolset");
         assert!(coding["tools"].as_array().unwrap().len() > 1);
         // test_state's agent has an empty registry → nothing enabled.
         assert_eq!(coding["enabled"], false);
@@ -27740,47 +29575,72 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let id = state.store.create_session("gateway", None, None).unwrap();
 
         let (status, body) = send_json(
-            app.clone(), "PATCH", &format!("/api/sessions/{}", id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/sessions/{}", id),
+            Some(token),
             json!({"title": "My session"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["object"], "ulnclaw.session");
         assert_eq!(body["session"]["title"], "My session");
 
         let (status, body) = send_json(
-            app.clone(), "PATCH", &format!("/api/sessions/{}", id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/sessions/{}", id),
+            Some(token),
             json!({"end_reason": "done"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["session"]["end_reason"], "done");
 
         // Unknown fields are rejected.
         let (status, body) = send_json(
-            app.clone(), "PATCH", &format!("/api/sessions/{}", id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/sessions/{}", id),
+            Some(token),
             json!({"title": "x", "hacked": true}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"]["code"], "unsupported_session_field");
 
         // Newlines collapse to a space (hermes sanitize_title semantics).
         let (status, body) = send_json(
-            app.clone(), "PATCH", &format!("/api/sessions/{}", id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/sessions/{}", id),
+            Some(token),
             json!({"title": "bad\ntitle"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["session"]["title"], "bad title");
 
         // Overlong title (> 100 chars) → 400.
         let (status, body) = send_json(
-            app.clone(), "PATCH", &format!("/api/sessions/{}", id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/sessions/{}", id),
+            Some(token),
             json!({"title": "x".repeat(101)}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"]["code"], "invalid_title");
 
         let (status, _) = send_json(
-            app.clone(), "PATCH", "/api/sessions/missing", Some(token), json!({"title": "x"}),
-        ).await;
+            app.clone(),
+            "PATCH",
+            "/api/sessions/missing",
+            Some(token),
+            json!({"title": "x"}),
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
@@ -27790,7 +29650,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let token = "sekret";
         let app = router(state.clone());
 
-        let id = state.store.create_session("gateway", Some("m"), None).unwrap();
+        let id = state
+            .store
+            .create_session("gateway", Some("m"), None)
+            .unwrap();
         state
             .store
             .append_message(
@@ -27807,9 +29670,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Fork with explicit id + title.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/sessions/{}/fork", id), Some(token),
+            app.clone(),
+            "POST",
+            &format!("/api/sessions/{}/fork", id),
+            Some(token),
             json!({"id": "fork-1", "title": "branch"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::CREATED);
         assert_eq!(body["session"]["id"], "fork-1");
         assert_eq!(body["session"]["parent_session_id"], id);
@@ -27818,7 +29685,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // Transcript carried forward.
         let (_, body) = get_json(app.clone(), "/api/sessions/fork-1/messages", Some(token)).await;
         let messages = body["data"].as_array().unwrap();
-        assert!(messages.iter().any(|m| m["content"].as_str().unwrap_or("").contains("hello fork")));
+        assert!(messages
+            .iter()
+            .any(|m| m["content"].as_str().unwrap_or("").contains("hello fork")));
 
         // Source marked branched.
         let source = state.store.get_session_row(&id).unwrap().unwrap();
@@ -27826,24 +29695,37 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Same id again → 409.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/sessions/{}/fork", id), Some(token),
+            app.clone(),
+            "POST",
+            &format!("/api/sessions/{}/fork", id),
+            Some(token),
             json!({"id": "fork-1"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::CONFLICT);
         assert_eq!(body["error"]["code"], "session_exists");
 
         // Invalid id → 400.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/sessions/{}/fork", id), Some(token),
+            app.clone(),
+            "POST",
+            &format!("/api/sessions/{}/fork", id),
+            Some(token),
             json!({"id": "bad\nid"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"]["code"], "invalid_session_id");
 
         // Missing source → 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/sessions/ghost/fork", Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "POST",
+            "/api/sessions/ghost/fork",
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
@@ -27852,7 +29734,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let app = router(test_state());
         let (status, body) = get_json(app, "/v1/capabilities", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
-        for flag in ["jobs", "skills", "toolsets", "session_fork", "session_patch"] {
+        for flag in [
+            "jobs",
+            "skills",
+            "toolsets",
+            "session_fork",
+            "session_patch",
+        ] {
             assert_eq!(body["endpoints"][flag], true, "missing capability {}", flag);
         }
     }
@@ -27950,8 +29838,14 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let models = providers[0]["models"].as_array().unwrap();
         assert!(models.iter().any(|m| m == "test-model"));
         assert!(models.iter().any(|m| m == "other-model"));
-        assert_eq!(providers[0]["capabilities"]["test-model"]["reasoning"], true);
-        assert_eq!(providers[0]["capabilities"]["test-model"]["context_window"], 128000);
+        assert_eq!(
+            providers[0]["capabilities"]["test-model"]["reasoning"],
+            true
+        );
+        assert_eq!(
+            providers[0]["capabilities"]["test-model"]["context_window"],
+            128000
+        );
         assert_eq!(
             providers[0]["capabilities"]["test-model"]["cost"]["input_per_mtok"],
             0.5
@@ -27959,8 +29853,12 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert!(body["catalog_cache"]["providers"].as_u64().unwrap() >= 1);
 
         // ?refresh=true forces a registry re-read (same fixture here).
-        let (status, body) =
-            get_json(app.clone(), "/api/model/options?refresh=true", Some("sekret")).await;
+        let (status, body) = get_json(
+            app.clone(),
+            "/api/model/options?refresh=true",
+            Some("sekret"),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["providers"][0]["catalog"], "models.dev");
         assert_eq!(body["providers"][0]["catalog_stale"], false);
@@ -28052,21 +29950,32 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let token = "sekret";
         let app = router(state.clone());
 
-        let id = state.store.create_session("gateway", Some("test-model"), None).unwrap();
+        let id = state
+            .store
+            .create_session("gateway", Some("test-model"), None)
+            .unwrap();
 
         // Missing model → 400.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/sessions/{}/model", id), Some(token),
+            app.clone(),
+            "POST",
+            &format!("/api/sessions/{}/model", id),
+            Some(token),
             json!({}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"]["code"], "model_required");
 
         // Lock to another model → acknowledged + persisted.
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/sessions/{}/model", id), Some(token),
+            app.clone(),
+            "POST",
+            &format!("/api/sessions/{}/model", id),
+            Some(token),
             json!({"model": "other-model", "provider": "test"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["object"], "ulnclaw.session.model_lock");
         assert_eq!(body["runtime"]["model"], "other-model");
@@ -28075,21 +29984,32 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(row.model.as_deref(), Some("other-model"));
 
         // The override is detected for locked sessions only.
-        assert_eq!(session_model_override(&state, &id), Some("other-model".into()));
+        assert_eq!(
+            session_model_override(&state, &id),
+            Some("other-model".into())
+        );
 
         // Locking back to the gateway model clears the override.
         let (status, _) = send_json(
-            app.clone(), "POST", &format!("/api/sessions/{}/model", id), Some(token),
+            app.clone(),
+            "POST",
+            &format!("/api/sessions/{}/model", id),
+            Some(token),
             json!({"model": "test-model"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(session_model_override(&state, &id), None);
 
         // Unknown session → 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/sessions/ghost/model", Some(token),
+            app.clone(),
+            "POST",
+            "/api/sessions/ghost/model",
+            Some(token),
             json!({"model": "m"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
@@ -28175,7 +30095,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .await
             .unwrap();
         let status = response.status();
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         (status, String::from_utf8_lossy(&body).to_string())
     }
 
@@ -28221,7 +30143,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
         // Seed a session with usage so store totals are non-zero.
-        let session_id = state.store.create_session("cli", Some("test-model"), None).unwrap();
+        let session_id = state
+            .store
+            .create_session("cli", Some("test-model"), None)
+            .unwrap();
         state.store.update_usage(&session_id, 120, 45, 3).unwrap();
 
         let app = router(state.clone());
@@ -28271,11 +30196,18 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(body["config"]["model"]["provider"], "openrouter");
         assert_eq!(body["config"]["model"]["api_key"], "[redacted]");
         assert_eq!(body["config"]["gateway"]["port"], 8642);
-        assert!(body["redacted"].as_array().unwrap().iter().any(|v| v == "model.api_key"));
+        assert!(body["redacted"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "model.api_key"));
 
         // PUT: set + unset apply; the redaction placeholder is skipped.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/config", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/config",
+            Some("sekret"),
             json!({
                 "set": {
                     "gateway.port": 9999,
@@ -28284,7 +30216,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 },
                 "unset": ["model.provider"],
             }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
         assert_eq!(body["skipped_redacted"], json!(["model.api_key"]));
@@ -28319,7 +30252,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let (status, body) = get_json(app.clone(), "/api/doctor", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["online"], false);
-        let sections = body["report"]["sections"].as_array().expect("sections array");
+        let sections = body["report"]["sections"]
+            .as_array()
+            .expect("sections array");
         assert!(!sections.is_empty(), "doctor report has sections");
         assert!(body["report"]["issues"].is_array());
 
@@ -28367,9 +30302,14 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .to_str()
             .unwrap()
             .to_string();
-        assert!(disposition.starts_with("attachment; filename=\"ulnclaw-session-"), "{disposition}");
+        assert!(
+            disposition.starts_with("attachment; filename=\"ulnclaw-session-"),
+            "{disposition}"
+        );
         assert!(disposition.ends_with(".md\""), "{disposition}");
-        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let body = String::from_utf8(bytes.to_vec()).unwrap();
         assert!(body.starts_with("# Session "));
         assert!(body.contains("hello <world>"));
@@ -28388,7 +30328,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .body(axum::body::Body::empty())
             .unwrap();
         let response = app.clone().oneshot(request).await.unwrap();
-        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let body = String::from_utf8(bytes.to_vec()).unwrap();
         assert!(body.contains("hello &lt;world&gt;"));
         assert!(body.contains("<!doctype html>"));
@@ -28409,7 +30351,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let app = router(test_state());
 
         // Empty list to start.
-        let (status, body) = get_json(app.clone(), "/api/webhooks/subscriptions", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/webhooks/subscriptions", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["subscriptions"], json!([]));
 
@@ -28423,41 +30366,67 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(body["name"], "build-events");
 
         // List shows the row with a webhook URL and masked secret.
-        let (status, body) = get_json(app.clone(), "/api/webhooks/subscriptions", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/webhooks/subscriptions", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         let rows = body["subscriptions"].as_array().expect("rows");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0]["name"], "build-events");
         assert_eq!(rows[0]["events"], json!(["push", "ci"]));
-        assert_eq!(rows[0]["url"], format!("{}/webhooks/build-events", body["base_url"].as_str().unwrap()));
+        assert_eq!(
+            rows[0]["url"],
+            format!(
+                "{}/webhooks/build-events",
+                body["base_url"].as_str().unwrap()
+            )
+        );
         assert_eq!(rows[0]["has_secret"], true);
 
         // Invalid name → 400.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/webhooks/subscriptions", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/webhooks/subscriptions",
+            Some("sekret"),
             json!({"name": "no spaces allowed!"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Test-fire wiring (unknown name yields the CLI's soft message).
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/webhooks/subscriptions/ghost/test", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/webhooks/subscriptions/ghost/test",
+            Some("sekret"),
             json!({}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body["message"].as_str().unwrap().contains("No subscription"));
+        assert!(body["message"]
+            .as_str()
+            .unwrap()
+            .contains("No subscription"));
 
         // Delete, then 404 on repeat.
         let (status, body) = send_json(
-            app.clone(), "DELETE", "/api/webhooks/subscriptions/build-events", Some("sekret"),
+            app.clone(),
+            "DELETE",
+            "/api/webhooks/subscriptions/build-events",
+            Some("sekret"),
             json!({}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["removed"], "build-events");
         let (status, _) = send_json(
-            app.clone(), "DELETE", "/api/webhooks/subscriptions/build-events", Some("sekret"),
+            app.clone(),
+            "DELETE",
+            "/api/webhooks/subscriptions/build-events",
+            Some("sekret"),
             json!({}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         match saved_home {
@@ -28508,7 +30477,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(body["lines"].as_array().unwrap().len(), 3);
 
         // Level filter keeps WARN+.
-        let (status, body) = get_json(app, "/api/logs/tail?lines=10&level=warn", Some("sekret")).await;
+        let (status, body) =
+            get_json(app, "/api/logs/tail?lines=10&level=warn", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         let lines = body["lines"].as_array().unwrap();
         assert_eq!(lines.len(), 2);
@@ -28525,9 +30495,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
     async fn test_mcp_servers_list_reports_transport_and_auth() {
         // State with two configured MCP servers: stdio + remote OAuth.
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
         let provider = Arc::new(
             OpenAiProvider::builder()
@@ -28591,7 +30560,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let dir = tempfile::tempdir().expect("tempdir");
         {
             let store = SqliteSessionStore::open(dir.path().join("state.db")).expect("store");
-            let id = store.create_session("cli", Some("test-model"), None).unwrap();
+            let id = store
+                .create_session("cli", Some("test-model"), None)
+                .unwrap();
             store
                 .append_message(
                     &id,
@@ -28632,10 +30603,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // gateway state must sit on that same store.
         let _guard = crate::models_dev::test_env_lock();
         let dir = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(dir.path().join("state.db")).expect("store"),
-        );
-        let id = store.create_session("cli", Some("test-model"), None).unwrap();
+        let store = Arc::new(SqliteSessionStore::open(dir.path().join("state.db")).expect("store"));
+        let id = store
+            .create_session("cli", Some("test-model"), None)
+            .unwrap();
         store
             .append_message(
                 &id,
@@ -28680,8 +30651,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert!(body["size_bytes"].as_u64().unwrap() > 0);
         assert!(body["db_path"].as_str().unwrap().ends_with("state.db"));
 
-        let (status, body) =
-            post_json(app, "/api/storage/optimize", "{}", "sekret").await;
+        let (status, body) = post_json(app, "/api/storage/optimize", "{}", "sekret").await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["merged_indexes"].as_i64().is_some());
         assert!(body["before_bytes"].as_u64().is_some());
@@ -28697,10 +30667,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
     async fn test_session_search_finds_seeded_message() {
         let _guard = crate::models_dev::test_env_lock();
         let dir = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(dir.path().join("state.db")).expect("store"),
-        );
-        let id = store.create_session("cli", Some("test-model"), None).unwrap();
+        let store = Arc::new(SqliteSessionStore::open(dir.path().join("state.db")).expect("store"));
+        let id = store
+            .create_session("cli", Some("test-model"), None)
+            .unwrap();
         store.set_session_title(&id, "searchable session").unwrap();
         store
             .append_message(
@@ -28748,8 +30718,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(first["title"], "searchable session");
         assert!(first["snippet"].as_str().unwrap().contains("fox"));
 
-        let (status, body) =
-            get_json(app, "/api/sessions/search?q=zebra", Some("sekret")).await;
+        let (status, body) = get_json(app, "/api/sessions/search?q=zebra", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["count"], 0);
     }
@@ -28758,13 +30727,15 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
     async fn test_session_prune_and_archive_endpoints() {
         let _guard = crate::models_dev::test_env_lock();
         let dir = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(dir.path().join("state.db")).expect("store"),
-        );
+        let store = Arc::new(SqliteSessionStore::open(dir.path().join("state.db")).expect("store"));
         // Two ended sessions with fresh activity; prune/archive filters
         // only ever see rows with ended_at set.
-        let keep = store.create_session("cli", Some("test-model"), None).unwrap();
-        let archive_me = store.create_session("cron", Some("test-model"), None).unwrap();
+        let keep = store
+            .create_session("cli", Some("test-model"), None)
+            .unwrap();
+        let archive_me = store
+            .create_session("cron", Some("test-model"), None)
+            .unwrap();
         for id in [&keep, &archive_me] {
             store
                 .append_message(
@@ -28950,7 +30921,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .unwrap()
             .to_string();
         assert!(disposition.contains("ulnclaw-snapshot-"), "{disposition}");
-        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         assert!(bytes.len() > 4 && &bytes[..2] == b"PK", "zip magic");
         // Path traversal ids are rejected.
         let (status, _) = get_json(
@@ -28962,13 +30935,17 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert!(status == StatusCode::NOT_FOUND || status == StatusCode::BAD_REQUEST);
 
         // Unknown snapshot → 404.
-        let (status, _) =
-            post_json(app.clone(), "/api/backups/nope/restore", "{}", "sekret").await;
+        let (status, _) = post_json(app.clone(), "/api/backups/nope/restore", "{}", "sekret").await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         // Prune keeps the newest N.
-        let (status, body) =
-            post_json(app.clone(), "/api/backups/prune", r#"{"keep": 1}"#, "sekret").await;
+        let (status, body) = post_json(
+            app.clone(),
+            "/api/backups/prune",
+            r#"{"keep": 1}"#,
+            "sekret",
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["removed"], 2);
         let (status, body) = get_json(app, "/api/backups", Some("sekret")).await;
@@ -29004,20 +30981,40 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(usage[0]["name"], "demo");
 
         // Pin → archive refused while pinned.
-        let (status, _) =
-            post_json(app.clone(), "/api/curator/pin", r#"{"skill": "demo"}"#, "sekret").await;
+        let (status, _) = post_json(
+            app.clone(),
+            "/api/curator/pin",
+            r#"{"skill": "demo"}"#,
+            "sekret",
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
-        let (status, body) =
-            post_json(app.clone(), "/api/curator/archive", r#"{"skill": "demo"}"#, "sekret").await;
+        let (status, body) = post_json(
+            app.clone(),
+            "/api/curator/archive",
+            r#"{"skill": "demo"}"#,
+            "sekret",
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert!(body["error"].as_str().unwrap().contains("pinned"));
 
         // Unpin → archive succeeds → listed as archived.
-        let (status, _) =
-            post_json(app.clone(), "/api/curator/unpin", r#"{"skill": "demo"}"#, "sekret").await;
+        let (status, _) = post_json(
+            app.clone(),
+            "/api/curator/unpin",
+            r#"{"skill": "demo"}"#,
+            "sekret",
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
-        let (status, body) =
-            post_json(app.clone(), "/api/curator/archive", r#"{"skill": "demo"}"#, "sekret").await;
+        let (status, body) = post_json(
+            app.clone(),
+            "/api/curator/archive",
+            r#"{"skill": "demo"}"#,
+            "sekret",
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
         let (status, body) = get_json(app.clone(), "/api/curator", Some("sekret")).await;
@@ -29031,8 +31028,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert!(archived.contains(&"demo"));
 
         // Restore brings it back.
-        let (status, body) =
-            post_json(app.clone(), "/api/curator/restore", r#"{"skill": "demo"}"#, "sekret").await;
+        let (status, body) = post_json(
+            app.clone(),
+            "/api/curator/restore",
+            r#"{"skill": "demo"}"#,
+            "sekret",
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
         let (status, body) = get_json(app, "/api/curator", Some("sekret")).await;
@@ -29060,8 +31062,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
         // Empty store status.
-        let (status, body) =
-            get_json(app.clone(), "/api/checkpoints/status", Some("sekret")).await;
+        let (status, body) = get_json(app.clone(), "/api/checkpoints/status", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["status"]["project_count"], 0);
 
@@ -29091,8 +31092,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert!(body["error"].as_str().is_some());
 
         // Prune over an empty store reports zeros.
-        let (status, body) =
-            post_json(app.clone(), "/api/checkpoints/prune", r#"{"days": 7}"#, "sekret").await;
+        let (status, body) = post_json(
+            app.clone(),
+            "/api/checkpoints/prune",
+            r#"{"days": 7}"#,
+            "sekret",
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["stats"]["scanned"], 0);
         assert_eq!(body["days"], 7);
@@ -29124,7 +31130,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // GET returns the raw text with comments.
         let (status, body) = get_json(app.clone(), "/api/config/raw", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body["toml"].as_str().unwrap().contains("# comment preserved"));
+        assert!(body["toml"]
+            .as_str()
+            .unwrap()
+            .contains("# comment preserved"));
 
         // Invalid TOML is rejected.
         let (status, _) = request_json(
@@ -29383,12 +31392,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(errors["exists"], false);
 
         // Tail returns both lines.
-        let (status, body) = get_json(
-            app.clone(),
-            "/api/logs?file=agent",
-            Some("sekret"),
-        )
-        .await;
+        let (status, body) = get_json(app.clone(), "/api/logs?file=agent", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["lines"].as_array().unwrap().len(), 2);
 
@@ -29457,13 +31461,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert!(body["hooks"].as_array().is_some());
 
         // Accept-all with no configured hooks accepts nothing.
-        let (status, body) = post_json(
-            app.clone(),
-            "/api/ops/hooks/accept-all",
-            "{}",
-            "sekret",
-        )
-        .await;
+        let (status, body) =
+            post_json(app.clone(), "/api/ops/hooks/accept-all", "{}", "sekret").await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["accepted"], 0);
 
@@ -29569,22 +31568,15 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .create_session("gateway", Some("test-model"), None)
             .unwrap();
         state.store.update_usage(&with_model, 100, 40, 3).unwrap();
-        state
-            .store
-            .create_session("gateway", None, None)
-            .unwrap();
+        state.store.create_session("gateway", None, None).unwrap();
 
         // Auth gate.
         let (status, _) = get_json(app.clone(), "/api/analytics/models", None).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
         // Aggregation reports only the model-backed session.
-        let (status, body) = get_json(
-            app.clone(),
-            "/api/analytics/models?days=30",
-            Some("sekret"),
-        )
-        .await;
+        let (status, body) =
+            get_json(app.clone(), "/api/analytics/models?days=30", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["days"], 30);
         let models = body["models"].as_array().unwrap();
@@ -29596,12 +31588,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(models[0]["total_tokens"], 140);
 
         // Days clamp into 1-365.
-        let (status, body) = get_json(
-            app,
-            "/api/analytics/models?days=9999",
-            Some("sekret"),
-        )
-        .await;
+        let (status, body) = get_json(app, "/api/analytics/models?days=9999", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["days"], 365);
     }
@@ -29640,8 +31627,12 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::OK);
         assert!(body["backends"].as_array().is_some());
 
-        let (status, body) =
-            get_json(app.clone(), "/api/tools/computer-use/status", Some("sekret")).await;
+        let (status, body) = get_json(
+            app.clone(),
+            "/api/tools/computer-use/status",
+            Some("sekret"),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["platform"].as_str().is_some());
 
@@ -29673,8 +31664,12 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .create_session("desktop", Some("test-model"), None)
             .unwrap();
         state.store.end_session(&id, "complete").unwrap();
-        let (status, body) =
-            get_json(app.clone(), "/api/sessions?archived=exclude", Some("sekret")).await;
+        let (status, body) = get_json(
+            app.clone(),
+            "/api/sessions?archived=exclude",
+            Some("sekret"),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["data"]
             .as_array()
@@ -29683,15 +31678,18 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .any(|row| row["id"] == id));
 
         state.store.set_session_archived(&id, true).unwrap();
-        let (_, body) =
-            get_json(app.clone(), "/api/sessions?archived=exclude", Some("sekret")).await;
+        let (_, body) = get_json(
+            app.clone(),
+            "/api/sessions?archived=exclude",
+            Some("sekret"),
+        )
+        .await;
         assert!(!body["data"]
             .as_array()
             .unwrap()
             .iter()
             .any(|row| row["id"] == id));
-        let (_, body) =
-            get_json(app, "/api/sessions?archived=only", Some("sekret")).await;
+        let (_, body) = get_json(app, "/api/sessions?archived=only", Some("sekret")).await;
         assert!(body["data"]
             .as_array()
             .unwrap()
@@ -29725,12 +31723,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
         // Listing: dirs first, hidden set filtered.
-        let (status, body) = get_json(
-            app.clone(),
-            "/api/fs/list?path=.",
-            Some("sekret"),
-        )
-        .await;
+        let (status, body) = get_json(app.clone(), "/api/fs/list?path=.", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         let entries = body["entries"].as_array().unwrap().clone();
         let names: Vec<String> = entries
@@ -29789,15 +31782,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         )
         .await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body["dataUrl"].as_str().unwrap().starts_with("data:text/plain;base64,"));
+        assert!(body["dataUrl"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:text/plain;base64,"));
 
         // Git-root on a git-less temp dir is null; default-cwd reports cwd.
-        let (status, body) = get_json(
-            app.clone(),
-            "/api/fs/git-root?path=.",
-            Some("sekret"),
-        )
-        .await;
+        let (status, body) = get_json(app.clone(), "/api/fs/git-root?path=.", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["root"].is_null() || body["root"].is_string());
         let (status, body) = get_json(app.clone(), "/api/fs/default-cwd", Some("sekret")).await;
@@ -29830,23 +31821,37 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::OK);
         let entries = body["entries"].as_array().unwrap().clone();
         assert!(entries.len() >= 8);
-        let memory = entries.iter().find(|entry| entry["name"] == "memory").unwrap();
+        let memory = entries
+            .iter()
+            .find(|entry| entry["name"] == "memory")
+            .unwrap();
         assert_eq!(memory["installed"], false);
-        let github = entries.iter().find(|entry| entry["name"] == "github").unwrap();
+        let github = entries
+            .iter()
+            .find(|entry| entry["name"] == "github")
+            .unwrap();
         assert_eq!(github["required_env"][0]["name"], "GITHUB_TOKEN");
 
         // Unknown entry 404s.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/mcp/catalog/install", Some(token),
+            app.clone(),
+            "POST",
+            "/api/mcp/catalog/install",
+            Some(token),
             json!({"name": "no-such"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         // Install memory, then see it flagged installed.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/mcp/catalog/install", Some(token),
+            app.clone(),
+            "POST",
+            "/api/mcp/catalog/install",
+            Some(token),
             json!({"name": "memory"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let on_disk = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
         assert!(on_disk.contains("name = \"memory\""), "{on_disk}");
@@ -29864,16 +31869,24 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Install with env vars stores them; duplicate install is rejected.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/mcp/catalog/install", Some(token),
+            app.clone(),
+            "POST",
+            "/api/mcp/catalog/install",
+            Some(token),
             json!({"name": "github", "env": {"GITHUB_TOKEN": "ghp-test-token"}}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let on_disk = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
         assert!(on_disk.contains("GITHUB_TOKEN"), "{on_disk}");
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/mcp/catalog/install", Some(token),
+            app.clone(),
+            "POST",
+            "/api/mcp/catalog/install",
+            Some(token),
             json!({"name": "github"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         match prev {
@@ -29924,21 +31937,33 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Unknown task and unknown scope are rejected.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/model/set", Some(token),
+            app.clone(),
+            "POST",
+            "/api/model/set",
+            Some(token),
             json!({"scope": "auxiliary", "task": "nope", "provider": "openai", "model": "x"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/model/set", Some(token),
+            app.clone(),
+            "POST",
+            "/api/model/set",
+            Some(token),
             json!({"scope": "bogus", "provider": "openai", "model": "x"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Reset removes the slot.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/model/set", Some(token),
+            app.clone(),
+            "POST",
+            "/api/model/set",
+            Some(token),
             json!({"scope": "auxiliary", "task": "compression", "provider": "auto"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["reset"], true);
         let on_disk = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
@@ -29955,9 +31980,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let app = router(test_state());
         // Restart/stop terminate the process — tests only verify the
         // auth gate keeps unauthenticated callers out.
-        let (status, _) = send_json(app.clone(), "POST", "/api/gateway/restart", None, json!({})).await;
+        let (status, _) =
+            send_json(app.clone(), "POST", "/api/gateway/restart", None, json!({})).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
-        let (status, _) = send_json(app.clone(), "POST", "/api/gateway/stop", None, json!({})).await;
+        let (status, _) =
+            send_json(app.clone(), "POST", "/api/gateway/stop", None, json!({})).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 
@@ -29973,45 +32000,67 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Empty value and unknown-key semantics.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/providers/validate", Some(token),
+            app.clone(),
+            "POST",
+            "/api/providers/validate",
+            Some(token),
             json!({"key": "OPENAI_API_KEY", "value": ""}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], false);
         assert_eq!(body["reachable"], true);
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/providers/validate", Some(token),
+            app.clone(),
+            "POST",
+            "/api/providers/validate",
+            Some(token),
             json!({"key": "SOME_RANDOM_KEY", "value": "abc"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
         assert_eq!(body["reachable"], false);
 
         // Unreachable base URL.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/providers/validate", Some(token),
+            app.clone(),
+            "POST",
+            "/api/providers/validate",
+            Some(token),
             json!({"key": "OPENAI_BASE_URL", "value": "http://127.0.0.1:9"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], false);
         assert_eq!(body["reachable"], false);
 
         // Mock OpenAI-compatible endpoint requiring a bearer key.
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind mock");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock");
         let port = listener.local_addr().unwrap().port();
         tokio::spawn(async move {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
             loop {
-                let Ok((mut socket, _)) = listener.accept().await else { break; };
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
                 tokio::spawn(async move {
                     let mut buf = [0u8; 4096];
                     let n = socket.read(&mut buf).await.unwrap_or(0);
                     let request = String::from_utf8_lossy(&buf[..n]).to_lowercase();
                     let authorized = request.contains("authorization: bearer sekret-key");
                     let (status_line, body) = if authorized {
-                        ("HTTP/1.1 200 OK", r#"{"data":[{"id":"mock-1"},{"id":"mock-2"}]}"#.to_string())
+                        (
+                            "HTTP/1.1 200 OK",
+                            r#"{"data":[{"id":"mock-1"},{"id":"mock-2"}]}"#.to_string(),
+                        )
                     } else {
-                        ("HTTP/1.1 401 Unauthorized", r#"{"error":"unauthorized"}"#.to_string())
+                        (
+                            "HTTP/1.1 401 Unauthorized",
+                            r#"{"error":"unauthorized"}"#.to_string(),
+                        )
                     };
                     let response = format!(
                         "{status_line}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
@@ -30025,9 +32074,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Without the key the probe surfaces the rejection.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/providers/validate", Some(token),
+            app.clone(),
+            "POST",
+            "/api/providers/validate",
+            Some(token),
             json!({"key": "OPENAI_BASE_URL", "value": format!("http://127.0.0.1:{port}")}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["ok"], false);
         assert_eq!(body["reachable"], true);
@@ -30077,9 +32130,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Dry run previews without mutating.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/curator/run", Some(token),
+            app.clone(),
+            "POST",
+            "/api/curator/run",
+            Some(token),
             json!({"dry_run": true}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["archived"], 1);
         assert_eq!(body["dry_run"], true);
@@ -30087,36 +32144,56 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Real pass archives the idle skill.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/curator/run", Some(token),
+            app.clone(),
+            "POST",
+            "/api/curator/run",
+            Some(token),
             json!({}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["archived"], 1);
         assert!(!skill_dir.exists());
 
         // Pause blocks runs; resume unblocks; GET reports the flag.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/curator/paused", Some(token),
+            app.clone(),
+            "PUT",
+            "/api/curator/paused",
+            Some(token),
             json!({"paused": true}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/curator/run", Some(token),
+            app.clone(),
+            "POST",
+            "/api/curator/run",
+            Some(token),
             json!({}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::CONFLICT);
         let (status, body) = get_json(app.clone(), "/api/curator", Some(token)).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["paused"], true);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/curator/paused", Some(token),
+            app.clone(),
+            "PUT",
+            "/api/curator/paused",
+            Some(token),
             json!({"paused": false}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/curator/run", Some(token),
+            app.clone(),
+            "POST",
+            "/api/curator/run",
+            Some(token),
             json!({}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
 
         match prev {
@@ -30143,7 +32220,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Valid PUT persists the preset.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/model/moa", Some(token),
+            app.clone(),
+            "PUT",
+            "/api/model/moa",
+            Some(token),
             json!({
                 "default_preset": "fast",
                 "presets": {
@@ -30157,7 +32237,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     }
                 }
             }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let on_disk = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
         assert!(on_disk.contains("[moa.presets.fast]"), "{on_disk}");
@@ -30167,16 +32248,26 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let (status, body) = get_json(app.clone(), "/api/model/moa", Some(token)).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["default_preset"], "fast");
-        assert_eq!(body["presets"]["fast"]["reference_models"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            body["presets"]["fast"]["reference_models"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
         assert_eq!(body["reference_models"].as_array().unwrap().len(), 2);
         assert_eq!(body["aggregator"]["model"], "claude-agg");
         assert_eq!(body["degraded_reference_policy"], "silent");
 
         // Validation: empty presets, blank aggregator model, unknown default.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/model/moa", Some(token),
+            app.clone(),
+            "PUT",
+            "/api/model/moa",
+            Some(token),
             json!({"presets": {}}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
             app.clone(), "PUT", "/api/model/moa", Some(token),
@@ -30207,21 +32298,33 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Name validation + transport requirement.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/mcp/servers", Some(token),
+            app.clone(),
+            "POST",
+            "/api/mcp/servers",
+            Some(token),
             json!({"name": "bad name"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/mcp/servers", Some(token),
+            app.clone(),
+            "POST",
+            "/api/mcp/servers",
+            Some(token),
             json!({"name": "srv"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Add a stdio server.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/mcp/servers", Some(token),
+            app.clone(),
+            "POST",
+            "/api/mcp/servers",
+            Some(token),
             json!({"name": "srv", "command": "echo", "args": ["hi"], "env": {"K": "v"}}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let on_disk = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
         assert!(on_disk.contains("[[mcp.servers]]"), "{on_disk}");
@@ -30229,16 +32332,24 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Duplicate add is rejected.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/mcp/servers", Some(token),
+            app.clone(),
+            "POST",
+            "/api/mcp/servers",
+            Some(token),
             json!({"name": "srv", "command": "echo"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Update merges fields (lazy flips, command survives).
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/mcp/servers", Some(token),
+            app.clone(),
+            "PUT",
+            "/api/mcp/servers",
+            Some(token),
             json!({"name": "srv", "lazy": true}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         let on_disk = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
         assert!(on_disk.contains("lazy = true"), "{on_disk}");
@@ -30246,9 +32357,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Enabled toggle.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/mcp/servers/srv/enabled", Some(token),
+            app.clone(),
+            "PUT",
+            "/api/mcp/servers/srv/enabled",
+            Some(token),
             json!({"enabled": false}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["enabled"], false);
         let on_disk = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
@@ -30256,26 +32371,33 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Update of an unknown server 404s.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/mcp/servers", Some(token),
+            app.clone(),
+            "PUT",
+            "/api/mcp/servers",
+            Some(token),
             json!({"name": "nope", "lazy": true}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         // Test endpoint: unknown server 404s; a dead command reports a
         // structured failure (spawn/handshake), never a panic.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/mcp/servers/nope/test", Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "POST",
+            "/api/mcp/servers/nope/test",
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         // Delete removes the entry.
-        let (status, _) = request_json(
-            app.clone(), "DELETE", "/api/mcp/servers/srv", None, token,
-        ).await;
+        let (status, _) =
+            request_json(app.clone(), "DELETE", "/api/mcp/servers/srv", None, token).await;
         assert_eq!(status, StatusCode::OK);
-        let (status, _) = request_json(
-            app.clone(), "DELETE", "/api/mcp/servers/srv", None, token,
-        ).await;
+        let (status, _) =
+            request_json(app.clone(), "DELETE", "/api/mcp/servers/srv", None, token).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         let on_disk = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
         assert!(!on_disk.contains("command = \"echo\""), "{on_disk}");
@@ -30342,12 +32464,24 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert!(body["branch"].as_str().unwrap().len() > 0);
 
         // Branches list includes the current branch.
-        let (status, body) = get_json(app.clone(), "/api/git/branches?path=.", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/git/branches?path=.", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
-        assert!(body["branches"].as_array().unwrap().iter().any(|b| b == &body["current"]));
+        assert!(body["branches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|b| b == &body["current"]));
 
         // Stage everything, then commit.
-        let (status, _) = send_json(app.clone(), "POST", "/api/git/stage", Some("sekret"), json!({})).await;
+        let (status, _) = send_json(
+            app.clone(),
+            "POST",
+            "/api/git/stage",
+            Some("sekret"),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let (status, body) = get_json(app.clone(), "/api/git/status?path=.", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
@@ -30355,69 +32489,105 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Empty commit message is rejected.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/git/commit", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/commit",
+            Some("sekret"),
             json!({"message": "  "}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/git/commit", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/commit",
+            Some("sekret"),
             json!({"message": "second"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["output"].as_str().unwrap().contains("second"));
 
         // Unstage round-trip.
         std::fs::write(dir.path().join("tracked.txt"), "one\ntwo\nthree\n").unwrap();
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/git/stage", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/stage",
+            Some("sekret"),
             json!({"paths": ["tracked.txt"]}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/git/unstage", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/unstage",
+            Some("sekret"),
             json!({"paths": ["tracked.txt"]}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
 
         // Revert requires confirm and explicit paths.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/git/revert", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/revert",
+            Some("sekret"),
             json!({"paths": ["tracked.txt"]}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/git/revert", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/revert",
+            Some("sekret"),
             json!({"paths": ["tracked.txt"], "confirm": true}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let (status, body) = get_json(app.clone(), "/api/git/status?path=.", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["unstaged"].as_array().unwrap().is_empty());
 
         // Worktrees: list, add (new branch), remove.
-        let (status, body) = get_json(app.clone(), "/api/git/worktrees?path=.", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/git/worktrees?path=.", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["worktrees"].as_array().unwrap().len(), 1);
-        let wt_target = dir
-            .path()
-            .with_file_name(format!("{}-wt", dir.path().file_name().unwrap().to_string_lossy()));
+        let wt_target = dir.path().with_file_name(format!(
+            "{}-wt",
+            dir.path().file_name().unwrap().to_string_lossy()
+        ));
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/git/worktree/add", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/worktree/add",
+            Some("sekret"),
             json!({"target": wt_target.display().to_string(), "new_branch": "wt-api"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
-        let (status, body) = get_json(app.clone(), "/api/git/worktrees?path=.", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/git/worktrees?path=.", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         let trees = body["worktrees"].as_array().unwrap().clone();
         assert_eq!(trees.len(), 2);
         assert!(trees.iter().any(|tree| tree["branch"] == "wt-api"));
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/git/worktree/remove", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/worktree/remove",
+            Some("sekret"),
             json!({"target": wt_target.display().to_string()}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
-        let (status, body) = get_json(app.clone(), "/api/git/worktrees?path=.", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/git/worktrees?path=.", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["worktrees"].as_array().unwrap().len(), 1);
 
@@ -30427,49 +32597,88 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             app.clone(),
             "/api/git/file-diff?path=.&file=tracked.txt",
             Some("sekret"),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["diff"].as_str().unwrap().contains("+three"));
-        let (status, _) = send_json(app.clone(), "POST", "/api/git/stage", Some("sekret"), json!({"paths": ["tracked.txt"]})).await;
+        let (status, _) = send_json(
+            app.clone(),
+            "POST",
+            "/api/git/stage",
+            Some("sekret"),
+            json!({"paths": ["tracked.txt"]}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let (status, body) = get_json(
             app.clone(),
             "/api/git/file-diff?path=.&file=tracked.txt&mode=staged",
             Some("sekret"),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["diff"].as_str().unwrap().contains("+three"));
-        let (status, _) = send_json(app.clone(), "POST", "/api/git/unstage", Some("sekret"), json!({"paths": ["tracked.txt"]})).await;
+        let (status, _) = send_json(
+            app.clone(),
+            "POST",
+            "/api/git/unstage",
+            Some("sekret"),
+            json!({"paths": ["tracked.txt"]}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
 
         // Branch create + switch round-trip.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/git/branch/create", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/branch/create",
+            Some("sekret"),
             json!({"name": "feature/api"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["name"], "feature/api");
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/git/branch/create", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/branch/create",
+            Some("sekret"),
             json!({"name": "bad name"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/git/branch/switch", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/branch/switch",
+            Some("sekret"),
             json!({"name": "feature/api"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let (status, body) = get_json(app.clone(), "/api/git/status?path=.", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["branch"], "feature/api");
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/git/branch/switch", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/git/branch/switch",
+            Some("sekret"),
             json!({"name": "no-such"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Push without an upstream is a structured error, not a panic.
-        let (status, _) = send_json(app.clone(), "POST", "/api/git/push", Some("sekret"), json!({})).await;
+        let (status, _) = send_json(
+            app.clone(),
+            "POST",
+            "/api/git/push",
+            Some("sekret"),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Non-repo path errors out.
@@ -30478,7 +32687,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             app.clone(),
             &format!("/api/git/status?path={}", outside.path().display()),
             Some("sekret"),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         std::env::set_current_dir(saved_cwd).unwrap();
@@ -30506,28 +32716,40 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Name validation.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/profiles", Some(token),
+            app.clone(),
+            "POST",
+            "/api/profiles",
+            Some(token),
             json!({"name": "bad name!"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Provider without model is rejected.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/profiles", Some(token),
+            app.clone(),
+            "POST",
+            "/api/profiles",
+            Some(token),
             json!({"name": "work", "provider": "openai"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Create a profile with a model override + toolsets.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/profiles", Some(token),
+            app.clone(),
+            "POST",
+            "/api/profiles",
+            Some(token),
             json!({
                 "name": "work",
                 "provider": "openai",
                 "model": "gpt-test",
                 "enabled_toolsets": ["terminal", "web"],
             }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["created"], true);
         assert_eq!(body["profile"]["name"], "work");
@@ -30544,38 +32766,52 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Replace (same name) reports created=false.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/profiles", Some(token),
+            app.clone(),
+            "POST",
+            "/api/profiles",
+            Some(token),
             json!({"name": "work", "provider": "anthropic", "model": "claude-test"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["created"], false);
 
         // Rename: identical name, unknown source, then a real rename.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/profiles/work/rename", Some(token),
+            app.clone(),
+            "POST",
+            "/api/profiles/work/rename",
+            Some(token),
             json!({"new_name": "work"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/profiles/nope/rename", Some(token),
+            app.clone(),
+            "POST",
+            "/api/profiles/nope/rename",
+            Some(token),
             json!({"new_name": "office"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/profiles/work/rename", Some(token),
+            app.clone(),
+            "POST",
+            "/api/profiles/work/rename",
+            Some(token),
             json!({"new_name": "office"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["name"], "office");
 
         // Delete: missing name 404s, existing name deletes.
-        let (status, _) = request_json(
-            app.clone(), "DELETE", "/api/profiles/work", None, token,
-        ).await;
+        let (status, _) =
+            request_json(app.clone(), "DELETE", "/api/profiles/work", None, token).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
-        let (status, _) = request_json(
-            app.clone(), "DELETE", "/api/profiles/office", None, token,
-        ).await;
+        let (status, _) =
+            request_json(app.clone(), "DELETE", "/api/profiles/office", None, token).await;
         assert_eq!(status, StatusCode::OK);
         let (status, body) = get_json(app.clone(), "/api/profiles", Some(token)).await;
         assert_eq!(status, StatusCode::OK);
@@ -30638,12 +32874,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
         // Working mode sees the modification and the untracked file.
-        let (status, body) = get_json(
-            app.clone(),
-            "/api/fs/git-diff?path=.",
-            Some("sekret"),
-        )
-        .await;
+        let (status, body) = get_json(app.clone(), "/api/fs/git-diff?path=.", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["empty"], false);
         assert!(body["diff"].as_str().unwrap().contains("+two"));
@@ -30718,23 +32949,35 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Validation: provider and api_key are required.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/credentials/pool", Some(token),
+            app.clone(),
+            "POST",
+            "/api/credentials/pool",
+            Some(token),
             json!({"provider": "openai"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Add two entries (provider normalized lowercase; default label).
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/credentials/pool", Some(token),
+            app.clone(),
+            "POST",
+            "/api/credentials/pool",
+            Some(token),
             json!({"provider": "OpenAI", "api_key": "sk-one-long-enough"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["provider"], "openai");
         assert_eq!(body["count"], 1);
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/credentials/pool", Some(token),
+            app.clone(),
+            "POST",
+            "/api/credentials/pool",
+            Some(token),
             json!({"provider": "openai", "api_key": "sk-two-long-enough", "label": "backup"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["count"], 2);
 
@@ -30756,15 +32999,25 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Remove by 1-based index; count shrinks.
         let (status, body) = send_json(
-            app.clone(), "DELETE", "/api/credentials/pool/openai/1", Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "DELETE",
+            "/api/credentials/pool/openai/1",
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["count"], 1);
 
         // Missing index -> 404.
         let (status, _) = send_json(
-            app.clone(), "DELETE", "/api/credentials/pool/openai/9", Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "DELETE",
+            "/api/credentials/pool/openai/9",
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         // Surviving entry is the former #2, renumbered to 1.
@@ -30805,9 +33058,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Set theme persists to config.toml and reflects immediately.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/dashboard/theme", Some(token),
+            app.clone(),
+            "PUT",
+            "/api/dashboard/theme",
+            Some(token),
             json!({"name": "midnight"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["theme"], "midnight");
         let (_, body) = get_json(app.clone(), "/api/dashboard/themes", Some(token)).await;
@@ -30817,8 +33074,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Empty name rejected.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/dashboard/theme", Some(token), json!({"name": " "}),
-        ).await;
+            app.clone(),
+            "PUT",
+            "/api/dashboard/theme",
+            Some(token),
+            json!({"name": " "}),
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Font: default "theme", curated id accepted, unknown coerced.
@@ -30828,21 +33090,27 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // P764: the curated choice list surfaces for editor pickers.
         let choices = body["font_choices"].as_array().unwrap();
         assert!(choices.len() > 8, "{body}");
-        assert!(
-            choices.iter().any(|c| c == "jetbrains-mono"),
-            "{body}"
-        );
+        assert!(choices.iter().any(|c| c == "jetbrains-mono"), "{body}");
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/dashboard/font", Some(token),
+            app.clone(),
+            "PUT",
+            "/api/dashboard/font",
+            Some(token),
             json!({"font": "jetbrains-mono"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["font"], "jetbrains-mono");
         let (_, body) = get_json(app.clone(), "/api/dashboard/font", Some(token)).await;
         assert_eq!(body["font"], "jetbrains-mono");
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/dashboard/font", Some(token), json!({"font": "bogus"}),
-        ).await;
+            app.clone(),
+            "PUT",
+            "/api/dashboard/font",
+            Some(token),
+            json!({"font": "bogus"}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["font"], "theme");
 
@@ -30874,14 +33142,22 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Set: validation + persistence.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/model/set", Some(token),
+            app.clone(),
+            "POST",
+            "/api/model/set",
+            Some(token),
             json!({"provider": "anthropic"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/model/set", Some(token),
+            app.clone(),
+            "POST",
+            "/api/model/set",
+            Some(token),
             json!({"provider": "anthropic", "model": "claude-sonnet-4-5"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
         let raw = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
@@ -30891,13 +33167,15 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // Recommended default: non-empty for a known provider, empty
         // provider yields an empty model.
         let (status, body) = get_json(
-            app.clone(), "/api/model/recommended-default?provider=anthropic", Some(token),
-        ).await;
+            app.clone(),
+            "/api/model/recommended-default?provider=anthropic",
+            Some(token),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert!(!body["model"].as_str().unwrap().is_empty());
-        let (status, body) = get_json(
-            app.clone(), "/api/model/recommended-default", Some(token),
-        ).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/model/recommended-default", Some(token)).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["model"], "");
 
@@ -30919,7 +33197,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let token = "sekret";
 
         // Empty list.
-        let (status, body) = get_json(app.clone(), "/api/providers/custom-endpoints", Some(token)).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/providers/custom-endpoints", Some(token)).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["endpoints"].as_array().unwrap().len(), 0);
 
@@ -30932,10 +33211,21 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(body["id"], "mylab");
         let raw = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
         assert!(raw.contains("[providers.mylab]"), "config.toml: {}", raw);
-        assert!(raw.contains("ULNCLAW_PROVIDER_MYLAB_API_KEY"), "config.toml: {}", raw);
-        assert!(!raw.contains("sk-custom-long-key"), "literal key leaked into config.toml");
+        assert!(
+            raw.contains("ULNCLAW_PROVIDER_MYLAB_API_KEY"),
+            "config.toml: {}",
+            raw
+        );
+        assert!(
+            !raw.contains("sk-custom-long-key"),
+            "literal key leaked into config.toml"
+        );
         let env_raw = std::fs::read_to_string(tmp.path().join(".env")).unwrap();
-        assert!(env_raw.contains("ULNCLAW_PROVIDER_MYLAB_API_KEY=sk-custom-long-key"), ".env: {}", env_raw);
+        assert!(
+            env_raw.contains("ULNCLAW_PROVIDER_MYLAB_API_KEY=sk-custom-long-key"),
+            ".env: {}",
+            env_raw
+        );
 
         // List shows env key posture.
         let (_, body) = get_json(app.clone(), "/api/providers/custom-endpoints", Some(token)).await;
@@ -30946,17 +33236,26 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Validate: unreachable endpoint reports reachable=false.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/providers/custom-endpoints/validate", Some(token),
+            app.clone(),
+            "POST",
+            "/api/providers/custom-endpoints/validate",
+            Some(token),
             json!({"base_url": "http://127.0.0.1:9"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], false);
         assert_eq!(body["reachable"], false);
 
         // Activate: becomes the main provider.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/providers/custom-endpoints/mylab/activate", Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "POST",
+            "/api/providers/custom-endpoints/mylab/activate",
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["provider"], "mylab");
         let raw = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
@@ -30964,30 +33263,53 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Active provider refuses deletion.
         let (status, _) = send_json(
-            app.clone(), "DELETE", "/api/providers/custom-endpoints/mylab", Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "DELETE",
+            "/api/providers/custom-endpoints/mylab",
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Switch away, then delete succeeds and cleans the .env key.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/model/set", Some(token),
+            app.clone(),
+            "POST",
+            "/api/model/set",
+            Some(token),
             json!({"provider": "openai", "model": "gpt-5.2"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let (status, body) = send_json(
-            app.clone(), "DELETE", "/api/providers/custom-endpoints/mylab", Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "DELETE",
+            "/api/providers/custom-endpoints/mylab",
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
         let raw = std::fs::read_to_string(tmp.path().join("config.toml")).unwrap();
         assert!(!raw.contains("[providers.mylab]"), "config.toml: {}", raw);
         let env_raw = std::fs::read_to_string(tmp.path().join(".env")).unwrap_or_default();
-        assert!(!env_raw.contains("ULNCLAW_PROVIDER_MYLAB_API_KEY"), ".env: {}", env_raw);
+        assert!(
+            !env_raw.contains("ULNCLAW_PROVIDER_MYLAB_API_KEY"),
+            ".env: {}",
+            env_raw
+        );
 
         // Deleting again 404s.
         let (status, _) = send_json(
-            app.clone(), "DELETE", "/api/providers/custom-endpoints/mylab", Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "DELETE",
+            "/api/providers/custom-endpoints/mylab",
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         match prev {
@@ -31036,15 +33358,24 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(body["logged_in"], true);
         assert_eq!(body["scopes"], "read");
         let preview = body["token_preview"].as_str().unwrap();
-        assert!(!preview.contains("tok-long-enough-value"), "raw token leaked");
+        assert!(
+            !preview.contains("tok-long-enough-value"),
+            "raw token leaked"
+        );
 
         // P644: Google Chat OAuth posture — no client secret, no
         // authorized accounts on a fresh home.
-        assert_eq!(body["google_chat"]["client_secret_configured"], false, "{body}");
-        assert!(body["google_chat"]["authorized_emails"]
-            .as_array()
-            .unwrap()
-            .is_empty(), "{body}");
+        assert_eq!(
+            body["google_chat"]["client_secret_configured"], false,
+            "{body}"
+        );
+        assert!(
+            body["google_chat"]["authorized_emails"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "{body}"
+        );
 
         match prev {
             Some(v) => std::env::set_var("ULNCLAW_HOME", v),
@@ -31081,8 +33412,14 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .to_str()
             .unwrap()
             .to_string();
-        assert!(disposition.contains("hello.txt"), "disposition: {}", disposition);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert!(
+            disposition.contains("hello.txt"),
+            "disposition: {}",
+            disposition
+        );
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         assert_eq!(&body[..], b"download me");
 
         // Query-token auth (browser-opened download precedent).
@@ -31097,20 +33434,32 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // mkdir: nested creation + conflict with an existing file.
         let nested = tmp.path().join("newdir").join("sub");
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/fs/mkdir", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/fs/mkdir",
+            Some("sekret"),
             json!({ "path": nested.display().to_string() }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["entry"]["isDirectory"], true);
         assert!(nested.is_dir());
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/fs/mkdir", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/fs/mkdir",
+            Some("sekret"),
             json!({ "path": file_path.display().to_string() }),
-        ).await;
+        )
+        .await;
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/fs/mkdir", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/fs/mkdir",
+            Some("sekret"),
             json!({ "path": file_path.display().to_string() }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::CONFLICT);
 
         match saved_home {
@@ -31133,46 +33482,70 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Requires auth.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/env/reveal", None,
+            app.clone(),
+            "POST",
+            "/api/env/reveal",
+            None,
             json!({ "key": "DEMO_REVEAL_KEY" }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
         // `.env` value is revealed unredacted.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/env/reveal", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/env/reveal",
+            Some("sekret"),
             json!({ "key": "DEMO_REVEAL_KEY" }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
         assert_eq!(body["value"], "from-dotenv");
 
         // Invalid key name -> 400 (does not consume the rate window).
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/env/reveal", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/env/reveal",
+            Some("sekret"),
             json!({ "key": "not a key!" }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Unknown key -> 404 (consumes window slot #2).
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/env/reveal", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/env/reveal",
+            Some("sekret"),
             json!({ "key": "ULNCLAW_NO_SUCH_KEY" }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         // Rate limit: 5 reveals per 30 s window (2 consumed above).
         for _ in 0..3 {
             let (status, _) = send_json(
-                app.clone(), "POST", "/api/env/reveal", Some("sekret"),
+                app.clone(),
+                "POST",
+                "/api/env/reveal",
+                Some("sekret"),
                 json!({ "key": "DEMO_REVEAL_KEY" }),
-            ).await;
+            )
+            .await;
             assert_eq!(status, StatusCode::OK);
         }
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/env/reveal", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/env/reveal",
+            Some("sekret"),
             json!({ "key": "DEMO_REVEAL_KEY" }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
 
         // Defaults: the full default config as JSON.
@@ -31225,13 +33598,17 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Catalog: 26 platforms with posture; telegram enabled+configured,
         // discord disabled.
-        let (status, body) = get_json(app.clone(), "/api/messaging/platforms", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/messaging/platforms", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["env_path"].as_str().unwrap().ends_with(".env"));
         assert_eq!(body["gateway_start_command"], "ulnclaw gateway");
         let platforms = body["platforms"].as_array().expect("platforms array");
         assert_eq!(platforms.len(), 26);
-        let telegram = platforms.iter().find(|p| p["id"] == "telegram").expect("telegram row");
+        let telegram = platforms
+            .iter()
+            .find(|p| p["id"] == "telegram")
+            .expect("telegram row");
         assert_eq!(telegram["enabled"], true);
         assert_eq!(telegram["configured"], true);
         assert_eq!(telegram["state"], "connected");
@@ -31239,42 +33616,65 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let env_row = &telegram["env_vars"][0];
         assert_eq!(env_row["key"], "TELEGRAM_BOT_TOKEN");
         assert_eq!(env_row["required"], true);
-        let discord = platforms.iter().find(|p| p["id"] == "discord").expect("discord row");
+        let discord = platforms
+            .iter()
+            .find(|p| p["id"] == "discord")
+            .expect("discord row");
         assert_eq!(discord["enabled"], false);
         assert_eq!(discord["state"], "disabled");
 
         // Update: unknown platform -> 404; foreign env key -> 400.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/messaging/platforms/nope", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/messaging/platforms/nope",
+            Some("sekret"),
             json!({ "enabled": true }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/messaging/platforms/telegram", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/messaging/platforms/telegram",
+            Some("sekret"),
             json!({ "env": { "SOME_RANDOM_KEY": "x" } }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // Update: set telegram's env token + enable discord.
         let (status, body) = send_json(
-            app.clone(), "PUT", "/api/messaging/platforms/telegram", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/messaging/platforms/telegram",
+            Some("sekret"),
             json!({ "env": { "TELEGRAM_BOT_TOKEN": "222:env-token" } }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
         let env_text = std::fs::read_to_string(dir.path().join(".env")).unwrap();
-        assert!(env_text.contains("TELEGRAM_BOT_TOKEN=222:env-token"), "{env_text}");
+        assert!(
+            env_text.contains("TELEGRAM_BOT_TOKEN=222:env-token"),
+            "{env_text}"
+        );
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/messaging/platforms/discord", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/messaging/platforms/discord",
+            Some("sekret"),
             json!({ "enabled": true }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let toml_text = std::fs::read_to_string(dir.path().join("config.toml")).unwrap();
         assert!(toml_text.contains("[messaging.discord]"), "{toml_text}");
         assert!(toml_text.contains("enabled = true"), "{toml_text}");
 
         // The catalog now reflects the env row + discord enablement.
-        let (status, body) = get_json(app.clone(), "/api/messaging/platforms", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/messaging/platforms", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         let platforms = body["platforms"].as_array().unwrap();
         let telegram = platforms.iter().find(|p| p["id"] == "telegram").unwrap();
@@ -31287,31 +33687,47 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // Test endpoint: telegram connected; discord missing its token;
         // unknown platform -> 404.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/messaging/platforms/telegram/test", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/messaging/platforms/telegram/test",
+            Some("sekret"),
             json!({}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], true);
         assert_eq!(body["state"], "connected");
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/messaging/platforms/discord/test", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/messaging/platforms/discord/test",
+            Some("sekret"),
             json!({}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["ok"], false);
         assert_eq!(body["state"], "not_configured");
         assert!(body["message"].as_str().unwrap().contains("bot_token"));
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/messaging/platforms/nope/test", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/messaging/platforms/nope/test",
+            Some("sekret"),
             json!({}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         // Clear the env key again.
         let (status, _) = send_json(
-            app.clone(), "PUT", "/api/messaging/platforms/telegram", Some("sekret"),
+            app.clone(),
+            "PUT",
+            "/api/messaging/platforms/telegram",
+            Some("sekret"),
             json!({ "clear_env": ["TELEGRAM_BOT_TOKEN"] }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         let env_text = std::fs::read_to_string(dir.path().join(".env")).unwrap_or_default();
         assert!(!env_text.contains("222:env-token"), "{env_text}");
@@ -31349,7 +33765,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // Image inside a media root -> base64 data URL.
         let (status, body) = get_json(app.clone(), &uri, Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["data_url"], "data:image/png;base64,iVBORy10ZXN0LWJ5dGVz");
+        assert_eq!(
+            body["data_url"],
+            "data:image/png;base64,iVBORy10ZXN0LWJ5dGVz"
+        );
 
         // Non-image extension -> 415.
         let txt_uri = format!("/api/media?path={}", media_dir.join("notes.txt").display());
@@ -31362,7 +33781,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::FORBIDDEN);
 
         // Missing file -> 404.
-        let missing_uri = format!("/api/media?path={}", media_dir.join("missing.png").display());
+        let missing_uri = format!(
+            "/api/media?path={}",
+            media_dir.join("missing.png").display()
+        );
         let (status, _) = get_json(app.clone(), &missing_uri, Some("sekret")).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
@@ -31404,38 +33826,65 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Requires auth.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/audio/speak", None,
+            app.clone(),
+            "POST",
+            "/api/audio/speak",
+            None,
             json!({ "text": "hello" }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
         // Empty text -> 400.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/audio/speak", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/audio/speak",
+            Some("sekret"),
             json!({ "text": "   " }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
         // No OPENAI_API_KEY anywhere -> clean 400 naming the key.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/audio/speak", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/audio/speak",
+            Some("sekret"),
             json!({ "text": "hello world" }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert!(body["error"]["message"].as_str().unwrap().contains("OPENAI_API_KEY"));
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("OPENAI_API_KEY"));
 
         // Unknown provider -> 400 naming the problem.
-        std::fs::write(dir.path().join("config.toml"), "[tts]\nprovider = \"piper\"\n").unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            "[tts]\nprovider = \"piper\"\n",
+        )
+        .unwrap();
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/audio/speak", Some("sekret"),
+            app.clone(),
+            "POST",
+            "/api/audio/speak",
+            Some("sekret"),
             json!({ "text": "hello world" }),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert!(body["error"]["message"].as_str().unwrap().contains("unsupported tts provider"));
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("unsupported tts provider"));
         std::fs::remove_file(dir.path().join("config.toml")).unwrap();
 
         // Voices without a key -> available:false, empty list.
-        let (status, body) = get_json(app.clone(), "/api/audio/elevenlabs/voices", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/audio/elevenlabs/voices", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["available"], false);
         assert!(body["voices"].as_array().unwrap().is_empty());
@@ -31492,7 +33941,14 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(
             names,
             vec![
-                "triage", "todo", "scheduled", "ready", "running", "blocked", "review", "done"
+                "triage",
+                "todo",
+                "scheduled",
+                "ready",
+                "running",
+                "blocked",
+                "review",
+                "done"
             ]
         );
         assert_eq!(body["latest_event_id"], 0);
@@ -31511,8 +33967,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(body["task"]["status"], "todo");
 
         // The board carries the card in todo with link/progress nulls.
-        let (_, body) =
-            get_json(app.clone(), "/api/plugins/kanban/board", Some("sekret")).await;
+        let (_, body) = get_json(app.clone(), "/api/plugins/kanban/board", Some("sekret")).await;
         let todo = body["columns"]
             .as_array()
             .unwrap()
@@ -31598,8 +34053,12 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::OK);
         assert!(!body["profiles"].as_array().unwrap().is_empty());
 
-        let (status, body) =
-            get_json(app.clone(), "/api/plugins/kanban/orchestration", Some("sekret")).await;
+        let (status, body) = get_json(
+            app.clone(),
+            "/api/plugins/kanban/orchestration",
+            Some("sekret"),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["auto_decompose"], true);
         assert!(body["resolved_orchestrator_profile"].is_string());
@@ -31699,8 +34158,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         use futures::{SinkExt, StreamExt};
         use tokio_tungstenite::tungstenite::Message as WsMessage;
-        type WsConn =
-            tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+        type WsConn = tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >;
 
         async fn next_data_frame(ws: &mut WsConn) -> WsMessage {
             loop {
@@ -31720,7 +34180,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // 2) No streaming provider (no keys anywhere) -> one fallback frame.
         let url = format!("ws://{addr}/api/audio/speak-stream?token=sekret");
-        let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.expect("ws connects");
+        let (mut ws, _) = tokio_tungstenite::connect_async(&url)
+            .await
+            .expect("ws connects");
         match next_data_frame(&mut ws).await {
             WsMessage::Text(text) => {
                 let frame: Value = serde_json::from_str(&text).unwrap();
@@ -31746,7 +34208,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // 4) Chunked provider present: start -> per-sentence PCM -> end.
         std::env::set_var("OPENAI_API_KEY", "mock-key");
         std::env::set_var("OPENAI_BASE_URL", format!("http://{mock_addr}/v1"));
-        let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.expect("ws connects");
+        let (mut ws, _) = tokio_tungstenite::connect_async(&url)
+            .await
+            .expect("ws connects");
         match next_data_frame(&mut ws).await {
             WsMessage::Text(text) => {
                 let frame: Value = serde_json::from_str(&text).unwrap();
@@ -31756,9 +34220,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             }
             other => panic!("expected start frame, got {other:?}"),
         }
-        ws.send(WsMessage::Text(json!({"text": "Hello world. "}).to_string()))
-            .await
-            .unwrap();
+        ws.send(WsMessage::Text(
+            json!({"text": "Hello world. "}).to_string(),
+        ))
+        .await
+        .unwrap();
         match next_data_frame(&mut ws).await {
             WsMessage::Binary(bytes) => assert_eq!(bytes, b"PCMPCM"),
             other => panic!("expected pcm frame, got {other:?}"),
@@ -31781,7 +34247,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         }
 
         // 5) Barge-in: stop cuts the session without an end frame.
-        let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.expect("ws connects");
+        let (mut ws, _) = tokio_tungstenite::connect_async(&url)
+            .await
+            .expect("ws connects");
         assert!(matches!(next_data_frame(&mut ws).await, WsMessage::Text(_)));
         ws.send(WsMessage::Text(json!({"stop": true}).to_string()))
             .await
@@ -31828,8 +34296,12 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
     async fn test_computer_use_grant_route_matches_platform() {
         let app = router(test_state());
         // Status card: can_grant is a macOS-only concept (hermes parity).
-        let (status, body) =
-            get_json(app.clone(), "/api/tools/computer-use/status", Some("sekret")).await;
+        let (status, body) = get_json(
+            app.clone(),
+            "/api/tools/computer-use/status",
+            Some("sekret"),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["can_grant"], std::env::consts::OS == "macos");
 
@@ -31906,7 +34378,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(payload["object"], "ulnclaw.session_export");
         assert_eq!(payload["sessions"][0]["id"], id);
         assert_eq!(payload["sessions"][0]["title"], "export me");
-        assert_eq!(payload["sessions"][0]["messages"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            payload["sessions"][0]["messages"].as_array().unwrap().len(),
+            2
+        );
 
         // Import a fresh session with explicit timestamps.
         let import_payload = json!({
@@ -32005,14 +34480,27 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert!(state.store.get_session_row("bad-role").unwrap().is_none());
 
         // Missing sessions field -> 400.
-        let (status, body) =
-            post_json(app.clone(), "/api/sessions/import", r#"{"profile":"p"}"#, "sekret").await;
+        let (status, body) = post_json(
+            app.clone(),
+            "/api/sessions/import",
+            r#"{"profile":"p"}"#,
+            "sekret",
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert!(body["error"]["message"].as_str().unwrap().contains("sessions"));
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("sessions"));
 
         // Auth required.
-        let (status, _) =
-            post_json(app.clone(), "/api/sessions/import", r#"{"sessions":[]}"#, "wrong").await;
+        let (status, _) = post_json(
+            app.clone(),
+            "/api/sessions/import",
+            r#"{"sessions":[]}"#,
+            "wrong",
+        )
+        .await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
         match saved_home {
@@ -32050,7 +34538,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert!(body["error"]["message"].as_str().unwrap().contains("Unknown provider"));
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Unknown provider"));
 
         // Unconfigured device flow -> 400 naming the config keys.
         let (status, body) = send_json(
@@ -32209,7 +34700,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let memory = body["providers"]["memory"].as_array().unwrap();
         assert!(memory.iter().any(|v| v.as_str() == Some("builtin")));
         assert!(memory.iter().any(|v| v.as_str() == Some("demo")));
-        assert_eq!(body["selected"]["memory_provider"].as_str(), Some("builtin"));
+        assert_eq!(
+            body["selected"]["memory_provider"].as_str(),
+            Some("builtin")
+        );
 
         // Install the local-dir candidate by catalog name.
         let (status, body) = post_json(
@@ -32431,27 +34925,39 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Archive the session (desktop P414 archive action).
         let (status, body) = send_json(
-            app.clone(), "PATCH", &format!("/api/sessions/{}", id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/sessions/{}", id),
+            Some(token),
             json!({"end_reason": "archived"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["session"]["end_reason"], "archived");
         assert!(body["session"]["ended_at"].as_f64().is_some());
 
         // end_reason: null clears the recorded end (unarchive).
         let (status, body) = send_json(
-            app.clone(), "PATCH", &format!("/api/sessions/{}", id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/sessions/{}", id),
+            Some(token),
             json!({"end_reason": null}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["session"]["end_reason"].is_null());
         assert!(body["session"]["ended_at"].is_null());
 
         // Empty-string end_reason stays a no-op (no archive).
         let (status, body) = send_json(
-            app.clone(), "PATCH", &format!("/api/sessions/{}", id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/sessions/{}", id),
+            Some(token),
             json!({"end_reason": ""}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert!(body["session"]["end_reason"].is_null());
     }
@@ -32464,22 +34970,26 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Full meta body (P426): source/cwd/title survive creation.
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/sessions", Some(token),
+            app.clone(),
+            "POST",
+            "/api/sessions",
+            Some(token),
             json!({"source": "desktop", "cwd": "/tmp/proj", "title": "My task"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         assert_eq!(body["source"], "desktop");
         let id = body["id"].as_str().unwrap().to_string();
-        let (status, row) = get_json(app.clone(), &format!("/api/sessions/{id}"), Some(token)).await;
+        let (status, row) =
+            get_json(app.clone(), &format!("/api/sessions/{id}"), Some(token)).await;
         assert_eq!(status, StatusCode::OK, "{row}");
         assert_eq!(row["source"], "desktop");
         assert_eq!(row["cwd"], "/tmp/proj");
         assert_eq!(row["title"], "My task");
 
         // Empty body keeps the gateway defaults.
-        let (status, body) = send_json(
-            app.clone(), "POST", "/api/sessions", Some(token), json!({}),
-        ).await;
+        let (status, body) =
+            send_json(app.clone(), "POST", "/api/sessions", Some(token), json!({})).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         assert_eq!(body["source"], "gateway");
         let id = body["id"].as_str().unwrap().to_string();
@@ -32494,9 +35004,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let token = "sekret";
         let app = router(state.clone());
 
-        let (status, body) = send_json(
-            app.clone(), "POST", "/api/sessions", Some(token), json!({}),
-        ).await;
+        let (status, body) =
+            send_json(app.clone(), "POST", "/api/sessions", Some(token), json!({})).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         let parent = body["id"].as_str().unwrap().to_string();
 
@@ -32507,8 +35016,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Forking adds the child to the parent's lineage (P553).
         let (status, body) = send_json(
-            app.clone(), "POST", &format!("/api/sessions/{parent}/fork"), Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "POST",
+            &format!("/api/sessions/{parent}/fork"),
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert!(status.is_success(), "{status} {body}");
         let child = body["session"]["id"].as_str().expect("fork id").to_string();
 
@@ -32547,8 +35061,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
 
         // Unknown session → 404.
         let (status, _) = send_json(
-            app.clone(), "POST", "/api/sessions/nope/retitle", Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "POST",
+            "/api/sessions/nope/retitle",
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         // A session without any user message cannot be retitled.
@@ -32557,8 +35076,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .create_session("cli", Some("test-model"), None)
             .expect("session created");
         let (status, body) = send_json(
-            app, "POST", &format!("/api/sessions/{sid}/retitle"), Some(token), json!({}),
-        ).await;
+            app,
+            "POST",
+            &format!("/api/sessions/{sid}/retitle"),
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
     }
 
@@ -32572,16 +35096,21 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let mut rx = crate::desktop_bridge::subscribe();
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/v1/runs", Some(token),
+            app.clone(),
+            "POST",
+            "/v1/runs",
+            Some(token),
             json!({"message": "settle me"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::ACCEPTED);
         let run_id = body["run_id"].as_str().expect("run id").to_string();
 
         // The provider is unreachable, so the run settles to failed.
         let mut settled = String::new();
         for _ in 0..60 {
-            let (_, run) = get_json(app.clone(), &format!("/v1/runs/{}", run_id), Some(token)).await;
+            let (_, run) =
+                get_json(app.clone(), &format!("/v1/runs/{}", run_id), Some(token)).await;
             settled = run["status"].as_str().unwrap_or("").to_string();
             if settled == "completed" || settled == "failed" {
                 break;
@@ -32646,7 +35175,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let request_run_id = run_id.clone();
         let request = tokio::spawn(async move {
             router
-                .request(&request_run_id, "dangerous command".into(), "rm -rf /".into())
+                .request(
+                    &request_run_id,
+                    "dangerous command".into(),
+                    "rm -rf /".into(),
+                )
                 .await
         });
 
@@ -32699,9 +35232,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let mut rx = crate::desktop_bridge::subscribe();
 
         let (status, body) = send_json(
-            app.clone(), "POST", "/api/sessions", Some(token),
+            app.clone(),
+            "POST",
+            "/api/sessions",
+            Some(token),
             json!({"source": "cli", "title": "from test"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::CREATED);
         let id = body["id"].as_str().expect("id").to_string();
 
@@ -32778,14 +35315,23 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let id = state.store.create_session("gateway", None, None).unwrap();
 
         let (status, _) = send_json(
-            app.clone(), "PATCH", &format!("/api/sessions/{}", id), Some(token),
+            app.clone(),
+            "PATCH",
+            &format!("/api/sessions/{}", id),
+            Some(token),
             json!({"title": "renamed"}),
-        ).await;
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
 
         let (status, _) = send_json(
-            app.clone(), "DELETE", &format!("/api/sessions/{}", id), Some(token), json!({}),
-        ).await;
+            app.clone(),
+            "DELETE",
+            &format!("/api/sessions/{}", id),
+            Some(token),
+            json!({}),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
 
         // The bus received both session.updated and session.deleted.
@@ -32827,7 +35373,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
-                        role: if i % 2 == 0 { Role::User } else { Role::Assistant },
+                        role: if i % 2 == 0 {
+                            Role::User
+                        } else {
+                            Role::Assistant
+                        },
                         content: Some(format!("message {i}")),
                         tool_calls: None,
                         tool_call_id: None,
@@ -32851,7 +35401,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
-                        role: if i % 2 == 0 { Role::User } else { Role::Assistant },
+                        role: if i % 2 == 0 {
+                            Role::User
+                        } else {
+                            Role::Assistant
+                        },
                         content: Some(format!("message {i} with some padding content")),
                         tool_calls: None,
                         tool_call_id: None,
@@ -32883,7 +35437,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
-                        role: if i % 2 == 0 { Role::User } else { Role::Assistant },
+                        role: if i % 2 == 0 {
+                            Role::User
+                        } else {
+                            Role::Assistant
+                        },
                         content: Some(format!("m{i}")),
                         tool_calls: None,
                         tool_call_id: None,
@@ -32906,7 +35464,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // Timestamped tail keeps the envelope.
         let (_, body) = get_json(
             app.clone(),
-            &format!("/api/sessions/{}/messages?limit=3&timestamps=true", session_id),
+            &format!(
+                "/api/sessions/{}/messages?limit=3&timestamps=true",
+                session_id
+            ),
             Some(token),
         )
         .await;
@@ -32937,7 +35498,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
-                        role: if i % 2 == 0 { Role::User } else { Role::Assistant },
+                        role: if i % 2 == 0 {
+                            Role::User
+                        } else {
+                            Role::Assistant
+                        },
                         content: Some(format!("m{i}")),
                         tool_calls: None,
                         tool_call_id: None,
@@ -33005,7 +35570,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
-                        role: if i % 2 == 0 { Role::User } else { Role::Assistant },
+                        role: if i % 2 == 0 {
+                            Role::User
+                        } else {
+                            Role::Assistant
+                        },
                         content: Some(format!("m{i}")),
                         tool_calls: None,
                         tool_call_id: None,
@@ -33047,7 +35616,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert!(body["data"].as_array().expect("rows").is_empty());
         let (_, body) = get_json(
             app.clone(),
-            &format!("/api/sessions/{}/messages?after=7&timestamps=true", session_id),
+            &format!(
+                "/api/sessions/{}/messages?after=7&timestamps=true",
+                session_id
+            ),
             Some(token),
         )
         .await;
@@ -33068,7 +35640,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
-                        role: if i % 2 == 0 { Role::User } else { Role::Assistant },
+                        role: if i % 2 == 0 {
+                            Role::User
+                        } else {
+                            Role::Assistant
+                        },
                         content: Some(format!("old {i}")),
                         tool_calls: None,
                         tool_call_id: None,
@@ -33086,7 +35662,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 name: None,
             })
             .collect();
-        state.store.replace_messages(&session_id, &replacement).unwrap();
+        state
+            .store
+            .replace_messages(&session_id, &replacement)
+            .unwrap();
         let loaded = state.store.load_messages(&session_id).unwrap();
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded[0].content.as_deref(), Some("new 0"));
@@ -33129,8 +35708,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert!(disabled.contains(&"demo".to_string()));
 
         // Enable removes it again.
-        let (status, _) =
-            post_json(app, "/api/plugins/demo/enable", "{}", "sekret").await;
+        let (status, _) = post_json(app, "/api/plugins/demo/enable", "{}", "sekret").await;
         assert_eq!(status, StatusCode::OK);
 
         match saved_home {
@@ -33150,10 +35728,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::OK);
         let channels = body["channels"].as_array().expect("channels");
         assert!(channels.len() >= 20);
-        let names: Vec<&str> = channels
-            .iter()
-            .filter_map(|c| c["name"].as_str())
-            .collect();
+        let names: Vec<&str> = channels.iter().filter_map(|c| c["name"].as_str()).collect();
         assert!(names.contains(&"telegram"));
         assert!(names.contains(&"matrix"));
         assert!(body["enabled_count"].as_u64().is_some());
@@ -33252,7 +35827,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         if cfg!(target_os = "linux") {
             // On Linux /proc/self/cgroup is always readable; the v2
             // entry presence is environment dependent.
-            assert!(body["cgroup_path"].is_string() || body["cgroup_path"].is_null(), "{body}");
+            assert!(
+                body["cgroup_path"].is_string() || body["cgroup_path"].is_null(),
+                "{body}"
+            );
         }
     }
 
@@ -33440,7 +36018,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let app = router(test_state());
         let (status, _) = get_json(app.clone(), "/api/status-phrases/preview", None).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
-        let (status, body) = get_json(app.clone(), "/api/status-phrases/preview", Some("sekret")).await;
+        let (status, body) =
+            get_json(app.clone(), "/api/status-phrases/preview", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["total"], 3, "{body}");
         let phrases = body["phrases"].as_array().unwrap();
@@ -33533,7 +36112,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         // Built-in 30 + conventional 1.
         assert_eq!(body["status_count"], 31, "{body}");
         assert_eq!(body["generic_count"], 20, "{body}");
-        assert_eq!(body["conventional_files"][0]["path"], "status_phrases.yaml", "{body}");
+        assert_eq!(
+            body["conventional_files"][0]["path"], "status_phrases.yaml",
+            "{body}"
+        );
         assert_eq!(body["has_config_section"], false, "{body}");
         let telegram = &body["platforms"]["telegram"];
         // Per-platform catalog: 30 built-ins + conventional + 1 section line.
@@ -33619,7 +36201,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             body["heartbeat"]["age_seconds"].as_f64().unwrap() < 30.0,
             "{body}"
         );
-        assert_eq!(body["heartbeat"]["payload"]["pid"], std::process::id(), "{body}");
+        assert_eq!(
+            body["heartbeat"]["payload"]["pid"],
+            std::process::id(),
+            "{body}"
+        );
         assert_eq!(body["shutdown_watchdog_dump"]["present"], false, "{body}");
         assert_eq!(body["shutdown_diagnostic_log"]["present"], false, "{body}");
 
@@ -33736,12 +36322,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs_f64();
-        crate::session_activity::touch_at(
-            key,
-            "tool call: shell",
-            "agent.progress",
-            now - 3600.0,
-        );
+        crate::session_activity::touch_at(key, "tool call: shell", "agent.progress", now - 3600.0);
         let app = router(test_state());
         let (status, body) = get_json(app, "/api/stall-watch", Some("sekret")).await;
         assert_eq!(status, StatusCode::OK);
@@ -33807,8 +36388,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(body["platforms"].as_array().unwrap().len(), 0);
 
         // Validation: missing fields are rejected.
-        let (status, _) =
-            post_json(app.clone(), "/api/pairing/approve", "{}", "sekret").await;
+        let (status, _) = post_json(app.clone(), "/api/pairing/approve", "{}", "sekret").await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, _) = post_json(
             app.clone(),
@@ -33840,8 +36420,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         // Clear-pending over an empty store clears zero.
-        let (status, body) =
-            post_json(app, "/api/pairing/clear-pending", "{}", "sekret").await;
+        let (status, body) = post_json(app, "/api/pairing/clear-pending", "{}", "sekret").await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["cleared"], 0);
 
@@ -33858,7 +36437,9 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
     /// Minimal DevTools discovery server: answers `/json/version` with a
     /// `webSocketDebuggerUrl` so `discover_browser_ws` succeeds.
     async fn spawn_mock_devtools() -> u16 {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind mock");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock");
         let port = listener.local_addr().unwrap().port();
         tokio::spawn(async move {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -33889,12 +36470,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
     async fn test_cron_scheduler_runs_due_jobs() {
         // State with the fake provider so the cron run actually completes.
         let temp = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            SqliteSessionStore::open(&temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(&temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
-        let agent =
-            Agent::new(Arc::new(FakeStreamProvider), ToolRegistry::new()).with_store(store);
+        let agent = Agent::new(Arc::new(FakeStreamProvider), ToolRegistry::new()).with_store(store);
         let state = GatewayState::new(
             Arc::new(agent),
             "fake-stream".into(),
@@ -33904,9 +36483,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         )
         .expect("state builds");
         let dir = tempfile::tempdir().unwrap();
-        let cron_store = Arc::new(
-            CronStore::open(&dir.path().join("state.db")).expect("cron store opens"),
-        );
+        let cron_store =
+            Arc::new(CronStore::open(&dir.path().join("state.db")).expect("cron store opens"));
         state.cron.set(cron_store.clone()).ok();
         let job = CronJob {
             id: "sched-1".into(),
@@ -33965,8 +36543,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
         let status = response.status();
-        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
     }
 
     async fn put_json(app: Router, uri: &str, body: &str, token: &str) -> (StatusCode, Value) {
@@ -33979,8 +36562,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
         let status = response.status();
-        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
     }
 
     #[tokio::test]
@@ -34006,7 +36594,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         )
         .await;
         assert_eq!(status, StatusCode::BAD_GATEWAY);
-        assert!(body["error"]["message"].as_str().unwrap().contains("unreachable"));
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("unreachable"));
         let (_, body) = get_json(app.clone(), "/v1/browser/status", Some(token)).await;
         assert_eq!(body["configured"], false);
 
@@ -34043,9 +36634,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
     fn multiplex_app(multiplex: bool, profiles: &[&str]) -> Router {
         let state = test_state();
         let default_router = router(state.clone());
-        let builder: ProfileRouterBuilder = Arc::new(|_name: String| {
-            Box::pin(async move { Ok(router(test_state())) })
-        });
+        let builder: ProfileRouterBuilder =
+            Arc::new(|_name: String| Box::pin(async move { Ok(router(test_state())) }));
         let hub = ProfileHub::new(
             multiplex,
             profiles.iter().map(|s| s.to_string()).collect(),
@@ -34129,10 +36719,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             Box::pin(async move { Ok(Router::new().route("/probe", get(probe))) })
         });
         let mut scope_map = std::collections::HashMap::new();
-        scope_map.insert(
-            "ULNCLAW_SS_MIRROR_PROBE".to_string(),
-            "scoped".to_string(),
-        );
+        scope_map.insert("ULNCLAW_SS_MIRROR_PROBE".to_string(), "scoped".to_string());
         let hub = ProfileHub::new(
             true,
             ["work"].iter().map(|s| s.to_string()).collect(),
@@ -34208,7 +36795,11 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
         let headers = response.headers();
         assert_eq!(
-            headers.get("access-control-allow-origin").unwrap().to_str().unwrap(),
+            headers
+                .get("access-control-allow-origin")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "http://127.0.0.1:5174"
         );
         assert!(headers
@@ -34321,7 +36912,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let task = notifier_task("done");
         let msg = format_notify_message(
             Some(&task),
-            &notifier_event("completed", serde_json::json!({"result": "all green\nsecond line"})),
+            &notifier_event(
+                "completed",
+                serde_json::json!({"result": "all green\nsecond line"}),
+            ),
         )
         .unwrap();
         assert_eq!(
@@ -34334,7 +36928,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             &notifier_event("blocked", serde_json::json!({"reason": "needs api key"})),
         )
         .unwrap();
-        assert_eq!(msg, "⏸ [default] @alice Kanban t_abc blocked: needs api key");
+        assert_eq!(
+            msg,
+            "⏸ [default] @alice Kanban t_abc blocked: needs api key"
+        );
 
         let msg = format_notify_message(
             Some(&task),
@@ -34347,8 +36944,16 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         );
 
         // Silent kinds advance the cursor without a message.
-        assert!(format_notify_message(Some(&task), &notifier_event("archived", serde_json::json!({}))).is_none());
-        assert!(format_notify_message(Some(&task), &notifier_event("unblocked", serde_json::json!({}))).is_none());
+        assert!(format_notify_message(
+            Some(&task),
+            &notifier_event("archived", serde_json::json!({}))
+        )
+        .is_none());
+        assert!(format_notify_message(
+            Some(&task),
+            &notifier_event("unblocked", serde_json::json!({}))
+        )
+        .is_none());
     }
 
     #[test]
@@ -34360,18 +36965,18 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         )
         .unwrap();
         assert!(msg.ends_with("handoff first"));
-        let msg =
-            format_notify_message(Some(&task), &notifier_event("completed", serde_json::json!({})))
-                .unwrap();
+        let msg = format_notify_message(
+            Some(&task),
+            &notifier_event("completed", serde_json::json!({})),
+        )
+        .unwrap();
         assert!(msg.ends_with("legacy result"));
     }
 
     #[tokio::test]
     async fn wake_self_posts_to_chat_completions() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         let server = tokio::spawn(async move {
             let (mut socket, _) = listener.accept().await.unwrap();
@@ -34431,9 +37036,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
     #[tokio::test]
     async fn wake_fails_fast_on_client_error() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         tokio::spawn(async move {
             if let Ok((mut socket, _)) = listener.accept().await {
@@ -34479,8 +37082,13 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         };
         let response = app.oneshot(builder.body(payload).unwrap()).await.unwrap();
         let status = response.status();
-        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
     }
 
     #[tokio::test]
@@ -34560,8 +37168,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["project"]["description"], "patched");
-        let (status, _) =
-            get_json(app.clone(), "/api/projects/no-such-project", Some(token)).await;
+        let (status, _) = get_json(app.clone(), "/api/projects/no-such-project", Some(token)).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
 
         // Archive hides it from the default list, restore brings it back.
@@ -34589,9 +37196,14 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         assert_eq!(status, StatusCode::OK);
 
         // Clear active, then hard-delete.
-        let (status, body) =
-            request_json(app.clone(), "POST", "/api/projects/active", Some(r#"{"id":null}"#), token)
-                .await;
+        let (status, body) = request_json(
+            app.clone(),
+            "POST",
+            "/api/projects/active",
+            Some(r#"{"id":null}"#),
+            token,
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert!(body["active_id"].is_null());
         let (status, _) = request_json(
@@ -34645,7 +37257,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .store
             .create_session("cli", None, Some(workdir.to_str().unwrap()))
             .unwrap();
-        state.store.create_session("cli", None, Some("/elsewhere")).unwrap();
+        state
+            .store
+            .create_session("cli", None, Some("/elsewhere"))
+            .unwrap();
 
         let app = router(state);
         let (status, body) = get_json(app, "/api/sessions", Some("sekret")).await;
@@ -34708,7 +37323,10 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .find(|row| row["id"] == id)
             .cloned()
             .unwrap();
-        assert!(row["last_activity_at"].as_f64().unwrap() >= started, "{row}");
+        assert!(
+            row["last_activity_at"].as_f64().unwrap() >= started,
+            "{row}"
+        );
         assert_eq!(row["message_count"], 1);
     }
 
@@ -34801,7 +37419,9 @@ Authorization = "Bearer static-token"
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         assert!(String::from_utf8_lossy(&body).contains("env keys"));
 
         let response = app
@@ -34810,7 +37430,9 @@ Authorization = "Bearer static-token"
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         assert!(String::from_utf8_lossy(&body).contains("header/API-key"));
 
         match prev {
@@ -34832,7 +37454,9 @@ Authorization = "Bearer static-token"
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let text = String::from_utf8_lossy(&body);
         assert!(text.contains("OAuth flow expired"), "{text}");
     }
@@ -34955,7 +37579,9 @@ url = "http://127.0.0.1:{}/mcp"
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let snapshot: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(snapshot["status"], "authorization_required", "{snapshot}");
         let flow_id = snapshot["flow_id"].as_str().unwrap().to_string();
@@ -34978,7 +37604,9 @@ url = "http://127.0.0.1:{}/mcp"
             .unwrap();
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         assert!(String::from_utf8_lossy(&body).contains("Authorization received"));
 
         // Poll the flow status until the worker finishes (token exchange
@@ -35003,9 +37631,10 @@ url = "http://127.0.0.1:{}/mcp"
         assert!(final_snapshot["error"].is_null());
 
         // Tokens persisted under the home.
-        let tokens: Value =
-            serde_json::from_str(&std::fs::read_to_string(tmp.path().join("mcp-tokens/e2e-srv.json")).unwrap())
-                .unwrap();
+        let tokens: Value = serde_json::from_str(
+            &std::fs::read_to_string(tmp.path().join("mcp-tokens/e2e-srv.json")).unwrap(),
+        )
+        .unwrap();
         assert_eq!(tokens["access_token"], "access-e2e");
 
         match prev {

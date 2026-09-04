@@ -588,7 +588,10 @@ pub fn get_sticker_by_name(name: &str) -> Option<&'static Sticker> {
     {
         return Some(sticker);
     }
-    if let Some(sticker) = STICKER_CATALOG.iter().find(|s| s.description.contains(query)) {
+    if let Some(sticker) = STICKER_CATALOG
+        .iter()
+        .find(|s| s.description.contains(query))
+    {
         return Some(sticker);
     }
     search_stickers(query, 1).into_iter().next()
@@ -660,8 +663,25 @@ fn is_stripped_punct(ch: char) -> bool {
     ch.is_whitespace()
         || matches!(
             ch,
-            '-' | '_' | '·' | '.' | ',' | '，' | '。' | '!' | '！' | '?' | '？' | '"' | '\u{201C}'
-                | '\u{201D}' | '\'' | '\u{2018}' | '\u{2019}' | '、' | '/' | '\\'
+            '-' | '_'
+                | '·'
+                | '.'
+                | ','
+                | '，'
+                | '。'
+                | '!'
+                | '！'
+                | '?'
+                | '？'
+                | '"'
+                | '\u{201C}'
+                | '\u{201D}'
+                | '\''
+                | '\u{2018}'
+                | '\u{2019}'
+                | '、'
+                | '/'
+                | '\\'
         )
 }
 
@@ -788,7 +808,11 @@ pub fn search_stickers(query: &str, limit: usize) -> Vec<&'static Sticker> {
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     let top = scored.first().map(|(score, _)| *score).unwrap_or(0.0);
     if top <= 0.0 {
-        return scored.into_iter().take(safe_limit).map(|(_, s)| s).collect();
+        return scored
+            .into_iter()
+            .take(safe_limit)
+            .map(|(_, s)| s)
+            .collect();
     }
     let floor = if top >= 22.0 {
         18.0
@@ -802,8 +826,16 @@ pub fn search_stickers(query: &str, limit: usize) -> Vec<&'static Sticker> {
         .filter(|(score, _)| *score >= floor)
         .copied()
         .collect();
-    let source = if filtered.is_empty() { scored } else { filtered };
-    source.into_iter().take(safe_limit).map(|(_, s)| s).collect()
+    let source = if filtered.is_empty() {
+        scored
+    } else {
+        filtered
+    };
+    source
+        .into_iter()
+        .take(safe_limit)
+        .map(|(_, s)| s)
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -920,7 +952,9 @@ mod tests {
         ids.dedup();
         assert_eq!(ids.len(), before, "sticker_id must be unique");
         assert!(STICKER_CATALOG.iter().all(|s| s.package_id == "1003"));
-        assert!(STICKER_CATALOG.iter().all(|s| !s.name.is_empty() && !s.description.is_empty()));
+        assert!(STICKER_CATALOG
+            .iter()
+            .all(|s| !s.name.is_empty() && !s.description.is_empty()));
     }
 
     #[test]
@@ -998,7 +1032,10 @@ mod tests {
         assert_eq!(value["formats"], "png");
         assert_eq!(value["name"], "狗头");
         // hermes json.dumps key order is preserved
-        assert!(element.msg_content.data.starts_with("{\"sticker_id\":\"225\",\"package_id\":\"1003\","));
+        assert!(element
+            .msg_content
+            .data
+            .starts_with("{\"sticker_id\":\"225\",\"package_id\":\"1003\","));
     }
 
     #[test]
@@ -1032,7 +1069,10 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(render_face_element(&garbage), "[emoji]");
-        assert_eq!(render_face_element(&proto::MsgContent::default()), "[emoji]");
+        assert_eq!(
+            render_face_element(&proto::MsgContent::default()),
+            "[emoji]"
+        );
     }
 
     #[test]

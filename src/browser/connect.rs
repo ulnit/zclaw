@@ -443,7 +443,9 @@ impl ChromeDebugLaunch {
                     .unwrap_or("")
                     .trim()
                     .to_string();
-                return Some(format!("{name} exited before the debug port opened: {last}"));
+                return Some(format!(
+                    "{name} exited before the debug port opened: {last}"
+                ));
             }
         }
         None
@@ -615,9 +617,9 @@ pub async fn connect_local_default(port: u16) -> ConnectOutcome {
     if let Some(found) = discover_local_cdp_url(port, Duration::from_secs(1)).await {
         outcome.url = Some(found.clone());
         outcome.already_open = true;
-        outcome
-            .messages
-            .push(format!("✓ Chromium-family browser is already listening at {found}"));
+        outcome.messages.push(format!(
+            "✓ Chromium-family browser is already listening at {found}"
+        ));
         return outcome;
     }
 
@@ -652,9 +654,9 @@ pub async fn connect_local_default(port: u16) -> ConnectOutcome {
         outcome.messages.push(format!(
             "⚠ Browser launched but port {launch_port} isn't responding yet"
         ));
-        outcome
-            .messages
-            .push("  Try again in a few seconds — the debug instance may still is starting".to_string());
+        outcome.messages.push(
+            "  Try again in a few seconds — the debug instance may still is starting".to_string(),
+        );
         return outcome;
     }
 
@@ -665,7 +667,9 @@ pub async fn connect_local_default(port: u16) -> ConnectOutcome {
         outcome.messages.push(format!("  {hint}"));
     }
     if let Some(manual) = manual_chrome_debug_command(launch_port, host_system()) {
-        outcome.messages.push("  Start one manually and re-run /browser connect:".to_string());
+        outcome
+            .messages
+            .push("  Start one manually and re-run /browser connect:".to_string());
         outcome.messages.push(format!("    {manual}"));
     }
     outcome

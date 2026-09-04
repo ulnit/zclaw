@@ -438,7 +438,12 @@ impl InsightsEngine {
 
 /// USD cost for a model/token pair via models.dev pricing; `None` when the
 /// model has no known pricing (hermes `_estimate_cost` semantics).
-pub fn estimate_cost(provider_hint: Option<&str>, model: &str, input_tokens: i64, output_tokens: i64) -> Option<f64> {
+pub fn estimate_cost(
+    provider_hint: Option<&str>,
+    model: &str,
+    input_tokens: i64,
+    output_tokens: i64,
+) -> Option<f64> {
     // models.dev is keyed by provider — without one the lookup can never
     // match, so skip the registry fetch entirely (keeps tests off the
     // shared models.dev cache).
@@ -497,8 +502,12 @@ fn compute_overview(sessions: &[SessionData], provider_hint: Option<&str>) -> Ov
     overview
 }
 
-fn compute_model_breakdown(sessions: &[SessionData], provider_hint: Option<&str>) -> Vec<ModelUsage> {
-    let mut by_model: std::collections::BTreeMap<String, ModelUsage> = std::collections::BTreeMap::new();
+fn compute_model_breakdown(
+    sessions: &[SessionData],
+    provider_hint: Option<&str>,
+) -> Vec<ModelUsage> {
+    let mut by_model: std::collections::BTreeMap<String, ModelUsage> =
+        std::collections::BTreeMap::new();
     for session in sessions {
         let key = if session.model.is_empty() {
             "(unknown)".to_string()
@@ -534,7 +543,8 @@ fn compute_model_breakdown(sessions: &[SessionData], provider_hint: Option<&str>
 }
 
 fn compute_source_breakdown(sessions: &[SessionData]) -> Vec<SourceUsage> {
-    let mut by_source: std::collections::BTreeMap<String, SourceUsage> = std::collections::BTreeMap::new();
+    let mut by_source: std::collections::BTreeMap<String, SourceUsage> =
+        std::collections::BTreeMap::new();
     for session in sessions {
         let entry = by_source
             .entry(session.source.clone())
@@ -626,7 +636,9 @@ pub fn bar_chart(values: &[u64], max_width: usize) -> Vec<String> {
             if *v == 0 {
                 String::new()
             } else {
-                "█".repeat(((*v as f64 / peak as f64) * max_width as f64) as usize).max("█".to_string())
+                "█"
+                    .repeat(((*v as f64 / peak as f64) * max_width as f64) as usize)
+                    .max("█".to_string())
             }
         })
         .collect()
@@ -806,7 +818,10 @@ pub fn format_gateway(report: &InsightsReport) -> String {
     }
     let o = &report.overview;
     let mut lines: Vec<String> = Vec::new();
-    lines.push(format!("📊 **ulnclaw Insights** — Last {} days", report.days));
+    lines.push(format!(
+        "📊 **ulnclaw Insights** — Last {} days",
+        report.days
+    ));
     lines.push(String::new());
     lines.push(format!(
         "**Sessions:** {} | **Messages:** {} | **Tool calls:** {}",
@@ -963,7 +978,10 @@ pub fn format_terminal(report: &InsightsReport) -> String {
         format_tokens(overview.total_tokens)
     ));
     if overview.cost_known {
-        out.push_str(&format!("  Est. cost: ${:.4}\n", overview.estimated_cost_usd));
+        out.push_str(&format!(
+            "  Est. cost: ${:.4}\n",
+            overview.estimated_cost_usd
+        ));
     } else {
         out.push_str("  Est. cost: unknown (no models.dev pricing matched)\n");
     }
@@ -975,7 +993,11 @@ pub fn format_terminal(report: &InsightsReport) -> String {
 
     if !report.models.is_empty() {
         out.push_str("\nModels\n");
-        let totals: Vec<u64> = report.models.iter().map(|m| m.total_tokens as u64).collect();
+        let totals: Vec<u64> = report
+            .models
+            .iter()
+            .map(|m| m.total_tokens as u64)
+            .collect();
         let bars = bar_chart(&totals, 20);
         for (model, bar) in report.models.iter().zip(bars.iter()).take(8) {
             let cost = if model.cost_known {
@@ -1132,14 +1154,18 @@ mod tests {
             .unwrap()
             .as_secs_f64();
         for i in 0..3 {
-            let id = store.create_session("cli", Some("test-model"), None).unwrap();
+            let id = store
+                .create_session("cli", Some("test-model"), None)
+                .unwrap();
             store
                 .update_usage(&id, 100 * (i + 1), 50 * (i + 1), i as u32)
                 .unwrap();
             store.end_session(&id, "completed").unwrap();
         }
         // An archived session that must be excluded.
-        let archived = store.create_session("cli", Some("test-model"), None).unwrap();
+        let archived = store
+            .create_session("cli", Some("test-model"), None)
+            .unwrap();
         store.set_session_archived(&archived, true).unwrap();
         let _ = now;
         store
@@ -1178,7 +1204,9 @@ mod tests {
     fn source_filter_restricts() {
         let dir = tempfile::tempdir().unwrap();
         let store = seeded_store(dir.path());
-        let gateway_session = store.create_session("gateway", Some("test-model"), None).unwrap();
+        let gateway_session = store
+            .create_session("gateway", Some("test-model"), None)
+            .unwrap();
         store.update_usage(&gateway_session, 10, 10, 0).unwrap();
         drop(store);
         let engine = InsightsEngine::open(&dir.path().join("state.db")).unwrap();
@@ -1233,7 +1261,11 @@ mod tests {
         let mut acc = std::collections::BTreeMap::new();
         let json = skill_call_json(&[
             ("c1", "skill_view", r#"{"name": "alpha"}"#),
-            ("c2", "skill_manage", r#"{"action": "patch", "name": "alpha"}"#),
+            (
+                "c2",
+                "skill_manage",
+                r#"{"action": "patch", "name": "alpha"}"#,
+            ),
             ("c3", "skill_view", r#"{"name": "beta"}"#),
             ("c4", "read_file", r#"{"path": "x"}"#),
         ]);

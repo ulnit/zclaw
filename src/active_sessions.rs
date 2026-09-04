@@ -81,12 +81,21 @@ pub fn summarize_holders(entries: &[SessionEntry]) -> String {
         .collect();
     // Sort by count desc, then name asc for deterministic output.
     parts.sort_by(|a, b| {
-        let ca = counts.get(a.split(' ').next().unwrap_or(a)).copied().unwrap_or(0);
-        let cb = counts.get(b.split(' ').next().unwrap_or(b)).copied().unwrap_or(0);
+        let ca = counts
+            .get(a.split(' ').next().unwrap_or(a))
+            .copied()
+            .unwrap_or(0);
+        let cb = counts
+            .get(b.split(' ').next().unwrap_or(b))
+            .copied()
+            .unwrap_or(0);
         cb.cmp(&ca).then_with(|| a.cmp(b))
     });
     let mut held = parts.join(", ");
-    let oldest = entries.iter().map(|e| e.started_at).fold(f64::INFINITY, f64::min);
+    let oldest = entries
+        .iter()
+        .map(|e| e.started_at)
+        .fold(f64::INFINITY, f64::min);
     if oldest.is_finite() {
         held.push_str(&format!(", oldest {} ago", format_age(now - oldest)));
     }
@@ -141,7 +150,11 @@ impl FileLock {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let file = OpenOptions::new().create(true).read(true).write(true).open(path)?;
+        let file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(path)?;
         // flock on unix, LockFileEx on Windows (hermes `_FileLock`).
         crate::process_ctl::lock_exclusive(&file)?;
         Ok(Self { file })
@@ -160,11 +173,16 @@ struct Registry {
 }
 
 fn read_entries(path: &Path) -> Vec<SessionEntry> {
-    let Ok(text) = fs::read_to_string(path) else { return Vec::new() };
+    let Ok(text) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
     match serde_json::from_str::<Registry>(&text) {
         Ok(reg) => reg.entries,
         Err(_) => {
-            tracing::warn!("Ignoring corrupt active session registry at {}", path.display());
+            tracing::warn!(
+                "Ignoring corrupt active session registry at {}",
+                path.display()
+            );
             Vec::new()
         }
     }
@@ -175,7 +193,9 @@ fn write_entries(path: &Path, entries: &[SessionEntry]) {
         let _ = fs::create_dir_all(parent);
     }
     let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
-    let registry = Registry { entries: entries.to_vec() };
+    let registry = Registry {
+        entries: entries.to_vec(),
+    };
     if let Ok(mut file) = File::create(&tmp) {
         if serde_json::to_writer(&mut file, &registry).is_ok() {
             let _ = file.flush();
@@ -219,8 +239,12 @@ fn pid_alive(pid: u32, expected_start: Option<f64>) -> bool {
     if !crate::process_ctl::alive(pid) {
         return false;
     }
-    let Some(expected) = expected_start else { return true };
-    let Some(current) = process_start_time(pid) else { return true };
+    let Some(expected) = expected_start else {
+        return true;
+    };
+    let Some(current) = process_start_time(pid) else {
+        return true;
+    };
     (current - expected).abs() < 0.001
 }
 
@@ -296,7 +320,10 @@ pub fn try_acquire_active_session(
         Ok(lock) => lock,
         Err(e) => {
             tracing::warn!("active session lock unavailable: {e}");
-            return (None, Some("active session file lock unavailable".to_string()));
+            return (
+                None,
+                Some("active session file lock unavailable".to_string()),
+            );
         }
     };
     let raw_entries = read_entries(&state);
@@ -314,7 +341,11 @@ pub fn try_acquire_active_session(
         );
         return (
             None,
-            Some(active_session_limit_message(entries.len(), max_sessions, &entries)),
+            Some(active_session_limit_message(
+                entries.len(),
+                max_sessions,
+                &entries,
+            )),
         );
     }
     let mut entries = entries;
@@ -359,7 +390,9 @@ pub fn transfer_active_session(lease: &mut ActiveSessionLease, new_session_id: &
         return true;
     }
     let state = state_path();
-    let Ok(_lock) = FileLock::acquire(&lock_path()) else { return false };
+    let Ok(_lock) = FileLock::acquire(&lock_path()) else {
+        return false;
+    };
     let mut entries = prune_dead(read_entries(&state));
     let mut updated = false;
     for entry in entries.iter_mut() {
@@ -386,7 +419,9 @@ pub fn release_orphaned_leases(live_lease_ids: &std::collections::HashSet<String
     if !state.exists() {
         return 0;
     }
-    let Ok(_lock) = FileLock::acquire(&lock_path()) else { return 0 };
+    let Ok(_lock) = FileLock::acquire(&lock_path()) else {
+        return 0;
+    };
     let entries = prune_dead(read_entries(&state));
     let total = entries.len();
     let kept: Vec<SessionEntry> = entries
@@ -404,7 +439,9 @@ pub fn release_orphaned_leases(live_lease_ids: &std::collections::HashSet<String
 /// `active_session_registry_snapshot`).
 pub fn active_session_registry_snapshot() -> Vec<SessionEntry> {
     let state = state_path();
-    let Ok(_lock) = FileLock::acquire(&lock_path()) else { return Vec::new() };
+    let Ok(_lock) = FileLock::acquire(&lock_path()) else {
+        return Vec::new();
+    };
     let entries = prune_dead(read_entries(&state));
     write_entries(&state, &entries);
     entries
@@ -422,9 +459,18 @@ mod tests {
 
     #[test]
     fn resolve_cap_zero_and_unset_disable() {
-        assert_eq!(resolve_max_concurrent_sessions(&config_with_cap(None)), None);
-        assert_eq!(resolve_max_concurrent_sessions(&config_with_cap(Some(0))), None);
-        assert_eq!(resolve_max_concurrent_sessions(&config_with_cap(Some(3))), Some(3));
+        assert_eq!(
+            resolve_max_concurrent_sessions(&config_with_cap(None)),
+            None
+        );
+        assert_eq!(
+            resolve_max_concurrent_sessions(&config_with_cap(Some(0))),
+            None
+        );
+        assert_eq!(
+            resolve_max_concurrent_sessions(&config_with_cap(Some(3))),
+            Some(3)
+        );
     }
 
     #[test]

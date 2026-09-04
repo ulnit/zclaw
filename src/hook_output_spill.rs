@@ -87,7 +87,11 @@ fn sanitize_session_segment(session_id: &str) -> String {
         .replace("..", "_")
 }
 
-fn resolve_spill_dir(config: &SpillConfig, home: &std::path::Path, session_id: Option<&str>) -> PathBuf {
+fn resolve_spill_dir(
+    config: &SpillConfig,
+    home: &std::path::Path,
+    session_id: Option<&str>,
+) -> PathBuf {
     let base = match &config.directory {
         Some(dir) => {
             let expanded = if let Some(rest) = dir.strip_prefix("~/") {
@@ -108,11 +112,23 @@ fn resolve_spill_dir(config: &SpillConfig, home: &std::path::Path, session_id: O
 
 /// Head/tail preview that stays inside the prompt (char-based, UTF-8
 /// safe — hermes slices code points).
-fn build_preview(text: &str, head: usize, tail: usize, saved_path: Option<&str>, source: &str) -> String {
+fn build_preview(
+    text: &str,
+    head: usize,
+    tail: usize,
+    saved_path: Option<&str>,
+    source: &str,
+) -> String {
     let total = text.chars().count();
     let head_chunk: String = text.chars().take(head).collect();
     let tail_chunk: String = if tail > 0 && total > head {
-        text.chars().rev().take(tail).collect::<Vec<_>>().into_iter().rev().collect()
+        text.chars()
+            .rev()
+            .take(tail)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect()
     } else {
         String::new()
     };
@@ -209,7 +225,13 @@ mod tests {
         config.preview_head = 10;
         config.preview_tail = 10;
         let content = format!("{}MIDDLE{}", "a".repeat(200), "z".repeat(200));
-        let out = spill_if_oversized(&content, Some("sess/one"), "shell hook", &config, dir.path());
+        let out = spill_if_oversized(
+            &content,
+            Some("sess/one"),
+            "shell hook",
+            &config,
+            dir.path(),
+        );
         assert!(out.contains("[shell hook output truncated"));
         assert!(out.contains("full content saved to"));
         assert!(out.contains("--- head ---"));
@@ -219,10 +241,7 @@ mod tests {
         // Session segment sanitized; exactly one spill file with the full
         // content (+ trailing newline).
         let session_dir = dir.path().join("hook_outputs").join("sess_one");
-        let files: Vec<_> = std::fs::read_dir(&session_dir)
-            .unwrap()
-            .flatten()
-            .collect();
+        let files: Vec<_> = std::fs::read_dir(&session_dir).unwrap().flatten().collect();
         assert_eq!(files.len(), 1);
         let saved = std::fs::read_to_string(files[0].path()).unwrap();
         assert_eq!(saved, format!("{content}\n"));
@@ -239,16 +258,14 @@ mod tests {
         let blocker = dir.path().join("blocker");
         std::fs::write(&blocker, "file").unwrap();
         config.directory = Some(blocker.join("sub").to_string_lossy().to_string());
-        let out = spill_if_oversized(
-            &"y".repeat(100_000),
-            None,
-            "hook",
-            &config,
-            dir.path(),
-        );
+        let out = spill_if_oversized(&"y".repeat(100_000), None, "hook", &config, dir.path());
         assert!(out.contains("spill write failed"), "{out}");
         assert!(out.contains("--- head ---"));
-        assert!(out.len() < 5_000, "preview must be bounded, got {}", out.len());
+        assert!(
+            out.len() < 5_000,
+            "preview must be bounded, got {}",
+            out.len()
+        );
     }
 
     #[test]

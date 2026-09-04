@@ -307,9 +307,7 @@ struct Runtime {
     cfg: ResolvedIrc,
     current_nick: Mutex<String>,
     /// Outbound request channel into the live session loop (target, text).
-    outbound: std::sync::Mutex<
-        Option<tokio::sync::mpsc::UnboundedSender<(String, String)>>,
-    >,
+    outbound: std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<(String, String)>>>,
 }
 
 /// Entry point spawned by `run_messaging`.
@@ -351,7 +349,14 @@ async fn connect_stream(cfg: &ResolvedIrc) -> Result<IrcStream, String> {
         tokio::net::TcpStream::connect((cfg.server.as_str(), cfg.port)),
     )
     .await
-    .map_err(|_| format!("connect timeout {}:{} after {}s", cfg.server, cfg.port, CONNECT_TIMEOUT.as_secs()))?
+    .map_err(|_| {
+        format!(
+            "connect timeout {}:{} after {}s",
+            cfg.server,
+            cfg.port,
+            CONNECT_TIMEOUT.as_secs()
+        )
+    })?
     .map_err(|e| format!("connect {}:{}: {e}", cfg.server, cfg.port))?;
     if cfg.use_tls {
         let name = rustls::pki_types::ServerName::try_from(cfg.server.clone())
@@ -361,8 +366,7 @@ async fn connect_stream(cfg: &ResolvedIrc) -> Result<IrcStream, String> {
         let config = rustls::ClientConfig::builder()
             .with_root_certificates(roots)
             .with_no_client_auth();
-        let connector =
-            tokio_rustls::TlsConnector::from(Arc::new(config));
+        let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
         let tls = connector
             .connect(name, tcp)
             .await
@@ -386,12 +390,15 @@ async fn run_session(
     _pairing: &Option<Arc<crate::pairing::PairingStore>>,
 ) -> Result<(), String> {
     let mut stream = connect_stream(&runtime.cfg).await?;
-    let (send_tx, mut send_rx) =
-        tokio::sync::mpsc::unbounded_channel::<(String, String)>();
+    let (send_tx, mut send_rx) = tokio::sync::mpsc::unbounded_channel::<(String, String)>();
     *runtime.outbound.lock().unwrap() = Some(send_tx);
     // Registration sequence (hermes connect()).
     if !runtime.cfg.server_password.is_empty() {
-        send_raw(&mut stream, &format!("PASS {}", runtime.cfg.server_password)).await?;
+        send_raw(
+            &mut stream,
+            &format!("PASS {}", runtime.cfg.server_password),
+        )
+        .await?;
     }
     send_raw(&mut stream, &format!("NICK {}", runtime.cfg.nickname)).await?;
     send_raw(
@@ -409,8 +416,7 @@ async fn run_session(
             read_line(&mut stream, &mut buffer),
         )
         .await
-        .map_err(|_| "registration timed out (no RPL_WELCOME)".to_string())?
-        ?;
+        .map_err(|_| "registration timed out (no RPL_WELCOME)".to_string())??;
         let (prefix, command, params) = parse_irc_message(&line);
         match command.as_str() {
             "PING" => {
@@ -439,7 +445,10 @@ async fn run_session(
     if !runtime.cfg.nickserv_password.is_empty() {
         send_raw(
             &mut stream,
-            &format!("PRIVMSG NickServ :IDENTIFY {}", runtime.cfg.nickserv_password),
+            &format!(
+                "PRIVMSG NickServ :IDENTIFY {}",
+                runtime.cfg.nickserv_password
+            ),
         )
         .await?;
         tokio::time::sleep(Duration::from_secs(2)).await;
@@ -503,7 +512,10 @@ async fn read_line(stream: &mut IrcStream, buffer: &mut Vec<u8>) -> Result<Strin
             return Ok(String::from_utf8_lossy(trimmed).to_string());
         }
         let mut chunk = [0u8; 4096];
-        let n = stream.read(&mut chunk).await.map_err(|e| format!("read: {e}"))?;
+        let n = stream
+            .read(&mut chunk)
+            .await
+            .map_err(|e| format!("read: {e}"))?;
         if n == 0 {
             return Err("connection closed".into());
         }
@@ -552,7 +564,11 @@ async fn handle_privmsg(
         return;
     }
     let is_channel = target.starts_with('#') || target.starts_with('&');
-    let chat_id = if is_channel { target.to_string() } else { sender.to_string() };
+    let chat_id = if is_channel {
+        target.to_string()
+    } else {
+        sender.to_string()
+    };
     if is_channel {
         let mut addressed = false;
         for prefix in [
@@ -675,7 +691,10 @@ mod tests {
         assert_eq!(command, "001");
         assert_eq!(
             params,
-            vec!["mynick".to_string(), "Welcome to the IRC network".to_string()]
+            vec![
+                "mynick".to_string(),
+                "Welcome to the IRC network".to_string()
+            ]
         );
     }
 
@@ -730,10 +749,7 @@ mod tests {
 
     #[test]
     fn irc_markdown_stripping() {
-        assert_eq!(
-            strip_markdown_irc("**bold** and `code`"),
-            "bold and code"
-        );
+        assert_eq!(strip_markdown_irc("**bold** and `code`"), "bold and code");
         assert_eq!(
             strip_markdown_irc("![pic](https://x/y.png)"),
             "https://x/y.png"

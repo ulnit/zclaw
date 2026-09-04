@@ -184,7 +184,12 @@ fn utf8_char_len(first_byte: u8) -> usize {
 /// a newline (or nothing emitted yet), or the text since the last newline
 /// being whitespace-only (with the cross-feed newline rule when there is
 /// no newline in the preceding portion).
-fn is_block_boundary(buf: &str, idx: usize, already_emitted: &[String], last_nl_flag: bool) -> bool {
+fn is_block_boundary(
+    buf: &str,
+    idx: usize,
+    already_emitted: &[String],
+    last_nl_flag: bool,
+) -> bool {
     if idx == 0 {
         if let Some(last) = already_emitted.last() {
             return last.ends_with('\n');
@@ -205,7 +210,11 @@ fn is_block_boundary(buf: &str, idx: usize, already_emitted: &[String], last_nl_
 }
 
 /// Earliest block-boundary open tag (hermes `_find_open_at_boundary`).
-fn find_open_at_boundary(buf: &str, already_emitted: &[String], last_nl_flag: bool) -> Option<(usize, usize)> {
+fn find_open_at_boundary(
+    buf: &str,
+    already_emitted: &[String],
+    last_nl_flag: bool,
+) -> Option<(usize, usize)> {
     let mut best: Option<(usize, usize)> = None;
     for tag in open_tags() {
         let mut search_start = 0;
@@ -291,8 +300,8 @@ impl StreamingThinkScrubber {
                 // Priority 2 — unterminated open tag at a block boundary.
                 let open_match = find_open_at_boundary(&buf, &out, self.last_emitted_ended_newline);
 
-                let pair_first = pair.is_some()
-                    && open_match.map_or(true, |(oi, _)| pair.unwrap().0 <= oi);
+                let pair_first =
+                    pair.is_some() && open_match.map_or(true, |(oi, _)| pair.unwrap().0 <= oi);
                 if pair_first {
                     let (start_idx, end_idx) = pair.unwrap();
                     let preceding = &buf[..start_idx];
@@ -459,7 +468,10 @@ mod tests {
     #[test]
     fn unterminated_block_discarded_on_flush() {
         let mut s = StreamingThinkScrubber::new();
-        let visible = collect(&mut s, &["Visible.\n<think>partial reasoning that never closes"]);
+        let visible = collect(
+            &mut s,
+            &["Visible.\n<think>partial reasoning that never closes"],
+        );
         assert_eq!(visible, "Visible.\n");
     }
 
@@ -490,7 +502,13 @@ mod tests {
 
     #[test]
     fn all_tag_variants() {
-        for name in ["think", "thinking", "reasoning", "thought", "REASONING_SCRATCHPAD"] {
+        for name in [
+            "think",
+            "thinking",
+            "reasoning",
+            "thought",
+            "REASONING_SCRATCHPAD",
+        ] {
             let mut s = StreamingThinkScrubber::new();
             let delta = format!("<{name}>hidden</{name}>shown");
             assert_eq!(collect(&mut s, &[&delta]), "shown", "variant {name}");
@@ -517,10 +535,7 @@ mod tests {
 
     #[test]
     fn strip_think_blocks_complete_string() {
-        assert_eq!(
-            strip_think_blocks("<think>abc</think>result"),
-            "result"
-        );
+        assert_eq!(strip_think_blocks("<think>abc</think>result"), "result");
         assert_eq!(strip_think_blocks("no tags here"), "no tags here");
         assert_eq!(strip_think_blocks("<thinking>x</thinking>"), "");
     }
@@ -533,6 +548,9 @@ mod tests {
         let mut s = StreamingThinkScrubber::new();
         assert_eq!(s.feed("partial answer"), "partial answer");
         assert_eq!(s.flush(), "");
-        assert_eq!(s.feed("<think>retry reasoning</think>new answer"), "new answer");
+        assert_eq!(
+            s.feed("<think>retry reasoning</think>new answer"),
+            "new answer"
+        );
     }
 }

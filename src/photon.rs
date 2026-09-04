@@ -406,7 +406,9 @@ pub fn url_only_candidate(text: &str) -> Option<String> {
     match url::Url::parse(candidate) {
         Ok(parsed) => {
             let scheme = parsed.scheme().to_lowercase();
-            if (scheme == "http" || scheme == "https") && !parsed.host_str().unwrap_or("").is_empty() {
+            if (scheme == "http" || scheme == "https")
+                && !parsed.host_str().unwrap_or("").is_empty()
+            {
                 Some(candidate.to_string())
             } else {
                 None
@@ -418,9 +420,24 @@ pub fn url_only_candidate(text: &str) -> Option<String> {
 
 /// hermes `_format_richlink_content`: title / summary / url lines.
 pub fn format_richlink_content(content: &Value) -> String {
-    let url = content.get("url").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-    let title = content.get("title").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-    let summary = content.get("summary").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let url = content
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let title = content
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let summary = content
+        .get("summary")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     let mut parts: Vec<String> = Vec::new();
     if !title.is_empty() {
         parts.push(title.clone());
@@ -605,7 +622,12 @@ fn parse_content_node(content: &Value, attachments: &mut Vec<MediaAttachment>) -
         "richlink" => Some(format_richlink_content(content)),
         "group" => {
             let mut parts: Vec<String> = Vec::new();
-            for item in content.get("items").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+            for item in content
+                .get("items")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default()
+            {
                 let item_content = item.get("content").cloned().unwrap_or(item.clone());
                 if let Some(text) = parse_content_node(&item_content, attachments) {
                     if !text.is_empty() {
@@ -642,7 +664,10 @@ fn attachment_from_content(content: &Value) -> Option<MediaAttachment> {
         .unwrap_or("application/octet-stream")
         .to_string();
     let data = content.get("data").and_then(|v| v.as_str()).unwrap_or("");
-    let encoding = content.get("encoding").and_then(|v| v.as_str()).unwrap_or("");
+    let encoding = content
+        .get("encoding")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     if data.is_empty() || encoding != "base64" {
         eprintln!("[photon] attachment {name}: no inline data (sidecar size cap?) — skipped");
         return None;
@@ -754,8 +779,7 @@ async fn handle_inbound(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            let ours = content.get("targetDirection").and_then(|v| v.as_str())
-                == Some("outbound")
+            let ours = content.get("targetDirection").and_then(|v| v.as_str()) == Some("outbound")
                 || (!target_id.is_empty() && runtime.is_own_send(&target_id).await);
             if !ours {
                 return;
@@ -802,7 +826,12 @@ async fn handle_inbound(
                     items
                         .iter()
                         .map(|item| item.get("content").unwrap_or(item))
-                        .filter(|c| matches!(c.get("type").and_then(|t| t.as_str()), Some("attachment") | Some("voice")))
+                        .filter(|c| {
+                            matches!(
+                                c.get("type").and_then(|t| t.as_str()),
+                                Some("attachment") | Some("voice")
+                            )
+                        })
                         .collect()
                 })
                 .unwrap_or_default(),
@@ -844,7 +873,9 @@ async fn handle_inbound(
             .to_string();
         if let Some(paths) = event.get("attachments").and_then(|v| v.as_array()) {
             for path_value in paths {
-                let Some(path) = path_value.as_str() else { continue };
+                let Some(path) = path_value.as_str() else {
+                    continue;
+                };
                 if !std::path::Path::new(path).is_absolute() {
                     continue;
                 }
@@ -892,13 +923,17 @@ async fn handle_inbound(
 
     // Allowlist ∪ pairing.
     if !runtime.cfg.allow_all_users
-        && !runtime.cfg.allowed_users.iter().any(|u| u == &sender_id || u == "*")
+        && !runtime
+            .cfg
+            .allowed_users
+            .iter()
+            .any(|u| u == &sender_id || u == "*")
     {
         if let Some(store) = pairing {
             if !store.is_approved("photon", &sender_id) {
-                if let Some(code_msg) = crate::messaging::pairing_offer_public(
-                    store, "photon", &sender_id, &sender_id,
-                ) {
+                if let Some(code_msg) =
+                    crate::messaging::pairing_offer_public(store, "photon", &sender_id, &sender_id)
+                {
                     let _ = send_message(runtime, &space_id, &code_msg).await;
                 }
                 return;
@@ -1044,7 +1079,11 @@ async fn send_richlink(runtime: &Runtime, space_id: &str, url: &str) -> Result<(
     if resp.status().is_success() {
         let body: Value = resp.json().await.unwrap_or(json!({}));
         runtime
-            .record_sent(body.get("messageId").and_then(|v| v.as_str()).map(String::from))
+            .record_sent(
+                body.get("messageId")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+            )
             .await;
         Ok(())
     } else {
@@ -1074,7 +1113,11 @@ async fn send_plain(
     if resp.status().is_success() {
         let body: Value = resp.json().await.unwrap_or(json!({}));
         runtime
-            .record_sent(body.get("messageId").and_then(|v| v.as_str()).map(String::from))
+            .record_sent(
+                body.get("messageId")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+            )
             .await;
         Ok(())
     } else {
@@ -1091,9 +1134,7 @@ fn send_payload(space_id: &str, content: &str, markdown: bool) -> Value {
     let total = content.chars().count();
     let body_text: String = content.chars().take(MAX_MESSAGE_LENGTH).collect();
     if total > MAX_MESSAGE_LENGTH {
-        eprintln!(
-            "[photon] truncating outbound from {total} to {MAX_MESSAGE_LENGTH} chars"
-        );
+        eprintln!("[photon] truncating outbound from {total} to {MAX_MESSAGE_LENGTH} chars");
     }
     let mut payload = json!({ "spaceId": space_id, "text": body_text });
     if markdown {
@@ -1132,7 +1173,6 @@ impl crate::messaging::PlatformSender for PhotonSender {
             eprintln!("[photon] send_text to {chat_id} failed: {e}");
         }
     }
-
 }
 
 #[cfg(test)]
@@ -1157,7 +1197,8 @@ mod tests {
 
     #[test]
     fn richlink_formatting() {
-        let content = json!({"type": "richlink", "url": "https://x.dev", "title": "X", "summary": "Y"});
+        let content =
+            json!({"type": "richlink", "url": "https://x.dev", "title": "X", "summary": "Y"});
         assert_eq!(format_richlink_content(&content), "X\nY\nhttps://x.dev");
         let no_url = json!({"type": "richlink"});
         assert_eq!(
@@ -1170,8 +1211,14 @@ mod tests {
 
     #[test]
     fn preview_marker_detection() {
-        assert!(is_richlink_preview_marker("art.pluginpayloadattachment", ""));
-        assert!(is_richlink_preview_marker("", "id-1.pluginPayloadAttachment"));
+        assert!(is_richlink_preview_marker(
+            "art.pluginpayloadattachment",
+            ""
+        ));
+        assert!(is_richlink_preview_marker(
+            "",
+            "id-1.pluginPayloadAttachment"
+        ));
         assert!(!is_richlink_preview_marker("photo.jpg", "id-2"));
     }
 
@@ -1179,14 +1226,16 @@ mod tests {
     fn mention_compile_and_clean() {
         let regexes = compile_mention_patterns(&[]);
         assert!(!regexes.is_empty());
-        assert!(regexes.iter().any(|re| re.is_match("hermes agent what time is it")));
+        assert!(regexes
+            .iter()
+            .any(|re| re.is_match("hermes agent what time is it")));
         assert!(regexes.iter().any(|re| re.is_match("@UlNcLaW, hello")));
         assert!(!regexes.iter().any(|re| re.is_match("plain message")));
         let cleaned = clean_mention_text("hermes agent, do the thing", &regexes);
         assert_eq!(cleaned, "do the thing");
         let bare = clean_mention_text("ulnclaw", &regexes);
         assert_eq!(bare, "ulnclaw"); // empty remainder keeps the original
-        // Invalid patterns drop without panicking.
+                                     // Invalid patterns drop without panicking.
         let dropped = compile_mention_patterns(&["(".to_string()]);
         assert!(dropped.is_empty() || true);
     }
@@ -1268,10 +1317,7 @@ mod tests {
         assert_eq!(normalize_chat_key("any;-;+12345"), "any;-;+12345");
         assert_eq!(normalize_chat_key("any;-;abc"), "any;-;abc");
         // Group GUIDs and phones pass through untouched.
-        assert_eq!(
-            normalize_chat_key("chat1234567890"),
-            "chat1234567890"
-        );
+        assert_eq!(normalize_chat_key("chat1234567890"), "chat1234567890");
         assert_eq!(normalize_chat_key("+15551234567"), "+15551234567");
     }
 

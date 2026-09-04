@@ -160,8 +160,7 @@ impl MatrixConfig {
                 .to_string(),
             access_token: env_trim("MATRIX_ACCESS_TOKEN")
                 .unwrap_or_else(|| self.access_token.trim().to_string()),
-            user_id: env_trim("MATRIX_USER_ID")
-                .unwrap_or_else(|| self.user_id.trim().to_string()),
+            user_id: env_trim("MATRIX_USER_ID").unwrap_or_else(|| self.user_id.trim().to_string()),
             password: env_trim("MATRIX_PASSWORD").unwrap_or_else(|| self.password.clone()),
             device_id: env_trim("MATRIX_DEVICE_ID")
                 .unwrap_or_else(|| self.device_id.trim().to_string()),
@@ -176,10 +175,8 @@ impl MatrixConfig {
                 .unwrap_or(self.require_mention),
             free_response_rooms: env_list("MATRIX_FREE_RESPONSE_ROOMS")
                 .unwrap_or_else(|| self.free_response_rooms.clone()),
-            process_notices: env_bool("MATRIX_PROCESS_NOTICES")
-                .unwrap_or(self.process_notices),
-            home_room: env_trim("MATRIX_HOME_ROOM")
-                .unwrap_or_else(|| self.home_room.clone()),
+            process_notices: env_bool("MATRIX_PROCESS_NOTICES").unwrap_or(self.process_notices),
+            home_room: env_trim("MATRIX_HOME_ROOM").unwrap_or_else(|| self.home_room.clone()),
             max_message_length: max_len,
             ignore_user_patterns: env_list("MATRIX_IGNORE_USER_PATTERNS")
                 .unwrap_or_else(|| self.ignore_user_patterns.clone()),
@@ -202,11 +199,19 @@ struct Runtime {
 
 impl Runtime {
     fn client_url(&self, path: &str) -> String {
-        format!("{}/_matrix/client/v3/{}", self.cfg.homeserver, path.trim_start_matches('/'))
+        format!(
+            "{}/_matrix/client/v3/{}",
+            self.cfg.homeserver,
+            path.trim_start_matches('/')
+        )
     }
 
     fn media_url(&self, path: &str) -> String {
-        format!("{}/_matrix/media/v3/{}", self.cfg.homeserver, path.trim_start_matches('/'))
+        format!(
+            "{}/_matrix/media/v3/{}",
+            self.cfg.homeserver,
+            path.trim_start_matches('/')
+        )
     }
 
     async fn authed(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
@@ -254,9 +259,7 @@ impl Runtime {
         let user = self.cfg.user_id.clone();
         let password = self.cfg.password.clone();
         if user.is_empty() || password.is_empty() {
-            return Err(
-                "no MATRIX_ACCESS_TOKEN and no MATRIX_USER_ID/MATRIX_PASSWORD pair".into(),
-            );
+            return Err("no MATRIX_ACCESS_TOKEN and no MATRIX_USER_ID/MATRIX_PASSWORD pair".into());
         }
         let mut payload = json!({
             "type": "m.login.password",
@@ -326,7 +329,12 @@ impl Runtime {
     }
 
     /// Upload bytes → `mxc://` URI (media v3 upload).
-    async fn upload_media(&self, data: Vec<u8>, filename: &str, mime: &str) -> Result<String, String> {
+    async fn upload_media(
+        &self,
+        data: Vec<u8>,
+        filename: &str,
+        mime: &str,
+    ) -> Result<String, String> {
         let url = format!(
             "{}?filename={}",
             self.media_url("upload"),
@@ -414,7 +422,12 @@ impl Runtime {
     }
 
     /// Download an `mxc://` object into the media cache.
-    async fn download_mxc(&self, mxc: &str, mime_hint: &str, filename_hint: &str) -> Option<MediaAttachment> {
+    async fn download_mxc(
+        &self,
+        mxc: &str,
+        mime_hint: &str,
+        filename_hint: &str,
+    ) -> Option<MediaAttachment> {
         let (server, media_id) = parse_mxc(mxc)?;
         let url = self.media_url(&format!("download/{server}/{media_id}"));
         // Try authenticated first (MSC3916), then unauthenticated for
@@ -513,9 +526,7 @@ pub async fn run(
     if resolved.access_token.is_empty()
         && (resolved.user_id.is_empty() || resolved.password.is_empty())
     {
-        eprintln!(
-            "[matrix] disabled: set MATRIX_ACCESS_TOKEN or MATRIX_USER_ID+MATRIX_PASSWORD"
-        );
+        eprintln!("[matrix] disabled: set MATRIX_ACCESS_TOKEN or MATRIX_USER_ID+MATRIX_PASSWORD");
         return;
     }
     let runtime = Arc::new(Runtime {
@@ -557,7 +568,9 @@ async fn sync_loop(
     runtime.login_if_needed().await?;
     if runtime.user_id.lock().await.is_empty() {
         // Token-only auth: discover who we are via /account/whoami.
-        let who = runtime.get_json(&runtime.client_url("account/whoami")).await?;
+        let who = runtime
+            .get_json(&runtime.client_url("account/whoami"))
+            .await?;
         if let Some(uid) = who.get("user_id").and_then(|v| v.as_str()) {
             *runtime.user_id.lock().await = uid.to_string();
         }
@@ -572,10 +585,7 @@ async fn sync_loop(
     let mut since: Option<String> = None;
     let mut initial_sync = true;
     loop {
-        let mut url = format!(
-            "{}?timeout={SYNC_TIMEOUT_MS}",
-            runtime.client_url("sync")
-        );
+        let mut url = format!("{}?timeout={SYNC_TIMEOUT_MS}", runtime.client_url("sync"));
         if let Some(token) = &since {
             url.push_str(&format!("&since={}", urlencoding(token)));
         }
@@ -615,7 +625,9 @@ async fn sync_loop(
                     );
                 }
             }
-            let Some(events) = room_data.pointer("/timeline/events").and_then(|v| v.as_array())
+            let Some(events) = room_data
+                .pointer("/timeline/events")
+                .and_then(|v| v.as_array())
             else {
                 continue;
             };
@@ -796,10 +808,7 @@ async fn handle_media_message(
     event_id: &str,
     content: &Value,
 ) {
-    let url = content
-        .get("url")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let url = content.get("url").and_then(|v| v.as_str()).unwrap_or("");
     if url.is_empty() || !url.starts_with("mxc://") {
         eprintln!("[matrix] rejecting inbound media {event_id} with non-MXC URL");
         return;
@@ -872,7 +881,9 @@ async fn room_gate_allows(
     is_dm: bool,
     sender: &str,
 ) -> bool {
-    if !runtime.cfg.allowed_rooms.is_empty() && !runtime.cfg.allowed_rooms.contains(&room_id.to_string()) {
+    if !runtime.cfg.allowed_rooms.is_empty()
+        && !runtime.cfg.allowed_rooms.contains(&room_id.to_string())
+    {
         return false;
     }
     if runtime.cfg.allow_all_users {
@@ -1000,7 +1011,11 @@ mod tests {
 
     #[test]
     fn mention_detection_and_strip() {
-        assert!(is_mentioned("hey @bot:example.org hi", "@bot:example.org", "Bot"));
+        assert!(is_mentioned(
+            "hey @bot:example.org hi",
+            "@bot:example.org",
+            "Bot"
+        ));
         assert!(is_mentioned("hey Bot hi", "@bot:example.org", "Bot"));
         assert!(!is_mentioned("hello world", "@bot:example.org", "Bot"));
         let stripped = strip_mention("@Bot do this", "@bot:example.org", "Bot");
@@ -1020,7 +1035,10 @@ mod tests {
         assert_eq!(clamp_max_message_length(0), DEFAULT_MAX_MESSAGE_LENGTH);
         assert_eq!(clamp_max_message_length(100), 500);
         assert_eq!(clamp_max_message_length(16000), 16000);
-        assert_eq!(clamp_max_message_length(999_999), MAX_MESSAGE_LENGTH_CEILING);
+        assert_eq!(
+            clamp_max_message_length(999_999),
+            MAX_MESSAGE_LENGTH_CEILING
+        );
     }
 
     #[test]

@@ -154,9 +154,7 @@ pub async fn signal_rpc(
             .get("message")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown error");
-        return Err(AgentError::Tool(format!(
-            "signal rpc {method}: {message}"
-        )));
+        return Err(AgentError::Tool(format!("signal rpc {method}: {message}")));
     }
     Ok(data.get("result").cloned().unwrap_or(Value::Null))
 }
@@ -200,7 +198,9 @@ pub fn validate_send_result(result: &Value) -> std::result::Result<(), String> {
         return Ok(());
     };
     for item in results {
-        let Some(item) = item.as_object() else { continue };
+        let Some(item) = item.as_object() else {
+            continue;
+        };
         if let Some(rtype) = item.get("type").and_then(|v| v.as_str()) {
             if rtype != "SUCCESS" {
                 return Err(rtype.to_string());
@@ -302,8 +302,7 @@ pub async fn signal_send_with_attachments(
 }
 
 fn base64_encode(input: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
     for chunk in input.chunks(3) {
         let b0 = chunk[0] as u32;
@@ -366,10 +365,7 @@ pub fn render_mentions(text: &str, mentions: &[Value]) -> String {
     let mut indexed: Vec<(usize, usize, String)> = Vec::new();
     for mention in mentions {
         let start = mention.get("start").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-        let length = mention
-            .get("length")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(1) as usize;
+        let length = mention.get("length").and_then(|v| v.as_u64()).unwrap_or(1) as usize;
         let identifier = mention
             .get("number")
             .and_then(|v| v.as_str())
@@ -589,10 +585,7 @@ pub fn parse_envelope(
                 };
                 let size = att.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
                 if size > SIGNAL_MAX_ATTACHMENT_SIZE {
-                    eprintln!(
-                        "[signal] attachment too large ({} bytes), skipping",
-                        size
-                    );
+                    eprintln!("[signal] attachment too large ({} bytes), skipping", size);
                     continue;
                 }
                 let mime = att
@@ -669,14 +662,7 @@ pub fn remux_aac_to_m4a(data: &[u8]) -> Option<Vec<u8>> {
     let dst = dir.join(format!("ulnclaw-signal-{}.m4a", stamp));
     std::fs::write(&src, data).ok()?;
     let status = std::process::Command::new("ffmpeg")
-        .args([
-            "-y",
-            "-i",
-            src.to_str()?,
-            "-c:a",
-            "copy",
-            dst.to_str()?,
-        ])
+        .args(["-y", "-i", src.to_str()?, "-c:a", "copy", dst.to_str()?])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -721,7 +707,10 @@ pub async fn fetch_attachment(
     } else {
         declared_mime.to_string()
     };
-    if mime == "audio/aac" || (mime.starts_with("audio/") && raw.starts_with(&[0xFF])) && sniff_mime(&raw) == "audio/mpeg" {
+    if mime == "audio/aac"
+        || (mime.starts_with("audio/") && raw.starts_with(&[0xFF]))
+            && sniff_mime(&raw) == "audio/mpeg"
+    {
         // ADTS stream — remux into m4a for STT friendliness.
         if let Some(remuxed) = remux_aac_to_m4a(&raw) {
             raw = remuxed;
@@ -925,7 +914,11 @@ async fn stream_events(
     let mut buffer = String::new();
     let mut last_activity = Instant::now();
     loop {
-        let next = tokio::time::timeout(Duration::from_secs(HEALTH_CHECK_INTERVAL_SECS), stream.next()).await;
+        let next = tokio::time::timeout(
+            Duration::from_secs(HEALTH_CHECK_INTERVAL_SECS),
+            stream.next(),
+        )
+        .await;
         match next {
             Ok(Some(Ok(chunk))) => {
                 last_activity = Instant::now();
@@ -934,7 +927,8 @@ async fn stream_events(
                     let Ok(envelope) = serde_json::from_str::<Value>(&payload) else {
                         continue;
                     };
-                    if let Some(inbound) = parse_envelope(cfg, account, sent_timestamps, &envelope) {
+                    if let Some(inbound) = parse_envelope(cfg, account, sent_timestamps, &envelope)
+                    {
                         handle_inbound(
                             client, cfg, account, http_url, dispatcher, pairing, inbound,
                         )
@@ -1059,8 +1053,7 @@ async fn handle_inbound(
         // P704: ledger-protected reply delivery.
         dispatcher
             .try_send_with_ledger("signal", &inbound.chat_id, &reply_text, || async {
-                match signal_send_text(client, cfg, http_url, &inbound.chat_id, &reply_text).await
-                {
+                match signal_send_text(client, cfg, http_url, &inbound.chat_id, &reply_text).await {
                     Ok(()) => Ok(()),
                     Err(e) => {
                         eprintln!("[signal] reply failed: {e}");
@@ -1071,15 +1064,9 @@ async fn handle_inbound(
             .await;
     }
     if !media_paths.is_empty() {
-        if let Err(e) = signal_send_with_attachments(
-            client,
-            cfg,
-            http_url,
-            &inbound.chat_id,
-            "",
-            &media_paths,
-        )
-        .await
+        if let Err(e) =
+            signal_send_with_attachments(client, cfg, http_url, &inbound.chat_id, "", &media_paths)
+                .await
         {
             eprintln!("[signal] media reply failed: {e}");
         }
@@ -1129,7 +1116,8 @@ mod tests {
     #[test]
     fn parses_dm_text_message() {
         let mut sent = SentTimestamps::default();
-        let inbound = parse_envelope(&cfg(), "+15550001111", &mut sent, &dm_envelope("hi")).unwrap();
+        let inbound =
+            parse_envelope(&cfg(), "+15550001111", &mut sent, &dm_envelope("hi")).unwrap();
         assert_eq!(inbound.chat_id, "+15552223333");
         assert_eq!(inbound.sender_name, "Alice");
         assert_eq!(inbound.text, "hi");
@@ -1240,7 +1228,10 @@ mod tests {
         let mut c = cfg();
         c.group_allowed_users = vec!["Z3JvdXA=".into()];
         let inbound = parse_envelope(&c, "+15550001111", &mut sent, &group);
-        assert!(inbound.is_none(), "require_mention filters unmentioned group msg");
+        assert!(
+            inbound.is_none(),
+            "require_mention filters unmentioned group msg"
+        );
         let mention = json!({
             "envelope": {
                 "sourceNumber": "+15552223333",
@@ -1254,7 +1245,7 @@ mod tests {
         let inbound = parse_envelope(&c, "+15550001111", &mut sent, &mention).unwrap();
         assert_eq!(inbound.chat_id, "group:Z3JvdXA=");
         assert_eq!(inbound.text, "hello"); // self-mention stripped
-        // Wildcard allows any group.
+                                           // Wildcard allows any group.
         let mut c2 = cfg();
         c2.group_allowed_users = vec!["*".into()];
         c2.require_mention = false;
@@ -1298,7 +1289,9 @@ mod tests {
 
     #[test]
     fn rate_limit_detection_parses_retry_after() {
-        let err = AgentError::Tool("signal rpc send: [429] RateLimitException: retry after 7 seconds".into());
+        let err = AgentError::Tool(
+            "signal rpc send: [429] RateLimitException: retry after 7 seconds".into(),
+        );
         assert_eq!(is_rate_limit_error(&err), Some(7));
         let plain = AgentError::Tool("signal rpc send: connection refused".into());
         assert_eq!(is_rate_limit_error(&plain), None);

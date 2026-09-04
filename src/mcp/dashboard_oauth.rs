@@ -155,7 +155,10 @@ impl DashboardOAuthFlow {
 
     /// Wait until the authorization URL is published (hermes
     /// `wait_for_authorization_url`, default timeout 30 s).
-    pub async fn wait_for_authorization_url(&self, timeout: Duration) -> Result<String, AgentError> {
+    pub async fn wait_for_authorization_url(
+        &self,
+        timeout: Duration,
+    ) -> Result<String, AgentError> {
         let deadline = Instant::now() + timeout;
         loop {
             let notified = self.auth_ready.notified();
@@ -194,22 +197,25 @@ impl DashboardOAuthFlow {
     ) -> Result<(), AgentError> {
         let mut inner = self.inner.lock().unwrap();
         if inner.callback_ready {
-            return Err(AgentError::Tool("OAuth callback already received".to_string()));
+            return Err(AgentError::Tool(
+                "OAuth callback already received".to_string(),
+            ));
         }
         let state_ok = match (&inner.expected_state, state) {
             (Some(expected), Some(actual)) => constant_time_eq(expected, actual),
             _ => false,
         };
         if !state_ok {
-            return Err(AgentError::Tool("OAuth callback state mismatch".to_string()));
+            return Err(AgentError::Tool(
+                "OAuth callback state mismatch".to_string(),
+            ));
         }
         if let Some(error) = error {
             inner.callback_error = Some(error.to_string());
         } else if let Some(code) = code {
             inner.callback = Some((code.to_string(), state.map(str::to_string)));
         } else {
-            inner.callback_error =
-                Some("OAuth callback did not include code or error".to_string());
+            inner.callback_error = Some("OAuth callback did not include code or error".to_string());
         }
         inner.callback_ready = true;
         drop(inner);
@@ -448,9 +454,9 @@ impl FlowRegistry {
         if pending >= MAX_PENDING_FLOWS {
             return Err(RegistryError::TooManyPending);
         }
-        let duplicate = flows.values().any(|f| {
-            f.server_name == flow.server_name && f.home == flow.home && !f.worker_done()
-        });
+        let duplicate = flows
+            .values()
+            .any(|f| f.server_name == flow.server_name && f.home == flow.home && !f.worker_done());
         if duplicate {
             return Err(RegistryError::AlreadyInProgress);
         }
@@ -522,7 +528,10 @@ mod tests {
         assert_eq!(extract_query_param(url, "state"), Some("abc-123".into()));
         assert_eq!(extract_query_param(url, "client_id"), Some("x".into()));
         assert_eq!(extract_query_param(url, "missing"), None);
-        assert_eq!(extract_query_param("https://as.example/authorize", "state"), None);
+        assert_eq!(
+            extract_query_param("https://as.example/authorize", "state"),
+            None
+        );
         // Percent-encoded value.
         let url = "https://as.example/authorize?state=ab%20cd";
         assert_eq!(extract_query_param(url, "state"), Some("ab cd".into()));
@@ -594,14 +603,19 @@ mod tests {
         let waiter_flow = flow.clone();
         let waiter = tokio::spawn(async move {
             (
-                waiter_flow.wait_for_authorization_url(Duration::from_secs(5)).await,
+                waiter_flow
+                    .wait_for_authorization_url(Duration::from_secs(5))
+                    .await,
                 waiter_flow.wait_for_callback(Duration::from_secs(5)).await,
             )
         });
         tokio::time::sleep(Duration::from_millis(50)).await;
         flow.mark_error("registration exploded");
         let (auth, callback) = waiter.await.unwrap();
-        assert!(auth.unwrap_err().to_string().contains("registration exploded"));
+        assert!(auth
+            .unwrap_err()
+            .to_string()
+            .contains("registration exploded"));
         assert!(callback.is_err());
         assert_eq!(flow.status(), FlowStatus::Error);
     }

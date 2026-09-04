@@ -33,10 +33,8 @@ pub fn probe_state_db(home: &Path) -> Value {
     if !path.exists() {
         return check("ok", Some("not initialized"), Vec::new());
     }
-    let open = rusqlite::Connection::open_with_flags(
-        &path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    );
+    let open =
+        rusqlite::Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY);
     match open {
         Ok(conn) => {
             let _ = conn.busy_timeout(std::time::Duration::from_secs(1));
@@ -167,7 +165,10 @@ pub fn collect_runtime_readiness(
     checks.insert("config".into(), probe_config(home));
     checks.insert("model".into(), probe_model(configured_model));
     checks.insert("disk".into(), probe_disk(home));
-    checks.insert("gateway".into(), probe_gateway(gateway_state, platform_rows));
+    checks.insert(
+        "gateway".into(),
+        probe_gateway(gateway_state, platform_rows),
+    );
     checks.insert(
         "background_queues".into(),
         check(
@@ -264,10 +265,7 @@ mod tests {
         let probe = probe_disk(dir.path());
         // The CI disk may legitimately be above the degraded line;
         // assert structure, not a status.
-        assert!(
-            matches!(status_of(&probe), "ok" | "degraded"),
-            "{probe}"
-        );
+        assert!(matches!(status_of(&probe), "ok" | "degraded"), "{probe}");
         #[cfg(unix)]
         {
             assert!(probe.get("used_percent").is_some(), "{probe}");
@@ -295,10 +293,12 @@ mod tests {
     fn collect_reports_overall_status() {
         let dir = tempfile::tempdir().unwrap();
         let rows: Vec<(&str, &str, String)> = Vec::new();
-        let report =
-            collect_runtime_readiness(dir.path(), "test-model", "running", &rows, 0, 0);
+        let report = collect_runtime_readiness(dir.path(), "test-model", "running", &rows, 0, 0);
         assert!(report["checks"]["state_db"].is_object(), "{report}");
-        assert!(report["checks"]["background_queues"].is_object(), "{report}");
+        assert!(
+            report["checks"]["background_queues"].is_object(),
+            "{report}"
+        );
         assert_eq!(report["status"], "ok", "{report}");
 
         let degraded = collect_runtime_readiness(dir.path(), "", "running", &rows, 0, 0);

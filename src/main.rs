@@ -10,14 +10,18 @@ use ulnclaw::config::UlncLawConfig;
 use ulnclaw::provider::openai::OpenAiProvider;
 use ulnclaw::provider::{Message, Role};
 use ulnclaw::session::sqlite::SqliteSessionStore;
+use ulnclaw::session::SessionStore;
 use ulnclaw::tools::builtin::register_builtin_tools;
 use ulnclaw::tools::context::ToolContext;
 use ulnclaw::tools::ToolRegistry;
-use ulnclaw::session::SessionStore;
 use ulnclaw::toolsets;
 
 #[derive(Parser)]
-#[command(name = "ulnclaw", version, about = "ulnclaw — Rust AI agent engine (hermes-agent port)")]
+#[command(
+    name = "ulnclaw",
+    version,
+    about = "ulnclaw — Rust AI agent engine (hermes-agent port)"
+)]
 struct Cli {
     /// Config file path (default: ~/.ulnclaw/config.toml)
     #[arg(long, global = true)]
@@ -681,7 +685,11 @@ enum KanbanBoardsAction {
     /// Rename a board's display name
     Rename { slug: String, name: Vec<String> },
     /// Set (or clear with --workdir "") a board's default working directory
-    SetWorkdir { slug: String, #[arg(long)] workdir: Option<String> },
+    SetWorkdir {
+        slug: String,
+        #[arg(long)]
+        workdir: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -980,7 +988,11 @@ enum KanbanAction {
         json: bool,
     },
     /// Show a task with comments and events
-    Show { id: String, #[arg(long)] json: bool },
+    Show {
+        id: String,
+        #[arg(long)]
+        json: bool,
+    },
     /// Move a task to ready
     Ready { id: String },
     /// Assign a task
@@ -1150,7 +1162,11 @@ enum KanbanAction {
         json: bool,
     },
     /// Release an active worker claim on a running task (hermes `kanban reclaim`)
-    Reclaim { id: String, #[arg(long)] reason: Option<String> },
+    Reclaim {
+        id: String,
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// Reassign a task to another profile ('none' clears), optionally
     /// reclaiming first (hermes `kanban reassign`)
     Reassign {
@@ -1240,10 +1256,16 @@ enum KanbanAction {
     Context { id: String },
     /// Integrity-check kanban.db and auto-repair index-scoped damage
     /// (hermes `kanban repair`)
-    Repair { #[arg(long)] json: bool },
+    Repair {
+        #[arg(long)]
+        json: bool,
+    },
     /// Known assignees (config roster) with per-status task counts
     /// (hermes `kanban assignees`)
-    Assignees { #[arg(long)] json: bool },
+    Assignees {
+        #[arg(long)]
+        json: bool,
+    },
     /// DEPRECATED — the dispatcher runs inside the gateway. `--force`
     /// keeps the old standalone loop alive (hermes `kanban daemon`)
     Daemon {
@@ -1296,7 +1318,10 @@ enum KanbanAction {
     },
     /// Per-status + per-assignee counts + oldest-ready age (hermes
     /// `kanban stats`)
-    Stats { #[arg(long)] json: bool },
+    Stats {
+        #[arg(long)]
+        json: bool,
+    },
     /// Live-stream board task_events to the terminal, Ctrl+C to exit
     /// (hermes `kanban watch`)
     Watch {
@@ -1337,7 +1362,10 @@ enum KanbanAction {
 #[derive(Subcommand)]
 enum SessionAction {
     /// List recent sessions
-    List { #[arg(long, default_value = "20")] limit: usize },
+    List {
+        #[arg(long, default_value = "20")]
+        limit: usize,
+    },
     /// Show a session's messages
     Show {
         id: String,
@@ -1439,10 +1467,12 @@ enum SessionAction {
     },
     /// Re-title sessions whose auto-title came from a /skill's own text
     /// (hermes sessions retitle-skills)
-    #[command(long_about = "Sessions opened with a /skill were auto-titled from the expanded \
+    #[command(
+        long_about = "Sessions opened with a /skill were auto-titled from the expanded \
 message, which embeds the whole skill body \u{2014} so the title describes the SKILL, not the \
 request. This regenerates those titles from what the user actually typed. Lists what it would \
-change unless --apply is passed.")]
+change unless --apply is passed."
+    )]
     RetitleSkills {
         /// Max sessions to scan
         #[arg(long, default_value = "200")]
@@ -1623,7 +1653,9 @@ enum ModelsAction {
 #[derive(Subcommand)]
 enum SkillAction {
     List,
-    View { name: String },
+    View {
+        name: String,
+    },
     /// List installed skills that declare a blueprint schedule
     Blueprints,
     /// Schedule a blueprint skill as a cron job (hermes blueprint jobs)
@@ -1634,7 +1666,9 @@ enum SkillAction {
         job_name: Option<String>,
     },
     /// Remove the cron job created for a blueprint skill
-    Unschedule { name: String },
+    Unschedule {
+        name: String,
+    },
     /// Security-scan an installed skill (hermes skills_guard)
     Scan {
         name: String,
@@ -2112,7 +2146,10 @@ enum CuratorAction {
 #[derive(Subcommand)]
 enum JourneyAction {
     /// List node ids (for delete/edit)
-    List { #[arg(long)] no_color: bool },
+    List {
+        #[arg(long)]
+        no_color: bool,
+    },
     /// Delete a learned skill (archived) or memory by node id
     Delete {
         /// Node id (skill name or memory:<source>:<index>; see `journey list`)
@@ -2131,11 +2168,19 @@ enum JourneyAction {
 #[derive(Subcommand)]
 enum CronAction {
     List,
-    Remove { id: String },
-    Pause { id: String },
-    Resume { id: String },
+    Remove {
+        id: String,
+    },
+    Pause {
+        id: String,
+    },
+    Resume {
+        id: String,
+    },
     /// Run a job once, immediately (unattended: cron approval mode applies)
-    Run { id: String },
+    Run {
+        id: String,
+    },
     /// Create a cron job (hermes `cron create`)
     Create {
         /// Job name
@@ -2158,7 +2203,9 @@ enum CronAction {
         repeat: Option<i64>,
     },
     /// Show one job in full (hermes `cron show`)
-    Show { id: String },
+    Show {
+        id: String,
+    },
     /// Automation blueprints: list the catalog, or fill + create one
     /// inline (hermes `cron blueprints`)
     Blueprints {
@@ -2205,18 +2252,28 @@ enum CheckpointAction {
 }
 
 fn load_config(cli: &Cli) -> UlncLawConfig {
-    let mut config = UlncLawConfig::load(cli.config.as_ref().map(std::path::Path::new))
-        .unwrap_or_default();
+    let mut config =
+        UlncLawConfig::load(cli.config.as_ref().map(std::path::Path::new)).unwrap_or_default();
     if let Some(ref profile) = cli.profile {
         config = config.with_profile(profile);
     }
     // CLI -m / --provider win over config AND profile (hermes -m
     // semantics): kanban workers pinned via task overrides ride these
     // same flags.
-    if let Some(model) = cli.model.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
+    if let Some(model) = cli
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+    {
         config.model.model = model.to_string();
     }
-    if let Some(provider) = cli.provider.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+    if let Some(provider) = cli
+        .provider
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+    {
         config.model.provider = provider.to_string();
     }
     // CLI --reasoning wins over config AND profile (hermes --reasoning
@@ -2265,12 +2322,12 @@ fn build_provider_with(
     // = "moa"` runs the whole agent loop on the preset — `model` selects
     // the preset. Slot keys resolve per preset, no main key required.
     if config.model.provider.trim().eq_ignore_ascii_case("moa") {
-        let facade = ulnclaw::moa::MoaProvider::new(
-            config.clone(),
-            session_id.map(str::to_string),
-        )
-        .map_err(|e| e.to_string())?;
-        eprintln!("🤖 AI Agent initialized with MoA preset: {}", facade.preset_name());
+        let facade = ulnclaw::moa::MoaProvider::new(config.clone(), session_id.map(str::to_string))
+            .map_err(|e| e.to_string())?;
+        eprintln!(
+            "🤖 AI Agent initialized with MoA preset: {}",
+            facade.preset_name()
+        );
         return Ok(Arc::new(facade));
     }
     let api_key = config.resolve_api_key();
@@ -2319,7 +2376,12 @@ fn build_provider_with(
     }
     // Priority Processing pin (hermes agent.service_tier): "fast" maps
     // to service_tier=priority; anything else keeps the endpoint default.
-    if config.agent.service_tier.trim().eq_ignore_ascii_case("fast") {
+    if config
+        .agent
+        .service_tier
+        .trim()
+        .eq_ignore_ascii_case("fast")
+    {
         builder = builder.service_tier("priority");
     }
     let provider = builder.build().map_err(|e| e.to_string())?;
@@ -2488,7 +2550,15 @@ async fn build_profile_messaging_stack(
     > = std::sync::Arc::new(tokio::sync::OnceCell::new());
     let approve = ulnclaw::gateway::gateway_approve_fn(router.clone(), state_holder.clone());
     let approve = ulnclaw::messaging::messaging_aware_approve_fn(approve);
-    let agent = make_agent_in(&profile_config, false, Some(approve), &profile_home, None, true).await?;
+    let agent = make_agent_in(
+        &profile_config,
+        false,
+        Some(approve),
+        &profile_home,
+        None,
+        true,
+    )
+    .await?;
     agent.context().set_async_delivery(true);
     // P723: placeholder-aware terminal cwd for profile gateways too.
     if let Some(cwd) = ulnclaw::cwd_placeholder::resolve_messaging_cwd(&profile_config) {
@@ -2618,7 +2688,10 @@ async fn console_cmd(config: &UlncLawConfig) -> Result<(), String> {
                 continue;
             }
             "chat" | "console" => {
-                eprintln!("console: '{}' is not available inside the console.", tokens[0]);
+                eprintln!(
+                    "console: '{}' is not available inside the console.",
+                    tokens[0]
+                );
                 continue;
             }
             _ => {}
@@ -2669,10 +2742,7 @@ async fn gateway_cmd(
     if let Some(pid) = ulnclaw::gateway_pidfile::running_gateway_pid(&home) {
         if replace {
             println!("gateway: replacing running instance (pid {pid})...");
-            ulnclaw::gateway_pidfile::replace_running(
-                pid,
-                std::time::Duration::from_secs(10),
-            )?;
+            ulnclaw::gateway_pidfile::replace_running(pid, std::time::Duration::from_secs(10))?;
         } else if !force {
             return Err(format!(
                 "Another gateway instance is already running (PID {pid}).\n                   Use 'ulnclaw gateway --replace' to take over,\n                   or '--force' to run alongside it (two dispatchers will race)."
@@ -2691,13 +2761,11 @@ async fn gateway_cmd(
     // One kanban notification delivery loop per gateway process (the
     // kanban store is shared; multiplex profile stacks must not spawn
     // their own notifiers or deliveries would duplicate).
-    ulnclaw::gateway::spawn_kanban_notifier(Some(
-        ulnclaw::gateway::WakeEndpoint {
-            host: gateway.host.clone(),
-            port: gateway.port,
-            key: gateway.key.clone(),
-        },
-    ));
+    ulnclaw::gateway::spawn_kanban_notifier(Some(ulnclaw::gateway::WakeEndpoint {
+        host: gateway.host.clone(),
+        port: gateway.port,
+        key: gateway.key.clone(),
+    }));
 
     // `/p/<profile>` multiplexing (hermes api_server parity): every route
     // is mirrored under `/p/<profile>/...`. With `[gateway]
@@ -2706,8 +2774,7 @@ async fn gateway_cmd(
     // accepted and served by the default profile.
     let hub = {
         let multiplex = gateway.multiplex_profiles;
-        let profiles: std::collections::HashSet<String> =
-            config.profiles.keys().cloned().collect();
+        let profiles: std::collections::HashSet<String> = config.profiles.keys().cloned().collect();
         let base_config = config.clone();
         let base_home = home.clone();
         let gateway_key = gateway.key.clone();
@@ -2789,9 +2856,7 @@ async fn gateway_cmd(
                         let config = base_config.clone();
                         let home = base_home.clone();
                         let key = gateway_key.clone();
-                        async move {
-                            build_profile_messaging_stack(&config, &name, &home, key).await
-                        }
+                        async move { build_profile_messaging_stack(&config, &name, &home, key).await }
                     });
                 eprintln!(
                     "[gateway] profile routing active: {} route(s), most-specific-first",
@@ -2864,13 +2929,8 @@ async fn gateway_cmd(
     // weakens the guard, and the liveness check self-heals it).
     let pidfile = ulnclaw::gateway_pidfile::pidfile_path(&home);
     let pidfile_written = ulnclaw::gateway_pidfile::write_pidfile(&home).is_ok();
-    let result = ulnclaw::gateway::serve_multiplex(
-        state,
-        Some(hub),
-        &gateway.host,
-        gateway.port,
-    )
-    .await;
+    let result =
+        ulnclaw::gateway::serve_multiplex(state, Some(hub), &gateway.host, gateway.port).await;
     if pidfile_written {
         let _ = std::fs::remove_file(&pidfile);
     }
@@ -2891,7 +2951,9 @@ async fn gateway_cmd(
     // should still be draining.
     let reaped = ulnclaw::cgroup_cleanup::reap_cgroup(None);
     if reaped > 0 {
-        tracing::info!("[cgroup_cleanup] reaped {reaped} orphaned process(es) from the unit cgroup");
+        tracing::info!(
+            "[cgroup_cleanup] reaped {reaped} orphaned process(es) from the unit cgroup"
+        );
     }
     result.map_err(|e| e.to_string())
 }
@@ -2907,7 +2969,10 @@ async fn checkpoints_cmd(config: &UlncLawConfig, action: CheckpointAction) -> Re
         CheckpointAction::List { dir } => {
             let dir = dir.unwrap_or(cwd);
             let checkpoints = manager.list_checkpoints(&dir).await;
-            println!("{}", ulnclaw::checkpoint::format_checkpoint_list(&checkpoints, &dir));
+            println!(
+                "{}",
+                ulnclaw::checkpoint::format_checkpoint_list(&checkpoints, &dir)
+            );
         }
         CheckpointAction::Status => {
             let status = manager.status().await;
@@ -2986,9 +3051,12 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
         Commands::Kanban { action } => kanban_cmd(action).await,
         Commands::Projects { action } => projects_cmd(action),
         Commands::Pets { action } => pets_cmd(action).await,
-        Commands::Tools { action, name, json } => {
-            tools_cmd(&config, action.as_deref().unwrap_or("list"), name.as_deref(), json)
-        }
+        Commands::Tools { action, name, json } => tools_cmd(
+            &config,
+            action.as_deref().unwrap_or("list"),
+            name.as_deref(),
+            json,
+        ),
         Commands::Skills { action } => skills_cmd(action.unwrap_or(SkillAction::List)).await,
         Commands::Bundles { action } => bundles_cmd(action.unwrap_or(BundlesAction::List)),
         Commands::Security { action } => {
@@ -3004,21 +3072,25 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
             }
             // reqwest's blocking client builds its own runtime — run it off
             // the async main context.
-            let findings = tokio::task::spawn_blocking(move || {
-                ulnclaw::security_audit::run_audit(components)
-            })
-            .await
-            .map_err(|e| e.to_string())??;
+            let findings =
+                tokio::task::spawn_blocking(move || ulnclaw::security_audit::run_audit(components))
+                    .await
+                    .map_err(|e| e.to_string())??;
             if json {
                 println!("{}", ulnclaw::security_audit::render_json(&findings, total));
             } else {
-                println!("{}", ulnclaw::security_audit::render_human(&findings, total));
+                println!(
+                    "{}",
+                    ulnclaw::security_audit::render_human(&findings, total)
+                );
             }
             Ok(())
         }
         Commands::Secrets { action } => secrets_cmd(&config, action),
         Commands::ComputerUse { action } => computer_use_cmd(&config, action).await,
-        Commands::Plugins { action } => plugins_cmd(&config, action.unwrap_or(PluginsAction::List)).await,
+        Commands::Plugins { action } => {
+            plugins_cmd(&config, action.unwrap_or(PluginsAction::List)).await
+        }
         Commands::Hooks { action } => hooks_cmd(&config, action).await,
         Commands::Pairing { action } => pairing_cmd(action).await,
         Commands::Profiles { action } => profiles_cmd(action.unwrap_or(ProfilesAction::List)),
@@ -3027,8 +3099,18 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
         Commands::Proxy { action } => proxy_cmd(&config, action).await,
         Commands::Egress { action } => egress_cmd(action).await,
         Commands::Cron { action } => cron_cmd(&config, action.unwrap_or(CronAction::List)).await,
-        Commands::Gateway { host, port, replace, force } => gateway_cmd(&config, host, port, replace, force).await,
-        Commands::Serve { host, port, replace, force } => gateway_cmd(&config, host, port, replace, force).await,
+        Commands::Gateway {
+            host,
+            port,
+            replace,
+            force,
+        } => gateway_cmd(&config, host, port, replace, force).await,
+        Commands::Serve {
+            host,
+            port,
+            replace,
+            force,
+        } => gateway_cmd(&config, host, port, replace, force).await,
         Commands::Dashboard { action, host, port } => {
             dashboard_cmd(&config, action.as_deref().unwrap_or("run"), host, port).await
         }
@@ -3039,15 +3121,22 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
                 Box::pin(console_cmd(&config));
             fut.await
         }
-        Commands::Migrate { migration, apply, no_backup } => {
-            migrate_cmd(migration.as_deref(), apply, no_backup, cli.config.clone())
-        }
+        Commands::Migrate {
+            migration,
+            apply,
+            no_backup,
+        } => migrate_cmd(migration.as_deref(), apply, no_backup, cli.config.clone()),
         Commands::Weixin { action } => weixin_cmd(action).await,
         Commands::Qq { action } => qq_cmd(action).await,
         Commands::GoogleChatOauth { action } => google_chat_oauth_cmd(action).await,
         Commands::SpotifyAuth { action } => spotify_auth_cmd(action).await,
         Commands::Checkpoints { action } => checkpoints_cmd(&config, action).await,
-        Commands::Diff { staged, all, dir, paths } => {
+        Commands::Diff {
+            staged,
+            all,
+            dir,
+            paths,
+        } => {
             let mode = if all {
                 ulnclaw::git_diff::DiffMode::All
             } else if staged {
@@ -3055,7 +3144,8 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
             } else {
                 ulnclaw::git_diff::DiffMode::Working
             };
-            let cwd = dir.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+            let cwd = dir
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
             match ulnclaw::git_diff::collect_working_diff(&cwd, mode, &paths) {
                 Ok(result) if result.empty => {
                     println!("No changes ({} mode).", mode.as_str());
@@ -3074,7 +3164,12 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
             Ok(())
         }
         Commands::Moa { action } => {
-            moa_cmd(&config, action.unwrap_or(MoaAction::List), cli.config.as_deref()).await
+            moa_cmd(
+                &config,
+                action.unwrap_or(MoaAction::List),
+                cli.config.as_deref(),
+            )
+            .await
         }
         Commands::Models { action } => {
             // reqwest's blocking client builds its own runtime, so catalog
@@ -3089,7 +3184,12 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
             let home = ulnclaw::config::ulnclaw_home();
             ulnclaw::memory_cmd::handle_memory_command(&home, &args, yes)
         }
-        Commands::ImportAgent { agent, source, dry_run, overwrite } => {
+        Commands::ImportAgent {
+            agent,
+            source,
+            dry_run,
+            overwrite,
+        } => {
             let user_home = dirs::home_dir().ok_or("cannot resolve home directory")?;
             let agents: Vec<String> = match agent {
                 Some(name) => vec![name],
@@ -3106,7 +3206,11 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
                 let default_dir = match name.as_str() {
                     "claude-code" => user_home.join(".claude"),
                     "codex" => user_home.join(".codex"),
-                    _ => return Err(format!("Unsupported agent: {name:?} (expected claude-code|codex)")),
+                    _ => {
+                        return Err(format!(
+                            "Unsupported agent: {name:?} (expected claude-code|codex)"
+                        ))
+                    }
                 };
                 let source_root = source.clone().unwrap_or(default_dir);
                 let target_root = ulnclaw::config::ulnclaw_home();
@@ -3123,9 +3227,7 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
             }
             Ok(())
         }
-        Commands::Curator { action } => {
-            curator_cmd(action.unwrap_or(CuratorAction::Status))
-        }
+        Commands::Curator { action } => curator_cmd(action.unwrap_or(CuratorAction::Status)),
         Commands::Journey {
             action,
             reveal,
@@ -3150,20 +3252,34 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
                     marker, info.name, info.source, info.description
                 );
             }
-            println!("Active skin: {} (set [display] skin in config.toml)", active);
+            println!(
+                "Active skin: {} (set [display] skin in config.toml)",
+                active
+            );
             Ok(())
         }
         Commands::Suggestions { args } => {
-            println!("{}", ulnclaw::cron::suggestions::handle_suggestions_command(&args.join(" ")));
+            println!(
+                "{}",
+                ulnclaw::cron::suggestions::handle_suggestions_command(&args.join(" "))
+            );
             Ok(())
         }
         Commands::Insights { days, source, json } => {
-            let engine = ulnclaw::insights::InsightsEngine::open_default().map_err(|e| e.to_string())?;
+            let engine =
+                ulnclaw::insights::InsightsEngine::open_default().map_err(|e| e.to_string())?;
             let report = engine
-                .generate(days, source.as_deref(), Some(config.model.provider.as_str()))
+                .generate(
+                    days,
+                    source.as_deref(),
+                    Some(config.model.provider.as_str()),
+                )
                 .map_err(|e| e.to_string())?;
             if json {
-                println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).unwrap_or_default()
+                );
             } else {
                 print!("{}", ulnclaw::insights::format_terminal(&report));
             }
@@ -3178,9 +3294,16 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
                 Err(result.message)
             }
         }
-        Commands::Debug { action, lines, no_redact, output } => {
+        Commands::Debug {
+            action,
+            lines,
+            no_redact,
+            output,
+        } => {
             if action != "report" {
-                return Err(format!("unknown debug action '{action}' (expected: report)"));
+                return Err(format!(
+                    "unknown debug action '{action}' (expected: report)"
+                ));
             }
             let report = ulnclaw::debug_cmd::handle_debug_command(
                 &config,
@@ -3205,7 +3328,10 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
             let data =
                 ulnclaw::prompt_size::compute_prompt_breakdown(&config, &home, &cwd, &registry);
             if json {
-                println!("{}", serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
+                );
             } else {
                 print!("{}", ulnclaw::prompt_size::render_breakdown(&data));
             }
@@ -3215,7 +3341,10 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
             let opts = ulnclaw::doctor::DoctorOptions { fix, online, json };
             let report = ulnclaw::doctor::run_doctor(&config, &opts);
             if json {
-                println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).unwrap_or_default()
+                );
             } else {
                 print!("{}", report.render());
             }
@@ -3265,8 +3394,16 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
                     Ok(())
                 }
                 Some(WebhookAction::Subscribe {
-                    name, description, events, secret, prompt, skills,
-                    deliver, deliver_chat_id, deliver_only, script,
+                    name,
+                    description,
+                    events,
+                    secret,
+                    prompt,
+                    skills,
+                    deliver,
+                    deliver_chat_id,
+                    deliver_only,
+                    script,
                 }) => {
                     if !config.messaging.webhook.enabled {
                         println!("  Webhook platform is not enabled. Enable it with:");
@@ -3275,8 +3412,15 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
                         return Ok(());
                     }
                     let opts = whs::SubscribeOptions {
-                        description, events, secret, prompt, skills,
-                        deliver, deliver_chat_id, deliver_only, script,
+                        description,
+                        events,
+                        secret,
+                        prompt,
+                        skills,
+                        deliver,
+                        deliver_chat_id,
+                        deliver_only,
+                        script,
                     };
                     print!("{}", whs::cmd_subscribe(&name, &opts)?);
                     Ok(())
@@ -3313,9 +3457,12 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
         Commands::Login => auth_cmd(&config, AuthAction::Login).await,
         Commands::Logout => auth_cmd(&config, AuthAction::Logout).await,
         Commands::Model { refresh } => ulnclaw::model_cmd::run_model_picker(refresh),
-        Commands::Setup { section, quick, reset, non_interactive } => {
-            ulnclaw::setup_cmd::run_setup(section.as_deref(), quick, reset, non_interactive)
-        }
+        Commands::Setup {
+            section,
+            quick,
+            reset,
+            non_interactive,
+        } => ulnclaw::setup_cmd::run_setup(section.as_deref(), quick, reset, non_interactive),
         Commands::Status { all: _, deep } => {
             let opts = ulnclaw::status::StatusOptions { deep };
             print!("{}", ulnclaw::status::show_status(&config, &opts));
@@ -3367,43 +3514,35 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
             slashes_only,
             no_assistant,
             agent_view,
-        } => {
-            match subcommand.as_deref() {
-                Some("manifest") => {
-                    let opts = ulnclaw::slack_cli::ManifestOptions {
-                        name,
-                        description,
-                        long_description,
-                        long_description_file,
-                        slashes_only,
-                        no_assistant,
-                        agent_view,
-                        write: write.map(|p| {
-                            if p.is_empty() {
-                                None
-                            } else {
-                                Some(p)
-                            }
-                        }),
-                    };
-                    let code = ulnclaw::slack_cli::run_manifest_command(
-                        &opts,
-                        &ulnclaw::config::ulnclaw_home(),
-                    );
-                    std::process::exit(code);
-                }
-                Some(other) => {
-                    eprintln!("Unknown slack subcommand: {other}");
-                    std::process::exit(1);
-                }
-                None => {
-                    eprintln!(
+        } => match subcommand.as_deref() {
+            Some("manifest") => {
+                let opts = ulnclaw::slack_cli::ManifestOptions {
+                    name,
+                    description,
+                    long_description,
+                    long_description_file,
+                    slashes_only,
+                    no_assistant,
+                    agent_view,
+                    write: write.map(|p| if p.is_empty() { None } else { Some(p) }),
+                };
+                let code = ulnclaw::slack_cli::run_manifest_command(
+                    &opts,
+                    &ulnclaw::config::ulnclaw_home(),
+                );
+                std::process::exit(code);
+            }
+            Some(other) => {
+                eprintln!("Unknown slack subcommand: {other}");
+                std::process::exit(1);
+            }
+            None => {
+                eprintln!(
                         "usage: ulnclaw slack <subcommand>\n\nsubcommands:\n  manifest   Generate a Slack app manifest with every gateway\n             command registered as a native slash\n\nRun `ulnclaw slack manifest -h` for details."
                     );
-                    std::process::exit(1);
-                }
+                std::process::exit(1);
             }
-        }
+        },
         Commands::Batch {
             dataset_file,
             batch_size,
@@ -3433,30 +3572,42 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
         Commands::Acp { verbose } => ulnclaw::acp_adapter::run_stdio(verbose)
             .await
             .map_err(|e| e.to_string()),
-        Commands::Mcp { args, verbose } => {
-            match args.first().map(String::as_str) {
-                Some("serve") => ulnclaw::mcp_serve::run_stdio(verbose)
-                    .await
-                    .map_err(|e| e.to_string()),
-                Some(other) => Err(format!("unknown mcp subcommand: {other} (expected: serve)")),
-                None => Err("usage: ulnclaw mcp serve [--verbose]".to_string()),
-            }
-        }
+        Commands::Mcp { args, verbose } => match args.first().map(String::as_str) {
+            Some("serve") => ulnclaw::mcp_serve::run_stdio(verbose)
+                .await
+                .map_err(|e| e.to_string()),
+            Some(other) => Err(format!("unknown mcp subcommand: {other} (expected: serve)")),
+            None => Err("usage: ulnclaw mcp serve [--verbose]".to_string()),
+        },
         Commands::Uninstall { full, dry_run, yes } => uninstall_cmd(full, dry_run, yes),
         Commands::Fallback { args, yes } => {
             let home = ulnclaw::config::ulnclaw_home();
-            print!("{}", ulnclaw::fallback::handle_fallback_command(&home, &args, yes)?);
+            print!(
+                "{}",
+                ulnclaw::fallback::handle_fallback_command(&home, &args, yes)?
+            );
             Ok(())
         }
-        Commands::Backup { action, output, quick, label } => {
+        Commands::Backup {
+            action,
+            output,
+            quick,
+            label,
+        } => {
             let home = ulnclaw::config::ulnclaw_home();
             match action.first().map(|a| a.as_str()) {
                 Some("list") => {
                     let snapshots = ulnclaw::backup::list_quick_snapshots(&home);
                     if snapshots.is_empty() {
-                        println!("No quick snapshots yet. Create one with 'ulnclaw backup --quick'.");
+                        println!(
+                            "No quick snapshots yet. Create one with 'ulnclaw backup --quick'."
+                        );
                     } else {
-                        println!("Quick snapshots in {}/{}:", home.display(), ulnclaw::backup::QUICK_SNAPSHOTS_DIR);
+                        println!(
+                            "Quick snapshots in {}/{}:",
+                            home.display(),
+                            ulnclaw::backup::QUICK_SNAPSHOTS_DIR
+                        );
                         for snapshot in &snapshots {
                             println!(
                                 "  {:<32} {:>4} file(s)  {:>10}",
@@ -3493,7 +3644,12 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
                 )),
                 None => {
                     if quick {
-                        match ulnclaw::backup::create_quick_snapshot(&home, label.as_deref(), None, None)? {
+                        match ulnclaw::backup::create_quick_snapshot(
+                            &home,
+                            label.as_deref(),
+                            None,
+                            None,
+                        )? {
                             Some(id) => {
                                 println!("✓ Quick snapshot created: {id}");
                                 println!("  Restore with: ulnclaw backup restore {id}");
@@ -3518,7 +3674,9 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
             let home = ulnclaw::config::ulnclaw_home();
             let zip_path = std::path::PathBuf::from(&zip);
             // Safety net snapshot of current state before overlaying.
-            if let Some(id) = ulnclaw::backup::create_quick_snapshot(&home, Some("pre-import"), None, None)? {
+            if let Some(id) =
+                ulnclaw::backup::create_quick_snapshot(&home, Some("pre-import"), None, None)?
+            {
                 println!("→ Current state snapshotted as {id} before import.");
             }
             let report = ulnclaw::backup::import_backup(&home, &zip_path)?;
@@ -3552,7 +3710,15 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
             }
             Ok(())
         }
-        Commands::Logs { log_name, lines, follow, level, session, since, component } => {
+        Commands::Logs {
+            log_name,
+            lines,
+            follow,
+            level,
+            session,
+            since,
+            component,
+        } => {
             let name = log_name.unwrap_or_else(|| "agent".to_string());
             if name == "list" {
                 print!("{}", ulnclaw::logs::list_logs());
@@ -3582,7 +3748,15 @@ async fn make_agent(
     session_id: Option<String>,
 ) -> Result<Arc<Agent>, String> {
     let home = ulnclaw::config::ensure_home().map_err(|e| e.to_string())?;
-    make_agent_in(config, interactive, approve_override, &home, session_id, false).await
+    make_agent_in(
+        config,
+        interactive,
+        approve_override,
+        &home,
+        session_id,
+        false,
+    )
+    .await
 }
 
 /// Build an agent rooted at an explicit home directory — the multiplex
@@ -3618,10 +3792,15 @@ async fn make_agent_in(
         eprintln!("[plugins] {plugin_tool_count} plugin tool(s) registered");
     }
 
-    toolsets::apply_toolset_policy(&mut registry, &config.enabled_toolsets, &config.disabled_toolsets);
+    toolsets::apply_toolset_policy(
+        &mut registry,
+        &config.enabled_toolsets,
+        &config.disabled_toolsets,
+    );
 
     std::fs::create_dir_all(home).ok();
-    let store = Arc::new(SqliteSessionStore::open(home.join("state.db")).map_err(|e| e.to_string())?);
+    let store =
+        Arc::new(SqliteSessionStore::open(home.join("state.db")).map_err(|e| e.to_string())?);
     // Crash recovery for background delegations (hermes durable registry):
     // rows still running from a previous process become terminal
     // "outcome unknown" results delivered on the next drain.
@@ -3668,15 +3847,18 @@ async fn make_agent_in(
         }));
         if context.approve.is_none() {
             context = context.with_approve(Arc::new(|reason, command| {
-            Box::pin(async move {
-                println!("\n⚠️  Approve dangerous command? [{}]\n{}\nApprove? [y/N]", reason, command);
-                print!("> ");
-                std::io::stdout().flush().ok();
-                let mut line = String::new();
-                std::io::stdin().read_line(&mut line).ok();
-                matches!(line.trim(), "y" | "Y" | "yes" | "YES")
-            })
-        }));
+                Box::pin(async move {
+                    println!(
+                        "\n⚠️  Approve dangerous command? [{}]\n{}\nApprove? [y/N]",
+                        reason, command
+                    );
+                    print!("> ");
+                    std::io::stdout().flush().ok();
+                    let mut line = String::new();
+                    std::io::stdin().read_line(&mut line).ok();
+                    matches!(line.trim(), "y" | "Y" | "yes" | "YES")
+                })
+            }));
         }
     }
     if let Some(approve) = approve_override {
@@ -3719,7 +3901,11 @@ async fn make_agent_in(
         persist: true,
         source: "cli".to_string(),
         environment_probe: config.agent.environment_probe,
-        terminal_backend: config.terminal.backend.clone().unwrap_or_else(|| "local".to_string()),
+        terminal_backend: config
+            .terminal
+            .backend
+            .clone()
+            .unwrap_or_else(|| "local".to_string()),
         ..Default::default()
     });
     let agent = agent
@@ -3731,7 +3917,6 @@ async fn make_agent_in(
     agent.wire_runners();
     Ok(agent)
 }
-
 
 /// `ulnclaw send` — pipe text from shell scripts to any configured
 /// messaging platform (hermes `hermes_cli/send_cmd.py`): no LLM, no agent
@@ -3778,9 +3963,8 @@ async fn send_cmd(
                     .map_err(|e| e.to_string())?;
                 buf
             } else {
-                std::fs::read_to_string(path).map_err(|e| {
-                    format!("cannot read --file {}: {e}", path)
-                })?
+                std::fs::read_to_string(path)
+                    .map_err(|e| format!("cannot read --file {}: {e}", path))?
             });
         } else if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
             let mut buf = String::new();
@@ -3810,22 +3994,35 @@ async fn send_cmd(
     .await;
 
     if json_mode {
-        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
     } else if !quiet {
         if let Some(error) = result.get("error").and_then(serde_json::Value::as_str) {
             eprintln!("ulnclaw send: {error}");
-        } else if result.get("success").and_then(serde_json::Value::as_bool).unwrap_or(false) {
+        } else if result
+            .get("success")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+        {
             match result.get("note").and_then(serde_json::Value::as_str) {
                 Some(note) => println!("{note}"),
                 None => println!("sent"),
             }
         } else {
-            println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&result).unwrap_or_default()
+            );
         }
     }
 
     let failed = result.get("error").is_some()
-        || !(result.get("success").and_then(serde_json::Value::as_bool).unwrap_or(false)
+        || !(result
+            .get("success")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
             || result.get("skipped").is_some());
     std::process::exit(if failed { FAILURE_EXIT } else { 0 });
 }
@@ -3836,11 +4033,14 @@ async fn send_list_targets(filter: Option<&str>, json_mode: bool) -> i32 {
     let mut platforms: std::collections::BTreeMap<String, Vec<serde_json::Value>> =
         std::collections::BTreeMap::new();
     for (platform, entry) in ulnclaw::channel_directory::list_channels(None) {
-        platforms.entry(platform).or_default().push(serde_json::json!({
-            "id": entry.id,
-            "name": entry.name,
-            "type": entry.chat_type,
-        }));
+        platforms
+            .entry(platform)
+            .or_default()
+            .push(serde_json::json!({
+                "id": entry.id,
+                "name": entry.name,
+                "type": entry.chat_type,
+            }));
     }
     // Merge configured-but-undiscovered platforms (hermes
     // get_connected_platforms merge) so --list never hides a working target.
@@ -3928,9 +4128,18 @@ async fn send_list_targets(filter: Option<&str>, json_mode: bool) -> i32 {
         }
         println!("{title}:");
         for entry in entries {
-            let id = entry.get("id").and_then(serde_json::Value::as_str).unwrap_or("");
-            let name = entry.get("name").and_then(serde_json::Value::as_str).unwrap_or("");
-            let chat_type = entry.get("type").and_then(serde_json::Value::as_str).unwrap_or("");
+            let id = entry
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let name = entry
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let chat_type = entry
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
             let label = if platform == "discord" {
                 format!("#{name}")
             } else if !chat_type.is_empty() {
@@ -3968,12 +4177,9 @@ async fn one_shot(
         .run_with_session(prompt, None, target.as_deref())
         .await
         .map_err(|e| e.to_string())?;
-    let content = ulnclaw::plugins::transform_llm_output(
-        &agent.context().session_id,
-        &cwd,
-        &result.content,
-    )
-    .await;
+    let content =
+        ulnclaw::plugins::transform_llm_output(&agent.context().session_id, &cwd, &result.content)
+            .await;
     println!("{}", content);
 
     // Kanban goal-loop mode (hermes cli.py quiet path): a worker spawned
@@ -4099,9 +4305,7 @@ async fn kanban_goal_loop_for_worker(
         },
         || {
             let store = store_ref;
-            Box::pin(async move {
-                store.get_task(task_id).ok().flatten().map(|t| t.status)
-            })
+            Box::pin(async move { store.get_task(task_id).ok().flatten().map(|t| t.status) })
         },
         |reason| {
             let store = store_ref;
@@ -4171,12 +4375,7 @@ fn resolve_resume_target(
     let resolved = store
         .resolve_session_id(name)
         .map_err(|e| e.to_string())?
-        .or_else(|| {
-            store
-                .resolve_session_by_title(name)
-                .ok()
-                .flatten()
-        });
+        .or_else(|| store.resolve_session_by_title(name).ok().flatten());
     let Some(resolved) = resolved else {
         return Err(format!(
             "No session found matching '{name}'.\nUse 'ulnclaw sessions list' to see available sessions."
@@ -4248,7 +4447,10 @@ async fn print_welcome_banner(config: &UlncLawConfig, agent: &Arc<Agent>) {
     };
     if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
         let term_width = ulnclaw::banner::terminal_width();
-        println!("{}", ulnclaw::banner::build_startup_display(&info, term_width));
+        println!(
+            "{}",
+            ulnclaw::banner::build_startup_display(&info, term_width)
+        );
     } else {
         println!(
             "ulnclaw {} — model: {} ({})",
@@ -4274,17 +4476,20 @@ async fn chat_repl(
     let mut history: Vec<Message> = Vec::new();
     let mut resumed_from: Option<String> = None;
     if resume.is_some() || continue_last.is_some() {
-        let target =
-            resolve_resume_target(resume.as_deref(), continue_last.as_deref())?.unwrap();
+        let target = resolve_resume_target(resume.as_deref(), continue_last.as_deref())?.unwrap();
         let home = ulnclaw::config::ensure_home().map_err(|e| e.to_string())?;
         let pre_store =
             SqliteSessionStore::open(home.join("state.db")).map_err(|e| e.to_string())?;
-        let messages = pre_store.load_messages(&target).map_err(|e| e.to_string())?;
+        let messages = pre_store
+            .load_messages(&target)
+            .map_err(|e| e.to_string())?;
         history = messages
             .into_iter()
             .filter(|m| m.role != Role::System)
             .collect();
-        let title = pre_store.get_session_title(&target).map_err(|e| e.to_string())?;
+        let title = pre_store
+            .get_session_title(&target)
+            .map_err(|e| e.to_string())?;
         resumed_from = Some(match title {
             Some(t) => format!("{} ({})", target, t),
             None => target.clone(),
@@ -4295,7 +4500,9 @@ async fn chat_repl(
     // Display-only tool-progress rendering wired through agent callbacks
     // (hermes CLI tool-progress scrollback); /focus and /verbose compose
     // on top of it (hermes focus_view + tool_progress_mode).
-    let display = Arc::new(std::sync::Mutex::new(ulnclaw::focus_view::DisplayState::default()));
+    let display = Arc::new(std::sync::Mutex::new(
+        ulnclaw::focus_view::DisplayState::default(),
+    ));
     {
         let progress_display = display.clone();
         let mut callbacks = ulnclaw::agent::AgentCallbacks::default();
@@ -4388,7 +4595,18 @@ async fn chat_repl(
             continue;
         }
         if input.starts_with('/') {
-            match handle_slash(&input, &agent, &mut history, &mut goal_manager, &mut pending, &mut session_key, &mut stash, &display).await {
+            match handle_slash(
+                &input,
+                &agent,
+                &mut history,
+                &mut goal_manager,
+                &mut pending,
+                &mut session_key,
+                &mut stash,
+                &display,
+            )
+            .await
+            {
                 Ok(true) => continue,
                 Ok(false) => break,
                 Err(e) => {
@@ -4398,7 +4616,10 @@ async fn chat_repl(
             }
         }
 
-        match agent.run_with_session(&input, Some(history.clone()), Some(&session_key)).await {
+        match agent
+            .run_with_session(&input, Some(history.clone()), Some(&session_key))
+            .await
+        {
             Ok(result) => {
                 let content = ulnclaw::plugins::transform_llm_output(
                     &session_key,
@@ -4500,7 +4721,10 @@ async fn handle_slash(
                     println!("{message}");
                 }
                 ulnclaw::focus_view::FocusArg::Status => {
-                    println!("{}", ulnclaw::focus_view::format_focus_status(enabled, Some(&configured)));
+                    println!(
+                        "{}",
+                        ulnclaw::focus_view::format_focus_status(enabled, Some(&configured))
+                    );
                 }
                 ulnclaw::focus_view::FocusArg::Usage => {
                     println!("{}", ulnclaw::focus_view::FOCUS_USAGE);
@@ -4542,14 +4766,20 @@ async fn handle_slash(
                     }
                 }
                 "pop" => {
-                    let index: usize = tail.parse::<usize>().map(|n| n.saturating_sub(1)).unwrap_or(0);
+                    let index: usize = tail
+                        .parse::<usize>()
+                        .map(|n| n.saturating_sub(1))
+                        .unwrap_or(0);
                     match stash.pop(index) {
                         Some((text, _images)) => println!("restored draft:\n{text}"),
                         None => println!("nothing to pop at that position."),
                     }
                 }
                 "drop" => {
-                    let index: usize = tail.parse::<usize>().map(|n| n.saturating_sub(1)).unwrap_or(usize::MAX);
+                    let index: usize = tail
+                        .parse::<usize>()
+                        .map(|n| n.saturating_sub(1))
+                        .unwrap_or(usize::MAX);
                     if index == usize::MAX || index >= stash.len() {
                         println!("usage: /stash drop <n> (1 = newest)");
                     } else if stash.pop(index).is_some() {
@@ -4576,7 +4806,11 @@ async fn handle_slash(
                 _ => {
                     // Anything else is draft text to park (hermes gesture).
                     if stash.stash(rest, &[]) {
-                        println!("stashed ({} parked). {}", stash.len(), stash.placeholder_hint());
+                        println!(
+                            "stashed ({} parked). {}",
+                            stash.len(),
+                            stash.placeholder_hint()
+                        );
                     }
                 }
             }
@@ -4628,9 +4862,10 @@ async fn handle_slash(
             // Board ops inline (hermes `/kanban` → kanban.run_slash).
             let home = ulnclaw::config::ulnclaw_home();
             let rest = rest.to_string();
-            let output = tokio::task::spawn_blocking(move || ulnclaw::kanban::run_slash(&home, &rest))
-                .await
-                .map_err(|e| e.to_string())?;
+            let output =
+                tokio::task::spawn_blocking(move || ulnclaw::kanban::run_slash(&home, &rest))
+                    .await
+                    .map_err(|e| e.to_string())?;
             print!("{output}");
         }
         "/egress" => {
@@ -4675,7 +4910,9 @@ async fn handle_slash(
                     println!("saved clipboard image: {}", dest.display());
                     println!("reference it in your next prompt (vision_analyze / read_file).");
                 } else {
-                    println!("clipboard image extraction failed (is wl-paste/xclip/pngpaste installed?)");
+                    println!(
+                        "clipboard image extraction failed (is wl-paste/xclip/pngpaste installed?)"
+                    );
                 }
             }
         }
@@ -4717,7 +4954,9 @@ async fn handle_slash(
                 println!("⚠️  /reload-mcp — prompt cache invalidation warning");
                 println!("   Reloading MCP servers rebuilds the tool set for this session and");
                 println!("   invalidates the provider prompt cache; the next message re-sends");
-                println!("   full input tokens (expensive on long-context / high-reasoning models).");
+                println!(
+                    "   full input tokens (expensive on long-context / high-reasoning models)."
+                );
                 print!("   Approve [o]nce / [a]lways / [c]ancel? ");
                 let mut answer = String::new();
                 std::io::stdin().read_line(&mut answer).ok();
@@ -4736,7 +4975,9 @@ async fn handle_slash(
                         "false",
                         false,
                     ) {
-                        Ok(_) => println!("🔒 Future /reload-mcp calls will run without confirmation."),
+                        Ok(_) => {
+                            println!("🔒 Future /reload-mcp calls will run without confirmation.")
+                        }
                         Err(e) => println!("⚠️  Couldn't persist opt-out ({}); reloading once.", e),
                     }
                 }
@@ -4755,7 +4996,8 @@ async fn handle_slash(
                         change_parts.push(format!("Added servers: {}", report.added.join(", ")));
                     }
                     if !report.removed.is_empty() {
-                        change_parts.push(format!("Removed servers: {}", report.removed.join(", ")));
+                        change_parts
+                            .push(format!("Removed servers: {}", report.removed.join(", ")));
                     }
                     if !report.reconnected.is_empty() {
                         change_parts.push(format!(
@@ -4785,7 +5027,10 @@ async fn handle_slash(
             println!("{} messages in current conversation.", history.len());
         }
         "/recap" => {
-            println!("{}", ulnclaw::session::recap::build_recap(history, None, None));
+            println!(
+                "{}",
+                ulnclaw::session::recap::build_recap(history, None, None)
+            );
         }
         "/reload" => {
             let count = ulnclaw::config::reload_env();
@@ -4817,13 +5062,12 @@ async fn handle_slash(
         "/insights" => {
             let days: u32 = rest.parse().unwrap_or(30);
             let provider = agent.tool_context().config.model.provider.clone();
-            match ulnclaw::insights::InsightsEngine::open(&ulnclaw::insights::default_store_path()) {
-                Ok(engine) => {
-                    match engine.generate(days, None, Some(provider.as_str())) {
-                        Ok(report) => print!("{}", ulnclaw::insights::format_terminal(&report)),
-                        Err(e) => println!("insights failed: {e}"),
-                    }
-                }
+            match ulnclaw::insights::InsightsEngine::open(&ulnclaw::insights::default_store_path())
+            {
+                Ok(engine) => match engine.generate(days, None, Some(provider.as_str())) {
+                    Ok(report) => print!("{}", ulnclaw::insights::format_terminal(&report)),
+                    Err(e) => println!("insights failed: {e}"),
+                },
                 Err(e) => println!("insights failed: {e}"),
             }
         }
@@ -4905,7 +5149,9 @@ async fn handle_slash(
                     } else {
                         match ulnclaw::browser::set_cdp_override(&url) {
                             Ok(()) => {
-                                println!("browser endpoint set to {url} (live until disconnect/exit)");
+                                println!(
+                                    "browser endpoint set to {url} (live until disconnect/exit)"
+                                );
                                 history.push(Message {
                                     role: Role::User,
                                     content: Some(BROWSER_CONNECT_NOTE.to_string()),
@@ -4932,7 +5178,9 @@ async fn handle_slash(
                         name: None,
                     });
                 }
-                other => println!("unknown /browser subcommand: {other} (status|connect|disconnect)"),
+                other => {
+                    println!("unknown /browser subcommand: {other} (status|connect|disconnect)")
+                }
             }
         }
         "/gitdiff" => {
@@ -4962,7 +5210,9 @@ async fn handle_slash(
             }
         }
         "/memory" => {
-            match ulnclaw::tools::builtin::memory::load_memory_for_prompt(&agent.tool_context().home) {
+            match ulnclaw::tools::builtin::memory::load_memory_for_prompt(
+                &agent.tool_context().home,
+            ) {
                 Some(memory) => println!("{}", memory),
                 None => println!("(memory is empty)"),
             }
@@ -4993,7 +5243,10 @@ async fn handle_slash(
                     };
                     match goals.set(objective, None, contract) {
                         Ok(state) => {
-                            println!("  ⊙ Goal set ({}-turn budget): {}", state.max_turns, state.goal);
+                            println!(
+                                "  ⊙ Goal set ({}-turn budget): {}",
+                                state.max_turns, state.goal
+                            );
                             if state.has_contract() {
                                 println!("  Drafted completion contract:");
                                 for line in state.contract.render_block().lines() {
@@ -5045,8 +5298,15 @@ async fn handle_slash(
                             let reason = wtokens.next().unwrap_or("").trim();
                             match goals.wait_on(pid, reason) {
                                 Ok(_) => {
-                                    let suffix = if reason.is_empty() { String::new() } else { format!(" ({})", reason) };
-                                    println!("  ⏳ Goal parked on pid {}{}. Loop pauses until it exits.", pid, suffix);
+                                    let suffix = if reason.is_empty() {
+                                        String::new()
+                                    } else {
+                                        format!(" ({})", reason)
+                                    };
+                                    println!(
+                                        "  ⏳ Goal parked on pid {}{}. Loop pauses until it exits.",
+                                        pid, suffix
+                                    );
                                 }
                                 Err(e) => println!("  /goal wait: {}", e),
                             }
@@ -5062,11 +5322,22 @@ async fn handle_slash(
                 }
             } else {
                 let (headline, contract) = ulnclaw::goals::parse_contract(rest);
-                let goal_text = if headline.is_empty() { rest.to_string() } else { headline };
-                let contract = if contract.is_empty() { None } else { Some(contract) };
+                let goal_text = if headline.is_empty() {
+                    rest.to_string()
+                } else {
+                    headline
+                };
+                let contract = if contract.is_empty() {
+                    None
+                } else {
+                    Some(contract)
+                };
                 match goals.set(&goal_text, None, contract) {
                     Ok(state) => {
-                        println!("  ⊙ Goal set ({}-turn budget): {}", state.max_turns, state.goal);
+                        println!(
+                            "  ⊙ Goal set ({}-turn budget): {}",
+                            state.max_turns, state.goal
+                        );
                         if state.has_contract() {
                             println!("  Completion contract:");
                             for line in state.contract.render_block().lines() {
@@ -5097,10 +5368,14 @@ async fn handle_slash(
                         } else {
                             match idx_str.parse::<usize>() {
                                 Ok(n) => match goals.remove_subgoal(n) {
-                                    Ok(removed) => println!("  ✓ Removed subgoal {}: {}", n, removed),
+                                    Ok(removed) => {
+                                        println!("  ✓ Removed subgoal {}: {}", n, removed)
+                                    }
                                     Err(e) => println!("  /subgoal remove: {}", e),
                                 },
-                                Err(_) => println!("  /subgoal remove: <n> must be an integer (1-based index)."),
+                                Err(_) => println!(
+                                    "  /subgoal remove: <n> must be an integer (1-based index)."
+                                ),
                             }
                         }
                     }
@@ -5131,7 +5406,10 @@ async fn handle_slash(
             }
         }
         "/suggestions" => {
-            println!("{}", ulnclaw::cron::suggestions::handle_suggestions_command(rest));
+            println!(
+                "{}",
+                ulnclaw::cron::suggestions::handle_suggestions_command(rest)
+            );
         }
         "/toolsets" => {
             // Hermes /toolsets parity (P672): toolset catalog with the
@@ -5175,7 +5453,10 @@ async fn handle_slash(
             // Hermes /agents parity (P666): active agents + recent
             // delegations digest from the live registry.
             let records = ulnclaw::async_delegation::list_delegations();
-            print!("{}", ulnclaw::async_delegation::format_agents_digest(&records));
+            print!(
+                "{}",
+                ulnclaw::async_delegation::format_agents_digest(&records)
+            );
         }
         "/init" => {
             // Hermes /init parity (P665): generate or update AGENTS.md
@@ -5246,7 +5527,11 @@ async fn handle_slash(
             } else {
                 match resolve_checkpoint(&checkpoints, first) {
                     Some(hash) => {
-                        let file = if second.is_empty() { None } else { Some(second) };
+                        let file = if second.is_empty() {
+                            None
+                        } else {
+                            Some(second)
+                        };
                         match manager.restore(&dir_str, &hash, file).await {
                             Ok(result) => println!(
                                 "✅ Restored to {} ({})",
@@ -5285,9 +5570,8 @@ async fn handle_slash(
             match ulnclaw::bundles::resolve_bundle_command_key(cmd_name) {
                 Some(key) => {
                     let skills_dir = agent.tool_context().home.join("skills");
-                    match ulnclaw::bundles::build_bundle_invocation_message(
-                        &key, rest, &skills_dir,
-                    ) {
+                    match ulnclaw::bundles::build_bundle_invocation_message(&key, rest, &skills_dir)
+                    {
                         Some((message, loaded, missing)) => {
                             let mut note = format!(
                                 "bundle {}: loaded {} skill(s)",
@@ -5299,7 +5583,11 @@ async fn handle_slash(
                             }
                             println!("{note}");
                             match agent
-                                .run_with_session(&message, Some(history.clone()), Some(session_key))
+                                .run_with_session(
+                                    &message,
+                                    Some(history.clone()),
+                                    Some(session_key),
+                                )
                                 .await
                             {
                                 Ok(result) => {
@@ -5335,9 +5623,7 @@ fn resolve_checkpoint(
         return None;
     }
     if let Ok(n) = selector.parse::<usize>() {
-        return checkpoints
-            .get(n.saturating_sub(1))
-            .map(|c| c.hash.clone());
+        return checkpoints.get(n.saturating_sub(1)).map(|c| c.hash.clone());
     }
     checkpoints
         .iter()
@@ -5346,7 +5632,11 @@ fn resolve_checkpoint(
 }
 
 fn print_diff_result(result: &serde_json::Value) {
-    if result.get("empty").and_then(|v| v.as_bool()).unwrap_or(false) {
+    if result
+        .get("empty")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
         println!("No changes recorded.");
         return;
     }
@@ -5370,11 +5660,15 @@ async fn auth_cmd(config: &UlncLawConfig, action: AuthAction) -> Result<(), Stri
     let cfg = &config.oauth;
     match action {
         AuthAction::Login => {
-            let auth = oauth::device_authorize(cfg).await.map_err(|e| e.to_string())?;
+            let auth = oauth::device_authorize(cfg)
+                .await
+                .map_err(|e| e.to_string())?;
             for line in oauth::login_instructions(&auth) {
                 println!("{line}");
             }
-            let tokens = oauth::poll_for_token(cfg, &auth).await.map_err(|e| e.to_string())?;
+            let tokens = oauth::poll_for_token(cfg, &auth)
+                .await
+                .map_err(|e| e.to_string())?;
             oauth::save_tokens(&home, &tokens).map_err(|e| e.to_string())?;
             println!("✓ Logged in.");
         }
@@ -5387,13 +5681,24 @@ async fn auth_cmd(config: &UlncLawConfig, action: AuthAction) -> Result<(), Stri
                     println!(
                         "Access token expires: {} ({})",
                         tokens.expires_at,
-                        if expired { "EXPIRED — run `ulnclaw auth refresh`" } else { "valid" }
+                        if expired {
+                            "EXPIRED — run `ulnclaw auth refresh`"
+                        } else {
+                            "valid"
+                        }
                     );
                 }
                 if !tokens.scope.is_empty() {
                     println!("Scope: {}", tokens.scope);
                 }
-                println!("Refresh token: {}", if tokens.refresh_token.is_empty() { "none" } else { "stored" });
+                println!(
+                    "Refresh token: {}",
+                    if tokens.refresh_token.is_empty() {
+                        "none"
+                    } else {
+                        "stored"
+                    }
+                );
             } else {
                 println!("Auth: not logged in (ulnclaw auth login)");
             }
@@ -5402,7 +5707,9 @@ async fn auth_cmd(config: &UlncLawConfig, action: AuthAction) -> Result<(), Stri
             }
         }
         AuthAction::Refresh => {
-            oauth::refresh(cfg, &home).await.map_err(|e| e.to_string())?;
+            oauth::refresh(cfg, &home)
+                .await
+                .map_err(|e| e.to_string())?;
             println!("✓ Access token refreshed.");
         }
         AuthAction::Logout => {
@@ -5473,13 +5780,14 @@ async fn proxy_cmd(config: &UlncLawConfig, action: Option<ProxyAction>) -> Resul
             }
             if proxy_cfg.upstream_url.trim().is_empty() {
                 return Err(
-                    "no upstream configured — set [proxy] upstream_url in config.toml"
-                        .to_string(),
+                    "no upstream configured — set [proxy] upstream_url in config.toml".to_string(),
                 );
             }
             if !proxy_cmd::is_authenticated(&home) {
-                return Err("not logged into the OAuth provider. Run `ulnclaw auth login` first."
-                    .to_string());
+                return Err(
+                    "not logged into the OAuth provider. Run `ulnclaw auth login` first."
+                        .to_string(),
+                );
             }
             println!(
                 "Starting ulnclaw proxy for stored OAuth credentials\n  Listening on:  http://{}:{}/v1\n  Forwarding to: {}\n  Use any bearer token in the client — the proxy attaches your real credential.\n\nPress Ctrl+C to stop.",
@@ -5573,22 +5881,18 @@ async fn sync_cmd(config: &UlncLawConfig, action: SyncAction) -> Result<(), Stri
                 println!("opted-in:    {}", state.enabled.join(", "));
             }
         }
-        SyncAction::Pull => {
-            match skills_sync::pull(cfg, oauth_cfg, &home).await {
-                Ok(names) if names.is_empty() => println!("Nothing new to pull."),
-                Ok(names) => println!("✓ Pulled: {}", names.join(", ")),
-                Err(e) => println!("{e}"),
+        SyncAction::Pull => match skills_sync::pull(cfg, oauth_cfg, &home).await {
+            Ok(names) if names.is_empty() => println!("Nothing new to pull."),
+            Ok(names) => println!("✓ Pulled: {}", names.join(", ")),
+            Err(e) => println!("{e}"),
+        },
+        SyncAction::Push => match skills_sync::push(cfg, oauth_cfg, &home).await {
+            Ok(names) if names.is_empty() => {
+                println!("Nothing to push (no skills opted in — ulnclaw sync enable <skill>).")
             }
-        }
-        SyncAction::Push => {
-            match skills_sync::push(cfg, oauth_cfg, &home).await {
-                Ok(names) if names.is_empty() => {
-                    println!("Nothing to push (no skills opted in — ulnclaw sync enable <skill>).")
-                }
-                Ok(names) => println!("✓ Pushed: {}", names.join(", ")),
-                Err(e) => println!("{e}"),
-            }
-        }
+            Ok(names) => println!("✓ Pushed: {}", names.join(", ")),
+            Err(e) => println!("{e}"),
+        },
         SyncAction::Now => {
             match skills_sync::pull(cfg, oauth_cfg, &home).await {
                 Ok(names) if !names.is_empty() => println!("✓ Pulled: {}", names.join(", ")),
@@ -5604,7 +5908,10 @@ async fn sync_cmd(config: &UlncLawConfig, action: SyncAction) -> Result<(), Stri
         SyncAction::Enable { skill } => {
             let skills_dir = home.join("skills");
             if !skills_dir.join(&skill).join("SKILL.md").is_file() {
-                return Err(format!("skill {skill:?} not found in {}", skills_dir.display()));
+                return Err(format!(
+                    "skill {skill:?} not found in {}",
+                    skills_dir.display()
+                ));
             }
             let mut state = skills_sync::load_state(&home);
             if !state.enabled.iter().any(|s| s == &skill) {
@@ -5621,7 +5928,8 @@ async fn sync_cmd(config: &UlncLawConfig, action: SyncAction) -> Result<(), Stri
         }
         SyncAction::Device { name } => {
             if let Some(name) = name {
-                let stored = skills_sync::set_device_name(&home, &name).map_err(|e| e.to_string())?;
+                let stored =
+                    skills_sync::set_device_name(&home, &name).map_err(|e| e.to_string())?;
                 println!("device label set to '{stored}'.");
                 println!("New pushes from this device will use this label.");
             } else {
@@ -5644,7 +5952,10 @@ async fn plugins_cmd(config: &UlncLawConfig, action: PluginsAction) -> Result<()
                 println!("No plugins found in {}.", home.join("plugins").display());
                 println!("Install a plugin directory with a plugin.toml manifest there.");
             } else {
-                println!("{:<20} {:<8} {:<6} {:<6} {}", "NAME", "VERSION", "HOOKS", "TOOLS", "DESCRIPTION");
+                println!(
+                    "{:<20} {:<8} {:<6} {:<6} {}",
+                    "NAME", "VERSION", "HOOKS", "TOOLS", "DESCRIPTION"
+                );
                 for plugin in &loaded {
                     let disabled = plugin.disabled;
                     let name = if disabled {
@@ -5684,7 +5995,10 @@ async fn plugins_cmd(config: &UlncLawConfig, action: PluginsAction) -> Result<()
             if added == 0 {
                 println!("No pending hooks to accept.");
             } else {
-                println!("✓ Accepted {added} hook command(s) into {}.", home.join("shell-hooks-allowlist.json").display());
+                println!(
+                    "✓ Accepted {added} hook command(s) into {}.",
+                    home.join("shell-hooks-allowlist.json").display()
+                );
             }
         }
         PluginsAction::Install {
@@ -5800,30 +6114,28 @@ async fn pairing_cmd(action: PairingAction) -> Result<(), String> {
                 }
             }
         }
-        PairingAction::Approve { platform, code } => {
-            match store.approve_code(&platform, &code) {
-                Some(grant) => {
-                    let name = if grant.user_name.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" ({})", grant.user_name)
-                    };
-                    println!("✓ Approved {}{} on {platform}.", grant.user_id, name);
-                    println!("  The pairing store joins the allowlist — the gateway authorizes them on the next message.");
-                }
-                None => {
-                    if store.is_locked_out(&platform) {
-                        return Err(format!(
-                            "{platform} is locked out after {} failed approvals — try again in an hour",
-                            ulnclaw::pairing::MAX_FAILED_ATTEMPTS
-                        ));
-                    }
+        PairingAction::Approve { platform, code } => match store.approve_code(&platform, &code) {
+            Some(grant) => {
+                let name = if grant.user_name.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({})", grant.user_name)
+                };
+                println!("✓ Approved {}{} on {platform}.", grant.user_id, name);
+                println!("  The pairing store joins the allowlist — the gateway authorizes them on the next message.");
+            }
+            None => {
+                if store.is_locked_out(&platform) {
                     return Err(format!(
-                        "no pending pairing request matched {code:?} on {platform} (codes expire after 1 hour)"
+                        "{platform} is locked out after {} failed approvals — try again in an hour",
+                        ulnclaw::pairing::MAX_FAILED_ATTEMPTS
                     ));
                 }
+                return Err(format!(
+                        "no pending pairing request matched {code:?} on {platform} (codes expire after 1 hour)"
+                    ));
             }
-        }
+        },
         PairingAction::Revoke { platform, user_id } => {
             if store.revoke(&platform, &user_id) {
                 println!("✓ Revoked {user_id} on {platform}.");
@@ -5863,7 +6175,9 @@ fn profiles_cmd(action: ProfilesAction) -> Result<(), String> {
             let path = ulnclaw::config_cmd::config_path();
             if rows.is_empty() {
                 println!("No profiles configured ({}).", path.display());
-                println!("Create one: ulnclaw profiles set <name> --provider openai --model gpt-4.1");
+                println!(
+                    "Create one: ulnclaw profiles set <name> --provider openai --model gpt-4.1"
+                );
                 return Ok(());
             }
             println!("Profiles in {}:", path.display());
@@ -5890,13 +6204,19 @@ fn profiles_cmd(action: ProfilesAction) -> Result<(), String> {
             let spec = profiles::ProfileSpec {
                 provider: profile.model.as_ref().map(|model| model.provider.clone()),
                 model: profile.model.as_ref().map(|model| model.model.clone()),
-                base_url: profile.model.as_ref().and_then(|model| model.base_url.clone()),
+                base_url: profile
+                    .model
+                    .as_ref()
+                    .and_then(|model| model.base_url.clone()),
                 temperature: profile.model.as_ref().and_then(|model| model.temperature),
                 enabled_toolsets: profile.enabled_toolsets.clone(),
                 disabled_toolsets: profile.disabled_toolsets.clone(),
             };
             let mut wrapper = toml::Table::new();
-            wrapper.insert(name.clone(), toml::Value::Table(profiles::build_profile_table(&spec)));
+            wrapper.insert(
+                name.clone(),
+                toml::Value::Table(profiles::build_profile_table(&spec)),
+            );
             let mut root = toml::Table::new();
             root.insert("profiles".to_string(), toml::Value::Table(wrapper));
             let rendered = toml::to_string_pretty(&root).map_err(|e| e.to_string())?;
@@ -5930,7 +6250,10 @@ fn profiles_cmd(action: ProfilesAction) -> Result<(), String> {
             };
             let created = profiles::save_profile(&name, &spec)?;
             let verb = if created { "Created" } else { "Updated" };
-            println!("✓ {verb} profile '{name}' in {}.", ulnclaw::config_cmd::config_path().display());
+            println!(
+                "✓ {verb} profile '{name}' in {}.",
+                ulnclaw::config_cmd::config_path().display()
+            );
             println!("  Restart the gateway (or start a new CLI process) to apply.");
             Ok(())
         }
@@ -5982,10 +6305,12 @@ async fn hooks_cmd(config: &UlncLawConfig, action: HooksAction) -> Result<(), St
                 .iter()
                 .filter(|p| !p.disabled)
                 .flat_map(|p| {
-                    p.manifest
-                        .hooks
-                        .iter()
-                        .map(move |h| format!("  [    consented] {}: {} (plugin {})", h, p.manifest.name, p.manifest.name))
+                    p.manifest.hooks.iter().map(move |h| {
+                        format!(
+                            "  [    consented] {}: {} (plugin {})",
+                            h, p.manifest.name, p.manifest.name
+                        )
+                    })
                 })
                 .collect();
             if !plugin_hooks.is_empty() {
@@ -6000,7 +6325,10 @@ async fn hooks_cmd(config: &UlncLawConfig, action: HooksAction) -> Result<(), St
                 allowlist.len()
             );
         }
-        HooksAction::Test { event, payload_file } => {
+        HooksAction::Test {
+            event,
+            payload_file,
+        } => {
             if !plugins::VALID_HOOKS.contains(&event.as_str()) {
                 return Err(format!(
                     "unknown hook event {event:?} — expected one of the {} hermes hook names",
@@ -6022,7 +6350,11 @@ async fn hooks_cmd(config: &UlncLawConfig, action: HooksAction) -> Result<(), St
                 println!("No responses (no consented hooks for this event, or none produced valid JSON).");
             } else {
                 for (idx, response) in responses.iter().enumerate() {
-                    println!("response {}: {}", idx + 1, serde_json::to_string_pretty(response).unwrap_or_default());
+                    println!(
+                        "response {}: {}",
+                        idx + 1,
+                        serde_json::to_string_pretty(response).unwrap_or_default()
+                    );
                 }
             }
         }
@@ -6031,7 +6363,10 @@ async fn hooks_cmd(config: &UlncLawConfig, action: HooksAction) -> Result<(), St
             if removed == 0 {
                 println!("No consent entries matched {command:?}.");
             } else {
-                println!("✓ Revoked {removed} consent entr{} for {command:?}.", if removed == 1 { "y" } else { "ies" });
+                println!(
+                    "✓ Revoked {removed} consent entr{} for {command:?}.",
+                    if removed == 1 { "y" } else { "ies" }
+                );
             }
         }
         HooksAction::Doctor => {
@@ -6043,7 +6378,10 @@ async fn hooks_cmd(config: &UlncLawConfig, action: HooksAction) -> Result<(), St
             let mut failed = 0usize;
             for probe in &probes {
                 let mark = if probe.ok { "ok " } else { "ERR" };
-                println!("[{mark}] {}: {} — {}", probe.event, probe.command, probe.detail);
+                println!(
+                    "[{mark}] {}: {} — {}",
+                    probe.event, probe.command, probe.detail
+                );
                 if !probe.ok {
                     failed += 1;
                 }
@@ -6088,7 +6426,10 @@ async fn computer_use_cmd(config: &UlncLawConfig, action: ComputerUseAction) -> 
         ComputerUseAction::Doctor { json } => {
             let payload = cu::health_report(cfg).await.map_err(|e| e.to_string())?;
             if json {
-                println!("{}", serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?
+                );
                 return Ok(());
             }
             let overall = payload
@@ -6112,7 +6453,10 @@ async fn computer_use_cmd(config: &UlncLawConfig, action: ComputerUseAction) -> 
                     }
                 }
             } else {
-                println!("{}", serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?
+                );
             }
             if overall != "ok" {
                 return Err("computer-use doctor reported a degraded state".to_string());
@@ -6137,7 +6481,9 @@ async fn computer_use_cmd(config: &UlncLawConfig, action: ComputerUseAction) -> 
                 use std::io::Write;
                 std::io::stdout().flush().ok();
                 let mut answer = String::new();
-                std::io::stdin().read_line(&mut answer).map_err(|e| e.to_string())?;
+                std::io::stdin()
+                    .read_line(&mut answer)
+                    .map_err(|e| e.to_string())?;
                 if !matches!(answer.trim().to_lowercase().as_str(), "y" | "yes") {
                     println!("aborted.");
                     return Ok(());
@@ -6196,9 +6542,16 @@ fn uninstall_cmd(full: bool, dry_run: bool, yes: bool) -> Result<(), String> {
     print!("Select option [1/2/3]: ");
     std::io::stdout().flush().map_err(|e| e.to_string())?;
     let mut choice_line = String::new();
-    std::io::stdin().read_line(&mut choice_line).map_err(|e| e.to_string())?;
+    std::io::stdin()
+        .read_line(&mut choice_line)
+        .map_err(|e| e.to_string())?;
     let choice = choice_line.trim().to_string();
-    if choice == "3" || matches!(choice.to_ascii_lowercase().as_str(), "" | "c" | "cancel" | "q" | "quit" | "n" | "no") {
+    if choice == "3"
+        || matches!(
+            choice.to_ascii_lowercase().as_str(),
+            "" | "c" | "cancel" | "q" | "quit" | "n" | "no"
+        )
+    {
         println!();
         println!("Uninstall cancelled.");
         return Ok(());
@@ -6219,7 +6572,9 @@ fn uninstall_cmd(full: bool, dry_run: bool, yes: bool) -> Result<(), String> {
     print!("Type 'yes' to confirm: ");
     std::io::stdout().flush().map_err(|e| e.to_string())?;
     let mut confirm_line = String::new();
-    std::io::stdin().read_line(&mut confirm_line).map_err(|e| e.to_string())?;
+    std::io::stdin()
+        .read_line(&mut confirm_line)
+        .map_err(|e| e.to_string())?;
     if confirm_line.trim().to_ascii_lowercase() != "yes" {
         println!();
         println!("Uninstall cancelled.");
@@ -6312,8 +6667,7 @@ fn secrets_cmd(config: &UlncLawConfig, action: SecretsAction) -> Result<(), Stri
                 }
             }
             // Base view: process env plus .env (same merge apply_all uses).
-            let mut env: std::collections::HashMap<String, String> =
-                std::env::vars().collect();
+            let mut env: std::collections::HashMap<String, String> = std::env::vars().collect();
             for (k, v) in ulnclaw::config::load_env_file(&home.join(".env")) {
                 env.entry(k).or_insert(v);
             }
@@ -6322,7 +6676,9 @@ fn secrets_cmd(config: &UlncLawConfig, action: SecretsAction) -> Result<(), Stri
                 if apply {
                     // SAFETY: single-threaded CLI path; mirrors hermes
                     // exporting winners at startup.
-                    unsafe { std::env::set_var(var, env.get(var).map(|s| s.as_str()).unwrap_or("")) };
+                    unsafe {
+                        std::env::set_var(var, env.get(var).map(|s| s.as_str()).unwrap_or(""))
+                    };
                     println!("exported {var} (from {source})");
                 } else {
                     println!("would export {var} (from {source})");
@@ -6466,7 +6822,10 @@ async fn weixin_cmd(action: WeixinAction) -> Result<(), String> {
                     );
                     println!("  [messaging.weixin]");
                     println!("  enabled = true");
-                    println!("  account_id = \"{}\"", creds.get("account_id").map(|s| s.as_str()).unwrap_or(""));
+                    println!(
+                        "  account_id = \"{}\"",
+                        creds.get("account_id").map(|s| s.as_str()).unwrap_or("")
+                    );
                     Ok(())
                 }
                 Ok(None) => Err("weixin login did not complete".into()),
@@ -6505,7 +6864,10 @@ async fn qq_cmd(action: QqAction) -> Result<(), String> {
                 Some(creds) => {
                     ulnclaw::qqbot::save_onboard_credentials(&home, &creds)?;
                     println!();
-                    println!("Saved credentials to {}.", home.join("qq").join("credentials.json").display());
+                    println!(
+                        "Saved credentials to {}.",
+                        home.join("qq").join("credentials.json").display()
+                    );
                     println!("Enable the adapter with:");
                     println!("  [messaging.qq]");
                     println!("  enabled = true");
@@ -6535,7 +6897,11 @@ fn qq_prompt_line(prompt: &str, default: &str) -> Result<String, String> {
     use std::io::Write;
     std::io::stdout().flush().ok();
     let mut line = String::new();
-    if std::io::stdin().read_line(&mut line).map_err(|e| e.to_string())? == 0 {
+    if std::io::stdin()
+        .read_line(&mut line)
+        .map_err(|e| e.to_string())?
+        == 0
+    {
         return Ok(default.to_string());
     }
     let trimmed = line.trim();
@@ -6556,7 +6922,9 @@ fn qq_prompt_hidden(prompt: &str) -> Result<String, String> {
     std::io::stdout().flush().ok();
     if enable_raw_mode().is_err() {
         let mut line = String::new();
-        std::io::stdin().read_line(&mut line).map_err(|e| e.to_string())?;
+        std::io::stdin()
+            .read_line(&mut line)
+            .map_err(|e| e.to_string())?;
         println!();
         return Ok(line.trim().to_string());
     }
@@ -6608,10 +6976,7 @@ fn qq_prompt_choice(prompt: &str, choices: &[&str], default_index: usize) -> Res
         println!("    {}. {}", idx + 1, choice);
     }
     loop {
-        let answer = qq_prompt_line(
-            &format!("Choice [{}]", default_index + 1),
-            "",
-        )?;
+        let answer = qq_prompt_line(&format!("Choice [{}]", default_index + 1), "")?;
         if answer.trim().is_empty() {
             return Ok(default_index);
         }
@@ -6630,7 +6995,9 @@ async fn qq_setup_wizard(timeout: u64) -> Result<(), String> {
     println!("  ─── 🐧 QQ Bot Setup ───");
 
     // Already configured? (env credentials or a saved onboard file)
-    let env_app_id = std::env::var("QQ_APP_ID").ok().filter(|v| !v.trim().is_empty());
+    let env_app_id = std::env::var("QQ_APP_ID")
+        .ok()
+        .filter(|v| !v.trim().is_empty());
     let env_secret = std::env::var("QQ_CLIENT_SECRET")
         .ok()
         .filter(|v| !v.trim().is_empty());
@@ -6709,7 +7076,10 @@ async fn qq_setup_wizard(timeout: u64) -> Result<(), String> {
             if !credentials.user_openid.is_empty() {
                 println!();
                 if qq_prompt_yes_no(
-                    &format!("  Add yourself ({}) to the allow list?", credentials.user_openid),
+                    &format!(
+                        "  Add yourself ({}) to the allow list?",
+                        credentials.user_openid
+                    ),
                     true,
                 )? {
                     allow_from.push(credentials.user_openid.clone());
@@ -6717,7 +7087,9 @@ async fn qq_setup_wizard(timeout: u64) -> Result<(), String> {
                 }
             }
             println!("  ✓ DM pairing enabled.");
-            println!("  ℹ Unknown users can request access; approve with `ulnclaw pairing approve`.");
+            println!(
+                "  ℹ Unknown users can request access; approve with `ulnclaw pairing approve`."
+            );
             ("pairing", allow_from)
         }
         1 => {
@@ -6726,7 +7098,8 @@ async fn qq_setup_wizard(timeout: u64) -> Result<(), String> {
         }
         _ => {
             let default_allow = credentials.user_openid.clone();
-            let allowlist = qq_prompt_line("Allowed user OpenIDs (comma-separated)", &default_allow)?;
+            let allowlist =
+                qq_prompt_line("Allowed user OpenIDs (comma-separated)", &default_allow)?;
             let allow_from: Vec<String> = allowlist
                 .split(',')
                 .map(|entry| entry.trim().to_string())
@@ -6744,15 +7117,23 @@ async fn qq_setup_wizard(timeout: u64) -> Result<(), String> {
     if !credentials.user_openid.is_empty() {
         println!();
         if qq_prompt_yes_no(
-            &format!("  Use your QQ user ID ({}) as the home channel?", credentials.user_openid),
+            &format!(
+                "  Use your QQ user ID ({}) as the home channel?",
+                credentials.user_openid
+            ),
             true,
         )? {
-            ulnclaw::qqbot::upsert_env_value(&home, "QQBOT_HOME_CHANNEL", &credentials.user_openid)?;
+            ulnclaw::qqbot::upsert_env_value(
+                &home,
+                "QQBOT_HOME_CHANNEL",
+                &credentials.user_openid,
+            )?;
             println!("  ✓ Home channel set to {}", credentials.user_openid);
         }
     } else {
         println!();
-        let home_channel = qq_prompt_line("Home channel OpenID (for cron/notifications, or empty)", "")?;
+        let home_channel =
+            qq_prompt_line("Home channel OpenID (for cron/notifications, or empty)", "")?;
         if !home_channel.is_empty() {
             ulnclaw::qqbot::upsert_env_value(&home, "QQBOT_HOME_CHANNEL", &home_channel)?;
             println!("  ✓ Home channel set to {}", home_channel);
@@ -6762,7 +7143,10 @@ async fn qq_setup_wizard(timeout: u64) -> Result<(), String> {
     println!();
     println!("  ✓ 🐧 QQ Bot configured!");
     println!("  ℹ App ID: {}", credentials.app_id);
-    println!("  ℹ Policy persisted to {}", home.join("config.toml").display());
+    println!(
+        "  ℹ Policy persisted to {}",
+        home.join("config.toml").display()
+    );
     Ok(())
 }
 
@@ -6820,10 +7204,18 @@ async fn spotify_auth_cmd(action: SpotifyAuthAction) -> Result<(), String> {
                 if let Some(scope) = status.get("scope").and_then(serde_json::Value::as_str) {
                     println!("  scope:      {scope}");
                 }
-                if let Some(expires) = status.get("expires_at").and_then(serde_json::Value::as_str) {
+                if let Some(expires) = status.get("expires_at").and_then(serde_json::Value::as_str)
+                {
                     println!("  expires_at: {expires}");
                 }
-                println!("  refresh:    {}", if status["has_refresh_token"] == serde_json::json!(true) { "stored" } else { "missing" });
+                println!(
+                    "  refresh:    {}",
+                    if status["has_refresh_token"] == serde_json::json!(true) {
+                        "stored"
+                    } else {
+                        "missing"
+                    }
+                );
             } else {
                 println!("Spotify: not logged in (run `ulnclaw spotify-auth login`)");
             }
@@ -6882,7 +7274,9 @@ async fn google_chat_oauth_cmd(action: GoogleChatOauthAction) -> Result<(), Stri
         GoogleChatOauthAction::ClientSecret { path } => {
             let dest = ulnclaw::google_chat_oauth::store_client_secret(&home, &path)?;
             println!("Stored client secret at {}", dest.display());
-            println!("Next: `ulnclaw google-chat-oauth auth-url` or send `/setup-files start` in chat.");
+            println!(
+                "Next: `ulnclaw google-chat-oauth auth-url` or send `/setup-files start` in chat."
+            );
             Ok(())
         }
         GoogleChatOauthAction::AuthUrl { email } => {
@@ -6908,8 +7302,7 @@ async fn google_chat_oauth_cmd(action: GoogleChatOauthAction) -> Result<(), Stri
         }
         GoogleChatOauthAction::Revoke { email } => {
             let client = reqwest::Client::new();
-            let output =
-                ulnclaw::google_chat_oauth::revoke(&home, &client, email.as_deref()).await;
+            let output = ulnclaw::google_chat_oauth::revoke(&home, &client, email.as_deref()).await;
             println!("{output}");
             Ok(())
         }
@@ -6943,42 +7336,55 @@ async fn pets_cmd(action: PetsAction) -> Result<(), String> {
     let code = tokio::task::spawn_blocking(move || {
         let home = ulnclaw::config::ulnclaw_home();
         match action {
-            PetsAction::List { query, installed, limit } => {
-                ulnclaw::pets::cmd_list(&home, &query.join(" "), installed, limit)
-            }
-            PetsAction::Install { slug, force, select } => {
-                ulnclaw::pets::cmd_install(&home, &slug, force, select)
-            }
+            PetsAction::List {
+                query,
+                installed,
+                limit,
+            } => ulnclaw::pets::cmd_list(&home, &query.join(" "), installed, limit),
+            PetsAction::Install {
+                slug,
+                force,
+                select,
+            } => ulnclaw::pets::cmd_install(&home, &slug, force, select),
             PetsAction::Select { slug } => {
                 ulnclaw::pets::cmd_select(&home, slug.as_deref().unwrap_or(""))
             }
-            PetsAction::Show { slug, state, cycle, once, mode, scale } => {
-                ulnclaw::pets::cmd_show(
-                    &home,
-                    &ulnclaw::pets::ShowOptions {
-                        slug: slug.unwrap_or_default(),
-                        state: state.unwrap_or_default(),
-                        cycle,
-                        once,
-                        mode,
-                        scale,
-                    },
-                )
-            }
+            PetsAction::Show {
+                slug,
+                state,
+                cycle,
+                once,
+                mode,
+                scale,
+            } => ulnclaw::pets::cmd_show(
+                &home,
+                &ulnclaw::pets::ShowOptions {
+                    slug: slug.unwrap_or_default(),
+                    state: state.unwrap_or_default(),
+                    cycle,
+                    once,
+                    mode,
+                    scale,
+                },
+            ),
             PetsAction::Off => ulnclaw::pets::cmd_off(),
             PetsAction::Scale { factor } => ulnclaw::pets::cmd_scale(&factor),
             PetsAction::Remove { slug } => ulnclaw::pets::cmd_remove(&home, &slug),
             PetsAction::Doctor => ulnclaw::pets::cmd_doctor(&home),
-            PetsAction::Hatch { description, style, name, base, drafts } => {
-                ulnclaw::pets_generate::cmd_hatch(
-                    &home,
-                    &description.join(" "),
-                    style.as_deref(),
-                    name.as_deref(),
-                    base.as_deref(),
-                    drafts,
-                )
-            }
+            PetsAction::Hatch {
+                description,
+                style,
+                name,
+                base,
+                drafts,
+            } => ulnclaw::pets_generate::cmd_hatch(
+                &home,
+                &description.join(" "),
+                style.as_deref(),
+                name.as_deref(),
+                base.as_deref(),
+                drafts,
+            ),
         }
     })
     .await
@@ -7101,8 +7507,7 @@ fn projects_cmd(action: ProjectsAction) -> Result<(), String> {
                 color: color.as_deref(),
                 board_slug: board.as_deref(),
             };
-            let pid = pdb::create_project(&conn, &args)
-                .map_err(|e| format!("project: {e}"))?;
+            let pid = pdb::create_project(&conn, &args).map_err(|e| format!("project: {e}"))?;
             if r#use {
                 pdb::set_active(&conn, Some(&pid)).map_err(|e| e.to_string())?;
             }
@@ -7116,9 +7521,7 @@ fn projects_cmd(action: ProjectsAction) -> Result<(), String> {
             let active = pdb::get_active_id(&conn).map_err(|e| e.to_string())?;
             let projects = pdb::list_projects(&conn, all).map_err(|e| e.to_string())?;
             if projects.is_empty() {
-                println!(
-                    "No projects yet. Create one with `ulnclaw project create <name>`."
-                );
+                println!("No projects yet. Create one with `ulnclaw project create <name>`.");
                 return Ok(());
             }
             for p in &projects {
@@ -7231,7 +7634,8 @@ fn projects_cmd(action: ProjectsAction) -> Result<(), String> {
         ProjectsAction::Scan { roots, max_depth } => {
             let roots: Vec<std::path::PathBuf> = if roots.is_empty() {
                 let home = dirs::home_dir().ok_or_else(|| {
-                    "project scan: cannot determine the home directory; pass --root PATH".to_string()
+                    "project scan: cannot determine the home directory; pass --root PATH"
+                        .to_string()
                 })?;
                 vec![home]
             } else {
@@ -7278,7 +7682,10 @@ fn projects_cmd(action: ProjectsAction) -> Result<(), String> {
                 let root = row["root"].as_str().unwrap_or_default();
                 let label = row["label"].as_str().unwrap_or_default();
                 let last_seen = row["last_seen"].as_i64().unwrap_or(0);
-                println!("{label:<24} {root}  (seen {})", ulnclaw::status::relative_time(last_seen as f64));
+                println!(
+                    "{label:<24} {root}  (seen {})",
+                    ulnclaw::status::relative_time(last_seen as f64)
+                );
             }
         }
     }
@@ -7312,7 +7719,11 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                     println!("{marker} {slug:16}  {active} active / {total} tasks");
                 }
             }
-            KanbanBoardsAction::Create { slug, name, workdir } => {
+            KanbanBoardsAction::Create {
+                slug,
+                name,
+                workdir,
+            } => {
                 store
                     .create_board(&slug, name.as_deref(), workdir.as_deref())
                     .map_err(|e| e.to_string())?;
@@ -7328,7 +7739,9 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
             }
             KanbanBoardsAction::Rename { slug, name } => {
                 let name = name.join(" ");
-                store.rename_board(&slug, &name).map_err(|e| e.to_string())?;
+                store
+                    .rename_board(&slug, &name)
+                    .map_err(|e| e.to_string())?;
                 println!("board '{slug}' renamed to '{name}'");
             }
             KanbanBoardsAction::SetWorkdir { slug, workdir } => {
@@ -7343,9 +7756,7 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
             KanbanBoardsAction::Show => {
                 let current = store.current_board().map_err(|e| e.to_string())?;
                 println!("current board: {current}");
-                for (slug, total, active) in
-                    store.board_task_counts().map_err(|e| e.to_string())?
-                {
+                for (slug, total, active) in store.board_task_counts().map_err(|e| e.to_string())? {
                     println!("  {slug:16}  {active} active / {total} tasks");
                 }
             }
@@ -7407,15 +7818,12 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
             };
             let branch_name = match branch.as_deref() {
                 Some(raw) => Some(
-                    ulnclaw::kanban::parse_branch_flag(raw)
-                        .map_err(|e| format!("kanban: {e}"))?,
+                    ulnclaw::kanban::parse_branch_flag(raw).map_err(|e| format!("kanban: {e}"))?,
                 ),
                 None => None,
             };
             if branch_name.is_some() && workspace_kind != "worktree" {
-                return Err(
-                    "kanban: --branch is only valid with --workspace worktree".into(),
-                );
+                return Err("kanban: --branch is only valid with --workspace worktree".into());
             }
             if workspace.is_none()
                 && ulnclaw::config::UlncLawConfig::load(None)
@@ -7436,7 +7844,11 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                     reasoning_effort: reasoning,
                     project_id: project,
                     created_by: KanbanStore::claimer_id(),
-                    skills: if skills.is_empty() { None } else { Some(skills) },
+                    skills: if skills.is_empty() {
+                        None
+                    } else {
+                        Some(skills)
+                    },
                     max_runtime_seconds,
                     idempotency_key,
                     triage,
@@ -7557,7 +7969,11 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                     } else {
                         format!(" {}", event.payload)
                     };
-                    println!("  {} {}{detail}", kanban_epoch_label(event.created_at), event.kind);
+                    println!(
+                        "  {} {}{detail}",
+                        kanban_epoch_label(event.created_at),
+                        event.kind
+                    );
                 }
             }
         }
@@ -7618,15 +8034,21 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
             println!("heartbeat recorded for {}", task.id);
         }
-        KanbanAction::Done { id, result, summary, metadata, artifact, created_card } => {
+        KanbanAction::Done {
+            id,
+            result,
+            summary,
+            metadata,
+            artifact,
+            created_card,
+        } => {
             if id.is_empty() {
                 return Err("usage: ulnclaw kanban done <task-id> [more ids]".into());
             }
             let metadata_value = match metadata.as_deref() {
                 Some(raw) => {
-                    let value: serde_json::Value = serde_json::from_str(raw).map_err(|e| {
-                        format!("kanban: --metadata must be a JSON object: {e}")
-                    })?;
+                    let value: serde_json::Value = serde_json::from_str(raw)
+                        .map_err(|e| format!("kanban: --metadata must be a JSON object: {e}"))?;
                     if !value.is_object() {
                         return Err("kanban: --metadata must be a JSON object".into());
                     }
@@ -7660,8 +8082,7 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                             .or(result.as_deref())
                             .unwrap_or("")
                             .to_string();
-                        let config =
-                            ulnclaw::config::UlncLawConfig::load(None).unwrap_or_default();
+                        let config = ulnclaw::config::UlncLawConfig::load(None).unwrap_or_default();
                         let gate = match build_provider(&config, None) {
                             Ok(provider) => {
                                 ulnclaw::goals::goal_completion_gate(
@@ -7721,7 +8142,9 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
         }
         KanbanAction::Review { id, reason } => {
             if id.is_empty() {
-                return Err("usage: ulnclaw kanban review <task-id> [more ids] [--reason TEXT]".into());
+                return Err(
+                    "usage: ulnclaw kanban review <task-id> [more ids] [--reason TEXT]".into(),
+                );
             }
             let reason = reason.unwrap_or_else(|| "ready for review".into());
             let mut failed: Vec<String> = Vec::new();
@@ -7743,10 +8166,18 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 }
             }
             if !failed.is_empty() {
-                return Err(format!("kanban: could not request review: {}", failed.join(", ")));
+                return Err(format!(
+                    "kanban: could not request review: {}",
+                    failed.join(", ")
+                ));
             }
         }
-        KanbanAction::Block { id, reason, kind, extra_ids } => {
+        KanbanAction::Block {
+            id,
+            reason,
+            kind,
+            extra_ids,
+        } => {
             let reason = reason.join(" ");
             let mut ids = vec![id];
             ids.extend(extra_ids);
@@ -7832,8 +8263,7 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
         KanbanAction::Archive { id, purge } => {
             if !id.is_empty() && !purge.is_empty() {
                 return Err(
-                    "kanban: choose either task ids to archive or --rm archived task ids"
-                        .into(),
+                    "kanban: choose either task ids to archive or --rm archived task ids".into(),
                 );
             }
             if id.is_empty() && purge.is_empty() {
@@ -7914,7 +8344,14 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
             println!("unlinked {parent} → {child}");
         }
-        KanbanAction::Swarm { goal, workers, verifier, synthesizer, idempotency_key, json } => {
+        KanbanAction::Swarm {
+            goal,
+            workers,
+            verifier,
+            synthesizer,
+            idempotency_key,
+            json,
+        } => {
             let goal = goal.join(" ");
             let mut specs: Vec<ulnclaw::kanban::SwarmWorkerSpec> = Vec::new();
             for raw in &workers {
@@ -7944,17 +8381,30 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 });
             }
             let created = store
-                .create_swarm(&goal, &specs, &verifier, &synthesizer, "", idempotency_key.as_deref())
+                .create_swarm(
+                    &goal,
+                    &specs,
+                    &verifier,
+                    &synthesizer,
+                    "",
+                    idempotency_key.as_deref(),
+                )
                 .map_err(|e| e.to_string())?;
             if json {
-                println!("{}", serde_json::to_string_pretty(&created).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&created).unwrap_or_default()
+                );
             } else {
                 println!("swarm root: {} (blackboard)", created.root_id);
                 for id in &created.worker_ids {
                     println!("  ▶ worker {id} (ready)");
                 }
                 println!("  ◇ verifier {} (waits for workers)", created.verifier_id);
-                println!("  ◆ synthesizer {} (waits for verifier)", created.synthesizer_id);
+                println!(
+                    "  ◆ synthesizer {} (waits for verifier)",
+                    created.synthesizer_id
+                );
             }
         }
         KanbanAction::Specify { id, all } => {
@@ -8015,7 +8465,11 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 }
             }
         }
-        KanbanAction::Diagnostics { id, min_severity, json } => {
+        KanbanAction::Diagnostics {
+            id,
+            min_severity,
+            json,
+        } => {
             let config = ulnclaw::config::UlncLawConfig::load(None).unwrap_or_default();
             let tasks: Vec<ulnclaw::kanban::Task> = match id.as_deref() {
                 Some(raw) => {
@@ -8034,9 +8488,8 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
             };
             let mut total = 0usize;
             for task in &tasks {
-                let diagnostics = ulnclaw::kanban_diagnostics::compute_task_diagnostics(
-                    &store, &config, task,
-                );
+                let diagnostics =
+                    ulnclaw::kanban_diagnostics::compute_task_diagnostics(&store, &config, task);
                 let filtered: Vec<&ulnclaw::kanban_diagnostics::Diagnostic> = diagnostics
                     .iter()
                     .filter(|d| {
@@ -8080,7 +8533,11 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 println!("no diagnostics — the board looks healthy");
             }
         }
-        KanbanAction::Schedule { id, reason, extra_ids } => {
+        KanbanAction::Schedule {
+            id,
+            reason,
+            extra_ids,
+        } => {
             let reason = reason.join(" ");
             let mut ids = vec![id];
             ids.extend(extra_ids);
@@ -8106,7 +8563,14 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 return Err(format!("kanban: could not schedule: {}", failed.join(", ")));
             }
         }
-        KanbanAction::Promote { id, reason, force, extra_ids, dry_run, json } => {
+        KanbanAction::Promote {
+            id,
+            reason,
+            force,
+            extra_ids,
+            dry_run,
+            json,
+        } => {
             let reason = reason.join(" ");
             let mut ids = vec![id];
             ids.extend(extra_ids);
@@ -8125,7 +8589,9 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 if dry_run {
                     match store.validate_promote(&resolved, force) {
                         Ok(()) => {
-                            results.push(serde_json::json!({ "task_id": resolved, "would_promote": true }));
+                            results.push(
+                                serde_json::json!({ "task_id": resolved, "would_promote": true }),
+                            );
                         }
                         Err(e) => {
                             results.push(serde_json::json!({ "task_id": resolved, "would_promote": false, "error": e.to_string() }));
@@ -8166,7 +8632,12 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
             println!("\u{25FB} {} reclaimed to ready", task.id);
         }
-        KanbanAction::Reassign { id, profile, reclaim, reason } => {
+        KanbanAction::Reassign {
+            id,
+            profile,
+            reclaim,
+            reason,
+        } => {
             let resolved = resolve(&id)?;
             let task = store
                 .reassign_task(
@@ -8181,16 +8652,22 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 None => println!("{} unassigned", task.id),
             }
         }
-        KanbanAction::Edit { id, title, body, result, summary, metadata } => {
+        KanbanAction::Edit {
+            id,
+            title,
+            body,
+            result,
+            summary,
+            metadata,
+        } => {
             let resolved = resolve(&id)?;
             if let Some(result) = result {
                 // Recovery edit on a completed task (hermes kanban edit).
                 let metadata_value = match metadata.as_deref() {
                     Some(raw) => {
-                        let value: serde_json::Value =
-                            serde_json::from_str(raw).map_err(|e| {
-                                format!("kanban: --metadata must be a JSON object: {e}")
-                            })?;
+                        let value: serde_json::Value = serde_json::from_str(raw).map_err(|e| {
+                            format!("kanban: --metadata must be a JSON object: {e}")
+                        })?;
                         if !value.is_object() {
                             return Err("kanban: --metadata must be a JSON object".into());
                         }
@@ -8219,7 +8696,11 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 println!("{} edited — {}", task.id, task.title);
             }
         }
-        KanbanAction::SetModel { id, model, provider } => {
+        KanbanAction::SetModel {
+            id,
+            model,
+            provider,
+        } => {
             let resolved = resolve(&id)?;
             let task = store
                 .set_model(&resolved, model.as_deref(), provider.as_deref())
@@ -8293,10 +8774,8 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(1));
                     let fresh = store.events(&resolved).map_err(|e| e.to_string())?;
-                    let new_events: Vec<ulnclaw::kanban::TaskEvent> = fresh
-                        .into_iter()
-                        .filter(|e| e.id > last_id)
-                        .collect();
+                    let new_events: Vec<ulnclaw::kanban::TaskEvent> =
+                        fresh.into_iter().filter(|e| e.id > last_id).collect();
                     for event in &new_events {
                         print_event(event);
                         last_id = event.id;
@@ -8321,19 +8800,28 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 }
             }
         }
-        KanbanAction::Runs { id, json, state_type, state_name } => {
+        KanbanAction::Runs {
+            id,
+            json,
+            state_type,
+            state_name,
+        } => {
             let resolved = resolve(&id)?;
             match (&state_type, &state_name) {
                 (Some(_), None) | (None, Some(_)) => {
                     return Err(
-                        "kanban runs: pass both --state-type and --state-name, or omit both"
-                            .into(),
+                        "kanban runs: pass both --state-type and --state-name, or omit both".into(),
                     );
                 }
                 _ => {}
             }
             let runs = store
-                .list_runs(&resolved, true, state_type.as_deref(), state_name.as_deref())
+                .list_runs(
+                    &resolved,
+                    true,
+                    state_type.as_deref(),
+                    state_name.as_deref(),
+                )
                 .map_err(|e| e.to_string())?;
             if json {
                 let rows: Vec<serde_json::Value> = runs
@@ -8395,8 +8883,13 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                         kanban_epoch_label(r.started_at)
                     );
                     if let Some(summary) = r.summary.as_deref().filter(|s| !s.is_empty()) {
-                        let first: String =
-                            summary.lines().next().unwrap_or("").chars().take(100).collect();
+                        let first: String = summary
+                            .lines()
+                            .next()
+                            .unwrap_or("")
+                            .chars()
+                            .take(100)
+                            .collect();
                         println!("     → {first}");
                     }
                     if let Some(err) = r.error.as_deref().filter(|s| !s.is_empty()) {
@@ -8424,10 +8917,16 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
             } else {
                 match report.status.as_str() {
                     "missing" => {
-                        println!("No kanban DB at {} — nothing to repair.", report.db_path.display());
+                        println!(
+                            "No kanban DB at {} — nothing to repair.",
+                            report.db_path.display()
+                        );
                     }
                     "ok" => {
-                        println!("{}: integrity_check ok — no repair needed.", report.db_path.display());
+                        println!(
+                            "{}: integrity_check ok — no repair needed.",
+                            report.db_path.display()
+                        );
                     }
                     "repaired" => {
                         println!("{}: repaired.", report.db_path.display());
@@ -8477,9 +8976,8 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 }
             }
             names.sort();
-            let on_disk = |name: &str| -> bool {
-                name == "default" || config.profiles.contains_key(name)
-            };
+            let on_disk =
+                |name: &str| -> bool { name == "default" || config.profiles.contains_key(name) };
             if json {
                 let rows: Vec<serde_json::Value> = names
                     .iter()
@@ -8528,7 +9026,11 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 }
             }
         }
-        KanbanAction::Daemon { interval, pidfile, force } => {
+        KanbanAction::Daemon {
+            interval,
+            pidfile,
+            force,
+        } => {
             if !force {
                 let guidance = [
                     "ulnclaw kanban daemon: DEPRECATED — the dispatcher now runs",
@@ -8572,9 +9074,7 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 match store.dispatch_once(
                     &home,
                     true,
-                    |task, workspace| {
-                        ulnclaw::kanban::dispatch_spawn(&home, task, workspace)
-                    },
+                    |task, workspace| ulnclaw::kanban::dispatch_spawn(&home, task, workspace),
                     None,
                     false,
                     2,
@@ -8583,9 +9083,7 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                     boot_config.kanban.max_in_progress_per_profile,
                     boot_config.kanban.max_in_progress,
                 ) {
-                    Ok(result)
-                        if !result.spawned.is_empty() || !result.reclaimed.is_empty() =>
-                    {
+                    Ok(result) if !result.spawned.is_empty() || !result.reclaimed.is_empty() => {
                         println!(
                             "kanban daemon: {} reclaimed, {} promoted, {} spawned",
                             result.reclaimed.len(),
@@ -8663,7 +9161,12 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 }
             }
         }
-        KanbanAction::NotifyUnsubscribe { id, platform, chat_id, thread_id } => {
+        KanbanAction::NotifyUnsubscribe {
+            id,
+            platform,
+            chat_id,
+            thread_id,
+        } => {
             let resolved = resolve(&id)?;
             let removed = store
                 .remove_notify_sub(&resolved, &platform, &chat_id, thread_id.as_deref())
@@ -8689,7 +9192,13 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
             }
             println!("board '{board}':");
             let order = [
-                "triage", "todo", "ready", "running", "scheduled", "blocked", "done",
+                "triage",
+                "todo",
+                "ready",
+                "running",
+                "scheduled",
+                "blocked",
+                "done",
             ];
             for status in order {
                 if let Some((_, count)) = stats.by_status.iter().find(|(s, _)| s == status) {
@@ -8719,7 +9228,12 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 _ => {}
             }
         }
-        KanbanAction::Watch { assignee, tenant, kinds, interval } => {
+        KanbanAction::Watch {
+            assignee,
+            tenant,
+            kinds,
+            interval,
+        } => {
             let kinds: Option<Vec<String>> = kinds.map(|raw| {
                 raw.split(',')
                     .map(|kind| kind.trim().to_string())
@@ -8755,11 +9269,16 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
         }
         KanbanAction::Gc => {
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let (removed, skipped) = ulnclaw::kanban::gc_worktrees(&cwd, &store)
-                .map_err(|e| e.to_string())?;
+            let (removed, skipped) =
+                ulnclaw::kanban::gc_worktrees(&cwd, &store).map_err(|e| e.to_string())?;
             println!("worktree gc: {removed} removed, {skipped} kept (active or not a worktree)");
         }
-        KanbanAction::Dispatch { max_spawn, dry_run, failure_limit, json } => {
+        KanbanAction::Dispatch {
+            max_spawn,
+            dry_run,
+            failure_limit,
+            json,
+        } => {
             let home = ulnclaw::config::ulnclaw_home();
             let config = ulnclaw::config::UlncLawConfig::load(None).unwrap_or_default();
             let use_worktrees = config.kanban.worktrees;
@@ -8769,9 +9288,7 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 .dispatch_once(
                     &home,
                     use_worktrees,
-                    |task, workspace| {
-                        ulnclaw::kanban::dispatch_spawn(&home, task, workspace)
-                    },
+                    |task, workspace| ulnclaw::kanban::dispatch_spawn(&home, task, workspace),
                     Some(max_spawn.max(1)),
                     dry_run,
                     failure_limit.max(1),
@@ -8813,7 +9330,9 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
                 println!("  ⏭ {id} skipped (concurrency cap)");
             }
             for id in &result.skipped_nonspawnable {
-                println!("  ⏭ {id} skipped (assignee is not a configured profile — claim-pulled lane)");
+                println!(
+                    "  ⏭ {id} skipped (assignee is not a configured profile — claim-pulled lane)"
+                );
             }
             for id in &result.skipped_unassigned {
                 println!("  ⏭ {id} skipped (review task has no assignee)");
@@ -8831,7 +9350,11 @@ async fn kanban_cmd(action: KanbanAction) -> Result<(), String> {
 
 async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(), String> {
     let home = ulnclaw::config::ensure_home().map_err(|e| e.to_string())?;
-    if let SessionAction::Repair { check_only, no_backup } = &action {
+    if let SessionAction::Repair {
+        check_only,
+        no_backup,
+    } = &action
+    {
         // Repair must run BEFORE opening the store: a malformed schema is
         // exactly the case where open fails (hermes sessions repair).
         let db_path = home.join("state.db");
@@ -8898,7 +9421,12 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 );
             }
         }
-        SessionAction::Show { id, raw, json, timestamps } => {
+        SessionAction::Show {
+            id,
+            raw,
+            json,
+            timestamps,
+        } => {
             let id = resolve_session_or_err(&store, &id)?;
             if raw || json {
                 // P740: raw mode renders from the timestamped load so
@@ -8909,7 +9437,10 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 if messages.is_empty() {
                     return Err(format!("session '{}' not found", id));
                 }
-                print!("{}", ulnclaw::session::export::render_session_raw(&messages, json));
+                print!(
+                    "{}",
+                    ulnclaw::session::export::render_session_raw(&messages, json)
+                );
                 return Ok(());
             }
             let Some(session) = store.load_session(&id).map_err(|e| e.to_string())? else {
@@ -8920,7 +9451,10 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                     .load_messages_with_timestamps(&id)
                     .map_err(|e| e.to_string())?;
                 for (ts, message) in &stamped {
-                    println!("{}", ulnclaw::session::export::render_show_line(*ts, message, true));
+                    println!(
+                        "{}",
+                        ulnclaw::session::export::render_show_line(*ts, message, true)
+                    );
                 }
             } else {
                 for message in &session.messages {
@@ -8931,12 +9465,19 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
         }
         SessionAction::Search { query } => {
             let query = query.join(" ");
-            let hits = store.search_messages(&query, 20).map_err(|e| e.to_string())?;
+            let hits = store
+                .search_messages(&query, 20)
+                .map_err(|e| e.to_string())?;
             for (session_id, snippet) in hits {
                 println!("[{}] {}", session_id, snippet);
             }
         }
-        SessionAction::Export { id, out, format, no_verification } => {
+        SessionAction::Export {
+            id,
+            out,
+            format,
+            no_verification,
+        } => {
             let id = resolve_session_or_err(&store, &id)?;
             let row = store
                 .get_session_row(&id)
@@ -8966,7 +9507,11 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
             let dir = out.unwrap_or_else(|| home.join("exports"));
             let path = ulnclaw::session::export::write_session_export(&dir, &session, &format)
                 .map_err(|e| e.to_string())?;
-            println!("✅ Exported {} messages to {}", session.messages.len(), path.display());
+            println!(
+                "✅ Exported {} messages to {}",
+                session.messages.len(),
+                path.display()
+            );
         }
         SessionAction::Recover { source, out } => {
             let output = out.unwrap_or_else(|| {
@@ -8994,7 +9539,10 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                             table, mode, stats.copied, stats.skipped
                         );
                     }
-                    println!("  integrity:   {}", if report.integrity_ok { "ok" } else { "FAILED" });
+                    println!(
+                        "  integrity:   {}",
+                        if report.integrity_ok { "ok" } else { "FAILED" }
+                    );
                     println!("  fts rebuilt: {}", report.fts_rebuilt);
                     match ulnclaw::session::recovery::write_recovery_report(&report) {
                         Ok(path) => println!("  report:      {}", path.display()),
@@ -9020,7 +9568,12 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 )
             );
         }
-        SessionAction::Prune { filters, include_archived, dry_run, yes } => {
+        SessionAction::Prune {
+            filters,
+            include_archived,
+            dry_run,
+            yes,
+        } => {
             let mut filters = filters.build()?;
             // Hermes semantics: a truly bare `sessions prune` (no time
             // window and no filters) means "older than 90 days". ANY
@@ -9034,7 +9587,11 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
             filters.archived = if include_archived { None } else { Some(false) };
             run_session_prune(&store, filters, true, dry_run, yes)?;
         }
-        SessionAction::Archive { filters, dry_run, yes } => {
+        SessionAction::Archive {
+            filters,
+            dry_run,
+            yes,
+        } => {
             let mut filters = filters.build()?;
             if filters.is_empty() {
                 return Err(
@@ -9056,13 +9613,20 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
             }
             let db_path = home.join("state.db");
             if let Ok(metadata) = std::fs::metadata(&db_path) {
-                println!("Database size: {:.1} MB", metadata.len() as f64 / (1024.0 * 1024.0));
+                println!(
+                    "Database size: {:.1} MB",
+                    metadata.len() as f64 / (1024.0 * 1024.0)
+                );
             }
         }
         SessionAction::Browse { source, limit } => {
             // Hermes browse excludes "tool" sessions unless a source filter
             // is given explicitly.
-            let excludes: Vec<&str> = if source.is_some() { vec![] } else { vec!["tool"] };
+            let excludes: Vec<&str> = if source.is_some() {
+                vec![]
+            } else {
+                vec!["tool"]
+            };
             let rows = store
                 .list_sessions_for_browse(limit.max(1), source.as_deref(), &excludes, false)
                 .map_err(|e| e.to_string())?;
@@ -9084,12 +9648,10 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 let reload_home = home.clone();
                 let reload_source = source.clone();
                 let reload_limit = limit.max(1);
-                let reload_excludes: Vec<String> =
-                    excludes.iter().map(|s| s.to_string()).collect();
+                let reload_excludes: Vec<String> = excludes.iter().map(|s| s.to_string()).collect();
                 let reload = move |include_archived: bool| {
-                    let fresh_store =
-                        SqliteSessionStore::open(reload_home.join("state.db"))
-                            .map_err(|e| e.to_string())?;
+                    let fresh_store = SqliteSessionStore::open(reload_home.join("state.db"))
+                        .map_err(|e| e.to_string())?;
                     let exclude_refs: Vec<&str> =
                         reload_excludes.iter().map(String::as_str).collect();
                     let fresh = fresh_store
@@ -9105,9 +9667,8 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 };
                 let archive_home = home.clone();
                 let archive = move |id: &str, archived: bool| {
-                    let archive_store =
-                        SqliteSessionStore::open(archive_home.join("state.db"))
-                            .map_err(|e| e.to_string())?;
+                    let archive_store = SqliteSessionStore::open(archive_home.join("state.db"))
+                        .map_err(|e| e.to_string())?;
                     archive_store
                         .set_session_archived(id, archived)
                         .map_err(|e| e.to_string())
@@ -9118,12 +9679,9 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 // this scope's borrow of `store`).
                 let preview_home = home.clone();
                 let preview = move |id: &str| {
-                    let preview_store =
-                        SqliteSessionStore::open(preview_home.join("state.db"))
-                            .map_err(|e| e.to_string())?;
-                    let messages = preview_store
-                        .load_messages(id)
+                    let preview_store = SqliteSessionStore::open(preview_home.join("state.db"))
                         .map_err(|e| e.to_string())?;
+                    let messages = preview_store.load_messages(id).map_err(|e| e.to_string())?;
                     let mut exchange: Vec<(String, Option<String>)> = Vec::new();
                     for message in &messages {
                         let role = match message.role {
@@ -9147,9 +9705,8 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                             .map(|text| !text.trim().is_empty())
                             .unwrap_or(false)
                     }) {
-                        let already_shown = exchange
-                            .iter()
-                            .any(|(_, content)| *content == last.content);
+                        let already_shown =
+                            exchange.iter().any(|(_, content)| *content == last.content);
                         if !already_shown {
                             let role = match last.role {
                                 ulnclaw::provider::Role::User => "you",
@@ -9167,18 +9724,16 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 // (the picker may outlive this scope's borrow of `store`).
                 let search_home = home.clone();
                 let transcript_search = move |query: &str| {
-                    let search_store =
-                        SqliteSessionStore::open(search_home.join("state.db"))
-                            .map_err(|e| e.to_string())?;
+                    let search_store = SqliteSessionStore::open(search_home.join("state.db"))
+                        .map_err(|e| e.to_string())?;
                     search_store
                         .search_messages(query, 200)
                         .map_err(|e| e.to_string())
                 };
                 let delete_home = home.clone();
                 let delete = move |id: &str| {
-                    let delete_store =
-                        SqliteSessionStore::open(delete_home.join("state.db"))
-                            .map_err(|e| e.to_string())?;
+                    let delete_store = SqliteSessionStore::open(delete_home.join("state.db"))
+                        .map_err(|e| e.to_string())?;
                     delete_store.delete_session(id).map_err(|e| e.to_string())
                 };
                 // P512: rename (title write) and fork (mark the source
@@ -9187,18 +9742,16 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 // the other browser callbacks.
                 let rename_home = home.clone();
                 let rename = move |id: &str, title: &str| {
-                    let rename_store =
-                        SqliteSessionStore::open(rename_home.join("state.db"))
-                            .map_err(|e| e.to_string())?;
+                    let rename_store = SqliteSessionStore::open(rename_home.join("state.db"))
+                        .map_err(|e| e.to_string())?;
                     rename_store
                         .set_session_title(id, title)
                         .map_err(|e| e.to_string())
                 };
                 let fork_home = home.clone();
                 let fork = move |id: &str| {
-                    let fork_store =
-                        SqliteSessionStore::open(fork_home.join("state.db"))
-                            .map_err(|e| e.to_string())?;
+                    let fork_store = SqliteSessionStore::open(fork_home.join("state.db"))
+                        .map_err(|e| e.to_string())?;
                     let source = fork_store
                         .get_session_row(id)
                         .map_err(|e| e.to_string())?
@@ -9226,9 +9779,8 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 // transcript as Markdown into <home>/exports.
                 let export_home = home.clone();
                 let export = move |id: &str| {
-                    let export_store =
-                        SqliteSessionStore::open(export_home.join("state.db"))
-                            .map_err(|e| e.to_string())?;
+                    let export_store = SqliteSessionStore::open(export_home.join("state.db"))
+                        .map_err(|e| e.to_string())?;
                     let row = export_store
                         .get_session_row(id)
                         .map_err(|e| e.to_string())?
@@ -9259,8 +9811,7 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 let context_home = home.clone();
                 let context_budget = config.agent.context_budget_tokens;
                 let context = move |id: &str| -> Option<(usize, usize)> {
-                    let store =
-                        SqliteSessionStore::open(context_home.join("state.db")).ok()?;
+                    let store = SqliteSessionStore::open(context_home.join("state.db")).ok()?;
                     let history: Vec<ulnclaw::provider::Message> = store
                         .load_messages(id)
                         .ok()?
@@ -9304,9 +9855,8 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 // giant session cannot blow up the redraw buffer).
                 let raw_home = home.clone();
                 let raw_transcript = move |id: &str| {
-                    let raw_store =
-                        SqliteSessionStore::open(raw_home.join("state.db"))
-                            .map_err(|e| e.to_string())?;
+                    let raw_store = SqliteSessionStore::open(raw_home.join("state.db"))
+                        .map_err(|e| e.to_string())?;
                     let messages = raw_store
                         .load_messages_with_timestamps(id)
                         .map_err(|e| e.to_string())?;
@@ -9350,7 +9900,11 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
             println!(
                 "{} session(s) opened with a /skill{}:",
                 rows.len(),
-                if apply { "" } else { " (dry run — pass --apply to write)" }
+                if apply {
+                    ""
+                } else {
+                    " (dry run — pass --apply to write)"
+                }
             );
             let provider = build_provider(config, None)?;
             let mut changed = 0usize;
@@ -9453,7 +10007,10 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 println!("Title already up to date: {:?}", old_title);
                 return Ok(());
             }
-            println!("{}\n    {:?}\n    \u{2192} {:?}", resolved, old_title, new_title);
+            println!(
+                "{}\n    {:?}\n    \u{2192} {:?}",
+                resolved, old_title, new_title
+            );
             if !apply {
                 println!("(dry run — pass --apply to write)");
                 return Ok(());
@@ -9526,14 +10083,18 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                     .unwrap_or(now);
                 match store.insert_imported_session(
                     &id,
-                    raw.get("source").and_then(|v| v.as_str()).unwrap_or("import"),
+                    raw.get("source")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("import"),
                     raw.get("model").and_then(|v| v.as_str()),
                     raw.get("title").and_then(|v| v.as_str()),
                     raw.get("cwd").and_then(|v| v.as_str()),
                     started_at,
                     raw.get("ended_at").and_then(|v| v.as_f64()),
                     raw.get("end_reason").and_then(|v| v.as_str()),
-                    raw.get("archived").and_then(|v| v.as_bool()).unwrap_or(false),
+                    raw.get("archived")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
                 ) {
                     Ok(true) => {}
                     Ok(false) => {
@@ -9601,10 +10162,7 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                 .map_err(|e| e.to_string())?
                 .ok_or_else(|| format!("Session '{}' not found.", id))?;
             if !yes {
-                print!(
-                    "Delete session '{}' and all its messages? [y/N] ",
-                    resolved
-                );
+                print!("Delete session '{}' and all its messages? [y/N] ", resolved);
                 std::io::Write::flush(&mut std::io::stdout()).ok();
                 let mut answer = String::new();
                 std::io::stdin().read_line(&mut answer).ok();
@@ -9625,7 +10183,10 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
             store
                 .set_session_title(&resolved, &title)
                 .map_err(|e| e.to_string())?;
-            match store.get_session_title(&resolved).map_err(|e| e.to_string())? {
+            match store
+                .get_session_title(&resolved)
+                .map_err(|e| e.to_string())?
+            {
                 Some(new_title) => println!("Session '{}' renamed to: {}", resolved, new_title),
                 None => println!("Session '{}' title cleared.", resolved),
             }
@@ -9753,12 +10314,16 @@ fn browse_row_matches(
         return true;
     }
     let q = filter.to_lowercase();
-    project.map(|slug| slug.to_lowercase().contains(&q)).unwrap_or(false)
-        || row.title
+    project
+        .map(|slug| slug.to_lowercase().contains(&q))
+        .unwrap_or(false)
+        || row
+            .title
             .as_deref()
             .map(|t| t.to_lowercase().contains(&q))
             .unwrap_or(false)
-        || row.preview
+        || row
+            .preview
             .as_deref()
             .map(|p| p.to_lowercase().contains(&q))
             .unwrap_or(false)
@@ -9794,7 +10359,17 @@ fn browse_row_matches(
 fn run_session_browse_tui(
     mut rows: Vec<ulnclaw::session::sqlite::BrowseRow>,
     mut projects: std::collections::HashMap<String, String>,
-    reload: Option<&dyn Fn(bool) -> Result<(Vec<ulnclaw::session::sqlite::BrowseRow>, std::collections::HashMap<String, String>), String>>,
+    reload: Option<
+        &dyn Fn(
+            bool,
+        ) -> Result<
+            (
+                Vec<ulnclaw::session::sqlite::BrowseRow>,
+                std::collections::HashMap<String, String>,
+            ),
+            String,
+        >,
+    >,
     archive: Option<&dyn Fn(&str, bool) -> Result<(), String>>,
     preview: Option<&dyn Fn(&str) -> Result<Vec<(String, Option<String>)>, String>>,
     transcript_search: Option<&dyn Fn(&str) -> Result<Vec<(String, String)>, String>>,
@@ -9826,18 +10401,12 @@ fn run_session_browse_tui(
         fn drop(&mut self) {
             terminal::disable_raw_mode().ok();
             let mut out = std::io::stdout();
-            execute!(
-                out,
-                cursor::Show,
-                terminal::LeaveAlternateScreen
-            )
-            .ok();
+            execute!(out, cursor::Show, terminal::LeaveAlternateScreen).ok();
         }
     }
 
     let mut out = std::io::stdout();
-    execute!(out, terminal::EnterAlternateScreen, cursor::Hide)
-        .map_err(|e| e.to_string())?;
+    execute!(out, terminal::EnterAlternateScreen, cursor::Hide).map_err(|e| e.to_string())?;
     terminal::enable_raw_mode().map_err(|e| e.to_string())?;
     let _guard = TuiGuard;
 
@@ -9936,9 +10505,7 @@ fn run_session_browse_tui(
                     .map(|m| r.model.as_deref() == Some(m))
                     .unwrap_or(true)
             })
-            .filter(|r| {
-                browse_row_matches(r, projects.get(&r.id).map(String::as_str), &filter)
-            })
+            .filter(|r| browse_row_matches(r, projects.get(&r.id).map(String::as_str), &filter))
             .collect();
         if let Some(hits) = search_hits.as_ref() {
             let hit_ids: std::collections::HashSet<&str> =
@@ -9948,7 +10515,9 @@ fn run_session_browse_tui(
         if sort_alpha {
             filtered.sort_by(|a, b| {
                 ulnclaw::tui_text::browse_title_sort_key(a.title.as_deref())
-                    .cmp(&ulnclaw::tui_text::browse_title_sort_key(b.title.as_deref()))
+                    .cmp(&ulnclaw::tui_text::browse_title_sort_key(
+                        b.title.as_deref(),
+                    ))
                     .then_with(|| {
                         b.last_active
                             .partial_cmp(&a.last_active)
@@ -9962,8 +10531,7 @@ fn run_session_browse_tui(
         // Owned copy for modal actions (archive confirm) so the key
         // handler can mutate `rows` without fighting the borrow of
         // `filtered`.
-        let highlighted_id: Option<String> =
-            filtered.get(cursor_idx).map(|row| row.id.clone());
+        let highlighted_id: Option<String> = filtered.get(cursor_idx).map(|row| row.id.clone());
         let highlighted_label: Option<String> = filtered.get(cursor_idx).map(|row| {
             row.title
                 .clone()
@@ -9986,8 +10554,7 @@ fn run_session_browse_tui(
         if transcript_mode {
             let (tcols, trows) = terminal::size().map_err(|e| e.to_string())?;
             let (tcols, trows) = (tcols as usize, trows as usize);
-            queue!(out, Clear(ClearType::All), cursor::MoveTo(0, 0))
-                .map_err(|e| e.to_string())?;
+            queue!(out, Clear(ClearType::All), cursor::MoveTo(0, 0)).map_err(|e| e.to_string())?;
             let body_h = trows.saturating_sub(2);
             let max_scroll = transcript_lines.len().saturating_sub(body_h);
             if transcript_scroll > max_scroll {
@@ -10013,8 +10580,7 @@ fn run_session_browse_tui(
                     .take(body_h)
                     .enumerate()
                 {
-                    queue!(out, cursor::MoveTo(0, (i + 1) as u16))
-                        .map_err(|e| e.to_string())?;
+                    queue!(out, cursor::MoveTo(0, (i + 1) as u16)).map_err(|e| e.to_string())?;
                     let clipped = line.chars().take(tcols).collect::<String>();
                     if line.starts_with("\u{2500}\u{2500} ") {
                         queue!(
@@ -10086,8 +10652,7 @@ fn run_session_browse_tui(
 
         let (cols, rows_h) = terminal::size().map_err(|e| e.to_string())?;
         let (cols, rows_h) = (cols as usize, rows_h as usize);
-        queue!(out, Clear(ClearType::All), cursor::MoveTo(0, 0))
-            .map_err(|e| e.to_string())?;
+        queue!(out, Clear(ClearType::All), cursor::MoveTo(0, 0)).map_err(|e| e.to_string())?;
 
         if rows_h < 5 || cols < 40 {
             queue!(out, Print("Terminal too small")).map_err(|e| e.to_string())?;
@@ -10251,14 +10816,10 @@ fn run_session_browse_tui(
                 );
                 // P340: transcript-match snippet above the preview.
                 if let Some(hits) = search_hits.as_ref() {
-                    if let Some((_, snippet)) =
-                        hits.iter().find(|(id, _)| *id == selected_row.id)
-                    {
+                    if let Some((_, snippet)) = hits.iter().find(|(id, _)| *id == selected_row.id) {
                         pane_lines.push(String::new());
                         pane_lines.push("\u{2500} transcript match \u{2500}".to_string());
-                        pane_lines.extend(ulnclaw::tui_text::wrap_display_text(
-                            snippet, content_w,
-                        ));
+                        pane_lines.extend(ulnclaw::tui_text::wrap_display_text(snippet, content_w));
                     }
                 }
                 // P278: first-exchange preview under the metadata.
@@ -10267,10 +10828,8 @@ fn run_session_browse_tui(
                         let exchange = match preview_cache.get(&selected_row.id) {
                             Some(cached) => cached.clone(),
                             None => {
-                                let loaded =
-                                    preview_fn(&selected_row.id).unwrap_or_default();
-                                preview_cache
-                                    .insert(selected_row.id.clone(), loaded.clone());
+                                let loaded = preview_fn(&selected_row.id).unwrap_or_default();
+                                preview_cache.insert(selected_row.id.clone(), loaded.clone());
                                 if preview_cache.len() > 64 {
                                     preview_cache.clear();
                                 }
@@ -10284,9 +10843,8 @@ fn run_session_browse_tui(
                         if !text.is_empty() {
                             pane_lines.push(String::new());
                             pane_lines.push("\u{2500} conversation \u{2500}".to_string());
-                            pane_lines.extend(
-                                ulnclaw::tui_text::wrap_display_text(&text, content_w),
-                            );
+                            pane_lines
+                                .extend(ulnclaw::tui_text::wrap_display_text(&text, content_w));
                         }
                     }
                 }
@@ -10330,8 +10888,7 @@ fn run_session_browse_tui(
         // Help overlay (P224, F1): keybinding table drawn over the list
         // area; any key dismisses it.
         if show_help {
-            for (offset, (key, desc)) in
-                ulnclaw::tui_text::browse_help_entries().iter().enumerate()
+            for (offset, (key, desc)) in ulnclaw::tui_text::browse_help_entries().iter().enumerate()
             {
                 let y = 2 + offset;
                 if y + 1 >= rows_h {
@@ -10360,7 +10917,9 @@ fn run_session_browse_tui(
             queue!(
                 out,
                 SetForegroundColor(Color::Yellow),
-                Print(ulnclaw::tui_text::browse_transcript_search_prompt(&search_query)),
+                Print(ulnclaw::tui_text::browse_transcript_search_prompt(
+                    &search_query
+                )),
                 ResetColor
             )
             .map_err(|e| e.to_string())?;
@@ -10370,7 +10929,10 @@ fn run_session_browse_tui(
             queue!(
                 out,
                 SetForegroundColor(Color::Cyan),
-                Print(ulnclaw::tui_text::browse_rename_prompt_text(&label, &rename_buffer)),
+                Print(ulnclaw::tui_text::browse_rename_prompt_text(
+                    &label,
+                    &rename_buffer
+                )),
                 ResetColor
             )
             .map_err(|e| e.to_string())?;
@@ -10420,23 +10982,23 @@ fn run_session_browse_tui(
             .map_err(|e| e.to_string())?;
             out.flush().map_err(|e| e.to_string())?;
         } else {
-        let footer = if filtered.is_empty() {
-            format!("  0/{} sessions", rows.len())
-        } else {
-            let mut text = format!("  {}/{} sessions", cursor_idx + 1, filtered.len());
-            if filtered.len() < rows.len() {
-                text.push_str(&format!(" (filtered from {})", rows.len()));
-            }
-            text
-        };
-        queue!(
-            out,
-            SetForegroundColor(Color::DarkGrey),
-            Print(footer),
-            ResetColor
-        )
-        .map_err(|e| e.to_string())?;
-        out.flush().map_err(|e| e.to_string())?;
+            let footer = if filtered.is_empty() {
+                format!("  0/{} sessions", rows.len())
+            } else {
+                let mut text = format!("  {}/{} sessions", cursor_idx + 1, filtered.len());
+                if filtered.len() < rows.len() {
+                    text.push_str(&format!(" (filtered from {})", rows.len()));
+                }
+                text
+            };
+            queue!(
+                out,
+                SetForegroundColor(Color::DarkGrey),
+                Print(footer),
+                ResetColor
+            )
+            .map_err(|e| e.to_string())?;
+            out.flush().map_err(|e| e.to_string())?;
         }
 
         match event::read().map_err(|e| e.to_string())? {
@@ -10520,14 +11082,18 @@ fn run_session_browse_tui(
                                     Some(rename_fn) => match rename_fn(&id, &title) {
                                         Ok(()) => {
                                             if let Some(reload_fn) = reload {
-                                                if let Ok((fresh_rows, fresh_projects)) = reload_fn(show_archived) {
+                                                if let Ok((fresh_rows, fresh_projects)) =
+                                                    reload_fn(show_archived)
+                                                {
                                                     rows = fresh_rows;
                                                     projects = fresh_projects;
                                                 }
                                             }
                                             cursor_idx = 0;
                                             scroll_offset = 0;
-                                            notice = Some(format!("Renamed to \u{201C}{title}\u{201D}."));
+                                            notice = Some(format!(
+                                                "Renamed to \u{201C}{title}\u{201D}."
+                                            ));
                                         }
                                         Err(e) => {
                                             notice = Some(format!("Rename failed: {e}"));
@@ -10568,7 +11134,9 @@ fn run_session_browse_tui(
                                             hits.retain(|(hit_id, _)| *hit_id != id);
                                         }
                                         if let Some(reload_fn) = reload {
-                                            if let Ok((fresh_rows, fresh_projects)) = reload_fn(show_archived) {
+                                            if let Ok((fresh_rows, fresh_projects)) =
+                                                reload_fn(show_archived)
+                                            {
                                                 rows = fresh_rows;
                                                 projects = fresh_projects;
                                             }
@@ -10599,7 +11167,9 @@ fn run_session_browse_tui(
                                 Some(fork_fn) => match fork_fn(&id) {
                                     Ok(new_id) => {
                                         if let Some(reload_fn) = reload {
-                                            if let Ok((fresh_rows, fresh_projects)) = reload_fn(show_archived) {
+                                            if let Ok((fresh_rows, fresh_projects)) =
+                                                reload_fn(show_archived)
+                                            {
                                                 rows = fresh_rows;
                                                 projects = fresh_projects;
                                             }
@@ -10635,7 +11205,9 @@ fn run_session_browse_tui(
                                             rows.retain(|r| r.id != id);
                                         }
                                         if let Some(reload_fn) = reload {
-                                            if let Ok((fresh_rows, fresh_projects)) = reload_fn(show_archived) {
+                                            if let Ok((fresh_rows, fresh_projects)) =
+                                                reload_fn(show_archived)
+                                            {
                                                 rows = fresh_rows;
                                                 projects = fresh_projects;
                                             }
@@ -10679,9 +11251,7 @@ fn run_session_browse_tui(
                     }
                     // Ctrl+J (LF) / Ctrl+M (CR) are the classic Enter
                     // equivalents — some terminal paths deliver LF.
-                    KeyCode::Enter
-                    | KeyCode::Char('j')
-                    | KeyCode::Char('m')
+                    KeyCode::Enter | KeyCode::Char('j') | KeyCode::Char('m')
                         if matches!(key.code, KeyCode::Enter)
                             || key.modifiers.contains(KeyModifiers::CONTROL) =>
                     {
@@ -10907,11 +11477,9 @@ fn run_session_browse_tui(
                                         if text.trim().is_empty() {
                                             lines.push("(empty)".to_string());
                                         } else {
-                                            lines.extend(
-                                                ulnclaw::tui_text::wrap_display_text(
-                                                    &text, width,
-                                                ),
-                                            );
+                                            lines.extend(ulnclaw::tui_text::wrap_display_text(
+                                                &text, width,
+                                            ));
                                         }
                                         lines.push(String::new());
                                     }
@@ -10922,7 +11490,10 @@ fn run_session_browse_tui(
                                     if let Some(raw_fn) = raw_transcript {
                                         match raw_fn(&row.id) {
                                             Ok(messages) => {
-                                                let raw = ulnclaw::session::export::render_session_raw(&messages, false);
+                                                let raw =
+                                                    ulnclaw::session::export::render_session_raw(
+                                                        &messages, false,
+                                                    );
                                                 alt.extend(raw.lines().map(str::to_string));
                                             }
                                             Err(_) => {}
@@ -11093,7 +11664,11 @@ fn browse_details_pane_lines(
     let active = if absolute.is_empty() {
         format!("active: {}", relative_time(row.last_active))
     } else {
-        format!("active: {} \u{00B7} {}", relative_time(row.last_active), absolute)
+        format!(
+            "active: {} \u{00B7} {}",
+            relative_time(row.last_active),
+            absolute
+        )
     };
     lines.extend(ulnclaw::tui_text::wrap_display_text(&active, width));
     if let Some(preview) = row.preview.as_deref().filter(|p| !p.trim().is_empty()) {
@@ -11120,9 +11695,7 @@ fn run_session_browse_stdin(
     loop {
         let filtered: Vec<&ulnclaw::session::sqlite::BrowseRow> = rows
             .iter()
-            .filter(|r| {
-                browse_row_matches(r, projects.get(&r.id).map(String::as_str), &filter)
-            })
+            .filter(|r| browse_row_matches(r, projects.get(&r.id).map(String::as_str), &filter))
             .collect();
         println!();
         if filter.is_empty() {
@@ -11145,12 +11718,19 @@ fn run_session_browse_stdin(
             );
         }
         if filtered.len() > page.len() {
-            println!("      \u{2026} {} more — type text to narrow", filtered.len() - page.len());
+            println!(
+                "      \u{2026} {} more — type text to narrow",
+                filtered.len() - page.len()
+            );
         }
         print!("\n> ");
         std::io::Write::flush(&mut std::io::stdout()).ok();
         let mut line = String::new();
-        if std::io::stdin().read_line(&mut line).map_err(|e| e.to_string())? == 0 {
+        if std::io::stdin()
+            .read_line(&mut line)
+            .map_err(|e| e.to_string())?
+            == 0
+        {
             return Ok(None); // EOF
         }
         let input = line.trim().to_string();
@@ -11166,7 +11746,10 @@ fn run_session_browse_stdin(
             if n >= 1 && n <= page.len() {
                 return Ok(Some(page[n - 1].id.clone()));
             }
-            println!("No such entry — pick 1-{} or type text to filter.", page.len());
+            println!(
+                "No such entry — pick 1-{} or type text to filter.",
+                page.len()
+            );
             continue;
         }
         filter = input;
@@ -11242,7 +11825,11 @@ fn run_session_prune(
         format_epoch(newest)
     );
     if dry_run || !yes {
-        let shown: Vec<_> = if dry_run { candidates.iter().collect() } else { candidates.iter().take(15).collect() };
+        let shown: Vec<_> = if dry_run {
+            candidates.iter().collect()
+        } else {
+            candidates.iter().take(15).collect()
+        };
         let shown_count = shown.len();
         println!(
             "{} session(s) match ({}; {}):",
@@ -11283,7 +11870,12 @@ fn run_session_prune(
         }
     }
     if !yes {
-        print!("{} these {} session(s) ({})? [y/N] ", verb, candidates.len(), span);
+        print!(
+            "{} these {} session(s) ({})? [y/N] ",
+            verb,
+            candidates.len(),
+            span
+        );
         std::io::Write::flush(&mut std::io::stdout()).ok();
         let mut answer = String::new();
         std::io::stdin().read_line(&mut answer).ok();
@@ -11295,7 +11887,9 @@ fn run_session_prune(
     let count = if delete {
         store.prune_sessions(&filters).map_err(|e| e.to_string())?
     } else {
-        store.archive_sessions(&filters).map_err(|e| e.to_string())?
+        store
+            .archive_sessions(&filters)
+            .map_err(|e| e.to_string())?
     };
     if delete {
         println!("Pruned {} session(s).", count);
@@ -11383,8 +11977,8 @@ async fn moa_cmd(
             let path = config_path
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| ulnclaw::config::ulnclaw_home().join("config.toml"));
-            let content = toml::to_string_pretty(&updated)
-                .map_err(|e| format!("serialize config: {}", e))?;
+            let content =
+                toml::to_string_pretty(&updated).map_err(|e| format!("serialize config: {}", e))?;
             std::fs::write(&path, content)
                 .map_err(|e| format!("write {}: {}", path.display(), e))?;
             println!("Deleted MoA preset: {}", name);
@@ -11418,8 +12012,7 @@ fn migrate_cmd(
             let path = config_override
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(ulnclaw::config_cmd::config_path);
-            let (issues, applied) =
-                ulnclaw::migrate::run_xai_migration(&path, apply, !no_backup)?;
+            let (issues, applied) = ulnclaw::migrate::run_xai_migration(&path, apply, !no_backup)?;
             println!(
                 "\u{25C6} xAI Model Retirement Migration ({})",
                 ulnclaw::migrate::XAI_RETIREMENT_DATE
@@ -11453,7 +12046,11 @@ fn migrate_cmd(
                 println!(
                     "  \u{2713} Rewrote {applied} reference(s) in {}{}",
                     path.display(),
-                    if no_backup { "" } else { " (backup: .toml.bak)" }
+                    if no_backup {
+                        ""
+                    } else {
+                        " (backup: .toml.bak)"
+                    }
                 );
             } else {
                 println!("  Dry-run mode \u{2014} no changes written.");
@@ -11523,7 +12120,11 @@ fn tools_cmd(
             println!("Toolsets:");
             for ts in registry.toolset_names() {
                 let count = registry.toolset_tools(&ts).len();
-                let state = if enabled.contains(&ts) { "enabled" } else { "disabled" };
+                let state = if enabled.contains(&ts) {
+                    "enabled"
+                } else {
+                    "disabled"
+                };
                 println!("  {:<16} {:<9} {} tools", ts, state, count);
             }
             println!("\nEnabled tools ({}):", registry.len());
@@ -11539,8 +12140,7 @@ fn tools_cmd(
             let mut probe = ToolRegistry::new();
             register_builtin_tools(&mut probe);
             let known = probe.toolset_names();
-            if !known.iter().any(|n| n == toolset)
-                && toolsets::resolve_toolset(toolset).is_empty()
+            if !known.iter().any(|n| n == toolset) && toolsets::resolve_toolset(toolset).is_empty()
             {
                 return Err(format!(
                     "Unknown toolset: {toolset}\nKnown toolsets: {}",
@@ -11570,17 +12170,29 @@ fn tools_cmd(
             };
             print!(
                 "{}",
-                ulnclaw::config_cmd::set_config_value("disabled_toolsets", &render(&disabled), true)?
+                ulnclaw::config_cmd::set_config_value(
+                    "disabled_toolsets",
+                    &render(&disabled),
+                    true
+                )?
             );
             if !enabled_list.is_empty() || !config.enabled_toolsets.is_empty() {
                 print!(
                     "{}",
-                    ulnclaw::config_cmd::set_config_value("enabled_toolsets", &render(&enabled_list), true)?
+                    ulnclaw::config_cmd::set_config_value(
+                        "enabled_toolsets",
+                        &render(&enabled_list),
+                        true
+                    )?
                 );
             }
             println!(
                 "{} toolset '{toolset}' — restart running gateways to apply.",
-                if action == "disable" { "Disabled" } else { "Enabled" }
+                if action == "disable" {
+                    "Disabled"
+                } else {
+                    "Enabled"
+                }
             );
             Ok(())
         }
@@ -11604,13 +12216,19 @@ fn curator_cmd(action: CuratorAction) -> Result<(), String> {
             println!(
                 "  {:<28} {}",
                 "paused",
-                if curator::is_paused(&home) { "yes" } else { "no" }
+                if curator::is_paused(&home) {
+                    "yes"
+                } else {
+                    "no"
+                }
             );
             Ok(())
         }
         CuratorAction::Run { dry_run } => {
             if curator::is_paused(&home) && !dry_run {
-                return Err("curator is paused — resume it first (`ulnclaw curator resume`)".to_string());
+                return Err(
+                    "curator is paused — resume it first (`ulnclaw curator resume`)".to_string(),
+                );
             }
             let counts = curator::apply_automatic_transitions(&home, dry_run);
             println!(
@@ -11656,12 +12274,20 @@ fn curator_cmd(action: CuratorAction) -> Result<(), String> {
             }
             let (ok, message) = skill_usage::archive_skill(&home, &skill);
             println!("curator: {}", message);
-            if ok { Ok(()) } else { Err(message) }
+            if ok {
+                Ok(())
+            } else {
+                Err(message)
+            }
         }
         CuratorAction::Restore { skill } => {
             let (ok, message) = skill_usage::restore_skill(&home, &skill);
             println!("curator: {}", message);
-            if ok { Ok(()) } else { Err(message) }
+            if ok {
+                Ok(())
+            } else {
+                Err(message)
+            }
         }
         CuratorAction::ListArchived => {
             let names = skill_usage::list_archived_skill_names(&home);
@@ -11764,7 +12390,9 @@ fn curator_cmd(action: CuratorAction) -> Result<(), String> {
                 print!("\nArchive {} skill(s)? [y/N] ", candidates.len());
                 std::io::Write::flush(&mut std::io::stdout()).ok();
                 let mut answer = String::new();
-                std::io::stdin().read_line(&mut answer).map_err(|e| e.to_string())?;
+                std::io::stdin()
+                    .read_line(&mut answer)
+                    .map_err(|e| e.to_string())?;
                 if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
                     println!("curator: aborted");
                     return Err("aborted".into());
@@ -11790,7 +12418,12 @@ fn curator_cmd(action: CuratorAction) -> Result<(), String> {
             }
             Ok(())
         }
-        CuratorAction::Adopt { skill, all_unmanaged, dry_run, yes } => {
+        CuratorAction::Adopt {
+            skill,
+            all_unmanaged,
+            dry_run,
+            yes,
+        } => {
             let mut names = skill;
             if all_unmanaged {
                 if !names.is_empty() {
@@ -11821,7 +12454,9 @@ fn curator_cmd(action: CuratorAction) -> Result<(), String> {
                 print!("  proceed? [y/N] ");
                 std::io::Write::flush(&mut std::io::stdout()).ok();
                 let mut answer = String::new();
-                std::io::stdin().read_line(&mut answer).map_err(|e| e.to_string())?;
+                std::io::stdin()
+                    .read_line(&mut answer)
+                    .map_err(|e| e.to_string())?;
                 if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
                     println!("curator: aborted");
                     return Err("aborted".into());
@@ -11838,7 +12473,11 @@ fn curator_cmd(action: CuratorAction) -> Result<(), String> {
             if names.len() > 1 {
                 println!("curator: adopted {}/{}", names.len() - failed, names.len());
             }
-            if failed > 0 { Err("some adoptions failed".into()) } else { Ok(()) }
+            if failed > 0 {
+                Err("some adoptions failed".into())
+            } else {
+                Ok(())
+            }
         }
         CuratorAction::ListUnmanaged => {
             let rows = skill_usage::unmanaged_report(&home);
@@ -11865,7 +12504,10 @@ fn curator_cmd(action: CuratorAction) -> Result<(), String> {
                 } else {
                     "no marker"
                 };
-                let activity = row.get("activity_count").and_then(|v| v.as_u64()).unwrap_or(0);
+                let activity = row
+                    .get("activity_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
                 let last = row
                     .get("last_activity_at")
                     .and_then(|v| v.as_str())
@@ -11912,11 +12554,7 @@ fn journey_cmd(
                 println!("No learning yet.");
                 return Ok(());
             }
-            nodes.sort_by_key(|n| {
-                n.get("timestamp")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0)
-            });
+            nodes.sort_by_key(|n| n.get("timestamp").and_then(|v| v.as_i64()).unwrap_or(0));
             let color = !no_color && std::io::stdout().is_terminal();
             for node in &nodes {
                 let glyph = if node.get("kind").and_then(|v| v.as_str()) == Some("memory") {
@@ -11951,11 +12589,16 @@ fn journey_cmd(
                 return Err("node not found".into());
             }
             if !yes {
-                let label = detail.get("label").and_then(|v| v.as_str()).unwrap_or(&node);
+                let label = detail
+                    .get("label")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&node);
                 print!("  Delete '{}'? [y/N] ", label);
                 std::io::Write::flush(&mut std::io::stdout()).ok();
                 let mut answer = String::new();
-                std::io::stdin().read_line(&mut answer).map_err(|e| e.to_string())?;
+                std::io::stdin()
+                    .read_line(&mut answer)
+                    .map_err(|e| e.to_string())?;
                 if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
                     println!("  aborted");
                     return Err("aborted".into());
@@ -11984,7 +12627,10 @@ fn journey_cmd(
                 );
                 return Err("node not found".into());
             }
-            let kind = detail.get("kind").and_then(|v| v.as_str()).unwrap_or("skill");
+            let kind = detail
+                .get("kind")
+                .and_then(|v| v.as_str())
+                .unwrap_or("skill");
             let content = detail
                 .get("content")
                 .and_then(|v| v.as_str())
@@ -12013,12 +12659,19 @@ fn journey_cmd(
         None => {
             let payload = ulnclaw::learning_graph::build_learning_graph(&home);
             if json_flag {
-                println!("{}", serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?
+                );
                 return Ok(());
             }
             let color = !no_color && std::io::stdout().is_terminal();
             let (cols, rows) = term_size(width, height);
-            let nodes = payload.get("nodes").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+            let nodes = payload
+                .get("nodes")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
             if nodes == 0 {
                 println!(
                     "No learning yet — use ulnclaw a while and your learned skills and memories will start mapping out here."
@@ -12029,7 +12682,10 @@ fn journey_cmd(
                 journey_play(&payload, cols, rows, color, fps)
             } else {
                 let reveal = reveal.clamp(0.0, 1.0);
-                print!("{}", journey_frame_text(&payload, cols, rows, reveal, color));
+                print!(
+                    "{}",
+                    journey_frame_text(&payload, cols, rows, reveal, color)
+                );
                 Ok(())
             }
         }
@@ -12068,9 +12724,9 @@ fn open_in_editor(initial: &str, suffix: &str) -> Result<Option<String>, String>
         .arg(&path)
         .status();
     let result = match status {
-        Ok(status) if status.success() => {
-            std::fs::read_to_string(&path).map(Some).map_err(|e| e.to_string())
-        }
+        Ok(status) if status.success() => std::fs::read_to_string(&path)
+            .map(Some)
+            .map_err(|e| e.to_string()),
         Ok(_) => Err("editor exited non-zero".to_string()),
         Err(e) => Err(format!("editor failed: {}", e)),
     };
@@ -12084,7 +12740,10 @@ fn run_color(
     palette: &std::collections::HashMap<String, String>,
 ) -> Option<(u8, u8, u8)> {
     use ulnclaw::learning_graph_render as render;
-    let base = run.hex.clone().or_else(|| palette.get(&run.style).cloned())?;
+    let base = run
+        .hex
+        .clone()
+        .or_else(|| palette.get(&run.style).cloned())?;
     let faded = render::fade(palette, Some(&base), run.alpha)?;
     Some(render::hex_to_rgb(&faded))
 }
@@ -12102,7 +12761,10 @@ fn row_to_text(
         }
         match run_color(run, palette) {
             Some((r, g, b)) => {
-                out.push_str(&format!("\u{1b}[38;2;{};{};{}m{}\u{1b}[0m", r, g, b, run.text));
+                out.push_str(&format!(
+                    "\u{1b}[38;2;{};{};{}m{}\u{1b}[0m",
+                    r, g, b, run.text
+                ));
             }
             None => out.push_str(&run.text),
         }
@@ -12152,7 +12814,10 @@ fn journey_frame_text(
         }
         let glyph = item.get("glyph").and_then(|v| v.as_str()).unwrap_or("");
         let label = item.get("label").and_then(|v| v.as_str()).unwrap_or("");
-        let style = item.get("style").and_then(|v| v.as_str()).unwrap_or(render::STYLE_DIM);
+        let style = item
+            .get("style")
+            .and_then(|v| v.as_str())
+            .unwrap_or(render::STYLE_DIM);
         if color {
             let fake = render::Run {
                 text: format!("{} ", glyph),
@@ -12179,7 +12844,10 @@ fn journey_frame_text(
             let hex = item.get("color").and_then(|v| v.as_str()).unwrap_or("");
             if color && !hex.is_empty() {
                 let (r, g, b) = render::hex_to_rgb(hex);
-                cat_line.push_str(&format!("\u{1b}[38;2;{};{};{}m{} \u{1b}[0m", r, g, b, glyph));
+                cat_line.push_str(&format!(
+                    "\u{1b}[38;2;{};{};{}m{} \u{1b}[0m",
+                    r, g, b, glyph
+                ));
                 cat_line.push_str(&format!("\u{1b}[38;2;138;138;138m{}\u{1b}[0m", label));
             } else {
                 cat_line.push_str(&format!("{} {}", glyph, label));
@@ -12200,7 +12868,10 @@ fn journey_frame_text(
 
     // Date axis under the field (oldest → now).
     let (start, end) = axis;
-    let gap = inner.saturating_sub(start.chars().count()).saturating_sub(end.chars().count()).max(1);
+    let gap = inner
+        .saturating_sub(start.chars().count())
+        .saturating_sub(end.chars().count())
+        .max(1);
     if color {
         parts.push(format!(
             "  \u{1b}[38;2;138;138;138m{}\u{1b}[0m{}\u{1b}[38;2;138;138;138m{}\u{1b}[0m",
@@ -12224,7 +12895,11 @@ fn journey_frame_text(
     } else {
         parts.push(format!(
             "  ◷ {}   {}/{} revealed · {}%",
-            if frame.date.is_empty() { "—" } else { &frame.date },
+            if frame.date.is_empty() {
+                "—"
+            } else {
+                &frame.date
+            },
             frame.visible,
             count,
             pct
@@ -12243,7 +12918,10 @@ fn journey_frame_text(
             let glyph = item.get("glyph").and_then(|v| v.as_str()).unwrap_or("");
             let label = item.get("label").and_then(|v| v.as_str()).unwrap_or("");
             let meta = item.get("meta").and_then(|v| v.as_str()).unwrap_or("");
-            let style = item.get("style").and_then(|v| v.as_str()).unwrap_or(render::STYLE_DIM);
+            let style = item
+                .get("style")
+                .and_then(|v| v.as_str())
+                .unwrap_or(render::STYLE_DIM);
             let alpha = item.get("alpha").and_then(|v| v.as_f64()).unwrap_or(1.0);
             let meta: String = if meta.chars().count() <= 32 {
                 meta.to_string()
@@ -12326,10 +13004,7 @@ fn models_cmd(action: ModelsAction) -> Result<(), String> {
                         .to_string(),
                 );
             }
-            println!(
-                "{:<24} {:<36} {:>7}  env",
-                "id", "name", "models"
-            );
+            println!("{:<24} {:<36} {:>7}  env", "id", "name", "models");
             for provider in providers {
                 println!(
                     "{:<24} {:<36} {:>7}  {}",
@@ -12347,7 +13022,11 @@ fn models_cmd(action: ModelsAction) -> Result<(), String> {
                 cache.fresh
             );
         }
-        ModelsAction::List { provider, all, refresh } => {
+        ModelsAction::List {
+            provider,
+            all,
+            refresh,
+        } => {
             if refresh {
                 md::fetch_models_dev_opts(true, true);
             }
@@ -12367,7 +13046,9 @@ fn models_cmd(action: ModelsAction) -> Result<(), String> {
         }
         ModelsAction::Info { provider, model } => {
             let Some(info) = md::get_model_info(&provider, &model) else {
-                return Err(format!("model '{model}' not found for provider '{provider}'"));
+                return Err(format!(
+                    "model '{model}' not found for provider '{provider}'"
+                ));
             };
             println!("{} ({})", info.name, info.id);
             println!("  provider:    {}", info.provider_id);
@@ -12385,7 +13066,11 @@ fn models_cmd(action: ModelsAction) -> Result<(), String> {
             println!("  cost:        {}", info.format_cost());
             println!("  capabilities: {}", info.format_capabilities());
             if !info.input_modalities.is_empty() {
-                println!("  modalities:  in={} out={}", info.input_modalities.join("+"), info.output_modalities.join("+"));
+                println!(
+                    "  modalities:  in={} out={}",
+                    info.input_modalities.join("+"),
+                    info.output_modalities.join("+")
+                );
             }
             if !info.knowledge_cutoff.is_empty() {
                 println!("  knowledge:   {}", info.knowledge_cutoff);
@@ -12398,7 +13083,9 @@ fn models_cmd(action: ModelsAction) -> Result<(), String> {
             md::fetch_models_dev_opts(true, true);
             let cache = md::cache_info();
             if cache.providers == 0 {
-                return Err("models.dev refresh failed (see debug log); no cache available".to_string());
+                return Err(
+                    "models.dev refresh failed (see debug log); no cache available".to_string(),
+                );
             }
             println!(
                 "models.dev cache refreshed: {} providers (fresh={})",
@@ -12419,7 +13106,8 @@ async fn skills_cmd(action: SkillAction) -> Result<(), String> {
                 println!("No skills installed ({}).", dir.display());
             }
             for skill in skills {
-                let skill_md = std::fs::read_to_string(skill.path.join("SKILL.md")).unwrap_or_default();
+                let skill_md =
+                    std::fs::read_to_string(skill.path.join("SKILL.md")).unwrap_or_default();
                 let blueprint_note = match ulnclaw::skills::blueprint::parse_blueprint(&skill_md) {
                     Ok(Some(spec)) => format!("  ⏰ {}", spec.schedule),
                     _ => String::new(),
@@ -12499,10 +13187,7 @@ async fn skills_cmd(action: SkillAction) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
             let wanted = format!("blueprint:{}", name);
             let jobs = store.list().map_err(|e| e.to_string())?;
-            let matches: Vec<_> = jobs
-                .into_iter()
-                .filter(|job| job.name == wanted)
-                .collect();
+            let matches: Vec<_> = jobs.into_iter().filter(|job| job.name == wanted).collect();
             if matches.is_empty() {
                 return Err(format!("no cron job named '{}' found", wanted));
             }
@@ -12511,20 +13196,29 @@ async fn skills_cmd(action: SkillAction) -> Result<(), String> {
                 println!("removed job {} ({})", job.id, job.name);
             }
         }
-        SkillAction::Scan { name, source, json, force } => {
+        SkillAction::Scan {
+            name,
+            source,
+            json,
+            force,
+        } => {
             let Some(skill_dir) = ulnclaw::skills::guard::find_skill_dir(&dir, &name) else {
                 return Err(format!("skill '{}' not found in {}", name, dir.display()));
             };
             let result = ulnclaw::skills::guard::scan_skill(&skill_dir, &source);
             if json {
                 let mut value = serde_json::to_value(&result).map_err(|e| e.to_string())?;
-                let (allowed, reason) = ulnclaw::skills::guard::should_allow_install(&result, force);
+                let (allowed, reason) =
+                    ulnclaw::skills::guard::should_allow_install(&result, force);
                 value["decision"] = serde_json::json!({
                     "allowed": allowed,
                     "reason": reason,
                     "scanner": ulnclaw::skills::guard::SCANNER_VERSION,
                 });
-                println!("{}", serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?
+                );
             } else {
                 println!("{}", ulnclaw::skills::guard::format_scan_report(&result));
             }
@@ -12537,7 +13231,8 @@ async fn skills_cmd(action: SkillAction) -> Result<(), String> {
             let Some(skill) = ulnclaw::skills::find_skill(&dir, &name) else {
                 return Err(format!("skill '{}' not found", name));
             };
-            let content = std::fs::read_to_string(skill.path.join("SKILL.md")).map_err(|e| e.to_string())?;
+            let content =
+                std::fs::read_to_string(skill.path.join("SKILL.md")).map_err(|e| e.to_string())?;
             println!("{}", content);
             for file in ulnclaw::skills::linked_files(&skill.path) {
                 println!("  + {}", file);
@@ -12614,7 +13309,10 @@ fn bundles_cmd(action: BundlesAction) -> Result<(), String> {
             let diff = bundles::reload_diff(&before);
             // A one-shot CLI rescans from disk, so the diff is against the
             // snapshot taken moments earlier; report the live total.
-            println!("Reloaded bundles directory: {}", bundles::bundles_dir().display());
+            println!(
+                "Reloaded bundles directory: {}",
+                bundles::bundles_dir().display()
+            );
             println!("Total bundles: {}", diff.total);
         }
     }
@@ -12623,7 +13321,8 @@ fn bundles_cmd(action: BundlesAction) -> Result<(), String> {
 
 async fn cron_cmd(config: &UlncLawConfig, action: CronAction) -> Result<(), String> {
     let home = ulnclaw::config::ensure_home().map_err(|e| e.to_string())?;
-    let store = ulnclaw::cron::CronStore::open(&home.join("state.db")).map_err(|e| e.to_string())?;
+    let store =
+        ulnclaw::cron::CronStore::open(&home.join("state.db")).map_err(|e| e.to_string())?;
     match action {
         CronAction::List => {
             let jobs = store.list().map_err(|e| e.to_string())?;
@@ -12680,10 +13379,8 @@ async fn cron_cmd(config: &UlncLawConfig, action: CronAction) -> Result<(), Stri
                             .map(|d| d.as_secs_f64())
                             .unwrap_or(0.0),
                     );
-                    job.last_status = Some(format!(
-                        "ok (manual run, {}s)",
-                        started.elapsed().as_secs()
-                    ));
+                    job.last_status =
+                        Some(format!("ok (manual run, {}s)", started.elapsed().as_secs()));
                     store.update(&job).map_err(|e| e.to_string())?;
                     println!("{}", answer);
                 }
@@ -12694,7 +13391,14 @@ async fn cron_cmd(config: &UlncLawConfig, action: CronAction) -> Result<(), Stri
                 }
             }
         }
-        CronAction::Create { name, schedule, prompt, deliver, skills, repeat } => {
+        CronAction::Create {
+            name,
+            schedule,
+            prompt,
+            deliver,
+            skills,
+            repeat,
+        } => {
             // P661: hermes `cron create` parity.
             let name = name.trim().to_string();
             if name.is_empty() {
@@ -12709,9 +13413,9 @@ async fn cron_cmd(config: &UlncLawConfig, action: CronAction) -> Result<(), Stri
                 }
             }
             let deliver = deliver.as_deref().map(|raw| {
-                ulnclaw::cron::delivery::normalize_deliver_value(Some(
-                    &serde_json::Value::String(raw.to_string()),
-                ))
+                ulnclaw::cron::delivery::normalize_deliver_value(Some(&serde_json::Value::String(
+                    raw.to_string(),
+                )))
             });
             let job = ulnclaw::cron::CronJob {
                 id: uuid::Uuid::new_v4().simple().to_string()[..12].to_string(),

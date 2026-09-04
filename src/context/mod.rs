@@ -7,7 +7,6 @@ pub mod breakdown;
 pub mod compressor;
 pub use compressor::ContextCompressor;
 
-
 /// Prompt builder - assembles system prompts from multiple layers
 ///
 /// Follows Hermes Agent's tiered approach:
@@ -137,7 +136,10 @@ impl PromptBuilder {
         }
 
         // Volatile tier: timestamp
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         parts.push(format!(
             "Current time: {}",
             format!("unix_timestamp: {}", now)
@@ -151,4 +153,3 @@ impl PromptBuilder {
         parts.join("\n\n")
     }
 }
-

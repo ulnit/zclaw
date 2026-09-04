@@ -48,10 +48,15 @@ fn tool_error(e: &SpotifyToolError) -> Value {
 // ---------------------------------------------------------------------------
 
 /// Accept a raw id, `spotify:<type>:<id>` URI, or open.spotify.com URL.
-pub fn normalize_spotify_id(value: &str, expected_type: Option<&str>) -> Result<String, SpotifyToolError> {
+pub fn normalize_spotify_id(
+    value: &str,
+    expected_type: Option<&str>,
+) -> Result<String, SpotifyToolError> {
     let cleaned = value.trim();
     if cleaned.is_empty() {
-        return Err(SpotifyToolError::Other("Spotify id/uri/url is required.".into()));
+        return Err(SpotifyToolError::Other(
+            "Spotify id/uri/url is required.".into(),
+        ));
     }
     if let Some(rest) = cleaned.strip_prefix("spotify:") {
         let rebuilt = format!("spotify:{rest}");
@@ -70,7 +75,10 @@ pub fn normalize_spotify_id(value: &str, expected_type: Option<&str>) -> Result<
     }
     if cleaned.contains("open.spotify.com") {
         if let Ok(parsed) = url::Url::parse(cleaned) {
-            let path_parts: Vec<&str> = parsed.path_segments().map(|s| s.filter(|p| !p.is_empty()).collect()).unwrap_or_default();
+            let path_parts: Vec<&str> = parsed
+                .path_segments()
+                .map(|s| s.filter(|p| !p.is_empty()).collect())
+                .unwrap_or_default();
             if path_parts.len() >= 2 {
                 let (item_type, item_id) = (path_parts[0], path_parts[1]);
                 if let Some(expected) = expected_type {
@@ -88,10 +96,15 @@ pub fn normalize_spotify_id(value: &str, expected_type: Option<&str>) -> Result<
 }
 
 /// Normalize to a full `spotify:<type>:<id>` URI.
-pub fn normalize_spotify_uri(value: &str, expected_type: Option<&str>) -> Result<String, SpotifyToolError> {
+pub fn normalize_spotify_uri(
+    value: &str,
+    expected_type: Option<&str>,
+) -> Result<String, SpotifyToolError> {
     let cleaned = value.trim();
     if cleaned.is_empty() {
-        return Err(SpotifyToolError::Other("Spotify URI/url/id is required.".into()));
+        return Err(SpotifyToolError::Other(
+            "Spotify URI/url/id is required.".into(),
+        ));
     }
     if cleaned.starts_with("spotify:") {
         if let Some(expected) = expected_type {
@@ -113,7 +126,10 @@ pub fn normalize_spotify_uri(value: &str, expected_type: Option<&str>) -> Result
 }
 
 /// Normalize a list, deduped, at least one item.
-pub fn normalize_spotify_uris(values: &[String], expected_type: Option<&str>) -> Result<Vec<String>, SpotifyToolError> {
+pub fn normalize_spotify_uris(
+    values: &[String],
+    expected_type: Option<&str>,
+) -> Result<Vec<String>, SpotifyToolError> {
     let mut uris: Vec<String> = Vec::new();
     for value in values {
         let uri = normalize_spotify_uri(value, expected_type)?;
@@ -122,7 +138,9 @@ pub fn normalize_spotify_uris(values: &[String], expected_type: Option<&str>) ->
         }
     }
     if uris.is_empty() {
-        return Err(SpotifyToolError::Other("At least one Spotify item is required.".into()));
+        return Err(SpotifyToolError::Other(
+            "At least one Spotify item is required.".into(),
+        ));
     }
     Ok(uris)
 }
@@ -153,11 +171,20 @@ fn as_list(raw: Option<&Value>) -> Vec<String> {
         None => Vec::new(),
         Some(Value::Array(items)) => items
             .iter()
-            .filter_map(|v| v.as_str().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string))
+            .filter_map(|v| {
+                v.as_str()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string)
+            })
             .collect(),
         Some(other) => {
             let text = other.as_str().unwrap_or("").trim().to_string();
-            if text.is_empty() { Vec::new() } else { vec![text] }
+            if text.is_empty() {
+                Vec::new()
+            } else {
+                vec![text]
+            }
         }
     }
 }
@@ -187,18 +214,25 @@ pub struct SpotifyClient {
 }
 
 /// hermes `_friendly_spotify_error_message`.
-fn friendly_error_message(status: u16, detail: &str, path: &str, retry_after: Option<&str>) -> String {
+fn friendly_error_message(
+    status: u16,
+    detail: &str,
+    path: &str,
+    retry_after: Option<&str>,
+) -> String {
     let normalized = detail.to_lowercase();
     let is_playback_path = path.starts_with("/me/player");
     match status {
-        401 => "Spotify authentication failed or expired. Run `ulnclaw spotify-auth login` again.".to_string(),
+        401 => "Spotify authentication failed or expired. Run `ulnclaw spotify-auth login` again."
+            .to_string(),
         403 => {
             if is_playback_path {
                 "Spotify rejected this playback request. Playback control usually requires a Spotify Premium account and an active Spotify Connect device.".to_string()
             } else if normalized.contains("scope") || normalized.contains("permission") {
                 "Spotify rejected the request because the current auth scope is insufficient. Re-run `ulnclaw spotify-auth login` to refresh permissions.".to_string()
             } else {
-                "Spotify rejected the request. The account may not have permission for this action.".to_string()
+                "Spotify rejected the request. The account may not have permission for this action."
+                    .to_string()
             }
         }
         404 => {
@@ -244,7 +278,11 @@ fn extract_error_detail(value: &Value, fallback: &str) -> String {
 
 /// hermes `_describe_empty_playback`.
 fn describe_empty_playback(payload: &Value, action: &str) -> Option<Value> {
-    if !payload.get("empty").and_then(Value::as_bool).unwrap_or(false) {
+    if !payload
+        .get("empty")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
         return None;
     }
     let status_code = payload.get("status_code").cloned().unwrap_or(json!(204));
@@ -295,10 +333,18 @@ impl SpotifyClient {
             .map_err(|e| SpotifyToolError::Other(format!("http client: {e}")))?;
         let mut request = client
             .request(method.clone(), &url)
-            .header("Authorization", format!("Bearer {}", self.runtime.access_token))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.runtime.access_token),
+            )
             .header("Content-Type", "application/json");
         if let Some(params) = &params {
-            request = request.query(&params.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>());
+            request = request.query(
+                &params
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect::<Vec<_>>(),
+            );
         }
         if let Some(body) = &json_body {
             request = request.json(body);
@@ -312,7 +358,8 @@ impl SpotifyClient {
             self.runtime = crate::spotify_auth::resolve_runtime_credentials(true, true)
                 .await
                 .map_err(SpotifyToolError::Auth)?;
-            return Box::pin(self.request(method, path, params, json_body, empty_response, false)).await;
+            return Box::pin(self.request(method, path, params, json_body, empty_response, false))
+                .await;
         }
         let retry_after = response
             .headers()
@@ -335,12 +382,13 @@ impl SpotifyClient {
             });
         }
         if status == 204 || text.is_empty() {
-            return Ok(empty_response.unwrap_or_else(|| {
-                json!({"success": true, "status_code": status, "empty": true})
-            }));
+            return Ok(empty_response.unwrap_or_else(
+                || json!({"success": true, "status_code": status, "empty": true}),
+            ));
         }
         if content_type.contains("application/json") {
-            Ok(serde_json::from_str(&text).unwrap_or_else(|_| json!({"success": true, "text": text})))
+            Ok(serde_json::from_str(&text)
+                .unwrap_or_else(|_| json!({"success": true, "text": text})))
         } else {
             Ok(json!({"success": true, "text": text}))
         }
@@ -349,14 +397,37 @@ impl SpotifyClient {
     // ── endpoint wrappers (hermes client methods) ─────────────────────
 
     async fn get_devices(&mut self) -> Result<Value, SpotifyToolError> {
-        self.request(reqwest::Method::GET, "/me/player/devices", None, None, None, true).await
+        self.request(
+            reqwest::Method::GET,
+            "/me/player/devices",
+            None,
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn transfer_playback(&mut self, device_id: &str, play: bool) -> Result<Value, SpotifyToolError> {
-        self.request(reqwest::Method::PUT, "/me/player", None, Some(json!({"device_ids": [device_id], "play": play})), None, true).await
+    async fn transfer_playback(
+        &mut self,
+        device_id: &str,
+        play: bool,
+    ) -> Result<Value, SpotifyToolError> {
+        self.request(
+            reqwest::Method::PUT,
+            "/me/player",
+            None,
+            Some(json!({"device_ids": [device_id], "play": play})),
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn get_playback_state(&mut self, market: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn get_playback_state(
+        &mut self,
+        market: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let params = market.map(|m| vec![("market".to_string(), m.to_string())]);
         self.request(
             reqwest::Method::GET,
@@ -373,7 +444,10 @@ impl SpotifyClient {
         .await
     }
 
-    async fn get_currently_playing(&mut self, market: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn get_currently_playing(
+        &mut self,
+        market: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let params = market.map(|m| vec![("market".to_string(), m.to_string())]);
         self.request(
             reqwest::Method::GET,
@@ -412,57 +486,149 @@ impl SpotifyClient {
         if let Some(position) = position_ms {
             body.insert("position_ms".into(), json!(position));
         }
-        self.request(reqwest::Method::PUT, "/me/player/play", params, Some(Value::Object(body)), None, true).await
+        self.request(
+            reqwest::Method::PUT,
+            "/me/player/play",
+            params,
+            Some(Value::Object(body)),
+            None,
+            true,
+        )
+        .await
     }
 
     async fn pause_playback(&mut self, device_id: Option<&str>) -> Result<Value, SpotifyToolError> {
         let params = device_id.map(|d| vec![("device_id".to_string(), d.to_string())]);
-        self.request(reqwest::Method::PUT, "/me/player/pause", params, None, None, true).await
+        self.request(
+            reqwest::Method::PUT,
+            "/me/player/pause",
+            params,
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
     async fn skip_next(&mut self, device_id: Option<&str>) -> Result<Value, SpotifyToolError> {
         let params = device_id.map(|d| vec![("device_id".to_string(), d.to_string())]);
-        self.request(reqwest::Method::POST, "/me/player/next", params, None, None, true).await
+        self.request(
+            reqwest::Method::POST,
+            "/me/player/next",
+            params,
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
     async fn skip_previous(&mut self, device_id: Option<&str>) -> Result<Value, SpotifyToolError> {
         let params = device_id.map(|d| vec![("device_id".to_string(), d.to_string())]);
-        self.request(reqwest::Method::POST, "/me/player/previous", params, None, None, true).await
+        self.request(
+            reqwest::Method::POST,
+            "/me/player/previous",
+            params,
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn seek(&mut self, position_ms: i64, device_id: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn seek(
+        &mut self,
+        position_ms: i64,
+        device_id: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let mut params = vec![("position_ms".to_string(), position_ms.to_string())];
         if let Some(d) = device_id {
             params.push(("device_id".to_string(), d.to_string()));
         }
-        self.request(reqwest::Method::PUT, "/me/player/seek", Some(params), None, None, true).await
+        self.request(
+            reqwest::Method::PUT,
+            "/me/player/seek",
+            Some(params),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn set_repeat(&mut self, state: &str, device_id: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn set_repeat(
+        &mut self,
+        state: &str,
+        device_id: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let mut params = vec![("state".to_string(), state.to_string())];
         if let Some(d) = device_id {
             params.push(("device_id".to_string(), d.to_string()));
         }
-        self.request(reqwest::Method::PUT, "/me/player/repeat", Some(params), None, None, true).await
+        self.request(
+            reqwest::Method::PUT,
+            "/me/player/repeat",
+            Some(params),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn set_shuffle(&mut self, state: bool, device_id: Option<&str>) -> Result<Value, SpotifyToolError> {
-        let mut params = vec![("state".to_string(), if state { "true".to_string() } else { "false".to_string() })];
+    async fn set_shuffle(
+        &mut self,
+        state: bool,
+        device_id: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
+        let mut params = vec![(
+            "state".to_string(),
+            if state {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            },
+        )];
         if let Some(d) = device_id {
             params.push(("device_id".to_string(), d.to_string()));
         }
-        self.request(reqwest::Method::PUT, "/me/player/shuffle", Some(params), None, None, true).await
+        self.request(
+            reqwest::Method::PUT,
+            "/me/player/shuffle",
+            Some(params),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn set_volume(&mut self, volume_percent: i64, device_id: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn set_volume(
+        &mut self,
+        volume_percent: i64,
+        device_id: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let mut params = vec![("volume_percent".to_string(), volume_percent.to_string())];
         if let Some(d) = device_id {
             params.push(("device_id".to_string(), d.to_string()));
         }
-        self.request(reqwest::Method::PUT, "/me/player/volume", Some(params), None, None, true).await
+        self.request(
+            reqwest::Method::PUT,
+            "/me/player/volume",
+            Some(params),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn get_recently_played(&mut self, limit: i64, after: Option<i64>, before: Option<i64>) -> Result<Value, SpotifyToolError> {
+    async fn get_recently_played(
+        &mut self,
+        limit: i64,
+        after: Option<i64>,
+        before: Option<i64>,
+    ) -> Result<Value, SpotifyToolError> {
         let mut params = vec![("limit".to_string(), limit.to_string())];
         if let Some(after) = after {
             params.push(("after".to_string(), after.to_string()));
@@ -470,19 +636,47 @@ impl SpotifyClient {
         if let Some(before) = before {
             params.push(("before".to_string(), before.to_string()));
         }
-        self.request(reqwest::Method::GET, "/me/player/recently-played", Some(params), None, None, true).await
+        self.request(
+            reqwest::Method::GET,
+            "/me/player/recently-played",
+            Some(params),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
     async fn get_queue(&mut self) -> Result<Value, SpotifyToolError> {
-        self.request(reqwest::Method::GET, "/me/player/queue", None, None, None, true).await
+        self.request(
+            reqwest::Method::GET,
+            "/me/player/queue",
+            None,
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn add_to_queue(&mut self, uri: &str, device_id: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn add_to_queue(
+        &mut self,
+        uri: &str,
+        device_id: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let mut params = vec![("uri".to_string(), uri.to_string())];
         if let Some(d) = device_id {
             params.push(("device_id".to_string(), d.to_string()));
         }
-        self.request(reqwest::Method::POST, "/me/player/queue", Some(params), None, None, true).await
+        self.request(
+            reqwest::Method::POST,
+            "/me/player/queue",
+            Some(params),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
     async fn search(
@@ -506,44 +700,116 @@ impl SpotifyClient {
         if let Some(include) = include_external {
             params.push(("include_external".to_string(), include.to_string()));
         }
-        self.request(reqwest::Method::GET, "/search", Some(params), None, None, true).await
+        self.request(
+            reqwest::Method::GET,
+            "/search",
+            Some(params),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn get_my_playlists(&mut self, limit: i64, offset: i64) -> Result<Value, SpotifyToolError> {
-        self.request(reqwest::Method::GET, "/me/playlists", Some(vec![
-            ("limit".to_string(), limit.to_string()),
-            ("offset".to_string(), offset.to_string()),
-        ]), None, None, true).await
+    async fn get_my_playlists(
+        &mut self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Value, SpotifyToolError> {
+        self.request(
+            reqwest::Method::GET,
+            "/me/playlists",
+            Some(vec![
+                ("limit".to_string(), limit.to_string()),
+                ("offset".to_string(), offset.to_string()),
+            ]),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn get_playlist(&mut self, playlist_id: &str, market: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn get_playlist(
+        &mut self,
+        playlist_id: &str,
+        market: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let params = market.map(|m| vec![("market".to_string(), m.to_string())]);
-        self.request(reqwest::Method::GET, &format!("/playlists/{playlist_id}"), params, None, None, true).await
+        self.request(
+            reqwest::Method::GET,
+            &format!("/playlists/{playlist_id}"),
+            params,
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn create_playlist(&mut self, name: &str, public: bool, collaborative: bool, description: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn create_playlist(
+        &mut self,
+        name: &str,
+        public: bool,
+        collaborative: bool,
+        description: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let mut body = json!({"name": name, "public": public, "collaborative": collaborative});
         if let Some(description) = description {
             body["description"] = json!(description);
         }
-        self.request(reqwest::Method::POST, "/me/playlists", None, Some(body), None, true).await
+        self.request(
+            reqwest::Method::POST,
+            "/me/playlists",
+            None,
+            Some(body),
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn add_playlist_items(&mut self, playlist_id: &str, uris: &[String], position: Option<i64>) -> Result<Value, SpotifyToolError> {
+    async fn add_playlist_items(
+        &mut self,
+        playlist_id: &str,
+        uris: &[String],
+        position: Option<i64>,
+    ) -> Result<Value, SpotifyToolError> {
         let mut body = json!({"uris": uris});
         if let Some(position) = position {
             body["position"] = json!(position);
         }
-        self.request(reqwest::Method::POST, &format!("/playlists/{playlist_id}/items"), None, Some(body), None, true).await
+        self.request(
+            reqwest::Method::POST,
+            &format!("/playlists/{playlist_id}/items"),
+            None,
+            Some(body),
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn remove_playlist_items(&mut self, playlist_id: &str, uris: &[String], snapshot_id: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn remove_playlist_items(
+        &mut self,
+        playlist_id: &str,
+        uris: &[String],
+        snapshot_id: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let items: Vec<Value> = uris.iter().map(|uri| json!({"uri": uri})).collect();
         let mut body = json!({"items": items});
         if let Some(snapshot) = snapshot_id {
             body["snapshot_id"] = json!(snapshot);
         }
-        self.request(reqwest::Method::DELETE, &format!("/playlists/{playlist_id}/items"), None, Some(body), None, true).await
+        self.request(
+            reqwest::Method::DELETE,
+            &format!("/playlists/{playlist_id}/items"),
+            None,
+            Some(body),
+            None,
+            true,
+        )
+        .await
     }
 
     async fn update_playlist_details(
@@ -567,15 +833,41 @@ impl SpotifyClient {
         if let Some(description) = description {
             body.insert("description".into(), json!(description));
         }
-        self.request(reqwest::Method::PUT, &format!("/playlists/{playlist_id}"), None, Some(Value::Object(body)), None, true).await
+        self.request(
+            reqwest::Method::PUT,
+            &format!("/playlists/{playlist_id}"),
+            None,
+            Some(Value::Object(body)),
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn get_album(&mut self, album_id: &str, market: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn get_album(
+        &mut self,
+        album_id: &str,
+        market: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let params = market.map(|m| vec![("market".to_string(), m.to_string())]);
-        self.request(reqwest::Method::GET, &format!("/albums/{album_id}"), params, None, None, true).await
+        self.request(
+            reqwest::Method::GET,
+            &format!("/albums/{album_id}"),
+            params,
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn get_album_tracks(&mut self, album_id: &str, limit: i64, offset: i64, market: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn get_album_tracks(
+        &mut self,
+        album_id: &str,
+        limit: i64,
+        offset: i64,
+        market: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let mut params = vec![
             ("limit".to_string(), limit.to_string()),
             ("offset".to_string(), offset.to_string()),
@@ -583,10 +875,23 @@ impl SpotifyClient {
         if let Some(market) = market {
             params.push(("market".to_string(), market.to_string()));
         }
-        self.request(reqwest::Method::GET, &format!("/albums/{album_id}/tracks"), Some(params), None, None, true).await
+        self.request(
+            reqwest::Method::GET,
+            &format!("/albums/{album_id}/tracks"),
+            Some(params),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn get_saved_tracks(&mut self, limit: i64, offset: i64, market: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn get_saved_tracks(
+        &mut self,
+        limit: i64,
+        offset: i64,
+        market: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let mut params = vec![
             ("limit".to_string(), limit.to_string()),
             ("offset".to_string(), offset.to_string()),
@@ -594,10 +899,23 @@ impl SpotifyClient {
         if let Some(market) = market {
             params.push(("market".to_string(), market.to_string()));
         }
-        self.request(reqwest::Method::GET, "/me/tracks", Some(params), None, None, true).await
+        self.request(
+            reqwest::Method::GET,
+            "/me/tracks",
+            Some(params),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn get_saved_albums(&mut self, limit: i64, offset: i64, market: Option<&str>) -> Result<Value, SpotifyToolError> {
+    async fn get_saved_albums(
+        &mut self,
+        limit: i64,
+        offset: i64,
+        market: Option<&str>,
+    ) -> Result<Value, SpotifyToolError> {
         let mut params = vec![
             ("limit".to_string(), limit.to_string()),
             ("offset".to_string(), offset.to_string()),
@@ -605,16 +923,47 @@ impl SpotifyClient {
         if let Some(market) = market {
             params.push(("market".to_string(), market.to_string()));
         }
-        self.request(reqwest::Method::GET, "/me/albums", Some(params), None, None, true).await
+        self.request(
+            reqwest::Method::GET,
+            "/me/albums",
+            Some(params),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
     async fn save_library_items(&mut self, uris: &[String]) -> Result<Value, SpotifyToolError> {
-        self.request(reqwest::Method::PUT, "/me/library", Some(vec![("uris".to_string(), uris.join(","))]), None, None, true).await
+        self.request(
+            reqwest::Method::PUT,
+            "/me/library",
+            Some(vec![("uris".to_string(), uris.join(","))]),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 
-    async fn remove_saved_items(&mut self, ids: &[String], kind: &str) -> Result<Value, SpotifyToolError> {
-        let uris: Vec<String> = ids.iter().map(|id| format!("spotify:{kind}:{id}")).collect();
-        self.request(reqwest::Method::DELETE, "/me/library", Some(vec![("uris".to_string(), uris.join(","))]), None, None, true).await
+    async fn remove_saved_items(
+        &mut self,
+        ids: &[String],
+        kind: &str,
+    ) -> Result<Value, SpotifyToolError> {
+        let uris: Vec<String> = ids
+            .iter()
+            .map(|id| format!("spotify:{kind}:{id}"))
+            .collect();
+        self.request(
+            reqwest::Method::DELETE,
+            "/me/library",
+            Some(vec![("uris".to_string(), uris.join(","))]),
+            None,
+            None,
+            true,
+        )
+        .await
     }
 }
 
@@ -623,16 +972,22 @@ impl SpotifyClient {
 // ---------------------------------------------------------------------------
 
 async fn handle_playback(args: &Value) -> Result<Value, SpotifyToolError> {
-    let action = arg_str(args, "action").unwrap_or_else(|| "get_state".to_string()).to_lowercase();
+    let action = arg_str(args, "action")
+        .unwrap_or_else(|| "get_state".to_string())
+        .to_lowercase();
     let mut client = SpotifyClient::new().await?;
     let device_id = arg_str(args, "device_id");
     match action.as_str() {
         "get_state" => {
-            let payload = client.get_playback_state(arg_str(args, "market").as_deref()).await?;
+            let payload = client
+                .get_playback_state(arg_str(args, "market").as_deref())
+                .await?;
             Ok(describe_empty_playback(&payload, &action).unwrap_or(payload))
         }
         "get_currently_playing" => {
-            let payload = client.get_currently_playing(arg_str(args, "market").as_deref()).await?;
+            let payload = client
+                .get_currently_playing(arg_str(args, "market").as_deref())
+                .await?;
             Ok(describe_empty_playback(&payload, &action).unwrap_or(payload))
         }
         "play" => {
@@ -643,18 +998,27 @@ async fn handle_playback(args: &Value) -> Result<Value, SpotifyToolError> {
                         .filter(|(_, v)| !v.is_null())
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect();
-                    if filtered.is_empty() { None } else { Some(Value::Object(filtered)) }
+                    if filtered.is_empty() {
+                        None
+                    } else {
+                        Some(Value::Object(filtered))
+                    }
                 }
                 _ => None,
             };
             let uris = if args.get("uris").map(|v| !v.is_null()).unwrap_or(false) {
-                Some(normalize_spotify_uris(&as_list(args.get("uris")), Some("track"))?)
+                Some(normalize_spotify_uris(
+                    &as_list(args.get("uris")),
+                    Some("track"),
+                )?)
             } else {
                 None
             };
             let context_uri = match arg_str(args, "context_uri") {
                 Some(raw) => {
-                    let context_type = if raw.starts_with("spotify:album:") || raw.contains("/album/") {
+                    let context_type = if raw.starts_with("spotify:album:")
+                        || raw.contains("/album/")
+                    {
                         Some("album")
                     } else if raw.starts_with("spotify:playlist:") || raw.contains("/playlist/") {
                         Some("playlist")
@@ -668,7 +1032,13 @@ async fn handle_playback(args: &Value) -> Result<Value, SpotifyToolError> {
                 None => None,
             };
             let result = client
-                .start_playback(device_id.as_deref(), context_uri.as_deref(), uris, offset, arg_i64(args, "position_ms"))
+                .start_playback(
+                    device_id.as_deref(),
+                    context_uri.as_deref(),
+                    uris,
+                    offset,
+                    arg_i64(args, "position_ms"),
+                )
                 .await?;
             Ok(json!({"success": true, "action": action, "result": result}))
         }
@@ -686,7 +1056,9 @@ async fn handle_playback(args: &Value) -> Result<Value, SpotifyToolError> {
         }
         "seek" => {
             let Some(position_ms) = arg_i64(args, "position_ms") else {
-                return Err(SpotifyToolError::Other("position_ms is required for action='seek'".into()));
+                return Err(SpotifyToolError::Other(
+                    "position_ms is required for action='seek'".into(),
+                ));
             };
             let result = client.seek(position_ms, device_id.as_deref()).await?;
             Ok(json!({"success": true, "action": action, "result": result}))
@@ -694,7 +1066,9 @@ async fn handle_playback(args: &Value) -> Result<Value, SpotifyToolError> {
         "set_repeat" => {
             let state = arg_str(args, "state").unwrap_or_default().to_lowercase();
             if !matches!(state.as_str(), "track" | "context" | "off") {
-                return Err(SpotifyToolError::Other("state must be one of: track, context, off".into()));
+                return Err(SpotifyToolError::Other(
+                    "state must be one of: track, context, off".into(),
+                ));
             }
             let result = client.set_repeat(&state, device_id.as_deref()).await?;
             Ok(json!({"success": true, "action": action, "result": result}))
@@ -706,54 +1080,86 @@ async fn handle_playback(args: &Value) -> Result<Value, SpotifyToolError> {
         }
         "set_volume" => {
             let Some(volume) = arg_i64(args, "volume_percent") else {
-                return Err(SpotifyToolError::Other("volume_percent is required for action='set_volume'".into()));
+                return Err(SpotifyToolError::Other(
+                    "volume_percent is required for action='set_volume'".into(),
+                ));
             };
-            let result = client.set_volume(volume.clamp(0, 100), device_id.as_deref()).await?;
+            let result = client
+                .set_volume(volume.clamp(0, 100), device_id.as_deref())
+                .await?;
             Ok(json!({"success": true, "action": action, "result": result}))
         }
         "recently_played" => {
             let after = arg_i64(args, "after");
             let before = arg_i64(args, "before");
             if after.is_some() && before.is_some() {
-                return Err(SpotifyToolError::Other("Provide only one of 'after' or 'before'".into()));
+                return Err(SpotifyToolError::Other(
+                    "Provide only one of 'after' or 'before'".into(),
+                ));
             }
-            Ok(client.get_recently_played(coerce_limit(args, 20), after, before).await?)
+            Ok(client
+                .get_recently_played(coerce_limit(args, 20), after, before)
+                .await?)
         }
-        _ => Err(SpotifyToolError::Other(format!("Unknown spotify_playback action: {action}"))),
+        _ => Err(SpotifyToolError::Other(format!(
+            "Unknown spotify_playback action: {action}"
+        ))),
     }
 }
 
 async fn handle_devices(args: &Value) -> Result<Value, SpotifyToolError> {
-    let action = arg_str(args, "action").unwrap_or_else(|| "list".to_string()).to_lowercase();
+    let action = arg_str(args, "action")
+        .unwrap_or_else(|| "list".to_string())
+        .to_lowercase();
     let mut client = SpotifyClient::new().await?;
     match action.as_str() {
         "list" => Ok(client.get_devices().await?),
         "transfer" => {
             let Some(device_id) = arg_str(args, "device_id") else {
-                return Err(SpotifyToolError::Other("device_id is required for action='transfer'".into()));
+                return Err(SpotifyToolError::Other(
+                    "device_id is required for action='transfer'".into(),
+                ));
             };
-            let result = client.transfer_playback(&device_id, coerce_bool(args.get("play"), false)).await?;
+            let result = client
+                .transfer_playback(&device_id, coerce_bool(args.get("play"), false))
+                .await?;
             Ok(json!({"success": true, "action": action, "result": result}))
         }
-        _ => Err(SpotifyToolError::Other(format!("Unknown spotify_devices action: {action}"))),
+        _ => Err(SpotifyToolError::Other(format!(
+            "Unknown spotify_devices action: {action}"
+        ))),
     }
 }
 
 async fn handle_queue(args: &Value) -> Result<Value, SpotifyToolError> {
-    let action = arg_str(args, "action").unwrap_or_else(|| "get".to_string()).to_lowercase();
+    let action = arg_str(args, "action")
+        .unwrap_or_else(|| "get".to_string())
+        .to_lowercase();
     let mut client = SpotifyClient::new().await?;
     match action.as_str() {
         "get" => Ok(client.get_queue().await?),
         "add" => {
             let uri = normalize_spotify_uri(&arg_str(args, "uri").unwrap_or_default(), None)?;
-            let result = client.add_to_queue(&uri, arg_str(args, "device_id").as_deref()).await?;
+            let result = client
+                .add_to_queue(&uri, arg_str(args, "device_id").as_deref())
+                .await?;
             Ok(json!({"success": true, "action": action, "uri": uri, "result": result}))
         }
-        _ => Err(SpotifyToolError::Other(format!("Unknown spotify_queue action: {action}"))),
+        _ => Err(SpotifyToolError::Other(format!(
+            "Unknown spotify_queue action: {action}"
+        ))),
     }
 }
 
-const SEARCH_TYPES: [&str; 7] = ["album", "artist", "playlist", "track", "show", "episode", "audiobook"];
+const SEARCH_TYPES: [&str; 7] = [
+    "album",
+    "artist",
+    "playlist",
+    "track",
+    "show",
+    "episode",
+    "audiobook",
+];
 
 async fn handle_search(args: &Value) -> Result<Value, SpotifyToolError> {
     let mut client = SpotifyClient::new().await?;
@@ -761,7 +1167,11 @@ async fn handle_search(args: &Value) -> Result<Value, SpotifyToolError> {
         return Err(SpotifyToolError::Other("query is required".into()));
     };
     let raw_types = as_list(args.get("types").or_else(|| args.get("type")));
-    let raw_types = if raw_types.is_empty() { vec!["track".to_string()] } else { raw_types };
+    let raw_types = if raw_types.is_empty() {
+        vec!["track".to_string()]
+    } else {
+        raw_types
+    };
     let search_types: Vec<String> = raw_types
         .iter()
         .map(|t| t.to_lowercase())
@@ -774,42 +1184,78 @@ async fn handle_search(args: &Value) -> Result<Value, SpotifyToolError> {
     }
     let offset = arg_i64(args, "offset").unwrap_or(0).max(0);
     Ok(client
-        .search(&query, &search_types, coerce_limit(args, 10), offset, arg_str(args, "market").as_deref(), arg_str(args, "include_external").as_deref())
+        .search(
+            &query,
+            &search_types,
+            coerce_limit(args, 10),
+            offset,
+            arg_str(args, "market").as_deref(),
+            arg_str(args, "include_external").as_deref(),
+        )
         .await?)
 }
 
 async fn handle_playlists(args: &Value) -> Result<Value, SpotifyToolError> {
-    let action = arg_str(args, "action").unwrap_or_else(|| "list".to_string()).to_lowercase();
+    let action = arg_str(args, "action")
+        .unwrap_or_else(|| "list".to_string())
+        .to_lowercase();
     let mut client = SpotifyClient::new().await?;
     match action.as_str() {
         "list" => {
             let offset = arg_i64(args, "offset").unwrap_or(0).max(0);
-            Ok(client.get_my_playlists(coerce_limit(args, 20), offset).await?)
+            Ok(client
+                .get_my_playlists(coerce_limit(args, 20), offset)
+                .await?)
         }
         "get" => {
-            let playlist_id = normalize_spotify_id(&arg_str(args, "playlist_id").unwrap_or_default(), Some("playlist"))?;
-            Ok(client.get_playlist(&playlist_id, arg_str(args, "market").as_deref()).await?)
+            let playlist_id = normalize_spotify_id(
+                &arg_str(args, "playlist_id").unwrap_or_default(),
+                Some("playlist"),
+            )?;
+            Ok(client
+                .get_playlist(&playlist_id, arg_str(args, "market").as_deref())
+                .await?)
         }
         "create" => {
             let Some(name) = arg_str(args, "name") else {
-                return Err(SpotifyToolError::Other("name is required for action='create'".into()));
+                return Err(SpotifyToolError::Other(
+                    "name is required for action='create'".into(),
+                ));
             };
             Ok(client
-                .create_playlist(&name, coerce_bool(args.get("public"), false), coerce_bool(args.get("collaborative"), false), arg_str(args, "description").as_deref())
+                .create_playlist(
+                    &name,
+                    coerce_bool(args.get("public"), false),
+                    coerce_bool(args.get("collaborative"), false),
+                    arg_str(args, "description").as_deref(),
+                )
                 .await?)
         }
         "add_items" => {
-            let playlist_id = normalize_spotify_id(&arg_str(args, "playlist_id").unwrap_or_default(), Some("playlist"))?;
+            let playlist_id = normalize_spotify_id(
+                &arg_str(args, "playlist_id").unwrap_or_default(),
+                Some("playlist"),
+            )?;
             let uris = normalize_spotify_uris(&as_list(args.get("uris")), None)?;
-            Ok(client.add_playlist_items(&playlist_id, &uris, arg_i64(args, "position")).await?)
+            Ok(client
+                .add_playlist_items(&playlist_id, &uris, arg_i64(args, "position"))
+                .await?)
         }
         "remove_items" => {
-            let playlist_id = normalize_spotify_id(&arg_str(args, "playlist_id").unwrap_or_default(), Some("playlist"))?;
+            let playlist_id = normalize_spotify_id(
+                &arg_str(args, "playlist_id").unwrap_or_default(),
+                Some("playlist"),
+            )?;
             let uris = normalize_spotify_uris(&as_list(args.get("uris")), None)?;
-            Ok(client.remove_playlist_items(&playlist_id, &uris, arg_str(args, "snapshot_id").as_deref()).await?)
+            Ok(client
+                .remove_playlist_items(&playlist_id, &uris, arg_str(args, "snapshot_id").as_deref())
+                .await?)
         }
         "update_details" => {
-            let playlist_id = normalize_spotify_id(&arg_str(args, "playlist_id").unwrap_or_default(), Some("playlist"))?;
+            let playlist_id = normalize_spotify_id(
+                &arg_str(args, "playlist_id").unwrap_or_default(),
+                Some("playlist"),
+            )?;
             Ok(client
                 .update_playlist_details(
                     &playlist_id,
@@ -820,33 +1266,54 @@ async fn handle_playlists(args: &Value) -> Result<Value, SpotifyToolError> {
                 )
                 .await?)
         }
-        _ => Err(SpotifyToolError::Other(format!("Unknown spotify_playlists action: {action}"))),
+        _ => Err(SpotifyToolError::Other(format!(
+            "Unknown spotify_playlists action: {action}"
+        ))),
     }
 }
 
 async fn handle_albums(args: &Value) -> Result<Value, SpotifyToolError> {
-    let action = arg_str(args, "action").unwrap_or_else(|| "get".to_string()).to_lowercase();
+    let action = arg_str(args, "action")
+        .unwrap_or_else(|| "get".to_string())
+        .to_lowercase();
     let mut client = SpotifyClient::new().await?;
     let album_id = normalize_spotify_id(
-        &arg_str(args, "album_id").or_else(|| arg_str(args, "id")).unwrap_or_default(),
+        &arg_str(args, "album_id")
+            .or_else(|| arg_str(args, "id"))
+            .unwrap_or_default(),
         Some("album"),
     )?;
     match action.as_str() {
-        "get" => Ok(client.get_album(&album_id, arg_str(args, "market").as_deref()).await?),
+        "get" => Ok(client
+            .get_album(&album_id, arg_str(args, "market").as_deref())
+            .await?),
         "tracks" => {
             let offset = arg_i64(args, "offset").unwrap_or(0).max(0);
-            Ok(client.get_album_tracks(&album_id, coerce_limit(args, 20), offset, arg_str(args, "market").as_deref()).await?)
+            Ok(client
+                .get_album_tracks(
+                    &album_id,
+                    coerce_limit(args, 20),
+                    offset,
+                    arg_str(args, "market").as_deref(),
+                )
+                .await?)
         }
-        _ => Err(SpotifyToolError::Other(format!("Unknown spotify_albums action: {action}"))),
+        _ => Err(SpotifyToolError::Other(format!(
+            "Unknown spotify_albums action: {action}"
+        ))),
     }
 }
 
 async fn handle_library(args: &Value) -> Result<Value, SpotifyToolError> {
     let kind = arg_str(args, "kind").unwrap_or_default().to_lowercase();
     if kind != "tracks" && kind != "albums" {
-        return Err(SpotifyToolError::Other("kind must be one of: tracks, albums".into()));
+        return Err(SpotifyToolError::Other(
+            "kind must be one of: tracks, albums".into(),
+        ));
     }
-    let action = arg_str(args, "action").unwrap_or_else(|| "list".to_string()).to_lowercase();
+    let action = arg_str(args, "action")
+        .unwrap_or_else(|| "list".to_string())
+        .to_lowercase();
     let item_type = if kind == "tracks" { "track" } else { "album" };
     let mut client = SpotifyClient::new().await?;
     match action.as_str() {
@@ -855,9 +1322,13 @@ async fn handle_library(args: &Value) -> Result<Value, SpotifyToolError> {
             let offset = arg_i64(args, "offset").unwrap_or(0).max(0);
             let market = arg_str(args, "market");
             if kind == "tracks" {
-                Ok(client.get_saved_tracks(limit, offset, market.as_deref()).await?)
+                Ok(client
+                    .get_saved_tracks(limit, offset, market.as_deref())
+                    .await?)
             } else {
-                Ok(client.get_saved_albums(limit, offset, market.as_deref()).await?)
+                Ok(client
+                    .get_saved_albums(limit, offset, market.as_deref())
+                    .await?)
             }
         }
         "save" => {
@@ -872,11 +1343,15 @@ async fn handle_library(args: &Value) -> Result<Value, SpotifyToolError> {
                 ids.push(normalize_spotify_id(item, Some(item_type))?);
             }
             if ids.is_empty() {
-                return Err(SpotifyToolError::Other("ids/items is required for action='remove'".into()));
+                return Err(SpotifyToolError::Other(
+                    "ids/items is required for action='remove'".into(),
+                ));
             }
             Ok(client.remove_saved_items(&ids, item_type).await?)
         }
-        _ => Err(SpotifyToolError::Other(format!("Unknown spotify_library action: {action}"))),
+        _ => Err(SpotifyToolError::Other(format!(
+            "Unknown spotify_library action: {action}"
+        ))),
     }
 }
 
@@ -890,7 +1365,9 @@ pub async fn run_spotify_tool(name: &str, args: &Value) -> Value {
         "spotify_playlists" => handle_playlists(args).await,
         "spotify_albums" => handle_albums(args).await,
         "spotify_library" => handle_library(args).await,
-        _ => Err(SpotifyToolError::Other(format!("Unknown spotify tool: {name}"))),
+        _ => Err(SpotifyToolError::Other(format!(
+            "Unknown spotify tool: {name}"
+        ))),
     };
     match result {
         Ok(value) => value,
@@ -900,10 +1377,16 @@ pub async fn run_spotify_tool(name: &str, args: &Value) -> Value {
 
 fn spotify_availability() -> crate::tools::ToolAvailability {
     let status = crate::spotify_auth::auth_status();
-    if status.get("logged_in").and_then(Value::as_bool).unwrap_or(false) {
+    if status
+        .get("logged_in")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
         crate::tools::ToolAvailability::available()
     } else {
-        crate::tools::ToolAvailability::unavailable("Spotify not authenticated (ulnclaw spotify-auth login)")
+        crate::tools::ToolAvailability::unavailable(
+            "Spotify not authenticated (ulnclaw spotify-auth login)",
+        )
     }
 }
 
@@ -1067,27 +1550,55 @@ mod tests {
 
     #[test]
     fn normalize_id_handles_uri_url_and_plain() {
-        assert_eq!(normalize_spotify_id("spotify:track:abc123", Some("track")).unwrap(), "abc123");
-        assert_eq!(normalize_spotify_id("https://open.spotify.com/track/abc123?si=x", Some("track")).unwrap(), "abc123");
+        assert_eq!(
+            normalize_spotify_id("spotify:track:abc123", Some("track")).unwrap(),
+            "abc123"
+        );
+        assert_eq!(
+            normalize_spotify_id("https://open.spotify.com/track/abc123?si=x", Some("track"))
+                .unwrap(),
+            "abc123"
+        );
         assert_eq!(normalize_spotify_id("abc123", None).unwrap(), "abc123");
         let e = normalize_spotify_id("spotify:album:abc", Some("track")).unwrap_err();
-        assert!(e.to_string().contains("Expected a Spotify track, got album"), "{e}");
+        assert!(
+            e.to_string()
+                .contains("Expected a Spotify track, got album"),
+            "{e}"
+        );
         assert!(normalize_spotify_id("   ", None).is_err());
     }
 
     #[test]
     fn normalize_uri_builds_full_uri_and_checks_type() {
-        assert_eq!(normalize_spotify_uri("abc123", Some("track")).unwrap(), "spotify:track:abc123");
-        assert_eq!(normalize_spotify_uri("spotify:track:abc", Some("track")).unwrap(), "spotify:track:abc");
+        assert_eq!(
+            normalize_spotify_uri("abc123", Some("track")).unwrap(),
+            "spotify:track:abc123"
+        );
+        assert_eq!(
+            normalize_spotify_uri("spotify:track:abc", Some("track")).unwrap(),
+            "spotify:track:abc"
+        );
         // expected_type=None keeps the input form (hermes parity); typed calls upgrade to URIs.
-        assert_eq!(normalize_spotify_uri("https://open.spotify.com/playlist/pl1", None).unwrap(), "https://open.spotify.com/playlist/pl1");
-        assert_eq!(normalize_spotify_uri("https://open.spotify.com/playlist/pl1", Some("playlist")).unwrap(), "spotify:playlist:pl1");
+        assert_eq!(
+            normalize_spotify_uri("https://open.spotify.com/playlist/pl1", None).unwrap(),
+            "https://open.spotify.com/playlist/pl1"
+        );
+        assert_eq!(
+            normalize_spotify_uri("https://open.spotify.com/playlist/pl1", Some("playlist"))
+                .unwrap(),
+            "spotify:playlist:pl1"
+        );
         assert!(normalize_spotify_uri("spotify:album:x", Some("track")).is_err());
     }
 
     #[test]
     fn normalize_uris_dedupes_and_requires_items() {
-        let uris = normalize_spotify_uris(&["a".into(), "spotify:track:a".into(), "b".into()], Some("track")).unwrap();
+        let uris = normalize_spotify_uris(
+            &["a".into(), "spotify:track:a".into(), "b".into()],
+            Some("track"),
+        )
+        .unwrap();
         assert_eq!(uris, vec!["spotify:track:a", "spotify:track:b"]);
         assert!(normalize_spotify_uris(&[], Some("track")).is_err());
     }
@@ -1111,11 +1622,18 @@ mod tests {
     fn friendly_errors_map_status_codes() {
         assert!(friendly_error_message(401, "", "/me/player", None).contains("spotify-auth login"));
         assert!(friendly_error_message(403, "", "/me/player/play", None).contains("Premium"));
-        assert!(friendly_error_message(403, "insufficient scope", "/search", None).contains("scope"));
-        assert!(friendly_error_message(404, "", "/me/player", None).contains("active playback device"));
+        assert!(
+            friendly_error_message(403, "insufficient scope", "/search", None).contains("scope")
+        );
+        assert!(
+            friendly_error_message(404, "", "/me/player", None).contains("active playback device")
+        );
         assert!(friendly_error_message(404, "", "/albums/x", None).contains("not found"));
         assert!(friendly_error_message(429, "", "/search", Some("5")).contains("Retry after 5"));
-        assert_eq!(friendly_error_message(500, "", "/search", None), "Spotify API request failed with status 500.");
+        assert_eq!(
+            friendly_error_message(500, "", "/search", None),
+            "Spotify API request failed with status 500."
+        );
     }
 
     #[test]
@@ -1159,7 +1677,13 @@ mod tests {
         let (_tmp, prev) = spotify_env_guard();
         let out = run_spotify_tool("spotify_playback", &json!({"action": "get_state"})).await;
         assert_eq!(out["success"], false);
-        assert!(out["error"].as_str().unwrap().contains("spotify-auth login"), "{out}");
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap()
+                .contains("spotify-auth login"),
+            "{out}"
+        );
         let out = run_spotify_tool("spotify_devices", &json!({"action": "list"})).await;
         assert_eq!(out["success"], false);
         restore_home(prev);
@@ -1170,11 +1694,27 @@ mod tests {
         let _guard = crate::models_dev::test_env_lock();
         let (_tmp, prev) = spotify_env_guard();
         // library kind validation precedes client construction.
-        let out = run_spotify_tool("spotify_library", &json!({"kind": "movies", "action": "list"})).await;
-        assert!(out["error"].as_str().unwrap().contains("kind must be one of"), "{out}");
+        let out = run_spotify_tool(
+            "spotify_library",
+            &json!({"kind": "movies", "action": "list"}),
+        )
+        .await;
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap()
+                .contains("kind must be one of"),
+            "{out}"
+        );
         // search builds the client first (hermes parity) → auth error wins.
         let out = run_spotify_tool("spotify_search", &json!({})).await;
-        assert!(out["error"].as_str().unwrap().contains("spotify-auth login"), "{out}");
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap()
+                .contains("spotify-auth login"),
+            "{out}"
+        );
         restore_home(prev);
     }
 
@@ -1195,7 +1735,10 @@ mod tests {
         }
         let schema = registry.get("spotify_playback").unwrap();
         assert_eq!(
-            schema.definition.parameters["properties"]["action"]["enum"].as_array().unwrap().len(),
+            schema.definition.parameters["properties"]["action"]["enum"]
+                .as_array()
+                .unwrap()
+                .len(),
             11
         );
     }

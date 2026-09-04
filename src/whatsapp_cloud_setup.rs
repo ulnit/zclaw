@@ -198,7 +198,12 @@ pub fn run_wizard() -> Result<i32, String> {
     println!("  'Send and receive messages' section — BELOW the 'From' dropdown.");
     println!("  It is NOT the phone number itself. 15-17 digits.");
     let current_phone = current("phone_number_id");
-    match prompt_validated("Phone Number ID", &current_phone, false, validate_phone_number_id)? {
+    match prompt_validated(
+        "Phone Number ID",
+        &current_phone,
+        false,
+        validate_phone_number_id,
+    )? {
         Some(v) => {
             write("phone_number_id", &v)?;
             wrote_any = true;
@@ -256,7 +261,10 @@ pub fn run_wizard() -> Result<i32, String> {
     println!("  ── STEP 4 — Verify Token (auto-generated) ──");
     let current_verify = current("verify_token");
     let verify_token = if !current_verify.is_empty() {
-        println!("  An existing verify token is already set ({}...).", mask_preview(&current_verify, 8));
+        println!(
+            "  An existing verify token is already set ({}...).",
+            mask_preview(&current_verify, 8)
+        );
         if setup_cmd::prompt_yes_no("Generate a new one?", false)? {
             let t = mint_verify_token();
             write("verify_token", &t)?;
@@ -352,7 +360,11 @@ fn current_allowlist() -> String {
 }
 
 fn write_allowlist(csv: &str) -> Result<(), String> {
-    let items: Vec<String> = csv.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    let items: Vec<String> = csv
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
     let path = config_cmd::config_path();
     let mut doc = config_cmd::load_toml(&path)?;
     let arr = toml::Value::Array(items.into_iter().map(toml::Value::String).collect());
@@ -432,11 +444,21 @@ mod tests {
     fn access_token_validator_diagnoses_foreign_tokens() {
         let long_eaa = format!("EAA{}", "x".repeat(120));
         assert!(validate_access_token(&long_eaa).is_ok());
-        assert!(validate_access_token("EAAshort").unwrap_err().contains("too short"));
-        assert!(validate_access_token("sk-abc").unwrap_err().contains("OpenAI"));
-        assert!(validate_access_token("xoxb-abc").unwrap_err().contains("Slack"));
-        assert!(validate_access_token("ghp_abc").unwrap_err().contains("GitHub"));
-        assert!(validate_access_token("random").unwrap_err().contains("start with 'EAA'"));
+        assert!(validate_access_token("EAAshort")
+            .unwrap_err()
+            .contains("too short"));
+        assert!(validate_access_token("sk-abc")
+            .unwrap_err()
+            .contains("OpenAI"));
+        assert!(validate_access_token("xoxb-abc")
+            .unwrap_err()
+            .contains("Slack"));
+        assert!(validate_access_token("ghp_abc")
+            .unwrap_err()
+            .contains("GitHub"));
+        assert!(validate_access_token("random")
+            .unwrap_err()
+            .contains("start with 'EAA'"));
     }
 
     #[test]
@@ -449,7 +471,10 @@ mod tests {
 
     #[test]
     fn allowlist_normalization_strips_formatting() {
-        assert_eq!(normalize_allowlist("+1 555-123-4567, +44 20 7946 0958"), "15551234567,442079460958");
+        assert_eq!(
+            normalize_allowlist("+1 555-123-4567, +44 20 7946 0958"),
+            "15551234567,442079460958"
+        );
         assert_eq!(normalize_allowlist(" , ,"), "");
         assert_eq!(normalize_allowlist("*"), "*");
     }

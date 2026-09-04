@@ -70,10 +70,7 @@ fn pending_reads() -> &'static Mutex<HashMap<String, Sender<Result<String, Strin
 fn read_terminal_roundtrip(start_line: Option<u64>, count: Option<u64>) -> Result<String, String> {
     let id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
     let (tx, rx) = channel();
-    pending_reads()
-        .lock()
-        .unwrap()
-        .insert(id.clone(), tx);
+    pending_reads().lock().unwrap().insert(id.clone(), tx);
     publish(
         "",
         "terminal.read",
@@ -140,15 +137,9 @@ mod tests {
         // it the way POST /api/desktop/read-response would.
         let id = "test-read-1";
         let (tx, rx) = channel();
-        pending_reads()
-            .lock()
-            .unwrap()
-            .insert(id.to_string(), tx);
+        pending_reads().lock().unwrap().insert(id.to_string(), tx);
         assert!(resolve_read(id, Ok("line one\nline two".into())));
-        assert_eq!(
-            rx.recv().unwrap(),
-            Ok("line one\nline two".to_string())
-        );
+        assert_eq!(rx.recv().unwrap(), Ok("line one\nline two".to_string()));
         // Second resolve: unknown id now.
         assert!(!resolve_read(id, Ok("late".into())));
     }

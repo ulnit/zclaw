@@ -72,9 +72,7 @@ pub fn mirror_to_session(
     };
     match store.append_message(&session_id, &message) {
         Ok(()) => {
-            tracing::debug!(
-                "[mirror] wrote to session {session_id} (from {source_label})"
-            );
+            tracing::debug!("[mirror] wrote to session {session_id} (from {source_label})");
             true
         }
         Err(e) => {
@@ -93,9 +91,8 @@ mod tests {
 
     fn temp_store() -> (tempfile::TempDir, Arc<SqliteSessionStore>) {
         let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            SqliteSessionStore::open(dir.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(dir.path().join("state.db")).expect("store opens"));
         (dir, store)
     }
 
@@ -146,8 +143,22 @@ mod tests {
         store
             .create_named_session("platform-testplat-chat-2", "platform:testplat", None, None)
             .unwrap();
-        assert!(!mirror_to_session(&store, "testplat", "chat-2", "   ", "cron", Role::User));
-        assert!(!mirror_to_session(&store, "testplat", "", "text", "cron", Role::User));
+        assert!(!mirror_to_session(
+            &store,
+            "testplat",
+            "chat-2",
+            "   ",
+            "cron",
+            Role::User
+        ));
+        assert!(!mirror_to_session(
+            &store,
+            "testplat",
+            "",
+            "text",
+            "cron",
+            Role::User
+        ));
     }
 
     #[test]

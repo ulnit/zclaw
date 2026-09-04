@@ -63,7 +63,11 @@ pub fn sample_memory() -> Value {
     {
         if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
             if let Some(line) = status.lines().find(|l| l.starts_with("VmRSS:")) {
-                if let Some(kib) = line.split_whitespace().nth(1).and_then(|v| v.parse::<u64>().ok()) {
+                if let Some(kib) = line
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|v| v.parse::<u64>().ok())
+                {
                     sample.insert("rss_kib".into(), json!(kib));
                 }
             }
@@ -77,7 +81,10 @@ pub fn sample_memory() -> Value {
                 let Some((key, rest)) = line.split_once(':') else {
                     continue;
                 };
-                let value = rest.split_whitespace().next().and_then(|v| v.parse::<u64>().ok());
+                let value = rest
+                    .split_whitespace()
+                    .next()
+                    .and_then(|v| v.parse::<u64>().ok());
                 match key {
                     "MemTotal" => total = value,
                     "MemAvailable" => available = value,
@@ -124,7 +131,11 @@ fn append_exit_diag(home: &Path, record: Value) {
         let _ = std::fs::create_dir_all(parent);
     }
     use std::io::Write;
-    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
         let _ = writeln!(file, "{}", record.to_string());
     }
 }
@@ -141,7 +152,10 @@ fn pid_alive_with_start_time(pid: Option<i64>, start_time: Option<u64>) -> bool 
     if !crate::gateway_pidfile::is_alive(pid as u32) {
         return false;
     }
-    match (start_time, crate::gateway_pidfile::process_start_time(pid as u32)) {
+    match (
+        start_time,
+        crate::gateway_pidfile::process_start_time(pid as u32),
+    ) {
         (Some(recorded), Some(actual)) => recorded == actual,
         // Alive but can't disambigate PID reuse — err on "alive".
         _ => true,
@@ -174,7 +188,10 @@ pub fn detect_unclean_exit(home: &Path) -> Option<Value> {
         return None; // live owner — planned takeover in flight
     }
     let mut evidence = serde_json::Map::new();
-    evidence.insert("prior_pid".into(), sentinel.get("pid").cloned().unwrap_or(Value::Null));
+    evidence.insert(
+        "prior_pid".into(),
+        sentinel.get("pid").cloned().unwrap_or(Value::Null),
+    );
     evidence.insert(
         "prior_started_at".into(),
         sentinel.get("started_at").cloned().unwrap_or(Value::Null),
@@ -212,7 +229,10 @@ pub fn record_startup(home: &Path) -> Option<Value> {
             found.get("prior_pid"),
             found.get("prior_started_at"),
             found.get("last_heartbeat_at"),
-            found.get("suspected_oom").and_then(|v| v.as_bool()).unwrap_or(false),
+            found
+                .get("suspected_oom")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
         );
     }
     let (pid, start_time) = {
@@ -419,10 +439,16 @@ mod tests {
 
     #[test]
     fn oom_suspicion_thresholds() {
-        assert!(suspected_oom(&json!({"mem_available_kib": 1000u64, "mem_total_kib": 1000000u64})));
+        assert!(suspected_oom(
+            &json!({"mem_available_kib": 1000u64, "mem_total_kib": 1000000u64})
+        ));
         // 4% of total — under the 5% fraction line.
-        assert!(suspected_oom(&json!({"mem_available_kib": 40000u64, "mem_total_kib": 1000000u64})));
-        assert!(!suspected_oom(&json!({"mem_available_kib": 900000u64, "mem_total_kib": 1000000u64})));
+        assert!(suspected_oom(
+            &json!({"mem_available_kib": 40000u64, "mem_total_kib": 1000000u64})
+        ));
+        assert!(!suspected_oom(
+            &json!({"mem_available_kib": 900000u64, "mem_total_kib": 1000000u64})
+        ));
         assert!(!suspected_oom(&json!({})));
     }
 }

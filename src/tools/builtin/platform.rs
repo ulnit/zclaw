@@ -43,7 +43,10 @@ async fn hass_request(
         .ok_or_else(|| crate::error::AgentError::tool("HASS_TOKEN not set"))?;
     let client = reqwest::Client::new();
     let mut request = client
-        .request(method, format!("{}/api/{}", url.trim_end_matches('/'), path))
+        .request(
+            method,
+            format!("{}/api/{}", url.trim_end_matches('/'), path),
+        )
         .header("Authorization", format!("Bearer {}", token));
     if let Some(body) = body {
         request = request.json(&body);
@@ -243,10 +246,7 @@ fn kanban_is_worker() -> bool {
 
 /// Resolve a task id argument, accepting unique prefixes like the CLI;
 /// falls back to the worker's own task when `id` is empty.
-fn kanban_resolve_id(
-    store: &crate::kanban::KanbanStore,
-    id: &str,
-) -> Result<Option<String>> {
+fn kanban_resolve_id(store: &crate::kanban::KanbanStore, id: &str) -> Result<Option<String>> {
     let id = id.trim();
     let id = if id.is_empty() {
         match kanban_worker_task() {
@@ -767,7 +767,9 @@ fn register_kanban(registry: &mut ToolRegistry) {
                     Err(e) => return Ok(kanban_error(e)),
                 };
                 match store.unblock_task(&id) {
-                    Ok(task) => Ok(json!({"success": true, "task_id": task.id, "status": task.status})),
+                    Ok(task) => {
+                        Ok(json!({"success": true, "task_id": task.id, "status": task.status}))
+                    }
                     Err(e) => Ok(kanban_error(e)),
                 }
             })
@@ -819,7 +821,10 @@ fn register_kanban(registry: &mut ToolRegistry) {
             .expect("kanban_link builds"),
     );
 
-    let attach = |name: &'static str, kind: &'static str, value_field: &'static str, desc: &'static str| {
+    let attach = |name: &'static str,
+                  kind: &'static str,
+                  value_field: &'static str,
+                  desc: &'static str| {
         tool(name)
             .description(desc)
             .parameters(json!({
@@ -859,8 +864,18 @@ fn register_kanban(registry: &mut ToolRegistry) {
             .build()
             .unwrap_or_else(|_| panic!("{name} builds"))
     };
-    registry.register(attach("kanban_attach", "file", "path", "Attach a local file path to a kanban task."));
-    registry.register(attach("kanban_attach_url", "url", "url", "Attach a URL to a kanban task."));
+    registry.register(attach(
+        "kanban_attach",
+        "file",
+        "path",
+        "Attach a local file path to a kanban task.",
+    ));
+    registry.register(attach(
+        "kanban_attach_url",
+        "url",
+        "url",
+        "Attach a URL to a kanban task.",
+    ));
 
     registry.register(
         tool("kanban_attachments")
@@ -947,68 +962,116 @@ async fn private_page_block(
 
 fn register_browser(registry: &mut ToolRegistry) {
     let specs: [(&str, &str, serde_json::Value); 12] = [
-        ("browser_navigate", "Navigate the browser to a URL.", json!({
-            "type": "object",
-            "properties": {"url": {"type": "string", "description": "URL to open"}},
-            "required": ["url"]
-        })),
-        ("browser_snapshot", "Capture an accessibility snapshot of the current page (element refs for interaction).", json!({
-            "type": "object", "properties": {}, "required": []
-        })),
-        ("browser_click", "Click an element from the last snapshot.", json!({
-            "type": "object",
-            "properties": {"element": {"type": "string", "description": "Element ref or selector"}},
-            "required": ["element"]
-        })),
-        ("browser_type", "Type text into an input element.", json!({
-            "type": "object",
-            "properties": {
-                "element": {"type": "string", "description": "Element ref or selector"},
-                "text": {"type": "string", "description": "Text to type"}
-            },
-            "required": ["element", "text"]
-        })),
-        ("browser_scroll", "Scroll the page (up/down, pixels).", json!({
-            "type": "object",
-            "properties": {
-                "direction": {"type": "string", "enum": ["up", "down"], "default": "down"},
-                "pixels": {"type": "integer", "default": 800}
-            },
-            "required": []
-        })),
-        ("browser_back", "Navigate back in history.", json!({"type": "object", "properties": {}, "required": []})),
-        ("browser_press", "Press a keyboard key (Enter, Tab, Escape...).", json!({
-            "type": "object",
-            "properties": {"key": {"type": "string", "description": "Key name"}},
-            "required": ["key"]
-        })),
-        ("browser_get_images", "List images on the current page with URLs.", json!({"type": "object", "properties": {}, "required": []})),
-        ("browser_vision", "Screenshot the page and analyze it with the vision model.", json!({
-            "type": "object",
-            "properties": {"prompt": {"type": "string", "description": "What to look for in the screenshot"}},
-            "required": []
-        })),
-        ("browser_console", "Evaluate JavaScript in the page console and return the result.", json!({
-            "type": "object",
-            "properties": {"expression": {"type": "string", "description": "JS expression"}},
-            "required": ["expression"]
-        })),
-        ("browser_cdp", "Send a raw Chrome DevTools Protocol command.", json!({
-            "type": "object",
-            "properties": {
-                "method": {"type": "string", "description": "CDP method, e.g. Page.captureScreenshot"},
-                "params": {"type": "object", "description": "CDP params"}
-            },
-            "required": ["method"]
-        })),
-        ("browser_dialog", "Handle a JavaScript dialog (accept/dismiss).", json!({
-            "type": "object",
-            "properties": {
-                "action": {"type": "string", "enum": ["accept", "dismiss"], "default": "accept"},
-                "prompt_text": {"type": "string", "description": "Text for prompt dialogs"}
-            },
-            "required": []
-        })),
+        (
+            "browser_navigate",
+            "Navigate the browser to a URL.",
+            json!({
+                "type": "object",
+                "properties": {"url": {"type": "string", "description": "URL to open"}},
+                "required": ["url"]
+            }),
+        ),
+        (
+            "browser_snapshot",
+            "Capture an accessibility snapshot of the current page (element refs for interaction).",
+            json!({
+                "type": "object", "properties": {}, "required": []
+            }),
+        ),
+        (
+            "browser_click",
+            "Click an element from the last snapshot.",
+            json!({
+                "type": "object",
+                "properties": {"element": {"type": "string", "description": "Element ref or selector"}},
+                "required": ["element"]
+            }),
+        ),
+        (
+            "browser_type",
+            "Type text into an input element.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "element": {"type": "string", "description": "Element ref or selector"},
+                    "text": {"type": "string", "description": "Text to type"}
+                },
+                "required": ["element", "text"]
+            }),
+        ),
+        (
+            "browser_scroll",
+            "Scroll the page (up/down, pixels).",
+            json!({
+                "type": "object",
+                "properties": {
+                    "direction": {"type": "string", "enum": ["up", "down"], "default": "down"},
+                    "pixels": {"type": "integer", "default": 800}
+                },
+                "required": []
+            }),
+        ),
+        (
+            "browser_back",
+            "Navigate back in history.",
+            json!({"type": "object", "properties": {}, "required": []}),
+        ),
+        (
+            "browser_press",
+            "Press a keyboard key (Enter, Tab, Escape...).",
+            json!({
+                "type": "object",
+                "properties": {"key": {"type": "string", "description": "Key name"}},
+                "required": ["key"]
+            }),
+        ),
+        (
+            "browser_get_images",
+            "List images on the current page with URLs.",
+            json!({"type": "object", "properties": {}, "required": []}),
+        ),
+        (
+            "browser_vision",
+            "Screenshot the page and analyze it with the vision model.",
+            json!({
+                "type": "object",
+                "properties": {"prompt": {"type": "string", "description": "What to look for in the screenshot"}},
+                "required": []
+            }),
+        ),
+        (
+            "browser_console",
+            "Evaluate JavaScript in the page console and return the result.",
+            json!({
+                "type": "object",
+                "properties": {"expression": {"type": "string", "description": "JS expression"}},
+                "required": ["expression"]
+            }),
+        ),
+        (
+            "browser_cdp",
+            "Send a raw Chrome DevTools Protocol command.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "method": {"type": "string", "description": "CDP method, e.g. Page.captureScreenshot"},
+                    "params": {"type": "object", "description": "CDP params"}
+                },
+                "required": ["method"]
+            }),
+        ),
+        (
+            "browser_dialog",
+            "Handle a JavaScript dialog (accept/dismiss).",
+            json!({
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["accept", "dismiss"], "default": "accept"},
+                    "prompt_text": {"type": "string", "description": "Text for prompt dialogs"}
+                },
+                "required": []
+            }),
+        ),
     ];
 
     for (name, description, parameters) in specs {
@@ -1343,8 +1406,8 @@ fn register_gated_stubs(registry: &mut ToolRegistry) {
                  behind another app. Requires cua-driver to be installed.",
             )
             .parameters(crate::computer_use::tool_schema())
-            .handler(|args, ctx| {
-                async move { crate::computer_use::handle_computer_use(args, ctx).await }
+            .handler(|args, ctx| async move {
+                crate::computer_use::handle_computer_use(args, ctx).await
             })
             .toolset("computer_use")
             .dangerous(true)
@@ -1353,7 +1416,9 @@ fn register_gated_stubs(registry: &mut ToolRegistry) {
                 if crate::computer_use::resolve_cua_driver_cmd().is_some() {
                     ToolAvailability::available()
                 } else {
-                    ToolAvailability::unavailable("cua-driver not installed (ulnclaw computer-use install)")
+                    ToolAvailability::unavailable(
+                        "cua-driver not installed (ulnclaw computer-use install)",
+                    )
                 }
             })
             .build()
@@ -1441,7 +1506,11 @@ mod kanban_tests {
 
         // Parent sees the child; prefix resolution works.
         let shown = registry
-            .dispatch("kanban_show", json!({"task_id": &parent_id[..8]}), ctx.clone())
+            .dispatch(
+                "kanban_show",
+                json!({"task_id": &parent_id[..8]}),
+                ctx.clone(),
+            )
             .await
             .unwrap();
         assert_eq!(shown["success"], true);

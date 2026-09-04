@@ -74,10 +74,7 @@ pub fn resolve_credentials() -> Option<FeishuAppCredentials> {
     if app_id.is_empty() || app_secret.is_empty() {
         None
     } else {
-        Some(FeishuAppCredentials {
-            app_id,
-            app_secret,
-        })
+        Some(FeishuAppCredentials { app_id, app_secret })
     }
 }
 
@@ -117,7 +114,10 @@ async fn tenant_access_token(creds: &FeishuAppCredentials) -> Result<String, Str
     if code != 0 {
         return Err(format!(
             "tenant token error: {}",
-            value.get("msg").and_then(|v| v.as_str()).unwrap_or("unknown")
+            value
+                .get("msg")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
         ));
     }
     let token = value
@@ -152,10 +152,7 @@ async fn feishu_call(
     }
     let client = reqwest::Client::new();
     let mut request = client
-        .request(
-            method,
-            format!("{}{}", crate::feishu::OPEN_API_BASE, url),
-        )
+        .request(method, format!("{}{}", crate::feishu::OPEN_API_BASE, url))
         .bearer_auth(&token)
         .timeout(REQUEST_TIMEOUT);
     for (key, value) in queries {
@@ -719,12 +716,9 @@ mod tests {
         .unwrap_err();
         assert_eq!(err, "file_token, comment_id, and content are required");
 
-        let err = run_feishu_doc_action(
-            "feishu_drive_add_comment",
-            &json!({"file_token": "ft"}),
-        )
-        .await
-        .unwrap_err();
+        let err = run_feishu_doc_action("feishu_drive_add_comment", &json!({"file_token": "ft"}))
+            .await
+            .unwrap_err();
         assert_eq!(err, "file_token and content are required");
 
         restore_env(prev);
@@ -749,14 +743,21 @@ mod tests {
     fn register_exposes_five_tools_in_two_toolsets() {
         let mut registry = crate::tools::ToolRegistry::new();
         register(&mut registry);
-        assert_eq!(registry.get("feishu_doc_read").unwrap().toolset, "feishu_doc");
+        assert_eq!(
+            registry.get("feishu_doc_read").unwrap().toolset,
+            "feishu_doc"
+        );
         for name in [
             "feishu_drive_list_comments",
             "feishu_drive_list_comment_replies",
             "feishu_drive_reply_comment",
             "feishu_drive_add_comment",
         ] {
-            assert_eq!(registry.get(name).unwrap().toolset, "feishu_drive", "{name}");
+            assert_eq!(
+                registry.get(name).unwrap().toolset,
+                "feishu_drive",
+                "{name}"
+            );
         }
     }
 

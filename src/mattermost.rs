@@ -253,7 +253,12 @@ impl Runtime {
 
     /// hermes `send()`: chunked post with `disable_mentions` props and
     /// optional thread root.
-    async fn send_post(&self, channel_id: &str, content: &str, root_id: Option<&str>) -> Result<(), String> {
+    async fn send_post(
+        &self,
+        channel_id: &str,
+        content: &str,
+        root_id: Option<&str>,
+    ) -> Result<(), String> {
         let chunks = crate::messaging::chunk_text(content, MAX_POST_LENGTH);
         for chunk in chunks {
             let mut payload = json!({
@@ -344,9 +349,13 @@ impl Runtime {
             return None;
         }
         let bytes = resp.bytes().await.ok()?.to_vec();
-        let path =
-            crate::media_cache::cache_media_bytes(&crate::config::ulnclaw_home(), &bytes, &mime, &fname)
-                .ok()?;
+        let path = crate::media_cache::cache_media_bytes(
+            &crate::config::ulnclaw_home(),
+            &bytes,
+            &mime,
+            &fname,
+        )
+        .ok()?;
         Some(MediaAttachment {
             path,
             mime,
@@ -480,7 +489,10 @@ async fn run_session(
         .await
         .map_err(|e| {
             let msg = e.to_string();
-            if msg.contains("401") || msg.contains("403") || msg.to_lowercase().contains("unauthorized") {
+            if msg.contains("401")
+                || msg.contains("403")
+                || msg.to_lowercase().contains("unauthorized")
+            {
                 SessionError::Permanent(format!("WS auth failed: {msg}"))
             } else {
                 SessionError::Transient(format!("WS connect: {msg}"))
@@ -617,9 +629,7 @@ async fn handle_ws_event(
         let bot_username = runtime.bot_username.lock().await.clone();
         let patterns: Vec<String> = vec![format!("@{bot_username}"), format!("@{bot_id}")];
         let lower = message_text.to_lowercase();
-        let has_mention = patterns
-            .iter()
-            .any(|p| lower.contains(&p.to_lowercase()));
+        let has_mention = patterns.iter().any(|p| lower.contains(&p.to_lowercase()));
         let is_free = runtime.cfg.free_response_channels.contains(&channel_id);
         if runtime.cfg.require_mention && !is_free && !has_mention {
             return;
@@ -736,7 +746,12 @@ async fn user_gate_allows(
     sender_id: &str,
     sender_name: &str,
 ) -> bool {
-    if runtime.cfg.allowed_users.iter().any(|u| u == sender_id || u == "*") {
+    if runtime
+        .cfg
+        .allowed_users
+        .iter()
+        .any(|u| u == sender_id || u == "*")
+    {
         return true;
     }
     if let Some(store) = pairing {

@@ -25,7 +25,9 @@ pub fn parse_duration_seconds(value: &str) -> Option<f64> {
         return None;
     }
     // Bare number = days (backward compatible with --older-than 90).
-    if s.chars().all(|c| c.is_ascii_digit() || c == '.') && s.chars().filter(|c| *c == '.').count() <= 1 {
+    if s.chars().all(|c| c.is_ascii_digit() || c == '.')
+        && s.chars().filter(|c| *c == '.').count() <= 1
+    {
         return s.parse::<f64>().ok().map(|days| days * 86400.0);
     }
     // Split numeric prefix from unit suffix.
@@ -71,8 +73,7 @@ pub fn parse_point_in_time(value: &str, flag: &str) -> Result<f64, String> {
         .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S"))
         .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M"))
         .or_else(|_| {
-            NaiveDate::parse_from_str(s, "%Y-%m-%d")
-                .map(|date| date.and_hms_opt(0, 0, 0).unwrap())
+            NaiveDate::parse_from_str(s, "%Y-%m-%d").map(|date| date.and_hms_opt(0, 0, 0).unwrap())
         })
         .map_err(|_| error())?;
     let local = Local
@@ -91,7 +92,9 @@ pub fn format_epoch(ts: Option<f64>) -> String {
     let Some(dt) = chrono::DateTime::from_timestamp(ts as i64, 0) else {
         return "-".to_string();
     };
-    dt.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()
+    dt.with_timezone(&Local)
+        .format("%Y-%m-%d %H:%M")
+        .to_string()
 }
 
 fn now_epoch() -> f64 {
@@ -185,7 +188,10 @@ impl PruneFilters {
         }
         if let Some(title) = self.title_like.as_deref().filter(|s| !s.is_empty()) {
             clauses.push("LOWER(COALESCE(s.title, '')) LIKE ?".to_string());
-            params.push(FilterParam::Text(format!("%{}%", title.to_ascii_lowercase())));
+            params.push(FilterParam::Text(format!(
+                "%{}%",
+                title.to_ascii_lowercase()
+            )));
         }
         if let Some(reason) = self.end_reason.as_deref().filter(|s| !s.is_empty()) {
             clauses.push("s.end_reason = ?".to_string());
@@ -212,7 +218,10 @@ impl PruneFilters {
         }
         if let Some(model) = self.model_like.as_deref().filter(|s| !s.is_empty()) {
             clauses.push("LOWER(COALESCE(s.model, '')) LIKE ?".to_string());
-            params.push(FilterParam::Text(format!("%{}%", model.to_ascii_lowercase())));
+            params.push(FilterParam::Text(format!(
+                "%{}%",
+                model.to_ascii_lowercase()
+            )));
         }
         if let Some(v) = self.min_tokens {
             clauses.push("(s.input_tokens + s.output_tokens) >= ?".to_string());
@@ -409,6 +418,9 @@ mod tests {
         let description = filters.describe();
         assert!(description.contains("last active before"));
         assert!(description.contains("source 'cron'"));
-        assert_eq!(PruneFilters::default().describe(), "no filters (all ended sessions)");
+        assert_eq!(
+            PruneFilters::default().describe(),
+            "no filters (all ended sessions)"
+        );
     }
 }

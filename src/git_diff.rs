@@ -109,8 +109,12 @@ fn run_git(args: &[&str], cwd: &Path, timeout: Duration) -> Result<(i32, String)
 }
 
 fn untracked_files(cwd: &Path) -> Vec<String> {
-    let (code, out) = run_git(&["ls-files", "--others", "--exclude-standard"], cwd, GIT_TIMEOUT)
-        .unwrap_or((-1, String::new()));
+    let (code, out) = run_git(
+        &["ls-files", "--others", "--exclude-standard"],
+        cwd,
+        GIT_TIMEOUT,
+    )
+    .unwrap_or((-1, String::new()));
     if code != 0 {
         return Vec::new();
     }
@@ -148,13 +152,13 @@ fn untracked_diff(cwd: &Path, files: &[String]) -> String {
 /// Collect a git diff of the working directory at `cwd` (hermes
 /// `collect_working_diff`). `paths` optionally restricts the diff to
 /// specific pathspecs (passed through to git verbatim).
-pub fn collect_working_diff(
-    cwd: &Path,
-    mode: DiffMode,
-    paths: &[String],
-) -> Result<WorkingDiff> {
+pub fn collect_working_diff(cwd: &Path, mode: DiffMode, paths: &[String]) -> Result<WorkingDiff> {
     // Repo probe.
-    let (code, _) = run_git(&["rev-parse", "--is-inside-work-tree"], cwd, Duration::from_secs(5))?;
+    let (code, _) = run_git(
+        &["rev-parse", "--is-inside-work-tree"],
+        cwd,
+        Duration::from_secs(5),
+    )?;
     if code != 0 {
         return Err(AgentError::Tool("Not a git repository.".to_string()));
     }
@@ -221,7 +225,11 @@ pub struct StatusSummary {
 }
 
 fn require_repo(cwd: &Path) -> Result<()> {
-    let (code, _) = run_git(&["rev-parse", "--is-inside-work-tree"], cwd, Duration::from_secs(5))?;
+    let (code, _) = run_git(
+        &["rev-parse", "--is-inside-work-tree"],
+        cwd,
+        Duration::from_secs(5),
+    )?;
     if code != 0 {
         return Err(AgentError::Tool("Not a git repository.".to_string()));
     }
@@ -248,8 +256,14 @@ pub fn status_summary(cwd: &Path) -> Result<StatusSummary> {
                 GIT_TIMEOUT,
             ) {
                 let mut parts = counts.split_whitespace();
-                summary.behind = parts.next().and_then(|value| value.parse().ok()).unwrap_or(0);
-                summary.ahead = parts.next().and_then(|value| value.parse().ok()).unwrap_or(0);
+                summary.behind = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(0);
+                summary.ahead = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(0);
             }
         }
     }
@@ -264,7 +278,12 @@ pub fn status_summary(cwd: &Path) -> Result<StatusSummary> {
         }
         let (index, working) = (bytes[0], bytes[1]);
         // Rename entries read "orig -> new"; keep the new path.
-        let file = line[3..].split(" -> ").last().unwrap_or(&line[3..]).trim().to_string();
+        let file = line[3..]
+            .split(" -> ")
+            .last()
+            .unwrap_or(&line[3..])
+            .trim()
+            .to_string();
         if index == b'?' && working == b'?' {
             summary.untracked.push(file);
             continue;
@@ -282,11 +301,7 @@ pub fn status_summary(cwd: &Path) -> Result<StatusSummary> {
 /// Local branch names (current branch first).
 pub fn local_branches(cwd: &Path) -> Result<Vec<String>> {
     require_repo(cwd)?;
-    let (code, out) = run_git(
-        &["branch", "--format=%(refname:short)"],
-        cwd,
-        GIT_TIMEOUT,
-    )?;
+    let (code, out) = run_git(&["branch", "--format=%(refname:short)"], cwd, GIT_TIMEOUT)?;
     if code != 0 {
         return Err(AgentError::Tool("git branch failed".to_string()));
     }
@@ -298,7 +313,10 @@ pub fn local_branches(cwd: &Path) -> Result<Vec<String>> {
         .collect();
     let current = status_summary_branch(cwd);
     branches.sort();
-    if let Some(position) = current.as_ref().and_then(|name| branches.iter().position(|b| b == name)) {
+    if let Some(position) = current
+        .as_ref()
+        .and_then(|name| branches.iter().position(|b| b == name))
+    {
         let name = branches.remove(position);
         branches.insert(0, name);
     }
@@ -407,7 +425,11 @@ pub fn list_worktrees(cwd: &Path) -> Result<Vec<WorktreeInfo>> {
     for line in out.lines().chain(std::iter::once("")) {
         if let Some(raw) = line.strip_prefix("worktree ") {
             if let Some(previous) = path.take() {
-                trees.push(WorktreeInfo { path: previous, branch: std::mem::take(&mut branch), is_main });
+                trees.push(WorktreeInfo {
+                    path: previous,
+                    branch: std::mem::take(&mut branch),
+                    is_main,
+                });
                 is_main = false;
             }
             path = Some(raw.trim().to_string());
@@ -420,7 +442,11 @@ pub fn list_worktrees(cwd: &Path) -> Result<Vec<WorktreeInfo>> {
             branch = "(detached)".to_string();
         } else if line.is_empty() {
             if let Some(previous) = path.take() {
-                trees.push(WorktreeInfo { path: previous, branch: std::mem::take(&mut branch), is_main });
+                trees.push(WorktreeInfo {
+                    path: previous,
+                    branch: std::mem::take(&mut branch),
+                    is_main,
+                });
                 is_main = false;
             }
         }
@@ -433,7 +459,12 @@ pub fn list_worktrees(cwd: &Path) -> Result<Vec<WorktreeInfo>> {
 
 /// Add a worktree: `git worktree add <target> [<branch>]`, or with
 /// `new_branch` create it first (`-b`).
-pub fn add_worktree(cwd: &Path, target: &str, branch: Option<&str>, new_branch: Option<&str>) -> Result<String> {
+pub fn add_worktree(
+    cwd: &Path,
+    target: &str,
+    branch: Option<&str>,
+    new_branch: Option<&str>,
+) -> Result<String> {
     require_repo(cwd)?;
     let target = target.trim();
     if target.is_empty() {
@@ -461,7 +492,12 @@ pub fn remove_worktree(cwd: &Path, target: &str) -> Result<String> {
     if target.is_empty() {
         return Err(AgentError::Tool("target path is required".to_string()));
     }
-    mutate(&["worktree", "remove", target], cwd, "git worktree remove", GIT_TIMEOUT_LONG)
+    mutate(
+        &["worktree", "remove", target],
+        cwd,
+        "git worktree remove",
+        GIT_TIMEOUT_LONG,
+    )
 }
 
 /// Diff for a single path (hermes `/api/git/file-diff` parity).
@@ -477,7 +513,13 @@ pub fn file_diff(cwd: &Path, file: &str, mode: DiffMode) -> Result<String> {
     if untracked && !matches!(mode, DiffMode::Staged) {
         let target = cwd.join(file);
         let (code, out) = run_git(
-            &["diff", "--no-index", "--", "/dev/null", &target.to_string_lossy()],
+            &[
+                "diff",
+                "--no-index",
+                "--",
+                "/dev/null",
+                &target.to_string_lossy(),
+            ],
             cwd,
             GIT_TIMEOUT_LONG,
         )?;
@@ -505,7 +547,9 @@ fn valid_branch_name(name: &str) -> bool {
         && !name.starts_with('-')
         && !name.contains("..")
         && !name.contains(char::is_whitespace)
-        && !name.chars().any(|ch| ch.is_control() || matches!(ch, '~' | '^' | ':' | '?' | '*' | '['))
+        && !name
+            .chars()
+            .any(|ch| ch.is_control() || matches!(ch, '~' | '^' | ':' | '?' | '*' | '['))
 }
 
 /// Create a branch (`git branch <name> [<start_point>]`).
@@ -697,7 +741,10 @@ mod tests {
         std::fs::write(dir.join("stray.txt"), "brand new\n").unwrap();
         let working = file_diff(&dir, "tracked.txt", DiffMode::Working).unwrap();
         assert!(working.contains("+line three"));
-        assert!(file_diff(&dir, "tracked.txt", DiffMode::Staged).unwrap().trim().is_empty());
+        assert!(file_diff(&dir, "tracked.txt", DiffMode::Staged)
+            .unwrap()
+            .trim()
+            .is_empty());
         stage(&dir, &["tracked.txt".to_string()]).unwrap();
         let staged = file_diff(&dir, "tracked.txt", DiffMode::Staged).unwrap();
         assert!(staged.contains("+line three"));
@@ -731,7 +778,10 @@ mod tests {
         add_worktree(&dir, &target.to_string_lossy(), None, Some("wt-branch")).unwrap();
         let trees = list_worktrees(&dir).unwrap();
         assert_eq!(trees.len(), 2);
-        let added = trees.iter().find(|tree| tree.branch == "wt-branch").unwrap();
+        let added = trees
+            .iter()
+            .find(|tree| tree.branch == "wt-branch")
+            .unwrap();
         assert!(!added.is_main);
         remove_worktree(&dir, &target.to_string_lossy()).unwrap();
         assert_eq!(list_worktrees(&dir).unwrap().len(), 1);

@@ -98,11 +98,15 @@ pub fn format_size(mut bytes: f64) -> String {
 /// True when the file looks like the hermes #68474 zeroed-state.db
 /// signature: size > 0, leading bytes all NUL (no SQLite header).
 pub fn is_zeroed_sqlite_file(path: &Path) -> bool {
-    let Ok(meta) = fs::metadata(path) else { return false };
+    let Ok(meta) = fs::metadata(path) else {
+        return false;
+    };
     if meta.len() == 0 {
         return false;
     }
-    let Ok(mut file) = File::open(path) else { return false };
+    let Ok(mut file) = File::open(path) else {
+        return false;
+    };
     let mut head = vec![0u8; 100.min(meta.len() as usize)];
     if file.read_exact(&mut head).is_err() {
         return false;
@@ -117,7 +121,9 @@ pub fn is_zeroed_sqlite_file(path: &Path) -> bool {
 /// (hermes `verify_sqlite_integrity`; the 2 GiB skip ceiling is not applied —
 /// ulnclaw callers only verify fresh backup copies).
 pub fn verify_sqlite_integrity(path: &Path) -> bool {
-    let Ok(mut file) = File::open(path) else { return false };
+    let Ok(mut file) = File::open(path) else {
+        return false;
+    };
     let mut header = [0u8; 16];
     if file.read_exact(&mut header).is_err() {
         return false;
@@ -143,7 +149,8 @@ pub fn safe_copy_db(src: &Path, dst: &Path) -> bool {
         let _ = fs::create_dir_all(parent);
     }
     let result = (|| -> rusqlite::Result<()> {
-        let conn = rusqlite::Connection::open_with_flags(src, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        let conn =
+            rusqlite::Connection::open_with_flags(src, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         conn.backup(DatabaseName::Main, dst, None)?;
         Ok(())
     })();
@@ -173,11 +180,17 @@ fn should_skip_backup_file(abs_path: &Path, out_path: &Path) -> bool {
             return true;
         }
     }
-    let name = abs_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = abs_path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     if EXCLUDED_NAMES.contains(&name.as_str()) {
         return true;
     }
-    if EXCLUDED_SUFFIXES.iter().any(|suffix| name.ends_with(suffix)) {
+    if EXCLUDED_SUFFIXES
+        .iter()
+        .any(|suffix| name.ends_with(suffix))
+    {
         return true;
     }
     false
@@ -221,12 +234,16 @@ pub fn create_backup(home: &Path, output: Option<&Path>) -> Result<BackupSummary
             .join(format!("ulnclaw-backup-{stamp}.zip")),
     };
     if out_path.extension().map(|e| e != "zip").unwrap_or(true) {
-        let mut name = out_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let mut name = out_path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         name.push_str(".zip");
         out_path.set_file_name(name);
     }
     if let Some(parent) = out_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
     }
 
     // Collect files (iterative walk with in-place dir pruning, hermes parity).
@@ -234,8 +251,10 @@ pub fn create_backup(home: &Path, output: Option<&Path>) -> Result<BackupSummary
     let mut skipped_dirs: Vec<String> = Vec::new();
     let mut stack: Vec<PathBuf> = vec![home.to_path_buf()];
     while let Some(dir) = stack.pop() {
-
-        let rel_dir = dir.strip_prefix(home).unwrap_or(Path::new("")).to_path_buf();
+        let rel_dir = dir
+            .strip_prefix(home)
+            .unwrap_or(Path::new(""))
+            .to_path_buf();
         let mut subdirs: Vec<PathBuf> = Vec::new();
         let mut entries = match fs::read_dir(&dir) {
             Ok(rd) => rd,
@@ -256,7 +275,10 @@ pub fn create_backup(home: &Path, output: Option<&Path>) -> Result<BackupSummary
         }
         subdirs.sort();
         for sub in subdirs {
-            let name = sub.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let name = sub
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
             if should_exclude_dir(&name) {
                 let rel = if rel_dir.as_os_str().is_empty() {
                     name.clone()
@@ -269,7 +291,10 @@ pub fn create_backup(home: &Path, output: Option<&Path>) -> Result<BackupSummary
             stack.push(sub);
         }
         for fpath in files {
-            let rel = fpath.strip_prefix(home).unwrap_or(Path::new("")).to_path_buf();
+            let rel = fpath
+                .strip_prefix(home)
+                .unwrap_or(Path::new(""))
+                .to_path_buf();
             if should_skip_backup_file(&fpath, &out_path) {
                 continue;
             }
@@ -286,7 +311,8 @@ pub fn create_backup(home: &Path, output: Option<&Path>) -> Result<BackupSummary
     let mut errors: Vec<String> = Vec::new();
     let started = std::time::Instant::now();
 
-    let out_file = File::create(&out_path).map_err(|e| format!("cannot create {}: {e}", out_path.display()))?;
+    let out_file = File::create(&out_path)
+        .map_err(|e| format!("cannot create {}: {e}", out_path.display()))?;
     let mut zip = zip::ZipWriter::new(out_file);
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
@@ -330,7 +356,8 @@ pub fn create_backup(home: &Path, output: Option<&Path>) -> Result<BackupSummary
         }
     }
 
-    zip.finish().map_err(|e| format!("failed to finalize zip: {e}"))?;
+    zip.finish()
+        .map_err(|e| format!("failed to finalize zip: {e}"))?;
     let zip_bytes = fs::metadata(&out_path).map(|m| m.len()).unwrap_or(0);
 
     skipped_dirs.sort();
@@ -351,13 +378,25 @@ pub fn format_backup_summary(summary: &BackupSummary) -> String {
     let mut out = String::new();
     out.push('\n');
     if summary.errors.is_empty() {
-        out.push_str(&format!("Backup complete: {}\n", summary.out_path.display()));
+        out.push_str(&format!(
+            "Backup complete: {}\n",
+            summary.out_path.display()
+        ));
     } else {
-        out.push_str(&format!("Backup incomplete: {}\n", summary.out_path.display()));
+        out.push_str(&format!(
+            "Backup incomplete: {}\n",
+            summary.out_path.display()
+        ));
     }
     out.push_str(&format!("  Files:       {}\n", summary.file_count));
-    out.push_str(&format!("  Original:    {}\n", format_size(summary.total_bytes as f64)));
-    out.push_str(&format!("  Compressed:  {}\n", format_size(summary.zip_bytes as f64)));
+    out.push_str(&format!(
+        "  Original:    {}\n",
+        format_size(summary.total_bytes as f64)
+    ));
+    out.push_str(&format!(
+        "  Compressed:  {}\n",
+        format_size(summary.zip_bytes as f64)
+    ));
     out.push_str(&format!("  Time:        {:.1}s\n", summary.elapsed_secs));
     if !summary.skipped_dirs.is_empty() {
         out.push_str("\n  Excluded directories:\n");
@@ -366,7 +405,10 @@ pub fn format_backup_summary(summary: &BackupSummary) -> String {
         }
     }
     if !summary.errors.is_empty() {
-        out.push_str(&format!("\n  Warnings ({} files skipped):\n", summary.errors.len()));
+        out.push_str(&format!(
+            "\n  Warnings ({} files skipped):\n",
+            summary.errors.len()
+        ));
         for err in summary.errors.iter().take(10) {
             out.push_str(err);
             out.push('\n');
@@ -376,7 +418,11 @@ pub fn format_backup_summary(summary: &BackupSummary) -> String {
         }
     }
     if summary.errors.is_empty() {
-        let name = summary.out_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = summary
+            .out_path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         out.push_str(&format!("\nRestore with: ulnclaw import {name}\n"));
     }
     out
@@ -403,7 +449,9 @@ pub fn validate_backup_zip(zip_path: &Path) -> (bool, String) {
     let markers = ["config.yaml", "config.toml", ".env", "state.db"];
     let mut found = false;
     for i in 0..archive.len() {
-        let Ok(entry) = archive.by_index_raw(i) else { continue };
+        let Ok(entry) = archive.by_index_raw(i) else {
+            continue;
+        };
         let basename = Path::new(entry.name())
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -435,7 +483,11 @@ pub fn detect_prefix(names: &[String]) -> String {
         .filter_map(|n| {
             let mut parts = n.split('/');
             let first = parts.next()?;
-            if parts.next().is_some() { Some(first) } else { None }
+            if parts.next().is_some() {
+                Some(first)
+            } else {
+                None
+            }
         })
         .collect();
     if first_parts.is_empty() {
@@ -480,7 +532,9 @@ pub fn import_backup(home: &Path, zip_path: &Path) -> Result<ImportReport, Strin
     let staging_root = staging.path();
 
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(|e| format!("zip entry error: {e}"))?;
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("zip entry error: {e}"))?;
         let raw_name = entry.name().to_string();
         let stripped = raw_name.strip_prefix(prefix.as_str()).unwrap_or(&raw_name);
         if stripped.is_empty() || stripped.ends_with('/') {
@@ -488,7 +542,9 @@ pub fn import_backup(home: &Path, zip_path: &Path) -> Result<ImportReport, Strin
         }
         // zip-slip guard: every component must stay inside the staging dir.
         let target = staging_root.join(stripped);
-        let canon_root = staging_root.canonicalize().unwrap_or_else(|_| staging_root.to_path_buf());
+        let canon_root = staging_root
+            .canonicalize()
+            .unwrap_or_else(|_| staging_root.to_path_buf());
         if let Some(parent) = target.parent() {
             let _ = fs::create_dir_all(parent);
         }
@@ -503,8 +559,10 @@ pub fn import_backup(home: &Path, zip_path: &Path) -> Result<ImportReport, Strin
             let _ = fs::create_dir_all(&target);
             continue;
         }
-        let mut out = File::create(&target).map_err(|e| format!("cannot stage {}: {e}", target.display()))?;
-        std::io::copy(&mut entry, &mut out).map_err(|e| format!("cannot extract {}: {e}", stripped))?;
+        let mut out =
+            File::create(&target).map_err(|e| format!("cannot stage {}: {e}", target.display()))?;
+        std::io::copy(&mut entry, &mut out)
+            .map_err(|e| format!("cannot extract {}: {e}", stripped))?;
     }
 
     // Overlay the staged tree onto home.
@@ -518,7 +576,10 @@ pub fn import_backup(home: &Path, zip_path: &Path) -> Result<ImportReport, Strin
                 continue;
             }
             let rel = path.strip_prefix(staging_root).unwrap_or(Path::new(""));
-            let basename = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let basename = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
             if IMPORT_SKIP_NAMES.contains(&basename.as_str()) {
                 report.skipped_runtime += 1;
                 continue;
@@ -562,7 +623,10 @@ pub fn format_import_report(report: &ImportReport) -> String {
         ));
     }
     if !report.errors.is_empty() {
-        out.push_str(&format!("  Warnings ({} files failed):\n", report.errors.len()));
+        out.push_str(&format!(
+            "  Warnings ({} files failed):\n",
+            report.errors.len()
+        ));
         for err in report.errors.iter().take(10) {
             out.push_str(err);
             out.push('\n');
@@ -593,14 +657,21 @@ pub fn export_quick_snapshot_zip(home: &Path, id: &str) -> Result<Vec<u8>, Strin
     let mut files: Vec<(PathBuf, PathBuf)> = Vec::new();
     let mut stack: Vec<PathBuf> = vec![root.clone()];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else { continue };
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
-            let Ok(file_type) = entry.file_type() else { continue };
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
             if file_type.is_dir() {
                 stack.push(path);
             } else if file_type.is_file() {
-                let rel = path.strip_prefix(&root).unwrap_or(Path::new("")).to_path_buf();
+                let rel = path
+                    .strip_prefix(&root)
+                    .unwrap_or(Path::new(""))
+                    .to_path_buf();
                 files.push((path, rel));
             }
         }
@@ -658,8 +729,12 @@ pub fn create_quick_snapshot(
     let mut warnings: Vec<String> = Vec::new();
 
     let too_large = |path: &Path, rel_name: &str, warnings: &mut Vec<String>| -> bool {
-        let Some(cap) = max_file_size else { return false };
-        let Ok(size) = fs::metadata(path).map(|m| m.len()) else { return false };
+        let Some(cap) = max_file_size else {
+            return false;
+        };
+        let Ok(size) = fs::metadata(path).map(|m| m.len()) else {
+            return false;
+        };
         if size <= cap {
             return false;
         }
@@ -753,8 +828,11 @@ pub fn create_quick_snapshot(
         "label": label,
         "files": manifest,
     });
-    fs::write(snap_dir.join("manifest.json"), serde_json::to_string_pretty(&meta).unwrap_or_default())
-        .map_err(|e| format!("cannot write manifest: {e}"))?;
+    fs::write(
+        snap_dir.join("manifest.json"),
+        serde_json::to_string_pretty(&meta).unwrap_or_default(),
+    )
+    .map_err(|e| format!("cannot write manifest: {e}"))?;
 
     let keep = keep.unwrap_or(QUICK_DEFAULT_KEEP);
     prune_quick_snapshots(home, keep);
@@ -769,13 +847,17 @@ pub fn create_quick_snapshot(
 pub fn list_quick_snapshots(home: &Path) -> Vec<SnapshotInfo> {
     let root = quick_snapshot_root(home);
     let mut snapshots: Vec<SnapshotInfo> = Vec::new();
-    let Ok(entries) = fs::read_dir(&root) else { return snapshots };
+    let Ok(entries) = fs::read_dir(&root) else {
+        return snapshots;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if !path.is_dir() {
             continue;
         }
-        let Some(id) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else { continue };
+        let Some(id) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+            continue;
+        };
         let manifest_path = path.join("manifest.json");
         let (files, bytes) = match fs::read_to_string(&manifest_path) {
             Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
@@ -820,18 +902,32 @@ pub fn restore_quick_snapshot(home: &Path, snapshot_id: &str) -> Result<bool, St
         return Ok(false);
     }
     let manifest_path = snap_dir.join("manifest.json");
-    let Ok(text) = fs::read_to_string(&manifest_path) else { return Ok(false) };
-    let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) else { return Ok(false) };
-    let Some(files) = meta.get("files").and_then(|f| f.as_object()) else { return Ok(false) };
+    let Ok(text) = fs::read_to_string(&manifest_path) else {
+        return Ok(false);
+    };
+    let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Ok(false);
+    };
+    let Some(files) = meta.get("files").and_then(|f| f.as_object()) else {
+        return Ok(false);
+    };
 
     let mut restored = 0usize;
     for rel in files.keys() {
         let src = snap_dir.join(rel);
         let dst = home.join(rel);
         // Traversal guards on both ends.
-        let src_ok = src.canonicalize().ok().map(|p| {
-            snap_dir.canonicalize().ok().map(|r| p.starts_with(r)).unwrap_or(false)
-        }).unwrap_or(false);
+        let src_ok = src
+            .canonicalize()
+            .ok()
+            .map(|p| {
+                snap_dir
+                    .canonicalize()
+                    .ok()
+                    .map(|r| p.starts_with(r))
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false);
         if !src_ok {
             continue;
         }
@@ -843,7 +939,12 @@ pub fn restore_quick_snapshot(home: &Path, snapshot_id: &str) -> Result<bool, St
         }
         let copied = if dst.extension().map(|e| e == "db").unwrap_or(false) {
             // Atomic-ish replace for databases (hermes parity).
-            let tmp = dst.parent().unwrap_or(Path::new(".")).join(format!(".{}.snap_restore", dst.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()));
+            let tmp = dst.parent().unwrap_or(Path::new(".")).join(format!(
+                ".{}.snap_restore",
+                dst.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            ));
             let result = fs::copy(&src, &tmp).is_ok()
                 && fs::remove_file(&dst).map(|_| true).unwrap_or(true)
                 && fs::rename(&tmp, &dst).is_ok();
@@ -885,11 +986,9 @@ pub fn prune_quick_snapshots(home: &Path, keep: usize) -> usize {
 /// Count cron jobs in a state.db (ulnclaw keeps them in the `cron_jobs`
 /// table; hermes reads cron/jobs.json).
 pub fn count_cron_jobs(state_db: &Path) -> Option<usize> {
-    let conn = rusqlite::Connection::open_with_flags(
-        state_db,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .ok()?;
+    let conn =
+        rusqlite::Connection::open_with_flags(state_db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .ok()?;
     let table_exists: bool = conn
         .query_row(
             "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='cron_jobs'",
@@ -900,8 +999,10 @@ pub fn count_cron_jobs(state_db: &Path) -> Option<usize> {
     if !table_exists {
         return Some(0);
     }
-    conn.query_row("SELECT COUNT(*) FROM cron_jobs", [], |row| row.get::<_, usize>(0))
-        .ok()
+    conn.query_row("SELECT COUNT(*) FROM cron_jobs", [], |row| {
+        row.get::<_, usize>(0)
+    })
+    .ok()
 }
 
 /// After an import/update, if the live state.db has zero cron jobs but a
@@ -916,7 +1017,9 @@ pub fn restore_cron_jobs_if_emptied(home: &Path) -> Option<String> {
         return None;
     }
     for snapshot in list_quick_snapshots(home) {
-        let snap_db = quick_snapshot_root(home).join(&snapshot.id).join("state.db");
+        let snap_db = quick_snapshot_root(home)
+            .join(&snapshot.id)
+            .join("state.db");
         if !snap_db.exists() {
             continue;
         }
@@ -965,7 +1068,11 @@ pub fn snapshot_slash(home: &Path, rest: &str) -> String {
     match sub {
         "create" | "new" | "save" => {
             let label = parts.collect::<Vec<_>>().join(" ");
-            let label = if label.is_empty() { None } else { Some(label.as_str()) };
+            let label = if label.is_empty() {
+                None
+            } else {
+                Some(label.as_str())
+            };
             match create_quick_snapshot(home, label, None, None) {
                 Ok(Some(id)) => format!("📸 snapshot created: {id}\n"),
                 Ok(None) => "(o_o) nothing to snapshot yet (no state files).\n".to_string(),
@@ -1072,7 +1179,10 @@ mod tests {
         assert!(verify_sqlite_integrity(&dst));
         assert_eq!(count_rows(&dst, "cron_jobs"), 3);
         assert!(copy_db_and_verify(&src, &dir.path().join("copy2.db")));
-        assert!(!safe_copy_db(&dir.path().join("missing.db"), &dir.path().join("x.db")));
+        assert!(!safe_copy_db(
+            &dir.path().join("missing.db"),
+            &dir.path().join("x.db")
+        ));
     }
 
     fn populate_home(home: &Path) {
@@ -1157,7 +1267,11 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = fs::metadata(target_home.join(".env")).unwrap().permissions().mode() & 0o777;
+            let mode = fs::metadata(target_home.join(".env"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
             assert_eq!(mode, 0o600);
         }
 
@@ -1185,7 +1299,8 @@ mod tests {
         {
             let f = File::create(&bogus_zip).unwrap();
             let mut zip = zip::ZipWriter::new(f);
-            zip.start_file("readme.txt", zip::write::SimpleFileOptions::default()).unwrap();
+            zip.start_file("readme.txt", zip::write::SimpleFileOptions::default())
+                .unwrap();
             zip.write_all(b"hi").unwrap();
             zip.finish().unwrap();
         }
@@ -1196,10 +1311,7 @@ mod tests {
 
     #[test]
     fn detect_prefix_strips_wrapper_dirs() {
-        let names: Vec<String> = vec![
-            ".hermes/config.yaml".into(),
-            ".hermes/state.db".into(),
-        ];
+        let names: Vec<String> = vec![".hermes/config.yaml".into(), ".hermes/state.db".into()];
         assert_eq!(detect_prefix(&names), ".hermes/");
         let names: Vec<String> = vec!["config.toml".into(), "state.db".into()];
         assert_eq!(detect_prefix(&names), "");
@@ -1270,7 +1382,9 @@ mod tests {
         fs::create_dir_all(&home).unwrap();
         make_sqlite_db(&home.join("state.db"), "cron_jobs", 3);
 
-        let snap_id = create_quick_snapshot(&home, None, None, None).unwrap().unwrap();
+        let snap_id = create_quick_snapshot(&home, None, None, None)
+            .unwrap()
+            .unwrap();
 
         // Simulate a bad update: state.db recreated without jobs.
         fs::remove_file(home.join("state.db")).unwrap();

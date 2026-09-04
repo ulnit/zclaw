@@ -55,27 +55,51 @@ impl DoctorReport {
 }
 
 fn ok(checks: &mut Vec<Check>, text: impl Into<String>) {
-    checks.push(Check { level: Level::Ok, text: text.into(), detail: String::new() });
+    checks.push(Check {
+        level: Level::Ok,
+        text: text.into(),
+        detail: String::new(),
+    });
 }
 
 fn ok_detail(checks: &mut Vec<Check>, text: impl Into<String>, detail: impl Into<String>) {
-    checks.push(Check { level: Level::Ok, text: text.into(), detail: detail.into() });
+    checks.push(Check {
+        level: Level::Ok,
+        text: text.into(),
+        detail: detail.into(),
+    });
 }
 
 fn warn(checks: &mut Vec<Check>, text: impl Into<String>) {
-    checks.push(Check { level: Level::Warn, text: text.into(), detail: String::new() });
+    checks.push(Check {
+        level: Level::Warn,
+        text: text.into(),
+        detail: String::new(),
+    });
 }
 
 fn warn_detail(checks: &mut Vec<Check>, text: impl Into<String>, detail: impl Into<String>) {
-    checks.push(Check { level: Level::Warn, text: text.into(), detail: detail.into() });
+    checks.push(Check {
+        level: Level::Warn,
+        text: text.into(),
+        detail: detail.into(),
+    });
 }
 
 fn fail(checks: &mut Vec<Check>, text: impl Into<String>) {
-    checks.push(Check { level: Level::Fail, text: text.into(), detail: String::new() });
+    checks.push(Check {
+        level: Level::Fail,
+        text: text.into(),
+        detail: String::new(),
+    });
 }
 
 fn info(checks: &mut Vec<Check>, text: impl Into<String>) {
-    checks.push(Check { level: Level::Info, text: text.into(), detail: String::new() });
+    checks.push(Check {
+        level: Level::Info,
+        text: text.into(),
+        detail: String::new(),
+    });
 }
 
 fn merge(report: &mut DoctorReport, issues: Vec<String>, fixed: usize) {
@@ -84,8 +108,7 @@ fn merge(report: &mut DoctorReport, issues: Vec<String>, fixed: usize) {
 }
 
 fn color_enabled() -> bool {
-    std::env::var_os("NO_COLOR").is_none()
-        && std::io::IsTerminal::is_terminal(&std::io::stdout())
+    std::env::var_os("NO_COLOR").is_none() && std::io::IsTerminal::is_terminal(&std::io::stdout())
 }
 
 fn paint(hex: &str, bold: bool, text: &str, enabled: bool) -> String {
@@ -151,7 +174,11 @@ fn check_version(report: &mut DoctorReport) {
                 " · local {} (+{} carried {})",
                 state.local,
                 state.ahead,
-                if state.ahead == 1 { "commit" } else { "commits" }
+                if state.ahead == 1 {
+                    "commit"
+                } else {
+                    "commits"
+                }
             ));
         }
         info(checks, text);
@@ -163,15 +190,24 @@ fn check_version(report: &mut DoctorReport) {
             warn_detail(
                 checks,
                 format!("{n} {word} behind upstream"),
-                format!("run {} to update", crate::banner::recommended_update_command()),
+                format!(
+                    "run {} to update",
+                    crate::banner::recommended_update_command()
+                ),
             );
-            issues.push(format!("ulnclaw is {n} {word} behind upstream — run {}", crate::banner::recommended_update_command()));
+            issues.push(format!(
+                "ulnclaw is {n} {word} behind upstream — run {}",
+                crate::banner::recommended_update_command()
+            ));
         }
         Some(_) => {
             warn(checks, "update available (commit count unknown)");
             issues.push("an ulnclaw update is available".to_string());
         }
-        None => info(checks, "update check not applicable (no git checkout found)"),
+        None => info(
+            checks,
+            "update check not applicable (no git checkout found)",
+        ),
     }
     merge(report, issues, 0);
 }
@@ -180,7 +216,12 @@ fn check_version(report: &mut DoctorReport) {
 // Configuration Files
 // =========================================================================
 
-fn check_config_files(report: &mut DoctorReport, config: &UlncLawConfig, home: &Path, opts: &DoctorOptions) {
+fn check_config_files(
+    report: &mut DoctorReport,
+    config: &UlncLawConfig,
+    home: &Path,
+    opts: &DoctorOptions,
+) {
     let mut issues: Vec<String> = Vec::new();
     let mut fixed = 0usize;
     let checks = report.section("Configuration Files");
@@ -221,10 +262,16 @@ fn check_config_files(report: &mut DoctorReport, config: &UlncLawConfig, home: &
 
     if config.model.model.trim().is_empty() {
         fail(checks, "no model configured");
-        info(checks, "set model.model in config.toml (or run 'ulnclaw init')");
+        info(
+            checks,
+            "set model.model in config.toml (or run 'ulnclaw init')",
+        );
         issues.push("configure model.model in config.toml".to_string());
     } else {
-        ok(checks, format!("model: {} ({})", config.model.model, config.model.provider));
+        ok(
+            checks,
+            format!("model: {} ({})", config.model.model, config.model.provider),
+        );
     }
 
     // .env file (optional env source).
@@ -239,15 +286,27 @@ fn check_config_files(report: &mut DoctorReport, config: &UlncLawConfig, home: &
                         && (trimmed.contains("API_KEY") || trimmed.contains("_TOKEN"))
                 });
                 if has_key {
-                    ok(checks, format!("{home_label}/.env exists (API key present)"));
+                    ok(
+                        checks,
+                        format!("{home_label}/.env exists (API key present)"),
+                    );
                 } else {
-                    warn(checks, format!("{home_label}/.env exists but holds no API key"));
+                    warn(
+                        checks,
+                        format!("{home_label}/.env exists but holds no API key"),
+                    );
                 }
             }
-            Err(_) => warn(checks, format!("{home_label}/.env exists but is unreadable")),
+            Err(_) => warn(
+                checks,
+                format!("{home_label}/.env exists but is unreadable"),
+            ),
         }
     } else {
-        info(checks, "no .env file (environment variables may be set directly)");
+        info(
+            checks,
+            "no .env file (environment variables may be set directly)",
+        );
     }
     merge(report, issues, fixed);
 }
@@ -274,11 +333,24 @@ fn check_directory_structure(report: &mut DoctorReport, home: &Path, opts: &Doct
             }
         }
     } else {
-        fail(checks, format!("home directory missing: {}", home.display()));
-        issues.push(format!("home directory {} missing (run 'ulnclaw doctor --fix')", home.display()));
+        fail(
+            checks,
+            format!("home directory missing: {}", home.display()),
+        );
+        issues.push(format!(
+            "home directory {} missing (run 'ulnclaw doctor --fix')",
+            home.display()
+        ));
     }
 
-    for subdir in ["sessions", "skills", "memory", "cron", "checkpoints", "logs"] {
+    for subdir in [
+        "sessions",
+        "skills",
+        "memory",
+        "cron",
+        "checkpoints",
+        "logs",
+    ] {
         let path = home.join(subdir);
         if path.is_dir() {
             ok(checks, format!("{subdir}/ present"));
@@ -291,7 +363,10 @@ fn check_directory_structure(report: &mut DoctorReport, home: &Path, opts: &Doct
                 Err(e) => warn(checks, format!("could not create {subdir}/: {e}")),
             }
         } else {
-            info(checks, format!("{subdir}/ not created yet (created on first use)"));
+            info(
+                checks,
+                format!("{subdir}/ not created yet (created on first use)"),
+            );
         }
     }
 
@@ -301,7 +376,10 @@ fn check_directory_structure(report: &mut DoctorReport, home: &Path, opts: &Doct
     if state_db.exists() {
         ok(checks, "state.db present (session store)");
     } else {
-        info(checks, "state.db not created yet (created on first session)");
+        info(
+            checks,
+            "state.db not created yet (created on first session)",
+        );
     }
     merge(report, issues, fixed);
 }
@@ -316,7 +394,10 @@ fn check_auth_providers(report: &mut DoctorReport, config: &UlncLawConfig, home:
     let provider = config.model.provider.as_str();
 
     if crate::provider::auxiliary::is_keyless(provider) {
-        info(checks, format!("provider '{provider}' runs locally — no API key needed"));
+        info(
+            checks,
+            format!("provider '{provider}' runs locally — no API key needed"),
+        );
         merge(report, issues, 0);
         return;
     }
@@ -364,7 +445,9 @@ fn resolve_key_source(config: &UlncLawConfig, home: &Path) -> Option<String> {
     if let Ok(content) = std::fs::read_to_string(env_path) {
         for var in ["ULNCLAW_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"] {
             if content.lines().any(|line| {
-                line.trim().starts_with(var) && line.contains('=') && !line.trim_start().starts_with('#')
+                line.trim().starts_with(var)
+                    && line.contains('=')
+                    && !line.trim_start().starts_with('#')
             }) {
                 return Some(format!("{var} in .env"));
             }
@@ -396,7 +479,10 @@ fn check_external_tools(report: &mut DoctorReport) {
         Some(path) => ok_detail(checks, "git found", path.display().to_string()),
         None => {
             warn(checks, "git not found on PATH");
-            info(checks, "checkpoints, /gitdiff and the git update check need git");
+            info(
+                checks,
+                "checkpoints, /gitdiff and the git update check need git",
+            );
             issues.push("install git for checkpoint/diff/update support".to_string());
         }
     }
@@ -405,14 +491,24 @@ fn check_external_tools(report: &mut DoctorReport) {
         crate::browser::connect::host_system(),
     );
     match candidates.first() {
-        Some(path) => ok_detail(checks, "Chromium-family browser found", path.display().to_string()),
+        Some(path) => ok_detail(
+            checks,
+            "Chromium-family browser found",
+            path.display().to_string(),
+        ),
         None => {
             warn(checks, "no Chromium-family browser binary found");
-            info(checks, "browser auto mode cannot launch; set ULNCLAW_BROWSER_PATH or ULNCLAW_BROWSER_CDP");
+            info(
+                checks,
+                "browser auto mode cannot launch; set ULNCLAW_BROWSER_PATH or ULNCLAW_BROWSER_CDP",
+            );
         }
     }
 
-    ok(checks, "SQLite bundled (rusqlite) — no system library required");
+    ok(
+        checks,
+        "SQLite bundled (rusqlite) — no system library required",
+    );
     merge(report, issues, 0);
 }
 
@@ -430,7 +526,10 @@ fn check_toolsets(report: &mut DoctorReport, config: &UlncLawConfig) {
     };
     ok(checks, format!("enabled: {}", enabled.join(", ")));
     if !config.disabled_toolsets.is_empty() {
-        info(checks, format!("disabled: {}", config.disabled_toolsets.join(", ")));
+        info(
+            checks,
+            format!("disabled: {}", config.disabled_toolsets.join(", ")),
+        );
     }
     // Resolve to concrete tool names so misnamed toolsets surface.
     let mut unknown = Vec::new();
@@ -442,7 +541,10 @@ fn check_toolsets(report: &mut DoctorReport, config: &UlncLawConfig) {
         }
     }
     for name in unknown {
-        warn(checks, format!("toolset '{name}' resolved to no tools (unknown name?)"));
+        warn(
+            checks,
+            format!("toolset '{name}' resolved to no tools (unknown name?)"),
+        );
         issues.push(format!("toolset '{name}' is enabled but unknown"));
     }
     merge(report, issues, 0);
@@ -456,7 +558,10 @@ fn check_skills(report: &mut DoctorReport, home: &Path) {
     let checks = report.section("Skills");
     let skills_dir = home.join("skills");
     if !skills_dir.is_dir() {
-        info(checks, "no skills directory yet (skills/ is created on first install)");
+        info(
+            checks,
+            "no skills directory yet (skills/ is created on first install)",
+        );
         return;
     }
     let skills = crate::skills::list_skills(&skills_dir);
@@ -469,7 +574,13 @@ fn check_skills(report: &mut DoctorReport, home: &Path) {
     // names as fallback — flag empties explicitly).
     for skill in &skills {
         if skill.name.trim().is_empty() {
-            warn(checks, format!("skill directory {} has no name in SKILL.md frontmatter", skill.path.display()));
+            warn(
+                checks,
+                format!(
+                    "skill directory {} has no name in SKILL.md frontmatter",
+                    skill.path.display()
+                ),
+            );
         }
     }
 }
@@ -483,7 +594,10 @@ fn check_profiles(report: &mut DoctorReport, config: &UlncLawConfig, home: &Path
         return;
     }
     let checks = report.section("Profiles");
-    ok(checks, format!("{} profile(s) configured", config.profiles.len()));
+    ok(
+        checks,
+        format!("{} profile(s) configured", config.profiles.len()),
+    );
     let mut names: Vec<&String> = config.profiles.keys().collect();
     names.sort();
     for name in names {
@@ -499,7 +613,11 @@ fn check_profiles(report: &mut DoctorReport, config: &UlncLawConfig, home: &Path
         if !profile_home.is_dir() {
             parts.push("profile home not created yet".to_string());
         }
-        let status = if parts.is_empty() { "configured".to_string() } else { parts.join(", ") };
+        let status = if parts.is_empty() {
+            "configured".to_string()
+        } else {
+            parts.join(", ")
+        };
         ok(checks, format!("  {name}: {status}"));
     }
 }
@@ -515,7 +633,12 @@ fn check_api_connectivity(report: &mut DoctorReport, config: &UlncLawConfig) {
         // Ollama-style local server: probe /api/tags.
         let base = config.resolve_base_url();
         let url = format!("{}/api/tags", base.trim_end_matches('/'));
-        probe_url(checks, &url, None, &format!("provider '{provider}' at {base}"));
+        probe_url(
+            checks,
+            &url,
+            None,
+            &format!("provider '{provider}' at {base}"),
+        );
         return;
     }
     let base = config.resolve_base_url();
@@ -544,10 +667,19 @@ fn probe_url(checks: &mut Vec<Check>, url: &str, bearer: Option<&str>, label: &s
     }
     match request.send() {
         Ok(resp) if resp.status().is_success() => {
-            ok(checks, format!("{label} reachable (HTTP {})", resp.status()));
+            ok(
+                checks,
+                format!("{label} reachable (HTTP {})", resp.status()),
+            );
         }
         Ok(resp) => {
-            warn(checks, format!("{label} answered HTTP {} — check credentials/base_url", resp.status()));
+            warn(
+                checks,
+                format!(
+                    "{label} answered HTTP {} — check credentials/base_url",
+                    resp.status()
+                ),
+            );
         }
         Err(e) => {
             warn(checks, format!("{label} unreachable: {e}"));
@@ -592,7 +724,10 @@ impl DoctorReport {
                     check.text
                 ));
                 if !check.detail.is_empty() {
-                    out.push_str(&format!("      {}\n", paint(DIM, false, &check.detail, enabled)));
+                    out.push_str(&format!(
+                        "      {}\n",
+                        paint(DIM, false, &check.detail, enabled)
+                    ));
                 }
             }
         }
@@ -614,7 +749,12 @@ impl DoctorReport {
             }
             out.push('\n');
             if self.fixed > 0 {
-                out.push_str(&paint(GREEN, true, &format!("  Fixed {} issue(s).", self.fixed), enabled));
+                out.push_str(&paint(
+                    GREEN,
+                    true,
+                    &format!("  Fixed {} issue(s).", self.fixed),
+                    enabled,
+                ));
                 out.push('\n');
             }
             out.push_str(&paint(
@@ -628,7 +768,12 @@ impl DoctorReport {
             out.push_str(&paint(GREEN, false, &rule, enabled));
             out.push('\n');
             if self.fixed > 0 {
-                out.push_str(&paint(GREEN, true, &format!("  Fixed {} issue(s).", self.fixed), enabled));
+                out.push_str(&paint(
+                    GREEN,
+                    true,
+                    &format!("  Fixed {} issue(s).", self.fixed),
+                    enabled,
+                ));
                 out.push('\n');
             }
             out.push_str(&paint(GREEN, true, "  All checks passed! 🎉", enabled));
@@ -701,7 +846,10 @@ mod tests {
             .iter()
             .find(|s| s.title == "Auth Providers")
             .unwrap();
-        assert!(auth.checks.iter().any(|c| c.text.contains("no API key needed")));
+        assert!(auth
+            .checks
+            .iter()
+            .any(|c| c.text.contains("no API key needed")));
         match prev {
             Some(v) => std::env::set_var("ULNCLAW_HOME", v),
             None => std::env::remove_var("ULNCLAW_HOME"),
@@ -732,7 +880,10 @@ mod tests {
         let prev = std::env::var("ULNCLAW_HOME").ok();
         std::env::set_var("ULNCLAW_HOME", dir.path());
         let config = minimal_config();
-        let opts = DoctorOptions { fix: true, ..Default::default() };
+        let opts = DoctorOptions {
+            fix: true,
+            ..Default::default()
+        };
         let report = run_doctor(&config, &opts);
         assert!(dir.path().join("config.toml").exists());
         assert!(dir.path().join("skills").is_dir());
@@ -753,7 +904,10 @@ mod tests {
         let mut config = minimal_config();
         config.enabled_toolsets = vec!["definitely_not_a_toolset".to_string()];
         let report = run_doctor(&config, &DoctorOptions::default());
-        assert!(report.issues.iter().any(|i| i.contains("definitely_not_a_toolset")));
+        assert!(report
+            .issues
+            .iter()
+            .any(|i| i.contains("definitely_not_a_toolset")));
         match prev {
             Some(v) => std::env::set_var("ULNCLAW_HOME", v),
             None => std::env::remove_var("ULNCLAW_HOME"),

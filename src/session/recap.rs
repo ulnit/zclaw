@@ -41,8 +41,8 @@ fn tool_call_name_and_args(message: &Message) -> Vec<(String, serde_json::Value)
     tool_calls
         .iter()
         .map(|call| {
-            let args: serde_json::Value = serde_json::from_str(&call.function.arguments)
-                .unwrap_or(serde_json::Value::Null);
+            let args: serde_json::Value =
+                serde_json::from_str(&call.function.arguments).unwrap_or(serde_json::Value::Null);
             (call.function.name.clone(), args)
         })
         .filter(|(name, _)| !name.is_empty())

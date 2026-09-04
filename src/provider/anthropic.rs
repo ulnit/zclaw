@@ -143,7 +143,10 @@ impl AnthropicProvider {
                     attempt,
                     self.max_retries,
                     delay,
-                    last_error.as_ref().map(|e| e.to_string()).unwrap_or_default()
+                    last_error
+                        .as_ref()
+                        .map(|e| e.to_string())
+                        .unwrap_or_default()
                 );
                 tokio::time::sleep(delay).await;
             }
@@ -186,9 +189,8 @@ impl AnthropicProvider {
                 status, message
             )));
         }
-        Err(last_error.unwrap_or_else(|| {
-            AgentError::Provider("request failed after retries".into())
-        }))
+        Err(last_error
+            .unwrap_or_else(|| AgentError::Provider("request failed after retries".into())))
     }
 
     fn build_body(&self, request: &ProviderRequest, stream: bool) -> Value {
@@ -285,7 +287,9 @@ impl AnthropicProviderBuilder {
         let endpoint = self
             .endpoint
             .unwrap_or_else(|| "https://api.anthropic.com".to_string());
-        let model = self.model.unwrap_or_else(|| "claude-sonnet-4-5".to_string());
+        let model = self
+            .model
+            .unwrap_or_else(|| "claude-sonnet-4-5".to_string());
         Ok(AnthropicProvider {
             client: Client::builder()
                 .timeout(std::time::Duration::from_secs(600))
@@ -350,7 +354,10 @@ fn attach_images_anthropic(messages: &mut [Value], images: &[crate::provider::Me
     let Some(idx) = messages.iter().rposition(|m| m["role"] == "user") else {
         return;
     };
-    if let Some(arr) = messages[idx].get_mut("content").and_then(|c| c.as_array_mut()) {
+    if let Some(arr) = messages[idx]
+        .get_mut("content")
+        .and_then(|c| c.as_array_mut())
+    {
         for block in blocks {
             arr.push(block);
         }
@@ -497,7 +504,11 @@ pub fn parse_anthropic_response(body: &Value) -> ProviderResponse {
     let mut text_parts: Vec<String> = Vec::new();
     let mut tool_calls: Vec<ToolCall> = Vec::new();
     let mut reasoning = String::new();
-    for block in body.get("content").and_then(|c| c.as_array()).unwrap_or(&vec![]) {
+    for block in body
+        .get("content")
+        .and_then(|c| c.as_array())
+        .unwrap_or(&vec![])
+    {
         match block.get("type").and_then(|t| t.as_str()) {
             Some("text") => {
                 if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
@@ -536,10 +547,7 @@ pub fn parse_anthropic_response(body: &Value) -> ProviderResponse {
     }
     let usage = body.get("usage").map(|u| Usage {
         prompt_tokens: u.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-        completion_tokens: u
-            .get("output_tokens")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as u32,
+        completion_tokens: u.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
         total_tokens: 0,
     });
     let finish_reason = map_stop_reason(body.get("stop_reason").and_then(|v| v.as_str()));
@@ -597,14 +605,8 @@ pub fn parse_anthropic_event(data: &str) -> Result<Option<StreamChunk>> {
                 if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
                     chunk.tool_call_deltas.push(ToolCallDelta {
                         index,
-                        id: block
-                            .get("id")
-                            .and_then(|v| v.as_str())
-                            .map(String::from),
-                        name_delta: block
-                            .get("name")
-                            .and_then(|v| v.as_str())
-                            .map(String::from),
+                        id: block.get("id").and_then(|v| v.as_str()).map(String::from),
+                        name_delta: block.get("name").and_then(|v| v.as_str()).map(String::from),
                         arguments_delta: None,
                     });
                 }
@@ -615,10 +617,8 @@ pub fn parse_anthropic_event(data: &str) -> Result<Option<StreamChunk>> {
             if let Some(delta) = event.get("delta") {
                 match delta.get("type").and_then(|t| t.as_str()) {
                     Some("text_delta") => {
-                        chunk.delta_content = delta
-                            .get("text")
-                            .and_then(|v| v.as_str())
-                            .map(String::from);
+                        chunk.delta_content =
+                            delta.get("text").and_then(|v| v.as_str()).map(String::from);
                     }
                     Some("thinking_delta") => {
                         chunk.delta_reasoning = delta
@@ -643,7 +643,10 @@ pub fn parse_anthropic_event(data: &str) -> Result<Option<StreamChunk>> {
         }
         "message_delta" => {
             chunk.finish_reason = map_stop_reason(
-                event.get("delta").and_then(|d| d.get("stop_reason")).and_then(|v| v.as_str()),
+                event
+                    .get("delta")
+                    .and_then(|d| d.get("stop_reason"))
+                    .and_then(|v| v.as_str()),
             );
             if let Some(usage) = event.get("usage") {
                 chunk.usage = Some(Usage {
@@ -921,7 +924,10 @@ mod tests {
         assert_eq!(response.content.as_deref(), Some("Running ls"));
         assert_eq!(response.tool_calls.len(), 1);
         assert_eq!(response.tool_calls[0].id, "toolu_9");
-        assert_eq!(response.tool_calls[0].function.arguments, "{\"command\":\"ls -la\"}");
+        assert_eq!(
+            response.tool_calls[0].function.arguments,
+            "{\"command\":\"ls -la\"}"
+        );
         assert_eq!(response.finish_reason.as_deref(), Some("tool_calls"));
         let usage = response.usage.unwrap();
         assert_eq!(usage.prompt_tokens, 10);
@@ -931,19 +937,37 @@ mod tests {
     #[test]
     fn test_stop_reason_mapping() {
         assert_eq!(map_stop_reason(Some("end_turn")).as_deref(), Some("stop"));
-        assert_eq!(map_stop_reason(Some("stop_sequence")).as_deref(), Some("stop"));
-        assert_eq!(map_stop_reason(Some("tool_use")).as_deref(), Some("tool_calls"));
-        assert_eq!(map_stop_reason(Some("max_tokens")).as_deref(), Some("length"));
+        assert_eq!(
+            map_stop_reason(Some("stop_sequence")).as_deref(),
+            Some("stop")
+        );
+        assert_eq!(
+            map_stop_reason(Some("tool_use")).as_deref(),
+            Some("tool_calls")
+        );
+        assert_eq!(
+            map_stop_reason(Some("max_tokens")).as_deref(),
+            Some("length")
+        );
         assert_eq!(map_stop_reason(None), None);
     }
 
     #[test]
     fn test_resolve_max_tokens_precedence() {
-        assert_eq!(resolve_max_tokens(Some(100), Some(200), "claude-sonnet-4-5"), 100);
-        assert_eq!(resolve_max_tokens(None, Some(200), "claude-sonnet-4-5"), 200);
+        assert_eq!(
+            resolve_max_tokens(Some(100), Some(200), "claude-sonnet-4-5"),
+            100
+        );
+        assert_eq!(
+            resolve_max_tokens(None, Some(200), "claude-sonnet-4-5"),
+            200
+        );
         assert_eq!(resolve_max_tokens(None, None, "claude-sonnet-4-5"), 64_000);
         assert_eq!(resolve_max_tokens(None, None, "claude-3-5-haiku"), 8_192);
-        assert_eq!(resolve_max_tokens(None, None, "unknown-model-9"), DEFAULT_OUTPUT_LIMIT);
+        assert_eq!(
+            resolve_max_tokens(None, None, "unknown-model-9"),
+            DEFAULT_OUTPUT_LIMIT
+        );
         assert_eq!(resolve_max_tokens(Some(0), None, "claude-3-opus"), 4_096);
     }
 
@@ -957,19 +981,30 @@ mod tests {
 
         let text = parse_anthropic_event(
             r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"He"}}"#,
-        ).unwrap().unwrap();
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(text.delta_content.as_deref(), Some("He"));
 
         let tool_start = parse_anthropic_event(
             r#"{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_5","name":"terminal"}}"#,
         ).unwrap().unwrap();
-        assert_eq!(tool_start.tool_call_deltas[0].id.as_deref(), Some("toolu_5"));
-        assert_eq!(tool_start.tool_call_deltas[0].name_delta.as_deref(), Some("terminal"));
+        assert_eq!(
+            tool_start.tool_call_deltas[0].id.as_deref(),
+            Some("toolu_5")
+        );
+        assert_eq!(
+            tool_start.tool_call_deltas[0].name_delta.as_deref(),
+            Some("terminal")
+        );
 
         let args = parse_anthropic_event(
             r#"{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"co"}}"#,
         ).unwrap().unwrap();
-        assert_eq!(args.tool_call_deltas[0].arguments_delta.as_deref(), Some("{\"co"));
+        assert_eq!(
+            args.tool_call_deltas[0].arguments_delta.as_deref(),
+            Some("{\"co")
+        );
         assert_eq!(args.tool_call_deltas[0].index, 1);
 
         let delta = parse_anthropic_event(
@@ -978,10 +1013,12 @@ mod tests {
         assert_eq!(delta.finish_reason.as_deref(), Some("stop"));
         assert_eq!(delta.usage.unwrap().completion_tokens, 12);
 
-        assert!(parse_anthropic_event(r#"{"type":"ping"}"#).unwrap().is_some());
-        assert!(parse_anthropic_event(
-            r#"{"type":"error","error":{"message":"overloaded"}}"#,
-        ).is_err());
+        assert!(parse_anthropic_event(r#"{"type":"ping"}"#)
+            .unwrap()
+            .is_some());
+        assert!(
+            parse_anthropic_event(r#"{"type":"error","error":{"message":"overloaded"}}"#,).is_err()
+        );
     }
 
     #[test]
@@ -1000,7 +1037,10 @@ mod tests {
             .api_key("sk-ant-oat01-token")
             .build()
             .unwrap();
-        assert_eq!(oauth.api_url(), "https://proxy.example.com/anthropic/v1/messages");
+        assert_eq!(
+            oauth.api_url(),
+            "https://proxy.example.com/anthropic/v1/messages"
+        );
         assert!(oauth.uses_bearer_auth());
     }
 

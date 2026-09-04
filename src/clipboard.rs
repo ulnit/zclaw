@@ -45,9 +45,7 @@ fn run_with_timeout(
     timeout: Duration,
 ) -> Option<ProcOutput> {
     let mut cmd = Command::new(program);
-    cmd.args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::null());
     if stdin_bytes.is_some() {
         cmd.stdin(Stdio::piped());
     } else {
@@ -195,25 +193,44 @@ fn write_clipboard_commands() -> Vec<(Vec<String>, bool)> {
     }
     if cfg!(target_os = "windows") {
         return vec![(
-            vec!["powershell".into(), "-NoProfile".into(), "-NonInteractive".into()],
+            vec![
+                "powershell".into(),
+                "-NoProfile".into(),
+                "-NonInteractive".into(),
+            ],
             false,
         )];
     }
     let mut attempts: Vec<(Vec<String>, bool)> = Vec::new();
     if is_wsl() {
         attempts.push((
-            vec!["powershell.exe".into(), "-NoProfile".into(), "-NonInteractive".into()],
+            vec![
+                "powershell.exe".into(),
+                "-NoProfile".into(),
+                "-NonInteractive".into(),
+            ],
             false,
         ));
     }
     if wayland_display().is_some() {
-        attempts.push((vec!["wl-copy".into(), "--type".into(), "text/plain".into()], true));
+        attempts.push((
+            vec!["wl-copy".into(), "--type".into(), "text/plain".into()],
+            true,
+        ));
     }
     attempts.push((
-        vec!["xclip".into(), "-selection".into(), "clipboard".into(), "-in".into()],
+        vec![
+            "xclip".into(),
+            "-selection".into(),
+            "clipboard".into(),
+            "-in".into(),
+        ],
         true,
     ));
-    attempts.push((vec!["xsel".into(), "--clipboard".into(), "--input".into()], true));
+    attempts.push((
+        vec!["xsel".into(), "--clipboard".into(), "--input".into()],
+        true,
+    ));
     attempts
 }
 
@@ -290,12 +307,7 @@ fn macos_osascript(dest: &Path) -> bool {
     let script = format!(
         "try\n  set imgData to the clipboard as «class PNGf»\n  set f to open for access POSIX file \"{dest_str}\" with write permission\n  write imgData to f\n  close access f\non error\n  return \"fail\"\nend try\n"
     );
-    let output = run_with_timeout(
-        "osascript",
-        &["-e", &script],
-        None,
-        Duration::from_secs(5),
-    );
+    let output = run_with_timeout("osascript", &["-e", &script], None, Duration::from_secs(5));
     if let Some(out) = output {
         if out.status_ok && !stdout_string(&out).contains("fail") && file_nonempty(dest) {
             return true;
@@ -310,7 +322,8 @@ fn macos_osascript(dest: &Path) -> bool {
 
 /// .NET System.Windows.Forms.Clipboard — used by both native Windows
 /// (powershell) and WSL2 (powershell.exe) paths.
-const PS_CHECK_IMAGE: &str = "Add-Type -AssemblyName System.Windows.Forms;[System.Windows.Forms.Clipboard]::ContainsImage()";
+const PS_CHECK_IMAGE: &str =
+    "Add-Type -AssemblyName System.Windows.Forms;[System.Windows.Forms.Clipboard]::ContainsImage()";
 
 const PS_EXTRACT_IMAGE: &str = "Add-Type -AssemblyName System.Windows.Forms;Add-Type -AssemblyName System.Drawing;$img = [System.Windows.Forms.Clipboard]::GetImage();if ($null -eq $img) { exit 1 }$ms = New-Object System.IO.MemoryStream;$img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png);[System.Convert]::ToBase64String($ms.ToArray())";
 
@@ -487,12 +500,7 @@ fn linux_save(dest: &Path) -> bool {
 // ---------------------------------------------------------------------------
 
 fn wl_paste_types() -> Option<Vec<String>> {
-    let output = run_with_timeout(
-        "wl-paste",
-        &["--list-types"],
-        None,
-        Duration::from_secs(3),
-    )?;
+    let output = run_with_timeout("wl-paste", &["--list-types"], None, Duration::from_secs(3))?;
     if !output.status_ok {
         return None;
     }
@@ -516,18 +524,19 @@ fn wayland_save(dest: &Path) -> bool {
         return false;
     };
     // Prefer PNG, fall back to other image formats (hermes order).
-    let mime: Option<&str> = ["image/png", "image/jpeg", "image/bmp", "image/gif", "image/webp"]
-        .into_iter()
-        .find(|preferred| types.iter().any(|t| t == *preferred));
+    let mime: Option<&str> = [
+        "image/png",
+        "image/jpeg",
+        "image/bmp",
+        "image/gif",
+        "image/webp",
+    ]
+    .into_iter()
+    .find(|preferred| types.iter().any(|t| t == *preferred));
     let Some(mime) = mime else {
         return false;
     };
-    let output = run_with_timeout(
-        "wl-paste",
-        &["--type", mime],
-        None,
-        Duration::from_secs(5),
-    );
+    let output = run_with_timeout("wl-paste", &["--type", mime], None, Duration::from_secs(5));
     let saved = match output {
         Some(out) if out.status_ok && !out.stdout.is_empty() => {
             std::fs::write(dest, &out.stdout).is_ok() && file_nonempty(dest)
@@ -628,7 +637,9 @@ fn xclip_save(dest: &Path) -> bool {
 }
 
 fn file_nonempty(path: &Path) -> bool {
-    std::fs::metadata(path).map(|m| m.len() > 0).unwrap_or(false)
+    std::fs::metadata(path)
+        .map(|m| m.len() > 0)
+        .unwrap_or(false)
 }
 
 /// Default clipboard-image directory under the ulnclaw home

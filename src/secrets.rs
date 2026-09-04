@@ -310,7 +310,10 @@ pub fn fetch_command_source(cfg: &CommandSourceConfig) -> FetchResult {
         }
     }
     const MAX_OUTPUT: usize = 1024 * 1024;
-    let stdout = child.wait_with_output().map(|o| o.stdout).unwrap_or_default();
+    let stdout = child
+        .wait_with_output()
+        .map(|o| o.stdout)
+        .unwrap_or_default();
     if stdout.len() > MAX_OUTPUT {
         result.error = Some("helper output exceeded 1 MiB cap".to_string());
         return result;
@@ -363,8 +366,7 @@ pub fn find_bws_maybe_install(home: &Path, install_if_missing: bool) -> Option<P
 /// allowed to change between majors (hermes `_BWS_VERSION`).
 pub const BWS_VERSION: &str = "2.0.0";
 
-const BWS_RELEASE_BASE: &str =
-    "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.0.0";
+const BWS_RELEASE_BASE: &str = "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.0.0";
 const BWS_CHECKSUM_NAME: &str = "bws-sha256-checksums-2.0.0.txt";
 /// Whole-request timeout. Hermes uses 60s; release CDN transfers of the
 /// ~6 MB zip routinely exceed that on slow links, so ulnclaw allows 5 min.
@@ -465,7 +467,10 @@ pub fn install_bws(home: &Path, force: bool) -> Result<PathBuf, String> {
         let _ = std::fs::remove_file(&staged);
         format!("install binary: {e}")
     })?;
-    eprintln!("[secrets] installed bws {BWS_VERSION} at {}", target.display());
+    eprintln!(
+        "[secrets] installed bws {BWS_VERSION} at {}",
+        target.display()
+    );
     Ok(target)
 }
 
@@ -540,21 +545,27 @@ fn extract_bws_from_zip(zip_bytes: &[u8], binary_name: &str) -> Result<Vec<u8>, 
         .map_err(|e| format!("corrupt archive: {e}"))?;
     let mut candidates: Vec<String> = Vec::new();
     for i in 0..archive.len() {
-        let entry = archive.by_index_raw(i).map_err(|e| format!("archive entry: {e}"))?;
+        let entry = archive
+            .by_index_raw(i)
+            .map_err(|e| format!("archive entry: {e}"))?;
         let name = entry.name().to_string();
         if name.split('/').last() == Some(binary_name) {
             candidates.push(name);
         }
     }
     if candidates.is_empty() {
-        return Err(format!("could not find {binary_name} inside downloaded archive"));
+        return Err(format!(
+            "could not find {binary_name} inside downloaded archive"
+        ));
     }
     candidates.sort_by_key(|name| name.len());
     let member = candidates.remove(0);
     // Zip-slip guard: member names must stay inside the extraction root.
     let normalized = member.trim_start_matches('/');
     if normalized.split('/').any(|seg| seg == "..") {
-        return Err(format!("refusing to extract unsafe archive member {member:?}"));
+        return Err(format!(
+            "refusing to extract unsafe archive member {member:?}"
+        ));
     }
     let mut file = archive
         .by_name(&member)
@@ -595,12 +606,9 @@ pub fn fetch_bitwarden_source(cfg: &BitwardenSourceConfig, home: &Path) -> Fetch
     );
     let ttl = cfg.cache_ttl_seconds as f64;
     if ttl > 0.0 {
-        if let Some(cached) = crate::secrets_cache::read_encrypted_bws_cache(
-            home,
-            &cache_key,
-            token.trim(),
-            ttl,
-        ) {
+        if let Some(cached) =
+            crate::secrets_cache::read_encrypted_bws_cache(home, &cache_key, token.trim(), ttl)
+        {
             result.secrets = cached.secrets;
             result.ok = true;
             return result;
@@ -662,7 +670,9 @@ pub fn fetch_bitwarden_source(cfg: &BitwardenSourceConfig, home: &Path) -> Fetch
                     continue;
                 }
                 if !is_valid_env_name(key) {
-                    result.warnings.push(format!("skipped invalid env name from vault: {key}"));
+                    result
+                        .warnings
+                        .push(format!("skipped invalid env name from vault: {key}"));
                     continue;
                 }
                 result.secrets.insert(key.to_string(), value.to_string());
@@ -699,7 +709,11 @@ pub fn find_op(binary_path: &str) -> Option<PathBuf> {
     let trimmed = binary_path.trim();
     if !trimmed.is_empty() {
         let candidate = PathBuf::from(trimmed);
-        return if candidate.is_file() { Some(candidate) } else { None };
+        return if candidate.is_file() {
+            Some(candidate)
+        } else {
+            None
+        };
     }
     if let Ok(path_var) = std::env::var("PATH") {
         for dir in path_var.split(':') {
@@ -745,7 +759,10 @@ fn op_child_env(token_value: &str) -> Vec<(String, String)> {
         }
     }
     if !token_value.is_empty() {
-        env.push(("OP_SERVICE_ACCOUNT_TOKEN".to_string(), token_value.to_string()));
+        env.push((
+            "OP_SERVICE_ACCOUNT_TOKEN".to_string(),
+            token_value.to_string(),
+        ));
     }
     env.push(("NO_COLOR".to_string(), "1".to_string()));
     env
@@ -810,7 +827,10 @@ fn run_op_read(
             Err(e) => return Err(format!("failed to invoke op: {e}")),
         }
     }
-    let stdout = child.wait_with_output().map(|o| o.stdout).unwrap_or_default();
+    let stdout = child
+        .wait_with_output()
+        .map(|o| o.stdout)
+        .unwrap_or_default();
     let value = String::from_utf8_lossy(&stdout)
         .trim_end_matches(['\r', '\n'])
         .to_string();
@@ -899,7 +919,13 @@ pub fn fetch_onepassword_source(cfg: &OnePasswordSourceConfig) -> FetchResult {
     };
     let mut read_errors = 0usize;
     for (name, reference) in &valid {
-        match run_op_read(&op, reference, &cfg.account, &token_value, cfg.timeout_seconds) {
+        match run_op_read(
+            &op,
+            reference,
+            &cfg.account,
+            &token_value,
+            cfg.timeout_seconds,
+        ) {
             Ok(value) => {
                 result.secrets.insert(name.clone(), value);
             }
@@ -1159,26 +1185,48 @@ mod tests {
             (
                 "bitwarden".to_string(),
                 fetch_ok(&[
-                    ("NEW_VAR", "from-bitwarden"),   // conflict: command claimed it
-                    ("OVERRIDE_ME", "bw-value"),     // existed, override=true → applied
-                    ("KEEP_ME", "bw-wants"),          // preserve → skipped
-                    ("BWS_ACCESS_TOKEN", "leaked"),   // protected → skipped
+                    ("NEW_VAR", "from-bitwarden"),  // conflict: command claimed it
+                    ("OVERRIDE_ME", "bw-value"),    // existed, override=true → applied
+                    ("KEEP_ME", "bw-wants"),        // preserve → skipped
+                    ("BWS_ACCESS_TOKEN", "leaked"), // protected → skipped
                     ("FRESH", "bw-fresh"),
                 ]),
             ),
         ];
         let report = apply_to_env(&mut env, &cfg, &fetches);
 
-        assert_eq!(env.get("NEW_VAR").unwrap(), "from-command", "first claim wins");
-        assert_eq!(env.get("EXISTING").unwrap(), "old", "no override on command source");
-        assert_eq!(env.get("OVERRIDE_ME").unwrap(), "bw-value", "override_existing applied");
-        assert_eq!(env.get("KEEP_ME").unwrap(), "precious", "preserve_existing held");
-        assert_eq!(env.get("BWS_ACCESS_TOKEN").unwrap(), "tok", "bootstrap token protected");
+        assert_eq!(
+            env.get("NEW_VAR").unwrap(),
+            "from-command",
+            "first claim wins"
+        );
+        assert_eq!(
+            env.get("EXISTING").unwrap(),
+            "old",
+            "no override on command source"
+        );
+        assert_eq!(
+            env.get("OVERRIDE_ME").unwrap(),
+            "bw-value",
+            "override_existing applied"
+        );
+        assert_eq!(
+            env.get("KEEP_ME").unwrap(),
+            "precious",
+            "preserve_existing held"
+        );
+        assert_eq!(
+            env.get("BWS_ACCESS_TOKEN").unwrap(),
+            "tok",
+            "bootstrap token protected"
+        );
         assert_eq!(env.get("FRESH").unwrap(), "bw-fresh");
 
         assert_eq!(report.applied.len(), 3); // NEW_VAR, OVERRIDE_ME, FRESH
         assert_eq!(report.conflicts.len(), 1);
-        assert!(report.skipped_protected.contains(&"BWS_ACCESS_TOKEN".to_string()));
+        assert!(report
+            .skipped_protected
+            .contains(&"BWS_ACCESS_TOKEN".to_string()));
         assert!(report.skipped_existing.contains(&"EXISTING".to_string()));
         assert!(report.skipped_existing.contains(&"KEEP_ME".to_string()));
     }
@@ -1372,8 +1420,14 @@ mod tests {
         std::fs::set_permissions(&op, std::fs::Permissions::from_mode(0o755)).unwrap();
 
         let mut env = HashMap::new();
-        env.insert("TEST_OP_KEY".to_string(), "op://vault/item/field".to_string());
-        env.insert("TEST_OP_BAD".to_string(), "op://vault/item/missing".to_string());
+        env.insert(
+            "TEST_OP_KEY".to_string(),
+            "op://vault/item/field".to_string(),
+        );
+        env.insert(
+            "TEST_OP_BAD".to_string(),
+            "op://vault/item/missing".to_string(),
+        );
         let cfg = OnePasswordSourceConfig {
             enabled: true,
             env,
@@ -1383,9 +1437,15 @@ mod tests {
         };
         let result = fetch_onepassword_source(&cfg);
         assert!(result.ok, "{:?}", result.error);
-        assert_eq!(result.secrets.get("TEST_OP_KEY").map(|s| s.as_str()), Some("s3cret"));
+        assert_eq!(
+            result.secrets.get("TEST_OP_KEY").map(|s| s.as_str()),
+            Some("s3cret")
+        );
         assert!(!result.secrets.contains_key("TEST_OP_BAD"));
-        assert!(result.warnings.iter().any(|w| w.contains("TEST_OP_BAD") || w.contains("op://vault/item/missing")));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.contains("TEST_OP_BAD") || w.contains("op://vault/item/missing")));
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1411,7 +1471,11 @@ mod tests {
         };
         assert_eq!(
             ordered_sources(&cfg),
-            vec!["onepassword".to_string(), "command".to_string(), "bitwarden".to_string()]
+            vec![
+                "onepassword".to_string(),
+                "command".to_string(),
+                "bitwarden".to_string()
+            ]
         );
     }
 
@@ -1438,10 +1502,19 @@ mod tests {
             },
         )];
         let report = apply_to_env(&mut env_map, &cfg, &fetches);
-        assert_eq!(env_map.get("EXISTING_VAR").map(|s| s.as_str()), Some("new"),
-            "mapped source overrides pre-existing env by default");
-        assert_eq!(env_map.get("OP_SERVICE_ACCOUNT_TOKEN").map(|s| s.as_str()), None,
-            "bootstrap token var is protected");
-        assert!(report.skipped_protected.iter().any(|v| v == "OP_SERVICE_ACCOUNT_TOKEN"));
+        assert_eq!(
+            env_map.get("EXISTING_VAR").map(|s| s.as_str()),
+            Some("new"),
+            "mapped source overrides pre-existing env by default"
+        );
+        assert_eq!(
+            env_map.get("OP_SERVICE_ACCOUNT_TOKEN").map(|s| s.as_str()),
+            None,
+            "bootstrap token var is protected"
+        );
+        assert!(report
+            .skipped_protected
+            .iter()
+            .any(|v| v == "OP_SERVICE_ACCOUNT_TOKEN"));
     }
 }

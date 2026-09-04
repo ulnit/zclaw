@@ -36,7 +36,11 @@ pub fn relative_time(ts: f64) -> String {
         return format!("{}d ago", (delta / 86400.0) as u64);
     }
     chrono::DateTime::from_timestamp(ts as i64, 0)
-        .map(|dt| dt.with_timezone(&chrono::Local).format("%Y-%m-%d").to_string())
+        .map(|dt| {
+            dt.with_timezone(&chrono::Local)
+                .format("%Y-%m-%d")
+                .to_string()
+        })
         .unwrap_or_else(|| "?".to_string())
 }
 
@@ -66,7 +70,10 @@ pub fn redact_key(key: &str) -> String {
 /// Vendor API-key table shared by `status` and `dump` (label, env-var
 /// alternates; first non-empty wins). Hermes parity: `dump.py` api_keys.
 pub const KEY_TABLE: &[(&str, &[&str])] = &[
-    ("ULNCLAW_GATEWAY", &["ULNCLAW_GATEWAY_KEY", "ULNCLAW_API_KEY"]),
+    (
+        "ULNCLAW_GATEWAY",
+        &["ULNCLAW_GATEWAY_KEY", "ULNCLAW_API_KEY"],
+    ),
     ("OpenRouter", &["OPENROUTER_API_KEY"]),
     ("OpenAI", &["OPENAI_API_KEY"]),
     ("Anthropic", &["ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN"]),
@@ -99,8 +106,7 @@ const CYAN: &str = "#00BCD4";
 const DIM: &str = "#8B8682";
 
 fn color_enabled() -> bool {
-    std::env::var_os("NO_COLOR").is_none()
-        && std::io::IsTerminal::is_terminal(&std::io::stdout())
+    std::env::var_os("NO_COLOR").is_none() && std::io::IsTerminal::is_terminal(&std::io::stdout())
 }
 
 fn paint(hex: &str, bold: bool, text: &str, enabled: bool) -> String {
@@ -130,11 +136,26 @@ pub fn show_status(config: &UlncLawConfig, opts: &StatusOptions) -> String {
     let mut out = String::new();
 
     out.push('\n');
-    out.push_str(&paint(CYAN, false, "┌─────────────────────────────────────────────────────────┐", enabled));
+    out.push_str(&paint(
+        CYAN,
+        false,
+        "┌─────────────────────────────────────────────────────────┐",
+        enabled,
+    ));
     out.push('\n');
-    out.push_str(&paint(CYAN, false, "│                 ⚕ ulnclaw Status                        │", enabled));
+    out.push_str(&paint(
+        CYAN,
+        false,
+        "│                 ⚕ ulnclaw Status                        │",
+        enabled,
+    ));
     out.push('\n');
-    out.push_str(&paint(CYAN, false, "└─────────────────────────────────────────────────────────┘", enabled));
+    out.push_str(&paint(
+        CYAN,
+        false,
+        "└─────────────────────────────────────────────────────────┘",
+        enabled,
+    ));
     out.push('\n');
 
     // Environment -----------------------------------------------------------
@@ -145,13 +166,21 @@ pub fn show_status(config: &UlncLawConfig, opts: &StatusOptions) -> String {
     out.push_str(&format!(
         "  config.toml:  {} {}\n",
         check_mark(config_path.exists()),
-        if config_path.exists() { "exists" } else { "not found (run 'ulnclaw init')" }
+        if config_path.exists() {
+            "exists"
+        } else {
+            "not found (run 'ulnclaw init')"
+        }
     ));
     let env_path = home.join(".env");
     out.push_str(&format!(
         "  .env file:    {} {}\n",
         check_mark(env_path.exists()),
-        if env_path.exists() { "exists" } else { "not found" }
+        if env_path.exists() {
+            "exists"
+        } else {
+            "not found"
+        }
     ));
 
     // Model -------------------------------------------------------------------
@@ -170,7 +199,11 @@ pub fn show_status(config: &UlncLawConfig, opts: &StatusOptions) -> String {
     section(&mut out, "API Keys", enabled);
     if let Some(key) = &config.model.api_key {
         if !key.trim().is_empty() {
-            out.push_str(&format!("  {:<16}  ✓ model.api_key ({})\n", "config", redact_key(key)));
+            out.push_str(&format!(
+                "  {:<16}  ✓ model.api_key ({})\n",
+                "config",
+                redact_key(key)
+            ));
         }
     }
     for (label, vars) in KEY_TABLE {
@@ -210,10 +243,7 @@ pub fn show_status(config: &UlncLawConfig, opts: &StatusOptions) -> String {
         crate::browser::connect::host_system(),
     );
     match candidates.first() {
-        Some(path) => out.push_str(&format!(
-            "  Binary:       ✓ {}\n",
-            path.display()
-        )),
+        Some(path) => out.push_str(&format!("  Binary:       ✓ {}\n", path.display())),
         None => out.push_str("  Binary:       ✗ no Chromium-family browser found\n"),
     }
 
@@ -236,18 +266,30 @@ pub fn show_status(config: &UlncLawConfig, opts: &StatusOptions) -> String {
     out.push_str(&format!(
         "  Auth key:     {} {}\n",
         check_mark(key_set),
-        if key_set { "configured" } else { "missing (gateway refuses API traffic without a key)" }
+        if key_set {
+            "configured"
+        } else {
+            "missing (gateway refuses API traffic without a key)"
+        }
     ));
     out.push_str(&format!(
         "  Multiplex:    {} profile mirrors\n",
-        if config.gateway.multiplex_profiles { "✓" } else { "✗" }
+        if config.gateway.multiplex_profiles {
+            "✓"
+        } else {
+            "✗"
+        }
     ));
     if opts.deep {
         let reachable = probe_tcp("127.0.0.1", config.gateway.port, Duration::from_secs(1));
         out.push_str(&format!(
             "  Port {}:     {}\n",
             config.gateway.port,
-            if reachable { "in use (gateway likely running)" } else { "available" }
+            if reachable {
+                "in use (gateway likely running)"
+            } else {
+                "available"
+            }
         ));
     }
 
@@ -257,7 +299,11 @@ pub fn show_status(config: &UlncLawConfig, opts: &StatusOptions) -> String {
         Ok(store) => match store.list() {
             Ok(jobs) => {
                 let active = jobs.iter().filter(|j| j.enabled).count();
-                out.push_str(&format!("  Jobs:         {} active, {} total\n", active, jobs.len()));
+                out.push_str(&format!(
+                    "  Jobs:         {} active, {} total\n",
+                    active,
+                    jobs.len()
+                ));
                 if let Some(next) = jobs
                     .iter()
                     .filter(|j| j.enabled)
@@ -267,9 +313,13 @@ pub fn show_status(config: &UlncLawConfig, opts: &StatusOptions) -> String {
                     out.push_str(&format!("  Next run:     {}\n", relative_time(next)));
                 }
             }
-            Err(e) => out.push_str(&format!("  Jobs:         (error reading cron store: {e})\n")),
+            Err(e) => out.push_str(&format!(
+                "  Jobs:         (error reading cron store: {e})\n"
+            )),
         },
-        Err(e) => out.push_str(&format!("  Jobs:         (error opening cron store: {e})\n")),
+        Err(e) => out.push_str(&format!(
+            "  Jobs:         (error opening cron store: {e})\n"
+        )),
     }
 
     // Sessions ------------------------------------------------------------------------
@@ -317,9 +367,19 @@ pub fn show_status(config: &UlncLawConfig, opts: &StatusOptions) -> String {
     out.push('\n');
     out.push_str(&paint(DIM, false, &"─".repeat(60), enabled));
     out.push('\n');
-    out.push_str(&paint(DIM, false, "  Run 'ulnclaw doctor' for detailed diagnostics", enabled));
+    out.push_str(&paint(
+        DIM,
+        false,
+        "  Run 'ulnclaw doctor' for detailed diagnostics",
+        enabled,
+    ));
     out.push('\n');
-    out.push_str(&paint(DIM, false, "  Run 'ulnclaw init' to write a default config", enabled));
+    out.push_str(&paint(
+        DIM,
+        false,
+        "  Run 'ulnclaw init' to write a default config",
+        enabled,
+    ));
     out.push('\n');
     out.push('\n');
     out
@@ -328,9 +388,9 @@ pub fn show_status(config: &UlncLawConfig, opts: &StatusOptions) -> String {
 fn probe_tcp(host: &str, port: u16, timeout: Duration) -> bool {
     let start = Instant::now();
     match std::net::TcpStream::connect_timeout(
-        &format!("{host}:{port}").parse().unwrap_or_else(|_| {
-            std::net::SocketAddr::from(([127, 0, 0, 1], port))
-        }),
+        &format!("{host}:{port}")
+            .parse()
+            .unwrap_or_else(|_| std::net::SocketAddr::from(([127, 0, 0, 1], port))),
         timeout,
     ) {
         Ok(_) => true,

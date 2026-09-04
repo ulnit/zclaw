@@ -25,7 +25,8 @@ pub struct CatalogEntry {
 pub const CATALOG: &[CatalogEntry] = &[
     CatalogEntry {
         name: "filesystem",
-        description: "Read/write/list files under allowed directories (reference filesystem server).",
+        description:
+            "Read/write/list files under allowed directories (reference filesystem server).",
         command: "npx",
         args: &["-y", "@modelcontextprotocol/server-filesystem", "."],
         required_env: &[],
@@ -121,7 +122,11 @@ mod tests {
             assert!(!entry.name.is_empty());
             assert!(!entry.description.is_empty());
             assert!(!entry.command.is_empty());
-            assert!(seen.insert(entry.name), "duplicate catalog entry {}", entry.name);
+            assert!(
+                seen.insert(entry.name),
+                "duplicate catalog entry {}",
+                entry.name
+            );
         }
         assert!(get_entry("filesystem").is_some());
         assert!(get_entry("no-such").is_none());

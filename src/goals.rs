@@ -250,7 +250,10 @@ impl GoalContract {
         let values = self.to_map();
         let mut lines = Vec::new();
         for (field, label) in CONTRACT_LABELS {
-            let value = values.get(*field).map(|s| s.trim().to_string()).unwrap_or_default();
+            let value = values
+                .get(*field)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
             if !value.is_empty() {
                 lines.push(format!("- {}: {}", label, value));
             }
@@ -259,7 +262,14 @@ impl GoalContract {
     }
 
     fn from_fields(fields: &HashMap<&'static str, Vec<String>>) -> GoalContract {
-        let join = |key: &'static str| fields.get(key).map(|v| v.join(" ")).unwrap_or_default().trim().to_string();
+        let join = |key: &'static str| {
+            fields
+                .get(key)
+                .map(|v| v.join(" "))
+                .unwrap_or_default()
+                .trim()
+                .to_string()
+        };
         GoalContract {
             outcome: join("outcome"),
             verification: join("verification"),
@@ -300,7 +310,10 @@ pub fn parse_contract(text: &str) -> (String, GoalContract) {
             headline_parts.push(line.to_string());
         }
     }
-    (headline_parts.join(" ").trim().to_string(), GoalContract::from_fields(&fields))
+    (
+        headline_parts.join(" ").trim().to_string(),
+        GoalContract::from_fields(&fields),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -512,14 +525,23 @@ pub fn parse_judge_response(raw: &str) -> JudgeVerdict {
                 Some(Value::Bool(b)) => *b,
                 _ => false,
             };
-            if done { "done".to_string() } else { "continue".to_string() }
+            if done {
+                "done".to_string()
+            } else {
+                "continue".to_string()
+            }
         }
     };
     if !matches!(verdict.as_str(), "done" | "continue" | "wait") {
         verdict = "continue".to_string();
     }
     if verdict != "wait" {
-        return JudgeVerdict { verdict, reason, parse_failed: false, wait: None };
+        return JudgeVerdict {
+            verdict,
+            reason,
+            parse_failed: false,
+            wait: None,
+        };
     }
 
     let first_int = |keys: &[&str]| -> Option<i64> {
@@ -648,7 +670,13 @@ pub fn render_background_block(processes: &[BackgroundProcessInfo]) -> String {
         let Some(pid) = proc.pid else { continue };
         let cmd = truncate_prompt(&proc.command.replace('\n', " ").trim().to_string(), 120);
         let tail = truncate_prompt(
-            &proc.output_preview.as_deref().unwrap_or("").replace('\n', " ").trim().to_string(),
+            &proc
+                .output_preview
+                .as_deref()
+                .unwrap_or("")
+                .replace('\n', " ")
+                .trim()
+                .to_string(),
             120,
         );
         let mut line = format!("- pid {}", pid);
@@ -736,7 +764,10 @@ pub fn load_goal(store: &SqliteSessionStore, session_id: &str) -> Option<GoalSta
     match GoalState::from_json(&raw) {
         Some(state) => Some(state),
         None => {
-            tracing::warn!("GoalManager: could not parse stored goal for {}", session_id);
+            tracing::warn!(
+                "GoalManager: could not parse stored goal for {}",
+                session_id
+            );
             None
         }
     }
@@ -792,7 +823,11 @@ pub fn migrate_goal_to_session(
         "GoalManager: migrated goal {} -> {} ({})",
         old_session_id,
         new_session_id,
-        if reason.is_empty() { "rotation" } else { reason }
+        if reason.is_empty() {
+            "rotation"
+        } else {
+            reason
+        }
     );
     true
 }
@@ -825,7 +860,11 @@ impl GoalManager {
             session_id,
             store,
             state,
-            default_max_turns: if default_max_turns == 0 { DEFAULT_MAX_TURNS } else { default_max_turns },
+            default_max_turns: if default_max_turns == 0 {
+                DEFAULT_MAX_TURNS
+            } else {
+                default_max_turns
+            },
         }
     }
 
@@ -842,7 +881,10 @@ impl GoalManager {
     }
 
     pub fn is_active(&self) -> bool {
-        self.state.as_ref().map(|s| s.status == "active").unwrap_or(false)
+        self.state
+            .as_ref()
+            .map(|s| s.status == "active")
+            .unwrap_or(false)
     }
 
     pub fn has_goal(&self) -> bool {
@@ -853,7 +895,10 @@ impl GoalManager {
     }
 
     pub fn has_contract(&self) -> bool {
-        self.state.as_ref().map(|s| s.has_contract()).unwrap_or(false)
+        self.state
+            .as_ref()
+            .map(|s| s.has_contract())
+            .unwrap_or(false)
     }
 
     /// Printable one-liner (hermes `status_line`).
@@ -868,32 +913,56 @@ impl GoalManager {
         let sub = if s.subgoals.is_empty() {
             String::new()
         } else {
-            format!(", {} subgoal{}", s.subgoals.len(), if s.subgoals.len() != 1 { "s" } else { "" })
+            format!(
+                ", {} subgoal{}",
+                s.subgoals.len(),
+                if s.subgoals.len() != 1 { "s" } else { "" }
+            )
         };
-        let con = if self.has_contract() { ", contract" } else { "" };
+        let con = if self.has_contract() {
+            ", contract"
+        } else {
+            ""
+        };
         let meta = format!("{}{}{}", turns, sub, con);
         if s.status == "active" {
             if let Some(sess) = s.waiting_on_session.as_deref() {
                 if session_waiting(sess) {
-                    let wr = s.waiting_reason.clone().unwrap_or_else(|| format!("session {}", sess));
+                    let wr = s
+                        .waiting_reason
+                        .clone()
+                        .unwrap_or_else(|| format!("session {}", sess));
                     return format!("⏳ Goal (parked on {}, {}): {}", wr, meta, s.goal);
                 }
             }
             if let Some(pid) = s.waiting_on_pid {
                 if pid_alive(pid) {
-                    let wr = s.waiting_reason.clone().unwrap_or_else(|| format!("pid {}", pid));
+                    let wr = s
+                        .waiting_reason
+                        .clone()
+                        .unwrap_or_else(|| format!("pid {}", pid));
                     return format!("⏳ Goal (parked on {}, {}): {}", wr, meta, s.goal);
                 }
             }
             if s.waiting_until > 0.0 && now_epoch() < s.waiting_until {
                 let remaining = (s.waiting_until - now_epoch()) as i64;
-                let wr = s.waiting_reason.clone().unwrap_or_else(|| format!("{}s", remaining));
-                return format!("⏳ Goal (parked {}s — {}, {}): {}", remaining, wr, meta, s.goal);
+                let wr = s
+                    .waiting_reason
+                    .clone()
+                    .unwrap_or_else(|| format!("{}s", remaining));
+                return format!(
+                    "⏳ Goal (parked {}s — {}, {}): {}",
+                    remaining, wr, meta, s.goal
+                );
             }
             return format!("⊙ Goal (active, {}): {}", meta, s.goal);
         }
         if s.status == "paused" {
-            let extra = s.paused_reason.as_deref().map(|r| format!(" — {}", r)).unwrap_or_default();
+            let extra = s
+                .paused_reason
+                .as_deref()
+                .map(|r| format!(" — {}", r))
+                .unwrap_or_default();
             return format!("⏸ Goal (paused, {}{}): {}", meta, extra, s.goal);
         }
         if s.status == "done" {
@@ -915,7 +984,9 @@ impl GoalManager {
         if goal.is_empty() {
             return Err("goal text is empty".to_string());
         }
-        let budget = max_turns.filter(|t| *t > 0).unwrap_or(self.default_max_turns);
+        let budget = max_turns
+            .filter(|t| *t > 0)
+            .unwrap_or(self.default_max_turns);
         let mut state = GoalState::new(goal, budget);
         state.contract = contract.unwrap_or_default();
         self.state = Some(state.clone());
@@ -1010,7 +1081,12 @@ impl GoalManager {
         if index_1based == 0 || index_1based > count {
             return Err(format!("index out of range (1..{})", count));
         }
-        let removed = self.state.as_mut().unwrap().subgoals.remove(index_1based - 1);
+        let removed = self
+            .state
+            .as_mut()
+            .unwrap()
+            .subgoals
+            .remove(index_1based - 1);
         self.save();
         Ok(removed)
     }
@@ -1055,7 +1131,9 @@ impl GoalManager {
         state.waiting_reason = Some(reason.trim().to_string()).filter(|r| !r.is_empty());
         state.waiting_since = now_epoch();
         self.save();
-        self.state.clone().ok_or_else(|| "no active goal to park".to_string())
+        self.state
+            .clone()
+            .ok_or_else(|| "no active goal to park".to_string())
     }
 
     /// Park the goal loop on a terminal background-process session
@@ -1075,7 +1153,9 @@ impl GoalManager {
         state.waiting_reason = Some(reason.trim().to_string()).filter(|r| !r.is_empty());
         state.waiting_since = now_epoch();
         self.save();
-        self.state.clone().ok_or_else(|| "no active goal to park".to_string())
+        self.state
+            .clone()
+            .ok_or_else(|| "no active goal to park".to_string())
     }
 
     /// Park the goal loop until `seconds` from now (hermes `wait_for_seconds`).
@@ -1093,7 +1173,9 @@ impl GoalManager {
         state.waiting_reason = Some(reason.trim().to_string()).filter(|r| !r.is_empty());
         state.waiting_since = now_epoch();
         self.save();
-        self.state.clone().ok_or_else(|| "no active goal to park".to_string())
+        self.state
+            .clone()
+            .ok_or_else(|| "no active goal to park".to_string())
     }
 
     /// Clear any active wait barrier; true if one was cleared (hermes
@@ -1102,7 +1184,10 @@ impl GoalManager {
         let Some(state) = self.state.as_mut() else {
             return false;
         };
-        if state.waiting_on_pid.is_none() && state.waiting_on_session.is_none() && state.waiting_until == 0.0 {
+        if state.waiting_on_pid.is_none()
+            && state.waiting_on_session.is_none()
+            && state.waiting_until == 0.0
+        {
             return false;
         }
         state.waiting_on_pid = None;
@@ -1176,7 +1261,11 @@ impl GoalManager {
             continuation_prompt: None,
             verdict: "waiting".to_string(),
             reason,
-            message: format!("⏳ Goal parked — waiting on {}: {}", tgt, state.waiting_reason.clone().unwrap_or_else(|| tgt.clone())),
+            message: format!(
+                "⏳ Goal parked — waiting on {}: {}",
+                tgt,
+                state.waiting_reason.clone().unwrap_or_else(|| tgt.clone())
+            ),
         })
     }
 
@@ -1207,7 +1296,11 @@ impl GoalManager {
             state.last_turn_at = now_epoch();
             state.clone()
         };
-        let contract = if snapshot.has_contract() { Some(snapshot.contract.clone()) } else { None };
+        let contract = if snapshot.has_contract() {
+            Some(snapshot.contract.clone())
+        } else {
+            None
+        };
         let (verdict, transport_failed) = judge_goal(
             config,
             main_provider,
@@ -1263,7 +1356,10 @@ impl GoalManager {
                     continuation_prompt: None,
                     verdict: "wait".to_string(),
                     reason: verdict.reason.clone(),
-                    message: format!("⏳ Goal parked (judge) — waiting on {}: {}", tgt, verdict.reason),
+                    message: format!(
+                        "⏳ Goal parked (judge) — waiting on {}: {}",
+                        tgt, verdict.reason
+                    ),
                 };
             }
         }
@@ -1347,7 +1443,10 @@ impl GoalManager {
         if turns_used >= max_turns {
             let state = self.state.as_mut().unwrap();
             state.status = "paused".to_string();
-            state.paused_reason = Some(format!("turn budget exhausted ({}/{})", turns_used, max_turns));
+            state.paused_reason = Some(format!(
+                "turn budget exhausted ({}/{})",
+                turns_used, max_turns
+            ));
             self.save();
             return GoalDecision {
                 status: Some("paused".to_string()),
@@ -1369,7 +1468,10 @@ impl GoalManager {
             continuation_prompt: self.next_continuation_prompt(),
             verdict: "continue".to_string(),
             reason: verdict.reason.clone(),
-            message: format!("↻ Continuing toward goal ({}/{}): {}", turns_used, max_turns, verdict.reason),
+            message: format!(
+                "↻ Continuing toward goal ({}/{}): {}",
+                turns_used, max_turns, verdict.reason
+            ),
         }
     }
 
@@ -1562,7 +1664,11 @@ pub async fn judge_goal(
         );
     }
 
-    let resolution = match crate::provider::auxiliary::resolve_aux_task(config, TASK_GOAL_JUDGE, main_provider) {
+    let resolution = match crate::provider::auxiliary::resolve_aux_task(
+        config,
+        TASK_GOAL_JUDGE,
+        main_provider,
+    ) {
         Ok(resolution) => resolution,
         Err(e) => {
             tracing::debug!("goal judge: auxiliary routing failed: {}", e);
@@ -1588,7 +1694,9 @@ pub async fn judge_goal(
         .filter(|s| !s.is_empty())
         .collect();
     let background_block = render_background_block(background_processes);
-    let current_time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z").to_string();
+    let current_time = chrono::Local::now()
+        .format("%Y-%m-%d %H:%M:%S %Z")
+        .to_string();
 
     let prompt = if let Some(contract) = contract.filter(|c| !c.is_empty()) {
         let mut contract_block = contract.render_block();
@@ -1604,7 +1712,10 @@ pub async fn judge_goal(
         JUDGE_USER_PROMPT_WITH_CONTRACT_TEMPLATE
             .replace("{goal}", &truncate_prompt(goal, 2000))
             .replace("{contract_block}", &truncate_prompt(&contract_block, 2500))
-            .replace("{response}", &truncate_prompt(last_response, JUDGE_RESPONSE_SNIPPET_CHARS))
+            .replace(
+                "{response}",
+                &truncate_prompt(last_response, JUDGE_RESPONSE_SNIPPET_CHARS),
+            )
             .replace("{background_block}", &background_block)
             .replace("{current_time}", &current_time)
     } else if !clean_subgoals.is_empty() {
@@ -1617,13 +1728,19 @@ pub async fn judge_goal(
         JUDGE_USER_PROMPT_WITH_SUBGOALS_TEMPLATE
             .replace("{goal}", &truncate_prompt(goal, 2000))
             .replace("{subgoals_block}", &truncate_prompt(&subgoals_block, 2000))
-            .replace("{response}", &truncate_prompt(last_response, JUDGE_RESPONSE_SNIPPET_CHARS))
+            .replace(
+                "{response}",
+                &truncate_prompt(last_response, JUDGE_RESPONSE_SNIPPET_CHARS),
+            )
             .replace("{background_block}", &background_block)
             .replace("{current_time}", &current_time)
     } else {
         JUDGE_USER_PROMPT_TEMPLATE
             .replace("{goal}", &truncate_prompt(goal, 2000))
-            .replace("{response}", &truncate_prompt(last_response, JUDGE_RESPONSE_SNIPPET_CHARS))
+            .replace(
+                "{response}",
+                &truncate_prompt(last_response, JUDGE_RESPONSE_SNIPPET_CHARS),
+            )
             .replace("{background_block}", &background_block)
             .replace("{current_time}", &current_time)
     };
@@ -1636,14 +1753,20 @@ pub async fn judge_goal(
         temperature: Some(0.0),
         stream: false,
         stop: None,
-    
-    images: None,
-};
+
+        images: None,
+    };
 
     match resolution.provider.chat_completion(request).await {
-        Ok(response) => (parse_judge_response(&response.content.unwrap_or_default()), false),
+        Ok(response) => (
+            parse_judge_response(&response.content.unwrap_or_default()),
+            false,
+        ),
         Err(e) => {
-            tracing::info!("goal judge: API call failed ({}) — falling through to continue", e);
+            tracing::info!(
+                "goal judge: API call failed ({}) — falling through to continue",
+                e
+            );
             (
                 JudgeVerdict {
                     verdict: "continue".into(),
@@ -1681,7 +1804,11 @@ pub async fn draft_contract(
     if objective.is_empty() {
         return None;
     }
-    let resolution = match crate::provider::auxiliary::resolve_aux_task(config, TASK_GOAL_JUDGE, main_provider) {
+    let resolution = match crate::provider::auxiliary::resolve_aux_task(
+        config,
+        TASK_GOAL_JUDGE,
+        main_provider,
+    ) {
         Ok(resolution) => resolution,
         Err(e) => {
             tracing::debug!("goal draft: auxiliary routing failed: {}", e);
@@ -1699,9 +1826,9 @@ pub async fn draft_contract(
         temperature: Some(0.0),
         stream: false,
         stop: None,
-    
-    images: None,
-};
+
+        images: None,
+    };
     let response = match resolution.provider.chat_completion(request).await {
         Ok(response) => response,
         Err(e) => {
@@ -1711,7 +1838,10 @@ pub async fn draft_contract(
     };
     let raw = response.content.unwrap_or_default();
     let Some(value) = extract_json_object(&raw) else {
-        tracing::debug!("goal draft: reply was not JSON: {:?}", truncate_chars(&raw, 200));
+        tracing::debug!(
+            "goal draft: reply was not JSON: {:?}",
+            truncate_chars(&raw, 200)
+        );
         return None;
     };
     let contract = GoalContract::from_value(Some(&value));
@@ -1821,7 +1951,11 @@ where
     J: FnMut(String) -> GoalLoopFuture<'e, JudgeVerdict>,
     L: FnMut(String),
 {
-    let max_turns = if max_turns < 1 { DEFAULT_MAX_TURNS as u32 } else { max_turns };
+    let max_turns = if max_turns < 1 {
+        DEFAULT_MAX_TURNS as u32
+    } else {
+        max_turns
+    };
     let mut last_response = first_response.to_string();
     // The first turn already consumed one unit of budget.
     let mut turns_used: u32 = 1;
@@ -1976,12 +2110,8 @@ pub async fn goal_completion_gate(
     let Some(provider) = provider else {
         return Ok(());
     };
-    if crate::provider::auxiliary::resolve_aux_task(
-        config,
-        TASK_GOAL_JUDGE,
-        provider.clone(),
-    )
-    .is_err()
+    if crate::provider::auxiliary::resolve_aux_task(config, TASK_GOAL_JUDGE, provider.clone())
+        .is_err()
     {
         return Ok(());
     }
@@ -2078,8 +2208,14 @@ mod tests {
 
     #[test]
     fn judge_verdict_shapes() {
-        assert_eq!(parse_judge_response(r#"{"verdict": "done", "reason": "finished"}"#).verdict, "done");
-        assert_eq!(parse_judge_response(r#"{"verdict": "CONTINUE", "reason": "more work"}"#).verdict, "continue");
+        assert_eq!(
+            parse_judge_response(r#"{"verdict": "done", "reason": "finished"}"#).verdict,
+            "done"
+        );
+        assert_eq!(
+            parse_judge_response(r#"{"verdict": "CONTINUE", "reason": "more work"}"#).verdict,
+            "continue"
+        );
         let legacy_done = parse_judge_response(r#"{"done": true, "reason": "ok"}"#);
         assert_eq!(legacy_done.verdict, "done");
         let legacy_not_done = parse_judge_response(r#"{"done": false}"#);
@@ -2114,11 +2250,16 @@ mod tests {
 
     #[test]
     fn judge_wait_directives() {
-        let by_session = parse_judge_response(r#"{"verdict": "wait", "wait_on_session": "bg-1", "reason": "ci"}"#);
+        let by_session = parse_judge_response(
+            r#"{"verdict": "wait", "wait_on_session": "bg-1", "reason": "ci"}"#,
+        );
         assert_eq!(by_session.wait, Some(WaitDirective::Session("bg-1".into())));
-        let by_pid = parse_judge_response(r#"{"verdict": "wait", "wait_on_pid": 1234, "reason": "build"}"#);
+        let by_pid =
+            parse_judge_response(r#"{"verdict": "wait", "wait_on_pid": 1234, "reason": "build"}"#);
         assert_eq!(by_pid.wait, Some(WaitDirective::Pid(1234)));
-        let by_seconds = parse_judge_response(r#"{"verdict": "wait", "wait_for_seconds": 60, "reason": "rate limit"}"#);
+        let by_seconds = parse_judge_response(
+            r#"{"verdict": "wait", "wait_for_seconds": 60, "reason": "rate limit"}"#,
+        );
         assert_eq!(by_seconds.wait, Some(WaitDirective::Seconds(60)));
         // Aliases + string numbers.
         let alias = parse_judge_response(r#"{"verdict": "wait", "session_id": "bg-9"}"#);
@@ -2257,7 +2398,10 @@ mod tests {
         // A fresh manager sees no active goal.
         let fresh = GoalManager::new("sess-c", Some(store.clone()), DEFAULT_MAX_TURNS);
         assert!(!fresh.has_goal());
-        assert_eq!(fresh.status_line(), "No active goal. Set one with /goal <text>.");
+        assert_eq!(
+            fresh.status_line(),
+            "No active goal. Set one with /goal <text>."
+        );
     }
 
     #[test]
@@ -2265,13 +2409,23 @@ mod tests {
         let (_dir, store) = temp_store("migrate");
         let mut manager = GoalManager::new("old-sess", Some(store.clone()), DEFAULT_MAX_TURNS);
         manager.set("carry me over", None, None).expect("set");
-        assert!(migrate_goal_to_session(&store, "old-sess", "new-sess", "compaction"));
+        assert!(migrate_goal_to_session(
+            &store,
+            "old-sess",
+            "new-sess",
+            "compaction"
+        ));
         let migrated = load_goal(&store, "new-sess").expect("migrated");
         assert_eq!(migrated.goal, "carry me over");
         assert_eq!(migrated.status, "active");
         assert_eq!(load_goal(&store, "old-sess").unwrap().status, "cleared");
         // Second migration is a no-op (old row cleared).
-        assert!(!migrate_goal_to_session(&store, "old-sess", "newer-sess", ""));
+        assert!(!migrate_goal_to_session(
+            &store,
+            "old-sess",
+            "newer-sess",
+            ""
+        ));
     }
 
     // --- state machine ---------------------------------------------------------
@@ -2330,7 +2484,9 @@ mod tests {
         let decision = manager.apply_verdict(bad, false);
         assert!(!decision.should_continue);
         assert_eq!(decision.status.as_deref(), Some("paused"));
-        assert!(decision.message.contains("isn't returning the required JSON verdict"));
+        assert!(decision
+            .message
+            .contains("isn't returning the required JSON verdict"));
     }
 
     #[test]
@@ -2338,14 +2494,18 @@ mod tests {
         let mut manager = manager_with_state(None);
         manager.state.as_mut().unwrap().max_turns = 100;
         for _ in 0..DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES {
-            let decision = manager.apply_verdict(judge_verdict("continue", "judge error: HttpError"), true);
+            let decision =
+                manager.apply_verdict(judge_verdict("continue", "judge error: HttpError"), true);
             if decision.status.as_deref() == Some("paused") {
                 assert!(decision.message.contains("judge API returned errors"));
                 return;
             }
             assert!(decision.should_continue);
         }
-        panic!("expected auto-pause after {} transport failures", DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES);
+        panic!(
+            "expected auto-pause after {} transport failures",
+            DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES
+        );
     }
 
     #[test]
@@ -2411,7 +2571,9 @@ mod tests {
     #[test]
     fn status_line_variants() {
         let mut manager = manager_with_state(None);
-        assert!(manager.status_line().contains("⊙ Goal (active, 0/5 turns): ship the feature"));
+        assert!(manager
+            .status_line()
+            .contains("⊙ Goal (active, 0/5 turns): ship the feature"));
         manager.add_subgoal("extra").unwrap();
         assert!(manager.status_line().contains("1 subgoal"));
         manager.pause("user-paused").unwrap();
@@ -2522,7 +2684,10 @@ mod tests {
         assert_eq!(result.turns_used, 2);
         assert_eq!(result.reason, "turn budget exhausted");
         let reason = block_reason.lock().unwrap().clone().unwrap();
-        assert!(reason.contains("exhausted its turn budget (2/2)"), "{reason}");
+        assert!(
+            reason.contains("exhausted its turn budget (2/2)"),
+            "{reason}"
+        );
     }
 
     #[tokio::test]

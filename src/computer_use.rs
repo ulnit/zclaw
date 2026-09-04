@@ -174,7 +174,9 @@ struct CuaSession {
 static SESSION: OnceCell<Arc<Mutex<Option<CuaSession>>>> = OnceCell::const_new();
 
 async fn session_cell() -> &'static Arc<Mutex<Option<CuaSession>>> {
-    SESSION.get_or_init(|| async { Arc::new(Mutex::new(None)) }).await
+    SESSION
+        .get_or_init(|| async { Arc::new(Mutex::new(None)) })
+        .await
 }
 
 /// Does the driver binary advertise `--no-overlay` (hermes
@@ -200,13 +202,15 @@ fn driver_supports_no_overlay(driver: &str) -> bool {
 /// Connect (or reuse) the shared cua-driver MCP session.
 async fn with_session<F, T>(cfg: &ComputerUseConfig, f: F) -> Result<T>
 where
-    F: FnOnce(&mut CuaSession) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T>> + Send + '_>>,
+    F: FnOnce(
+        &mut CuaSession,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T>> + Send + '_>>,
 {
     let cell = session_cell().await;
     let mut guard = cell.lock().await;
     if guard.is_none() {
-        let driver = resolve_cua_driver_cmd()
-            .ok_or_else(|| AgentError::Tool(cua_driver_install_hint()))?;
+        let driver =
+            resolve_cua_driver_cmd().ok_or_else(|| AgentError::Tool(cua_driver_install_hint()))?;
         let mut args = vec!["mcp".to_string()];
         if no_overlay_resolved(cfg) && driver_supports_no_overlay(&driver) {
             args.push("--no-overlay".to_string());
@@ -224,9 +228,9 @@ where
             lazy: false,
             enabled: true,
         };
-        let mut client = McpClient::connect(&server_cfg).await.map_err(|e| {
-            AgentError::Tool(format!("cua-driver MCP connect failed: {e}"))
-        })?;
+        let mut client = McpClient::connect(&server_cfg)
+            .await
+            .map_err(|e| AgentError::Tool(format!("cua-driver MCP connect failed: {e}")))?;
         let tools: Vec<String> = client
             .list_tools()
             .await
@@ -746,7 +750,10 @@ pub fn tool_schema() -> Value {
 }
 
 /// The `computer_use` tool handler (hermes `handle_computer_use`).
-pub async fn handle_computer_use(args: Value, ctx: Arc<crate::tools::ToolContext>) -> Result<Value> {
+pub async fn handle_computer_use(
+    args: Value,
+    ctx: Arc<crate::tools::ToolContext>,
+) -> Result<Value> {
     let action = args
         .get("action")
         .and_then(|v| v.as_str())
@@ -803,7 +810,9 @@ pub async fn handle_computer_use(args: Value, ctx: Arc<crate::tools::ToolContext
         "list_windows" => list_windows(&cfg, &args).await,
         "focus_app" => focus_app(&cfg, &args).await,
         other if other.starts_with("cua_browser_") => browser_passthrough(&cfg, other, &args).await,
-        _ => Ok(json!({"ok": false, "action": action, "error": format!("unknown action {action:?}")})),
+        _ => Ok(
+            json!({"ok": false, "action": action, "error": format!("unknown action {action:?}")}),
+        ),
     };
     // Belt-and-braces over the driver-side `set_config` cap: downscale
     // oversized screenshots client-side (no-op when the driver already
@@ -821,7 +830,11 @@ async fn capture(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
         .and_then(|v| v.as_str())
         .unwrap_or("som")
         .to_string();
-    let app = args.get("app").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let app = args
+        .get("app")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let window_title = args
         .get("window_title")
         .and_then(|v| v.as_str())
@@ -862,7 +875,12 @@ async fn capture(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
 
 /// click / double_click / right_click / middle_click (hermes `click()`):
 /// element index or coordinates against the active window.
-async fn click(cfg: &ComputerUseConfig, args: &Value, click_count: u32, button: &str) -> Result<Value> {
+async fn click(
+    cfg: &ComputerUseConfig,
+    args: &Value,
+    click_count: u32,
+    button: &str,
+) -> Result<Value> {
     let element = args.get("element").and_then(|v| v.as_u64());
     let (x, y) = match coord(args, "coordinate") {
         Some((x, y)) => (Some(x), Some(y)),
@@ -877,7 +895,11 @@ async fn click(cfg: &ComputerUseConfig, args: &Value, click_count: u32, button: 
         .and_then(|v| v.as_str())
         .unwrap_or(button)
         .to_string();
-    let modifiers = args.get("modifiers").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let modifiers = args
+        .get("modifiers")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     with_session(cfg, move |session| {
         Box::pin(async move {
             let Some(pid) = session.active_pid else {
@@ -888,7 +910,11 @@ async fn click(cfg: &ComputerUseConfig, args: &Value, click_count: u32, button: 
                 return Ok(json!({"ok": false, "action": "click",
                     "message": "No active window_id — call capture first."}));
             };
-            let tool = if click_count == 2 { "double_click" } else { "click" };
+            let tool = if click_count == 2 {
+                "double_click"
+            } else {
+                "click"
+            };
             let mut call = json!({"session": session.session_id, "pid": pid,
                 "window_id": window_id, "button": button.as_str()});
             if let Some(element) = element {
@@ -961,7 +987,11 @@ async fn drag(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
 
 /// scroll: direction + amount, or explicit coordinates (hermes `scroll()`).
 async fn scroll(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
-    let direction = args.get("direction").and_then(|v| v.as_str()).unwrap_or("down").to_string();
+    let direction = args
+        .get("direction")
+        .and_then(|v| v.as_str())
+        .unwrap_or("down")
+        .to_string();
     let amount = args.get("amount").and_then(|v| v.as_i64()).unwrap_or(3);
     let (x, y) = match coord(args, "coordinate") {
         Some((x, y)) => (Some(x), Some(y)),
@@ -998,7 +1028,11 @@ async fn scroll(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
 
 /// type: text entry (hermes `type_text()`).
 async fn type_text(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
-    let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let text = args
+        .get("text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if text.is_empty() {
         return Ok(json!({"ok": false, "action": "type", "message": "type requires text="}));
     }
@@ -1022,13 +1056,24 @@ async fn type_text(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
 /// key: single key (`press_key`) or `mod+key` combo (`hotkey`)
 /// (hermes `key()`).
 async fn key(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
-    let keys = args.get("keys").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let keys = args
+        .get("keys")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if keys.is_empty() {
         return Ok(json!({"ok": false, "action": "key", "message": "key requires keys="}));
     }
-    let parts: Vec<String> = keys.split('+').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    let parts: Vec<String> = keys
+        .split('+')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
     if parts.is_empty() {
-        return Ok(json!({"ok": false, "action": "key", "message": format!("unparseable key combo {keys:?}")}));
+        return Ok(
+            json!({"ok": false, "action": "key", "message": format!("unparseable key combo {keys:?}")}),
+        );
     }
     let is_combo = parts.len() > 1;
     with_session(cfg, move |session| {
@@ -1066,7 +1111,9 @@ async fn set_value(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
             "message": "set_value requires element= (element index)."}));
     };
     if value.is_null() {
-        return Ok(json!({"ok": false, "action": "set_value", "message": "set_value requires value="}));
+        return Ok(
+            json!({"ok": false, "action": "set_value", "message": "set_value requires value="}),
+        );
     }
     with_session(cfg, move |session| {
         Box::pin(async move {
@@ -1088,7 +1135,11 @@ async fn set_value(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
 
 /// list_windows with light filtering (hermes `list_windows()`).
 async fn list_windows(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
-    let app_filter = args.get("app").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+    let app_filter = args
+        .get("app")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_lowercase();
     with_session(cfg, move |session| {
         Box::pin(async move {
             let result = session
@@ -1118,9 +1169,16 @@ async fn list_windows(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
 /// focus_app: bring an app to front without stealing cursor focus
 /// (hermes `focus_app()`): match via list_apps, then `focus_app`.
 async fn focus_app(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
-    let app = args.get("app").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let app = args
+        .get("app")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if app.is_empty() {
-        return Ok(json!({"ok": false, "action": "focus_app", "message": "focus_app requires app="}));
+        return Ok(
+            json!({"ok": false, "action": "focus_app", "message": "focus_app requires app="}),
+        );
     }
     with_session(cfg, move |session| {
         Box::pin(async move {
@@ -1129,7 +1187,11 @@ async fn focus_app(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
                 .call_tool("list_apps", json!({"session": session.session_id}))
                 .await?;
             let list_payload = unwrap_mcp_result(&list);
-            let apps = list_payload.get("apps").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            let apps = list_payload
+                .get("apps")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
             let needle = app.to_lowercase();
             let mut found: Option<Value> = None;
             for candidate in &apps {
@@ -1144,7 +1206,11 @@ async fn focus_app(cfg: &ComputerUseConfig, args: &Value) -> Result<Value> {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_lowercase();
-                if name == needle || bundle == needle || name.contains(&needle) || bundle.contains(&needle) {
+                if name == needle
+                    || bundle == needle
+                    || name.contains(&needle)
+                    || bundle.contains(&needle)
+                {
                     found = Some(candidate.clone());
                     break;
                 }
@@ -1239,7 +1305,10 @@ pub async fn release_computer_use_session() {
 
 /// `cua-driver --version` (for `computer-use status`).
 pub fn driver_version(driver: &str) -> Option<String> {
-    let out = std::process::Command::new(driver).arg("--version").output().ok()?;
+    let out = std::process::Command::new(driver)
+        .arg("--version")
+        .output()
+        .ok()?;
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -1256,8 +1325,8 @@ pub fn driver_version(driver: &str) -> Option<String> {
 /// Run cua-driver's `health_report` MCP tool once (hermes `computer-use
 /// doctor`): connect, call, disconnect. Returns the structured payload.
 pub async fn health_report(cfg: &ComputerUseConfig) -> Result<Value> {
-    let driver = resolve_cua_driver_cmd()
-        .ok_or_else(|| AgentError::Tool(cua_driver_install_hint()))?;
+    let driver =
+        resolve_cua_driver_cmd().ok_or_else(|| AgentError::Tool(cua_driver_install_hint()))?;
     let mut args = vec!["mcp".to_string()];
     if no_overlay_resolved(cfg) && driver_supports_no_overlay(&driver) {
         args.push("--no-overlay".to_string());
@@ -1301,12 +1370,17 @@ mod tests {
     fn telemetry_env_policy() {
         let mut cfg = ComputerUseConfig::default();
         let env = cua_driver_child_env(&cfg);
-        assert_eq!(env.get(CUA_TELEMETRY_ENV_VAR).map(|s| s.as_str()), Some("0"));
+        assert_eq!(
+            env.get(CUA_TELEMETRY_ENV_VAR).map(|s| s.as_str()),
+            Some("0")
+        );
         cfg.cua_telemetry = true;
         let env = cua_driver_child_env(&cfg);
         // Opt-in: the var is whatever the process env has (often absent).
-        assert!(env.get(CUA_TELEMETRY_ENV_VAR).map(|s| s.as_str()) != Some("0")
-            || std::env::var(CUA_TELEMETRY_ENV_VAR).as_deref() == Ok("0"));
+        assert!(
+            env.get(CUA_TELEMETRY_ENV_VAR).map(|s| s.as_str()) != Some("0")
+                || std::env::var(CUA_TELEMETRY_ENV_VAR).as_deref() == Ok("0")
+        );
     }
 
     #[test]
@@ -1336,7 +1410,10 @@ mod tests {
     fn unwrap_mcp_plain_text() {
         let mcp = json!({"content": [{"type": "text", "text": "hello world"}]});
         let payload = unwrap_mcp_result(&mcp);
-        assert_eq!(payload.get("message").and_then(|v| v.as_str()), Some("hello world"));
+        assert_eq!(
+            payload.get("message").and_then(|v| v.as_str()),
+            Some("hello world")
+        );
     }
 
     #[test]
@@ -1365,7 +1442,9 @@ mod tests {
         // With no driver installed the handler short-circuits to the install
         // hint; either outcome must be ok=false without panicking.
         let ctx = Arc::new(crate::tools::ToolContext::default());
-        let out = handle_computer_use(json!({"action": "fly"}), ctx).await.unwrap();
+        let out = handle_computer_use(json!({"action": "fly"}), ctx)
+            .await
+            .unwrap();
         assert_eq!(out["ok"], json!(false));
     }
 
@@ -1452,7 +1531,10 @@ mod tests {
     fn resolve_env_override() {
         // SAFETY: test-local env mutation; other tests don't read this var.
         unsafe { std::env::set_var("ULNCLAW_CUA_DRIVER_CMD", "/tmp/fake-cua-driver") };
-        assert_eq!(resolve_cua_driver_cmd().as_deref(), Some("/tmp/fake-cua-driver"));
+        assert_eq!(
+            resolve_cua_driver_cmd().as_deref(),
+            Some("/tmp/fake-cua-driver")
+        );
         unsafe { std::env::remove_var("ULNCLAW_CUA_DRIVER_CMD") };
     }
 }

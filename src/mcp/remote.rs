@@ -34,8 +34,7 @@ type PendingMap = HashMap<u64, oneshot::Sender<Result<Value>>>;
 pub type ReauthFn = std::sync::Arc<
     dyn Fn(
             Option<String>,
-        )
-            -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>>
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send>>
         + Send
         + Sync,
 >;
@@ -92,8 +91,7 @@ fn split_sse_events(buffer: &str) -> (Vec<SseEvent>, String) {
     let mut i = 0usize;
     while i + 1 < bytes.len() {
         let is_double_nl = bytes[i] == b'\n' && bytes[i + 1] == b'\n';
-        let is_double_crlf = i + 3 < bytes.len()
-            && &bytes[i..i + 4] == b"\r\n\r\n";
+        let is_double_crlf = i + 3 < bytes.len() && &bytes[i..i + 4] == b"\r\n\r\n";
         if is_double_nl || is_double_crlf {
             let chunk = &buffer[rest_start..i];
             if let Some(event) = parse_sse_chunk(chunk) {
@@ -144,7 +142,9 @@ impl RemoteMcpClient {
             .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
             .build()
             .map_err(|e| AgentError::Tool(format!("MCP http client: {}", e)))?;
-        let is_sse = transport.map(|t| t.eq_ignore_ascii_case("sse")).unwrap_or(false);
+        let is_sse = transport
+            .map(|t| t.eq_ignore_ascii_case("sse"))
+            .unwrap_or(false);
         let mut client = Self {
             http,
             endpoint: Arc::new(Mutex::new(url.to_string())),
@@ -153,7 +153,11 @@ impl RemoteMcpClient {
             next_id: Arc::new(Mutex::new(1)),
             pending: Arc::new(Mutex::new(HashMap::new())),
             reader_handle: None,
-            transport: if is_sse { Transport::Sse } else { Transport::StreamableHttp },
+            transport: if is_sse {
+                Transport::Sse
+            } else {
+                Transport::StreamableHttp
+            },
             bearer: Arc::new(Mutex::new(bearer)),
             reauth: Arc::new(Mutex::new(reauth)),
             token_watch: Arc::new(Mutex::new(token_watch)),
@@ -168,7 +172,9 @@ impl RemoteMcpClient {
             client.start_sse_reader(url).await?;
         }
         client.request("initialize", init).await?;
-        client.notify("notifications/initialized", json!({})).await?;
+        client
+            .notify("notifications/initialized", json!({}))
+            .await?;
         Ok(client)
     }
 
@@ -176,10 +182,7 @@ impl RemoteMcpClient {
     /// and spawn the reader task that dispatches `message` events to
     /// pending requests.
     async fn start_sse_reader(&mut self, url: &str) -> Result<()> {
-        let mut request = self
-            .http
-            .get(url)
-            .header("Accept", "text/event-stream");
+        let mut request = self.http.get(url).header("Accept", "text/event-stream");
         if let Some(token) = self.bearer.lock().await.clone() {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
@@ -277,7 +280,8 @@ impl RemoteMcpClient {
             }
             Transport::Sse => {
                 self.post_message(&body).await?;
-                match tokio::time::timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS), receiver).await
+                match tokio::time::timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS), receiver)
+                    .await
                 {
                     Ok(Ok(result)) => result,
                     Ok(Err(_)) => Err(AgentError::Tool("MCP channel closed".into())),
@@ -328,11 +332,7 @@ impl RemoteMcpClient {
 
     /// POST with bearer auth + one 401 recovery retry (hermes
     /// `handle_401`: refresh/re-auth once, then replay the request).
-    async fn post_with_auth(
-        &self,
-        endpoint: &str,
-        body: &Value,
-    ) -> Result<reqwest::Response> {
+    async fn post_with_auth(&self, endpoint: &str, body: &Value) -> Result<reqwest::Response> {
         let send = |bearer: Option<String>| {
             let mut request = self
                 .http
@@ -391,11 +391,7 @@ impl RemoteMcpClient {
     /// Streamable HTTP POST: parse a plain-JSON or SSE response body.
     /// `expect_id` = Some for requests (returns the matching reply), None
     /// for notifications (status check only).
-    async fn post_and_parse<T>(
-        &self,
-        body: &Value,
-        expect_id: Option<u64>,
-    ) -> Result<T>
+    async fn post_and_parse<T>(&self, body: &Value, expect_id: Option<u64>) -> Result<T>
     where
         T: serde::de::DeserializeOwned + Default,
     {
@@ -506,7 +502,8 @@ mod tests {
 
     #[test]
     fn sse_event_parsing() {
-        let buffer = "event: endpoint\ndata: /messages?x=1\n\nevent: message\ndata: {\"id\": 1}\n\npartial";
+        let buffer =
+            "event: endpoint\ndata: /messages?x=1\n\nevent: message\ndata: {\"id\": 1}\n\npartial";
         let (events, rest) = split_sse_events(buffer);
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].event, "endpoint");
@@ -543,13 +540,17 @@ mod tests {
                 return (StatusCode::ACCEPTED, headers, Json(Value::Null));
             };
             let result = match method {
-                "initialize" => json!({"serverInfo": {"name": "mock"}, "protocolVersion": "2025-03-26"}),
+                "initialize" => {
+                    json!({"serverInfo": {"name": "mock"}, "protocolVersion": "2025-03-26"})
+                }
                 "tools/list" => json!({"tools": [{
                     "name": "ping",
                     "description": "ping tool",
                     "inputSchema": {"type": "object", "properties": {}}
                 }]}),
-                "tools/call" => json!({"content": [{"type": "text", "text": "pong"}], "isError": false}),
+                "tools/call" => {
+                    json!({"content": [{"type": "text", "text": "pong"}], "isError": false})
+                }
                 _ => json!({}),
             };
             (
@@ -562,7 +563,9 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         tokio::spawn(async move {
-            axum::serve(listener, Router::new().route("/mcp", post(rpc))).await.ok();
+            axum::serve(listener, Router::new().route("/mcp", post(rpc)))
+                .await
+                .ok();
         });
 
         let url = format!("http://127.0.0.1:{}/mcp", port);
@@ -578,7 +581,10 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0]["name"], "ping");
         let result = client.call_tool("ping", json!({})).await.unwrap();
-        assert_eq!(result.pointer("/content/0/text").and_then(|v| v.as_str()), Some("pong"));
+        assert_eq!(
+            result.pointer("/content/0/text").and_then(|v| v.as_str()),
+            Some("pong")
+        );
     }
 
     /// Minimal SSE-transport MCP server: GET /sse announces the POST
@@ -602,13 +608,17 @@ mod tests {
                 return StatusCode::ACCEPTED;
             };
             let result = match method {
-                "initialize" => json!({"serverInfo": {"name": "mock-sse"}, "protocolVersion": "2024-11-05"}),
+                "initialize" => {
+                    json!({"serverInfo": {"name": "mock-sse"}, "protocolVersion": "2024-11-05"})
+                }
                 "tools/list" => json!({"tools": [{
                     "name": "echo",
                     "description": "echo",
                     "inputSchema": {"type": "object", "properties": {}}
                 }]}),
-                "tools/call" => json!({"content": [{"type": "text", "text": "sse-pong"}], "isError": false}),
+                "tools/call" => {
+                    json!({"content": [{"type": "text", "text": "sse-pong"}], "isError": false})
+                }
                 _ => json!({}),
             };
             let reply = json!({"jsonrpc": "2.0", "id": id, "result": result}).to_string();
@@ -695,20 +705,30 @@ mod tests {
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("");
             if auth != "Bearer fresh-token" {
-                return (StatusCode::UNAUTHORIZED, Json(json!({"error": "unauthorized"})));
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({"error": "unauthorized"})),
+                );
             }
             let result = match method {
-                "initialize" => json!({"serverInfo": {"name": "secure"}, "protocolVersion": "2025-03-26"}),
+                "initialize" => {
+                    json!({"serverInfo": {"name": "secure"}, "protocolVersion": "2025-03-26"})
+                }
                 "tools/list" => json!({"tools": []}),
                 _ => json!({}),
             };
-            (StatusCode::OK, Json(json!({"jsonrpc": "2.0", "id": id, "result": result})))
+            (
+                StatusCode::OK,
+                Json(json!({"jsonrpc": "2.0", "id": id, "result": result})),
+            )
         }
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         tokio::spawn(async move {
-            axum::serve(listener, Router::new().route("/mcp", post(rpc))).await.ok();
+            axum::serve(listener, Router::new().route("/mcp", post(rpc)))
+                .await
+                .ok();
         });
 
         static FAILED_TOKENS: tokio::sync::Mutex<Vec<Option<String>>> =
@@ -736,7 +756,10 @@ mod tests {
         assert!(REAUTH_CALLS.load(Ordering::SeqCst) >= 1);
         // The hook received the FAILED token (hermes pending_401 keying).
         let seen = FAILED_TOKENS.lock().await;
-        assert!(seen.iter().any(|t| t.as_deref() == Some("stale-token")), "{seen:?}");
+        assert!(
+            seen.iter().any(|t| t.as_deref() == Some("stale-token")),
+            "{seen:?}"
+        );
     }
 
     #[test]

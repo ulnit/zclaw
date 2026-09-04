@@ -114,7 +114,11 @@ pub fn compute_recency(nodes: &[Value]) -> Recency {
     let last = ordered.len().saturating_sub(1).max(1) as f64;
     let mut ord_ratio: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
     for (i, node) in ordered.iter().enumerate() {
-        let ratio = if nodes.len() > 1 { i as f64 / last } else { 0.0 };
+        let ratio = if nodes.len() > 1 {
+            i as f64 / last
+        } else {
+            0.0
+        };
         ord_ratio.insert(node_id(node), ratio);
     }
 
@@ -273,12 +277,19 @@ pub fn derive_palette(primary_hex: &str, dark: bool) -> std::collections::HashMa
     );
     map.insert("label".to_string(), rgb_to_hex(mix_rgb(base, bg, 0.35)));
     map.insert("dim".to_string(), rgb_to_hex(mix_rgb(base, bg, 0.7)));
-    map.insert("bg".to_string(), rgb_to_hex((bg.0 as f64, bg.1 as f64, bg.2 as f64)));
+    map.insert(
+        "bg".to_string(),
+        rgb_to_hex((bg.0 as f64, bg.1 as f64, bg.2 as f64)),
+    );
     map
 }
 
 /// Fade `base` toward the palette background by `alpha` (rgba-over-bg).
-pub fn fade(palette: &std::collections::HashMap<String, String>, base: Option<&str>, alpha: f64) -> Option<String> {
+pub fn fade(
+    palette: &std::collections::HashMap<String, String>,
+    base: Option<&str>,
+    alpha: f64,
+) -> Option<String> {
     let base = base?;
     if alpha >= 0.999 {
         return Some(base.to_string());
@@ -293,7 +304,10 @@ fn node_score(node: &Value, rec: f64) -> f64 {
         return 3.5 + rec;
     }
     let use_count = node.get("useCount").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let pinned = node.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false);
+    let pinned = node
+        .get("pinned")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     rec * 2.0 + use_count.max(0.0).sqrt() + if pinned { 2.0 } else { 0.0 }
 }
 
@@ -337,7 +351,11 @@ fn node_meta(node: &Value) -> String {
     if count > 0 {
         bits.push(format!("x{}", count));
     }
-    if node.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false) {
+    if node
+        .get("pinned")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
         bits.push("pinned".to_string());
     }
     bits.join(" · ")
@@ -468,7 +486,8 @@ fn build_chart_buckets(nodes: &[Value], rec: &Recency, max_rows: usize) -> Vec<C
             }
             for node in nodes {
                 let r = rec.rec.get(&node_id(node)).copied().unwrap_or(0.0);
-                let idx = ((r * n_bins as f64).floor() as isize).clamp(0, n_bins as isize - 1) as usize;
+                let idx =
+                    ((r * n_bins as f64).floor() as isize).clamp(0, n_bins as isize - 1) as usize;
                 buckets[idx].add(node.clone());
             }
             buckets
@@ -490,14 +509,11 @@ fn build_chart_buckets(nodes: &[Value], rec: &Recency, max_rows: usize) -> Vec<C
 }
 
 fn bucket_label_node(bucket: &ChartBucket) -> Option<&Value> {
-    bucket
-        .nodes
-        .iter()
-        .max_by(|a, b| {
-            let sa = node_score(a, a.get("timestamp").and_then(to_ts).unwrap_or(bucket.ts));
-            let sb = node_score(b, b.get("timestamp").and_then(to_ts).unwrap_or(bucket.ts));
-            sa.partial_cmp(&sb).unwrap_or(std::cmp::Ordering::Equal)
-        })
+    bucket.nodes.iter().max_by(|a, b| {
+        let sa = node_score(a, a.get("timestamp").and_then(to_ts).unwrap_or(bucket.ts));
+        let sb = node_score(b, b.get("timestamp").and_then(to_ts).unwrap_or(bucket.ts));
+        sa.partial_cmp(&sb).unwrap_or(std::cmp::Ordering::Equal)
+    })
 }
 
 fn bucket_category(bucket: &ChartBucket) -> Option<String> {
@@ -605,8 +621,7 @@ pub fn render_graph(payload: &Value, cols: usize, rows: usize, reveal: f64) -> F
     let cmap = category_color_map(payload);
     let buckets = build_chart_buckets(&nodes, &rec, (rows.saturating_sub(3)).max(4));
     let n_buckets = buckets.len();
-    let visible_bucket_count =
-        ((reveal * n_buckets as f64).ceil() as usize).clamp(0, n_buckets);
+    let visible_bucket_count = ((reveal * n_buckets as f64).ceil() as usize).clamp(0, n_buckets);
     let max_total = buckets.iter().map(|b| b.total()).max().unwrap_or(1).max(1);
     let label_w = buckets
         .iter()
@@ -691,10 +706,23 @@ pub fn render_graph(payload: &Value, cols: usize, rows: usize, reveal: f64) -> F
                 hex: None,
             });
         } else if bucket.total() > 0 {
-            let head_hex = if bucket.skills > 0 { cat_hex.clone() } else { None };
+            let head_hex = if bucket.skills > 0 {
+                cat_hex.clone()
+            } else {
+                None
+            };
             row.push(Run {
-                text: if bucket.skills > 0 { "✦".to_string() } else { "◆".to_string() },
-                style: (if bucket.skills > 0 { STYLE_SKILL } else { STYLE_MEMORY }).to_string(),
+                text: if bucket.skills > 0 {
+                    "✦".to_string()
+                } else {
+                    "◆".to_string()
+                },
+                style: (if bucket.skills > 0 {
+                    STYLE_SKILL
+                } else {
+                    STYLE_MEMORY
+                })
+                .to_string(),
                 alpha: ink,
                 hex: head_hex,
             });
@@ -780,7 +808,11 @@ pub fn render_graph(payload: &Value, cols: usize, rows: usize, reveal: f64) -> F
         alpha: 1.0,
         hex: None,
     }];
-    tail.extend(trajectory_row(&buckets, (cols.saturating_sub(label_w).saturating_sub(13)).max(12), reveal));
+    tail.extend(trajectory_row(
+        &buckets,
+        (cols.saturating_sub(label_w).saturating_sub(13)).max(12),
+        reveal,
+    ));
     grid.push(tail);
 
     Frame {
@@ -797,7 +829,11 @@ pub fn render_graph(payload: &Value, cols: usize, rows: usize, reveal: f64) -> F
 // ---------------------------------------------------------------------------
 
 pub fn build_legend(payload: &Value) -> Vec<Value> {
-    let nodes = payload.get("nodes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let nodes = payload
+        .get("nodes")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
     let skills = nodes
         .iter()
         .filter(|n| n.get("kind").and_then(|v| v.as_str()) != Some("memory"))
@@ -810,7 +846,11 @@ pub fn build_legend(payload: &Value) -> Vec<Value> {
 }
 
 pub fn axis_labels(payload: &Value) -> (String, String) {
-    let nodes = payload.get("nodes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let nodes = payload
+        .get("nodes")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
     let rec = compute_recency(&nodes);
     if !rec.timed {
         return ("oldest".to_string(), "now".to_string());
@@ -838,7 +878,11 @@ fn category_counts(payload: &Value) -> Vec<(String, i64)> {
     }
     let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
     let empty: Vec<Value> = Vec::new();
-    for node in payload.get("nodes").and_then(|v| v.as_array()).unwrap_or(&empty) {
+    for node in payload
+        .get("nodes")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty)
+    {
         if node.get("kind").and_then(|v| v.as_str()) == Some("memory") {
             continue;
         }
@@ -891,10 +935,16 @@ pub fn category_legend(payload: &Value, limit: usize) -> Vec<Value> {
 }
 
 fn peak_day(payload: &Value) -> Option<String> {
-    let mut counts: std::collections::HashMap<(i32, u32, u32), usize> = std::collections::HashMap::new();
-    let mut reps: std::collections::HashMap<(i32, u32, u32), f64> = std::collections::HashMap::new();
+    let mut counts: std::collections::HashMap<(i32, u32, u32), usize> =
+        std::collections::HashMap::new();
+    let mut reps: std::collections::HashMap<(i32, u32, u32), f64> =
+        std::collections::HashMap::new();
     let empty: Vec<Value> = Vec::new();
-    for node in payload.get("nodes").and_then(|v| v.as_array()).unwrap_or(&empty) {
+    for node in payload
+        .get("nodes")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty)
+    {
         let Some(ts) = node.get("timestamp").and_then(to_ts) else {
             continue;
         };
@@ -914,18 +964,34 @@ fn peak_day(payload: &Value) -> Option<String> {
 }
 
 pub fn build_summary(payload: &Value) -> Vec<String> {
-    let stats = payload.get("stats").cloned().unwrap_or(serde_json::json!({}));
+    let stats = payload
+        .get("stats")
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
     let mut lines = Vec::new();
     let learned = stats
         .get("learned_skills")
         .or_else(|| stats.get("nodes"))
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
-    let mem = stats.get("memory_nodes").and_then(|v| v.as_i64()).unwrap_or(0);
-    let edges = stats.get("related_edges").and_then(|v| v.as_i64()).unwrap_or(0);
-    lines.push(format!("{} learned skills · {} memories · {} skill links", learned, mem, edges));
+    let mem = stats
+        .get("memory_nodes")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let edges = stats
+        .get("related_edges")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    lines.push(format!(
+        "{} learned skills · {} memories · {} skill links",
+        learned, mem, edges
+    ));
     let mut extra = Vec::new();
-    if let Some(mse) = stats.get("memory_skill_edges").and_then(|v| v.as_i64()).filter(|n| *n > 0) {
+    if let Some(mse) = stats
+        .get("memory_skill_edges")
+        .and_then(|v| v.as_i64())
+        .filter(|n| *n > 0)
+    {
         extra.push(format!("{} memory↔skill links", mse));
     }
     if let Some(peak) = peak_day(payload) {
@@ -936,7 +1002,6 @@ pub fn build_summary(payload: &Value) -> Vec<String> {
     }
     lines
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -979,7 +1044,10 @@ mod tests {
         // Fade toward bg lowers brightness.
         let faded = fade(&palette, Some("#FFFFFF"), 0.5).unwrap();
         assert_ne!(faded, "#FFFFFF");
-        assert_eq!(fade(&palette, Some("#FFFFFF"), 1.0), Some("#FFFFFF".to_string()));
+        assert_eq!(
+            fade(&palette, Some("#FFFFFF"), 1.0),
+            Some("#FFFFFF".to_string())
+        );
         assert_eq!(fade(&palette, None, 0.5), None);
     }
 
@@ -1044,7 +1112,10 @@ mod tests {
         let legend = build_legend(&payload);
         assert_eq!(legend.len(), 2);
         assert!(legend[0]["label"].as_str().unwrap().contains("skills (2)"));
-        assert!(legend[1]["label"].as_str().unwrap().contains("memories (1)"));
+        assert!(legend[1]["label"]
+            .as_str()
+            .unwrap()
+            .contains("memories (1)"));
 
         let (start, end) = axis_labels(&payload);
         assert!(start.contains("2023"));

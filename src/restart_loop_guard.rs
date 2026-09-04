@@ -61,7 +61,10 @@ fn save_boots(home: &Path, boots: &[f64]) {
 pub fn record_crash_boot(home: &Path, window_seconds: u64, now: Option<f64>) -> Vec<f64> {
     let ts = now.unwrap_or_else(now_secs);
     let cutoff = ts - window_seconds.max(1) as f64;
-    let mut boots: Vec<f64> = load_boots(home).into_iter().filter(|t| *t >= cutoff).collect();
+    let mut boots: Vec<f64> = load_boots(home)
+        .into_iter()
+        .filter(|t| *t >= cutoff)
+        .collect();
     boots.push(ts);
     save_boots(home, &boots);
     boots

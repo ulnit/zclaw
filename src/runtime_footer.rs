@@ -308,9 +308,11 @@ pub fn handle_footer_command(
             model,
             0,
             None,
-            Some(&std::env::current_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default()),
+            Some(
+                &std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+            ),
             None,
             &effective.fields,
         );
@@ -319,7 +321,10 @@ pub fn handle_footer_command(
         } else {
             format!(" Example: {preview}")
         };
-        format!("runtime footer enabled (fields: {}).{preview_note}", effective.fields.join(", "))
+        format!(
+            "runtime footer enabled (fields: {}).{preview_note}",
+            effective.fields.join(", ")
+        )
     } else {
         "runtime footer disabled.".to_string()
     }
@@ -403,12 +408,13 @@ mod tests {
             enabled: Some(true),
             fields: vec!["latency".into()],
         };
-        display
-            .platforms
-            .insert("whatsapp".into(), crate::config::PlatformDisplayOverride {
+        display.platforms.insert(
+            "whatsapp".into(),
+            crate::config::PlatformDisplayOverride {
                 runtime_footer: override_cfg,
                 ..Default::default()
-            });
+            },
+        );
 
         // Global only: disabled, default fields replaced by the global list.
         let resolved = resolve_footer_config(&display, None);

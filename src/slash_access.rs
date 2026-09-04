@@ -199,11 +199,7 @@ pub fn denial_message(canonical_cmd: &str, policy: &SlashAccessPolicy) -> String
          user_allowed_commands."
             .to_string()
     } else {
-        let preview: Vec<String> = allowed
-            .iter()
-            .take(12)
-            .map(|c| format!("/{c}"))
-            .collect();
+        let preview: Vec<String> = allowed.iter().take(12).map(|c| format!("/{c}")).collect();
         let ellipsis = if allowed.len() > 12 { "\u{2026}" } else { "" };
         format!(
             "You can run: {}{ellipsis}. Use /whoami for the full list.",
@@ -266,7 +262,10 @@ mod tests {
         assert!(policy.is_admin(Some("gadmin")));
         assert!(policy.can_run(Some("gadmin"), "reload-mcp"));
         assert!(policy.can_run(Some("pleb"), "title"));
-        assert!(!policy.can_run(Some("pleb"), "status"), "dm list must not leak into groups");
+        assert!(
+            !policy.can_run(Some("pleb"), "status"),
+            "dm list must not leak into groups"
+        );
     }
 
     #[test]
@@ -309,7 +308,10 @@ mod tests {
     fn denial_message_shapes() {
         let policy = policy_for(Some(&cfg()), "dm");
         let msg = denial_message("reload-mcp", &policy);
-        assert!(msg.starts_with("\u{26d4} /reload-mcp is admin-only here."), "{msg}");
+        assert!(
+            msg.starts_with("\u{26d4} /reload-mcp is admin-only here."),
+            "{msg}"
+        );
         assert!(msg.contains("/recap") && msg.contains("/status"), "{msg}");
         assert!(msg.contains("/whoami for the full list"), "{msg}");
         // No user_allowed_commands → the ask-an-admin suffix.

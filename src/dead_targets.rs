@@ -103,7 +103,9 @@ pub fn classify_send_error(error_text: &str) -> &'static str {
     if CHAT_LEVEL_NOT_FOUND_SUBSTRINGS
         .iter()
         .any(|s| blob.contains(s))
-        || SUBCHAT_NOT_FOUND_SUBSTRINGS.iter().any(|s| blob.contains(s))
+        || SUBCHAT_NOT_FOUND_SUBSTRINGS
+            .iter()
+            .any(|s| blob.contains(s))
     {
         return "not_found";
     }
@@ -126,7 +128,10 @@ pub fn classify_send_error(error_text: &str) -> &'static str {
 /// (conservative: never kill a chat that may still be reachable).
 pub fn is_chat_level_not_found(error_text: &str) -> bool {
     let blob = error_text.to_lowercase();
-    if SUBCHAT_NOT_FOUND_SUBSTRINGS.iter().any(|s| blob.contains(s)) {
+    if SUBCHAT_NOT_FOUND_SUBSTRINGS
+        .iter()
+        .any(|s| blob.contains(s))
+    {
         return false;
     }
     CHAT_LEVEL_NOT_FOUND_SUBSTRINGS
@@ -184,10 +189,9 @@ impl DeadTargetRegistry {
                     .ok()
                     .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
                 {
-                    Some(Value::Object(map)) => map
-                        .into_iter()
-                        .filter(|(_, v)| v.is_object())
-                        .collect(),
+                    Some(Value::Object(map)) => {
+                        map.into_iter().filter(|(_, v)| v.is_object()).collect()
+                    }
                     _ => HashMap::new(),
                 }
             }
@@ -245,7 +249,11 @@ impl DeadTargetRegistry {
             tracing::info!(
                 "[dead_targets] marked {key} as unreachable ({}) — future deliveries \
                  to this target will be skipped until a send succeeds",
-                if reason.is_empty() { "no reason given" } else { reason }
+                if reason.is_empty() {
+                    "no reason given"
+                } else {
+                    reason
+                }
             );
         }
         newly_added
@@ -367,7 +375,8 @@ mod tests {
 
     fn temp_registry() -> (tempfile::TempDir, DeadTargetRegistry) {
         let dir = tempfile::tempdir().unwrap();
-        let reg = DeadTargetRegistry::new(Some(dir.path().join("gateway").join("dead_targets.json")));
+        let reg =
+            DeadTargetRegistry::new(Some(dir.path().join("gateway").join("dead_targets.json")));
         (dir, reg)
     }
 
@@ -474,12 +483,24 @@ mod tests {
             classify_send_error("Forbidden: the group chat was deleted"),
             "forbidden"
         );
-        assert_eq!(classify_send_error("bot was blocked by the user"), "forbidden");
+        assert_eq!(
+            classify_send_error("bot was blocked by the user"),
+            "forbidden"
+        );
         assert_eq!(classify_send_error("user is deactivated"), "forbidden");
         assert_eq!(classify_send_error("Chat not found"), "not_found");
-        assert_eq!(classify_send_error("message to reply not found"), "not_found");
-        assert_eq!(classify_send_error("Too Many Requests: retry after 3"), "rate_limited");
-        assert_eq!(classify_send_error("ConnectionResetError happened"), "transient");
+        assert_eq!(
+            classify_send_error("message to reply not found"),
+            "not_found"
+        );
+        assert_eq!(
+            classify_send_error("Too Many Requests: retry after 3"),
+            "rate_limited"
+        );
+        assert_eq!(
+            classify_send_error("ConnectionResetError happened"),
+            "transient"
+        );
         assert_eq!(classify_send_error("broken pipe"), "transient");
         assert_eq!(classify_send_error("something exploded"), "unknown");
     }
@@ -509,9 +530,15 @@ mod tests {
             classify_dead_from_error_text("Forbidden: the group chat was deleted"),
             Some("forbidden")
         );
-        assert_eq!(classify_dead_from_error_text("Chat not found"), Some("not_found"));
+        assert_eq!(
+            classify_dead_from_error_text("Chat not found"),
+            Some("not_found")
+        );
         // Thread/topic-level not_found must NOT mark the chat dead.
-        assert_eq!(classify_dead_from_error_text("message to reply not found"), None);
+        assert_eq!(
+            classify_dead_from_error_text("message to reply not found"),
+            None
+        );
         assert_eq!(classify_dead_from_error_text("thread not found"), None);
         // Transient / rate-limit / unknown never mark dead.
         assert_eq!(classify_dead_from_error_text("retry after 5"), None);
@@ -523,7 +550,8 @@ mod tests {
     #[test]
     fn mark_dead_from_error_builds_kind_prefixed_reason() {
         let (_dir, reg) = temp_registry();
-        let kind = classify_dead_from_error_text("Forbidden: bot was kicked from the group chat").unwrap();
+        let kind =
+            classify_dead_from_error_text("Forbidden: bot was kicked from the group chat").unwrap();
         let tail = "Forbidden: bot was kicked from the group chat";
         reg.mark_dead("telegram", "9", &format!("{kind}: {tail}"));
         let rows = reg.list();

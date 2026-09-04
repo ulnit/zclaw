@@ -39,8 +39,8 @@ pub const DEFAULT_TURN_BUDGET_CHARS: usize = 200_000;
 pub const DEFAULT_PREVIEW_SIZE_CHARS: usize = 1_500;
 
 const UNSAFE_FILENAME_CHARS: &[char] = &[
-    ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '/', ':', ';', '<', '=',
-    '>', '?', '@', '[', '\\', ']', '^', '`', '{', '|', '}', '~', '\n', '\t',
+    ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '/', ':', ';', '<', '=', '>',
+    '?', '@', '[', '\\', ']', '^', '`', '{', '|', '}', '~', '\n', '\t',
 ];
 const MAX_RESULT_FILENAME_STEM: usize = 120;
 
@@ -106,7 +106,13 @@ pub fn safe_result_filename(tool_call_id: &str) -> String {
     };
     let mut stem: String = raw
         .chars()
-        .map(|c| if UNSAFE_FILENAME_CHARS.contains(&c) { '_' } else { c })
+        .map(|c| {
+            if UNSAFE_FILENAME_CHARS.contains(&c) {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect();
     let changed = stem != raw;
     stem = stem.trim_matches(&['.', '_', '-'][..]).to_string();
@@ -120,7 +126,11 @@ pub fn safe_result_filename(tool_call_id: &str) -> String {
         let hex: String = digest.iter().take(6).map(|b| format!("{b:02x}")).collect();
         let short: String = stem.chars().take(MAX_RESULT_FILENAME_STEM).collect();
         let short = short.trim_matches(&['.', '_', '-'][..]);
-        let short = if short.is_empty() { "tool_result" } else { short };
+        let short = if short.is_empty() {
+            "tool_result"
+        } else {
+            short
+        };
         stem = format!("{short}_{hex}");
     }
     format!("{stem}.txt")
@@ -138,9 +148,7 @@ pub fn resolve_storage_dir(
         return dir.to_path_buf();
     }
     match backend {
-        None | Some(TerminalBackend::Local) => {
-            std::env::temp_dir().join("ulnclaw-results")
-        }
+        None | Some(TerminalBackend::Local) => std::env::temp_dir().join("ulnclaw-results"),
         _ => PathBuf::from("/tmp/ulnclaw-results"),
     }
 }
@@ -321,7 +329,9 @@ pub async fn enforce_turn_budget(
             total_size -= size;
             total_size += replacement.len();
             contents[idx] = replacement;
-            tracing::info!("Budget enforcement: persisted tool result {tool_call_id} ({size} chars)");
+            tracing::info!(
+                "Budget enforcement: persisted tool result {tool_call_id} ({size} chars)"
+            );
         }
     }
 }

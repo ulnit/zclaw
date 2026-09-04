@@ -279,13 +279,19 @@ mod tests {
         assert_eq!(result["success"], json!(true));
         let job_id = result["job"]["job_id"].as_str().unwrap().to_string();
 
-        let result = (tool.handler)(json!({"action": "list"}), ctx.clone()).await.unwrap();
+        let result = (tool.handler)(json!({"action": "list"}), ctx.clone())
+            .await
+            .unwrap();
         assert_eq!(result["count"], json!(1));
 
-        let result = (tool.handler)(json!({"action": "pause", "job_id": job_id}), ctx.clone()).await.unwrap();
+        let result = (tool.handler)(json!({"action": "pause", "job_id": job_id}), ctx.clone())
+            .await
+            .unwrap();
         assert_eq!(result["success"], json!(true));
 
-        let result = (tool.handler)(json!({"action": "remove", "job_id": job_id}), ctx).await.unwrap();
+        let result = (tool.handler)(json!({"action": "remove", "job_id": job_id}), ctx)
+            .await
+            .unwrap();
         assert_eq!(result["success"], json!(true));
     }
 
@@ -294,7 +300,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let ctx = Arc::new(ToolContext::new().with_home(dir.path()));
         let tool = cronjob_tool();
-        let result = (tool.handler)(json!({"action": "create", "prompt": "x"}), ctx).await.unwrap();
+        let result = (tool.handler)(json!({"action": "create", "prompt": "x"}), ctx)
+            .await
+            .unwrap();
         assert_eq!(result["success"], json!(false));
     }
 }

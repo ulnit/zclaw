@@ -30,8 +30,10 @@ static SLACK_USER_NAME_RE: LazyLock<Regex> =
 static SLACK_MENTION_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*<@(U[A-Z0-9]{8,})(?:\|[^>]+)?>\s*$").unwrap());
 static WEIXIN_TARGET_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^\s*((?:wxid|gh|v\d+|wm|wb)_[A-Za-z0-9_-]+|[A-Za-z0-9._-]+@chatroom|filehelper)\s*$")
-        .unwrap()
+    Regex::new(
+        r"^\s*((?:wxid|gh|v\d+|wm|wb)_[A-Za-z0-9_-]+|[A-Za-z0-9._-]+@chatroom|filehelper)\s*$",
+    )
+    .unwrap()
 });
 static YUANBAO_TARGET_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*((?:group|direct):[^:]+)\s*$").unwrap());
@@ -42,8 +44,9 @@ static PHOTON_DM_GUID_RE: LazyLock<Regex> =
 static WHATSAPP_JID_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)^\s*[\w-]+@(?:g\.us|s\.whatsapp\.net|lid|broadcast|newsletter)\s*$").unwrap()
 });
-static EMAIL_TARGET_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\s*$").unwrap());
+static EMAIL_TARGET_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\s*$").unwrap()
+});
 
 /// Platforms addressed by phone number in E.164 form (hermes
 /// `_PHONE_PLATFORMS`).
@@ -55,7 +58,10 @@ fn is_digit_string(value: &str) -> bool {
 
 /// hermes `_parse_target_ref`: split a tool target reference into
 /// `(chat_id, thread_id, is_explicit)`.
-pub fn parse_target_ref(platform: &str, target_ref: &str) -> (Option<String>, Option<String>, bool) {
+pub fn parse_target_ref(
+    platform: &str,
+    target_ref: &str,
+) -> (Option<String>, Option<String>, bool) {
     match platform {
         "telegram" => {
             if let Some(caps) = TELEGRAM_TOPIC_RE.captures(target_ref) {
@@ -104,14 +110,20 @@ pub fn parse_target_ref(platform: &str, target_ref: &str) -> (Option<String>, Op
                 .or_else(|| SLACK_MENTION_RE.captures(target_ref))
             {
                 return (
-                    Some(format!("user:{}", caps.get(1).map(|m| m.as_str()).unwrap_or(""))),
+                    Some(format!(
+                        "user:{}",
+                        caps.get(1).map(|m| m.as_str()).unwrap_or("")
+                    )),
                     None,
                     true,
                 );
             }
             if let Some(caps) = SLACK_USER_NAME_RE.captures(target_ref) {
                 return (
-                    Some(format!("user_name:{}", caps.get(1).map(|m| m.as_str()).unwrap_or(""))),
+                    Some(format!(
+                        "user_name:{}",
+                        caps.get(1).map(|m| m.as_str()).unwrap_or("")
+                    )),
                     None,
                     true,
                 );
@@ -178,7 +190,11 @@ pub fn parse_target_ref(platform: &str, target_ref: &str) -> (Option<String>, Op
     if platform == "photon" && PHOTON_DM_GUID_RE.is_match(stripped) {
         return (Some(stripped.to_string()), None, true);
     }
-    if stripped.strip_prefix('-').map(is_digit_string).unwrap_or(false) || is_digit_string(stripped)
+    if stripped
+        .strip_prefix('-')
+        .map(is_digit_string)
+        .unwrap_or(false)
+        || is_digit_string(stripped)
     {
         return (Some(target_ref.to_string()), None, true);
     }
@@ -287,7 +303,8 @@ async fn handle_react(args: &Value, remove: bool) -> Value {
     let mut chat_id: Option<String> = None;
     if let Some(reference) = &reference {
         let (parsed, _thread, _explicit) = parse_target_ref(&platform, reference);
-        chat_id = parsed.or_else(|| crate::channel_directory::resolve_by_name(&platform, reference));
+        chat_id =
+            parsed.or_else(|| crate::channel_directory::resolve_by_name(&platform, reference));
         // Opaque platform-native ids match no parser pattern and no
         // directory entry — pass them through verbatim (hermes react
         // handler semantics); the adapter validates.
@@ -323,8 +340,13 @@ async fn handle_react(args: &Value, remove: bool) -> Value {
              {platform} chat — pass message_id explicitly."
         ));
     }
-    match sender.send_reaction(&chat_id, &emoji, &message_id, remove).await {
-        None => error_payload(&format!("Platform '{platform}' does not support message reactions.")),
+    match sender
+        .send_reaction(&chat_id, &emoji, &message_id, remove)
+        .await
+    {
+        None => error_payload(&format!(
+            "Platform '{platform}' does not support message reactions."
+        )),
         Some(ok) => json!({"success": ok}),
     }
 }
@@ -496,7 +518,8 @@ async fn standalone_send(
 /// messaging turn is running or any platform adapter registered a live
 /// sender (gateway up).
 fn send_message_availability() -> crate::tools::ToolAvailability {
-    if crate::messaging::current_messaging_ctx().is_some() || crate::messaging::has_platform_senders()
+    if crate::messaging::current_messaging_ctx().is_some()
+        || crate::messaging::has_platform_senders()
     {
         crate::tools::ToolAvailability::available()
     } else {

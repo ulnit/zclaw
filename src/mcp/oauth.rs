@@ -111,7 +111,13 @@ pub fn now_secs() -> u64 {
 pub fn safe_filename(name: &str) -> String {
     let sanitized: String = name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let trimmed = sanitized.trim_matches('_');
     let truncated: String = trimmed.chars().take(128).collect();
@@ -336,7 +342,10 @@ pub async fn register_client(
         .get("client_secret")
         .and_then(|v| v.as_str())
         .map(String::from);
-    Ok(ClientInfo { client_id, client_secret })
+    Ok(ClientInfo {
+        client_id,
+        client_secret,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -383,9 +392,8 @@ pub fn bind_callback_listener(port: u16) -> Result<(tokio::net::TcpListener, u16
     let listener = if port == 0 {
         bind(0).map_err(|e| AgentError::Tool(format!("bind loopback callback: {}", e)))?
     } else {
-        bind(port).map_err(|e| {
-            AgentError::Tool(format!("bind loopback callback port {}: {}", port, e))
-        })?
+        bind(port)
+            .map_err(|e| AgentError::Tool(format!("bind loopback callback port {}: {}", port, e)))?
     };
     let actual = listener
         .local_addr()
@@ -414,7 +422,9 @@ pub async fn wait_for_callback(
                 "MCP OAuth: timed out waiting for the browser callback".into(),
             ));
         };
-        let Ok((mut socket, _)) = accept else { continue };
+        let Ok((mut socket, _)) = accept else {
+            continue;
+        };
         let mut buffer = vec![0u8; 8192];
         let read = tokio::time::timeout_at(deadline, socket.read(&mut buffer)).await;
         let Ok(Ok(n)) = read else { continue };
@@ -435,19 +445,35 @@ pub async fn wait_for_callback(
 
         if let Some(error) = params.get("error") {
             let body = format!("OAuth error: {}\n", error);
-            socket.write_all(http_response(&body, false).as_bytes()).await.ok();
-            return Err(AgentError::Tool(format!("MCP OAuth: server returned error '{}'", error)));
+            socket
+                .write_all(http_response(&body, false).as_bytes())
+                .await
+                .ok();
+            return Err(AgentError::Tool(format!(
+                "MCP OAuth: server returned error '{}'",
+                error
+            )));
         }
-        let Some(code) = params.get("code") else { continue };
-        let state_ok = params.get("state").map(|s| s == expected_state).unwrap_or(false);
+        let Some(code) = params.get("code") else {
+            continue;
+        };
+        let state_ok = params
+            .get("state")
+            .map(|s| s == expected_state)
+            .unwrap_or(false);
         let body = if state_ok {
             "<html><body><h2>Authorization complete</h2><p>You can close this window and return to ulnclaw.</p></body></html>\n".to_string()
         } else {
             "OAuth state mismatch — close this window and retry.\n".to_string()
         };
-        socket.write_all(http_response(&body, state_ok).as_bytes()).await.ok();
+        socket
+            .write_all(http_response(&body, state_ok).as_bytes())
+            .await
+            .ok();
         if !state_ok {
-            return Err(AgentError::Tool("MCP OAuth: state mismatch on callback".into()));
+            return Err(AgentError::Tool(
+                "MCP OAuth: state mismatch on callback".into(),
+            ));
         }
         return Ok(code.clone());
     }
@@ -554,7 +580,11 @@ async fn token_request(token_endpoint: &str, form: &[(&str, String)]) -> Result<
     Ok(StoredTokens {
         access_token,
         refresh_token,
-        expires_at: if expires_in > 0 { now_secs() + expires_in } else { 0 },
+        expires_at: if expires_in > 0 {
+            now_secs() + expires_in
+        } else {
+            0
+        },
     })
 }
 
@@ -599,7 +629,10 @@ pub async fn get_access_token(
                     return Ok(tokens.access_token);
                 }
                 Err(e) => {
-                    eprintln!("[mcp-oauth] {}: refresh failed ({}); re-authorizing", server_name, e);
+                    eprintln!(
+                        "[mcp-oauth] {}: refresh failed ({}); re-authorizing",
+                        server_name, e
+                    );
                 }
             }
         }
@@ -631,7 +664,11 @@ pub async fn get_access_token(
         None => {
             let (listener, port) = bind_callback_listener(cfg.redirect_port)?;
             let uri = cfg.redirect_uri.clone().unwrap_or_else(|| {
-                format!("http://{}:{}/callback", cfg.redirect_host_or_default(), port)
+                format!(
+                    "http://{}:{}/callback",
+                    cfg.redirect_host_or_default(),
+                    port
+                )
             });
             (Some(listener), uri)
         }
@@ -659,8 +696,8 @@ pub async fn get_access_token(
         );
         println!("  {}", auth_url);
         open_browser(&auth_url);
-        let listener = listener
-            .expect("loopback listener is always bound outside dashboard-mediated flows");
+        let listener =
+            listener.expect("loopback listener is always bound outside dashboard-mediated flows");
         wait_for_callback(listener, &state).await?
     };
     let tokens = exchange_code(
@@ -703,7 +740,10 @@ pub async fn recover_token(
                     return Ok(tokens.access_token);
                 }
                 Err(e) => {
-                    eprintln!("[mcp-oauth] {}: refresh failed ({}); re-authorizing", server_name, e);
+                    eprintln!(
+                        "[mcp-oauth] {}: refresh failed ({}); re-authorizing",
+                        server_name, e
+                    );
                 }
             }
         }
@@ -764,7 +804,12 @@ async fn resolve_client(
                     format!("http://{}/callback", cfg.redirect_host_or_default())
                 })
             });
-        register_client(registration_endpoint, &redirect_uri, cfg.client_name_or_default()).await?
+        register_client(
+            registration_endpoint,
+            &redirect_uri,
+            cfg.client_name_or_default(),
+        )
+        .await?
     };
     save_client_info(home, server_name, &client).ok();
     Ok(client)
@@ -863,7 +908,11 @@ mod tests {
             let path = token_dir(home).join("srv_one.json");
             let mode = std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
             assert_eq!(mode, 0o600);
-            let dir_mode = std::fs::metadata(token_dir(home)).unwrap().permissions().mode() & 0o777;
+            let dir_mode = std::fs::metadata(token_dir(home))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
             assert_eq!(dir_mode, 0o700);
         }
 
@@ -894,10 +943,7 @@ mod tests {
         let as_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let as_port = as_listener.local_addr().unwrap().port();
         tokio::spawn(async move {
-            let app = Router::new().route(
-                "/.well-known/oauth-authorization-server",
-                get(as_doc),
-            );
+            let app = Router::new().route("/.well-known/oauth-authorization-server", get(as_doc));
             axum::serve(as_listener, app).await.ok();
         });
 
@@ -940,17 +986,17 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         tokio::spawn(async move {
-            let app = Router::new().route(
-                "/.well-known/oauth-authorization-server",
-                get(as_doc),
-            );
+            let app = Router::new().route("/.well-known/oauth-authorization-server", get(as_doc));
             axum::serve(listener, app).await.ok();
         });
 
         let metadata = discover_metadata(&format!("http://127.0.0.1:{}/mcp", port))
             .await
             .expect("fallback discovery");
-        assert_eq!(metadata.authorization_endpoint, "https://as2.example.com/authorize");
+        assert_eq!(
+            metadata.authorization_endpoint,
+            "https://as2.example.com/authorize"
+        );
     }
 
     /// Full authorization-code flow against a mock AS: registration →
@@ -979,7 +1025,10 @@ mod tests {
             match grant.as_str() {
                 "authorization_code" => {
                     assert_eq!(form.get("code").map(String::as_str), Some("auth-code-1"));
-                    assert!(form.get("code_verifier").map(|v| !v.is_empty()).unwrap_or(false));
+                    assert!(form
+                        .get("code_verifier")
+                        .map(|v| !v.is_empty())
+                        .unwrap_or(false));
                     axum::Json(json!({
                         "access_token": "access-1",
                         "refresh_token": "refresh-1",
@@ -1046,14 +1095,10 @@ mod tests {
             None,
         );
         // Simulate the browser hitting the callback.
-        let redirect = format!(
-            "{}?code=auth-code-1&state={}",
-            redirect_uri, state_value
-        );
+        let redirect = format!("{}?code=auth-code-1&state={}", redirect_uri, state_value);
         let expected_state = state_value.clone();
-        let waiter = tokio::spawn(async move {
-            wait_for_callback(listener, &expected_state).await
-        });
+        let waiter =
+            tokio::spawn(async move { wait_for_callback(listener, &expected_state).await });
         let fetched = reqwest::get(&redirect).await.expect("callback GET");
         assert_eq!(fetched.status(), 200);
         let code = waiter.await.unwrap().expect("callback captured");
@@ -1166,9 +1211,7 @@ mod tests {
         let worker_base = base.clone();
         let worker = tokio::spawn(crate::mcp::dashboard_oauth::scope_flow(
             worker_flow,
-            async move {
-                get_access_token(&worker_home, "dash-srv", &worker_base, &cfg, true).await
-            },
+            async move { get_access_token(&worker_home, "dash-srv", &worker_base, &cfg, true).await },
         ));
 
         // The authorization URL surfaces through the flow, carrying the
@@ -1183,7 +1226,10 @@ mod tests {
             .find(|(k, _)| k == "redirect_uri")
             .map(|(_, v)| v.into_owned())
             .unwrap();
-        assert_eq!(redirect, "http://127.0.0.1:8642/api/mcp/oauth/callback/dash-srv");
+        assert_eq!(
+            redirect,
+            "http://127.0.0.1:8642/api/mcp/oauth/callback/dash-srv"
+        );
         let state_value: String = parsed
             .query_pairs()
             .find(|(k, _)| k == "state")

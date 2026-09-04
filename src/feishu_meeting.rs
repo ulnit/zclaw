@@ -52,9 +52,24 @@ fn parse_user(value: &Value) -> Option<MeetingInviteUser> {
     }
     let id = raw.get("id").cloned().unwrap_or(serde_json::json!({}));
     Some(MeetingInviteUser {
-        open_id: id.get("open_id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string(),
-        user_id: id.get("user_id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string(),
-        union_id: id.get("union_id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string(),
+        open_id: id
+            .get("open_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string(),
+        user_id: id
+            .get("user_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string(),
+        union_id: id
+            .get("union_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string(),
         user_name: raw
             .get("user_name")
             .and_then(|v| v.as_str())
@@ -69,8 +84,17 @@ fn parse_meeting(value: &Value) -> Option<MeetingInviteMeeting> {
         return None;
     }
     Some(MeetingInviteMeeting {
-        id: raw.get("id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string(),
-        topic: raw.get("topic").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        id: raw
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string(),
+        topic: raw
+            .get("topic")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         meeting_no: raw
             .get("meeting_no")
             .and_then(|v| v.as_str())
@@ -85,7 +109,10 @@ fn parse_meeting(value: &Value) -> Option<MeetingInviteMeeting> {
 /// Unwrap a Feishu `body.content` list carrying an application/json
 /// payload (hermes `_content_payload`).
 fn content_payload(container: &Value) -> Value {
-    let Some(content) = container.pointer("/body/content").and_then(|v| v.as_array()) else {
+    let Some(content) = container
+        .pointer("/body/content")
+        .and_then(|v| v.as_array())
+    else {
         return serde_json::json!({});
     };
     for item in content {
@@ -123,7 +150,11 @@ pub fn parse_meeting_invited_event(envelope: &Value) -> Option<MeetingInvitedPay
         .cloned()
         .filter(|v| v.is_object())
         .unwrap_or_else(|| envelope.clone());
-    let content = if !content_payload(&event).as_object().map(|o| o.is_empty()).unwrap_or(true) {
+    let content = if !content_payload(&event)
+        .as_object()
+        .map(|o| o.is_empty())
+        .unwrap_or(true)
+    {
         content_payload(&event)
     } else {
         content_payload(envelope)
@@ -191,9 +222,16 @@ pub fn build_meeting_invite_prompt(payload: &MeetingInvitedPayload) -> String {
         String::new(),
         format!(
             "Meeting Number: {}",
-            if meeting_no.is_empty() { "unknown" } else { &meeting_no }
+            if meeting_no.is_empty() {
+                "unknown"
+            } else {
+                &meeting_no
+            }
         ),
-        format!("Topic: {}", if topic.is_empty() { "unknown" } else { &topic }),
+        format!(
+            "Topic: {}",
+            if topic.is_empty() { "unknown" } else { &topic }
+        ),
         format!("Inviter: {inviter_name}"),
         format!("Host: {host_name}"),
         String::new(),
@@ -211,13 +249,20 @@ fn dedup_key(payload: &MeetingInvitedPayload) -> String {
     if !payload.event_id.is_empty() {
         return format!("vc_invite:{}", payload.event_id);
     }
-    let meeting_id = payload.meeting.as_ref().map(|m| m.id.clone()).unwrap_or_default();
+    let meeting_id = payload
+        .meeting
+        .as_ref()
+        .map(|m| m.id.clone())
+        .unwrap_or_default();
     let inviter_id = payload
         .inviter
         .as_ref()
         .map(|u| u.open_id.clone())
         .unwrap_or_default();
-    format!("vc_invite:{meeting_id}:{inviter_id}:{}", payload.invite_time_s)
+    format!(
+        "vc_invite:{meeting_id}:{inviter_id}:{}",
+        payload.invite_time_s
+    )
 }
 
 /// Convert a `vc.bot.meeting_invited_v1` event into a DM dispatch and
@@ -244,7 +289,11 @@ pub async fn handle_meeting_invited_event(
     let resolved = cfg.resolve();
     let sender_id = inviter.open_id.clone();
     // Allowlist ∪ pairing gate (same shape as handle_message_event).
-    if !resolved.allowed_users.iter().any(|u| u == "*" || *u == sender_id) {
+    if !resolved
+        .allowed_users
+        .iter()
+        .any(|u| u == "*" || *u == sender_id)
+    {
         let store = crate::pairing::PairingStore::open(&crate::config::ulnclaw_home());
         if !store.is_approved("feishu", &sender_id) {
             if let Some(code_msg) =

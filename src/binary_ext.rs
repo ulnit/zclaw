@@ -21,21 +21,17 @@ pub fn binary_extensions() -> &'static HashSet<&'static str> {
             // Archives
             ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar", ".xz", ".z", ".tgz", ".iso",
             // Executables/binaries
-            ".exe", ".dll", ".so", ".dylib", ".bin", ".o", ".a", ".obj", ".lib",
-            ".app", ".msi", ".deb", ".rpm",
-            // Documents (exclude .pdf — text-based)
+            ".exe", ".dll", ".so", ".dylib", ".bin", ".o", ".a", ".obj", ".lib", ".app", ".msi",
+            ".deb", ".rpm", // Documents (exclude .pdf — text-based)
             ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp",
             // Fonts
-            ".ttf", ".otf", ".woff", ".woff2", ".eot",
-            // Bytecode / VM artifacts
+            ".ttf", ".otf", ".woff", ".woff2", ".eot", // Bytecode / VM artifacts
             ".pyc", ".pyo", ".class", ".jar", ".war", ".ear", ".node", ".wasm", ".rlib",
             // Database files
-            ".sqlite", ".sqlite3", ".db", ".mdb", ".idx",
-            // Design / 3D
+            ".sqlite", ".sqlite3", ".db", ".mdb", ".idx", // Design / 3D
             ".psd", ".ai", ".eps", ".sketch", ".fig", ".xd", ".blend", ".3ds", ".max",
             // Flash
-            ".swf", ".fla",
-            // Lock/profiling data
+            ".swf", ".fla", // Lock/profiling data
             ".lockb", ".dat", ".data",
         ])
     })
@@ -56,14 +52,30 @@ mod tests {
 
     #[test]
     fn detects_common_binaries() {
-        for p in ["logo.PNG", "/a/b/video.mp4", "archive.tar.gz", "app.exe", "model.wasm", "store.sqlite3", "font.WOFF2"] {
+        for p in [
+            "logo.PNG",
+            "/a/b/video.mp4",
+            "archive.tar.gz",
+            "app.exe",
+            "model.wasm",
+            "store.sqlite3",
+            "font.WOFF2",
+        ] {
             assert!(has_binary_extension(p), "should be binary: {p}");
         }
     }
 
     #[test]
     fn passes_text_files() {
-        for p in ["main.rs", "notes.md", "doc.pdf", "script.py", "data.json", "noext", ".env"] {
+        for p in [
+            "main.rs",
+            "notes.md",
+            "doc.pdf",
+            "script.py",
+            "data.json",
+            "noext",
+            ".env",
+        ] {
             assert!(!has_binary_extension(p), "should NOT be binary: {p}");
         }
     }

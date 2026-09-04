@@ -89,7 +89,10 @@ pub fn owner_alive(pid: Option<i64>, started: Option<i64>) -> bool {
     if !crate::gateway_pidfile::is_alive(pid as u32) {
         return false;
     }
-    match (started, crate::gateway_pidfile::process_start_time(pid as u32)) {
+    match (
+        started,
+        crate::gateway_pidfile::process_start_time(pid as u32),
+    ) {
         (Some(recorded), Some(actual)) => recorded as u64 == actual,
         _ => true, // start time unavailable on either side: pid liveness alone
     }
@@ -109,7 +112,17 @@ pub fn record_obligation(
     let id = obligation_id(platform, chat_id, content);
     let (pid, started) = owner_stamp();
     store
-        .record_obligation(&id, session_key, platform, chat_id, thread_id, content, pid, started, now_secs())
+        .record_obligation(
+            &id,
+            session_key,
+            platform,
+            chat_id,
+            thread_id,
+            content,
+            pid,
+            started,
+            now_secs(),
+        )
         .ok()?;
     Some(id)
 }
@@ -187,9 +200,8 @@ mod tests {
 
     fn temp_store() -> (tempfile::TempDir, Arc<SqliteSessionStore>) {
         let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(
-            SqliteSessionStore::open(dir.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(dir.path().join("state.db")).expect("store opens"));
         (dir, store)
     }
 
@@ -204,7 +216,8 @@ mod tests {
     #[test]
     fn lifecycle_transitions_land_in_the_table() {
         let (_dir, store) = temp_store();
-        let id = record_obligation(&store, "sess-1", "telegram", "42", None, "final answer").unwrap();
+        let id =
+            record_obligation(&store, "sess-1", "telegram", "42", None, "final answer").unwrap();
         let rows = store.obligation_rows();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].2, "pending");
@@ -269,16 +282,15 @@ mod tests {
         let id = record_obligation(&store, "sess-1", "telegram", "42", None, "answer").unwrap();
         // Exhaust the attempts budget directly.
         for _ in 0..MAX_ATTEMPTS {
-            store
-                .sweep_obligations(
-                    &["telegram".to_string()],
-                    std::process::id(),
-                    None,
-                    &|_, _| false,
-                    MAX_ATTEMPTS,
-                    STALE_AFTER_SECONDS,
-                    now_secs(),
-                );
+            store.sweep_obligations(
+                &["telegram".to_string()],
+                std::process::id(),
+                None,
+                &|_, _| false,
+                MAX_ATTEMPTS,
+                STALE_AFTER_SECONDS,
+                now_secs(),
+            );
         }
         // Next sweep: attempts at cap → abandoned, nothing claimed.
         let claimed = store.sweep_obligations(
@@ -322,7 +334,11 @@ mod tests {
         mark_delivered(&store, &id);
         // Far-future prune: the delivered row is past retention.
         store
-            .prune_obligations(RETENTION_SECONDS, MAX_ROWS, now_secs() + RETENTION_SECONDS + 10.0)
+            .prune_obligations(
+                RETENTION_SECONDS,
+                MAX_ROWS,
+                now_secs() + RETENTION_SECONDS + 10.0,
+            )
             .unwrap();
         assert!(store.obligation_rows().is_empty());
     }

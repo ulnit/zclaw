@@ -11,8 +11,7 @@ use sha2::{Digest, Sha256};
 
 const BECH32_CHARSET: &str = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 /// hermes `CURVE_ORDER`.
-const CURVE_ORDER_HEX: &str =
-    "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
+const CURVE_ORDER_HEX: &str = "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
 
 fn bech32_polymod(values: &[u8]) -> u32 {
     const GENERATORS: [u32; 5] = [0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3];
@@ -55,9 +54,7 @@ fn decode_nsec(value: &str) -> Result<[u8; 32], String> {
     }
     let mut data: Vec<u8> = Vec::new();
     for ch in normalized[separator + 1..].chars() {
-        let idx = BECH32_CHARSET
-            .find(ch)
-            .ok_or("invalid character in nsec")?;
+        let idx = BECH32_CHARSET.find(ch).ok_or("invalid character in nsec")?;
         data.push(idx as u8);
     }
     let mut check_input = bech32_hrp_expand(hrp);
@@ -94,9 +91,7 @@ pub fn decode_private_key(value: &str) -> Result<[u8; 32], String> {
     let bytes: Vec<u8> = if raw.to_lowercase().starts_with("nsec1") {
         decode_nsec(raw)?.to_vec()
     } else {
-        let hexed = raw
-            .strip_prefix("0x")
-            .unwrap_or(raw);
+        let hexed = raw.strip_prefix("0x").unwrap_or(raw);
         let mut bytes = Vec::new();
         let chars: Vec<char> = hexed.chars().collect();
         if chars.len() != 64 {
@@ -132,8 +127,7 @@ fn hex_bytes(hex: &str) -> Result<Vec<u8>, String> {
     }
     for pair in chars.chunks(2) {
         out.push(
-            u8::from_str_radix(&pair.iter().collect::<String>(), 16)
-                .map_err(|e| e.to_string())?,
+            u8::from_str_radix(&pair.iter().collect::<String>(), 16).map_err(|e| e.to_string())?,
         );
     }
     Ok(out)
@@ -141,8 +135,7 @@ fn hex_bytes(hex: &str) -> Result<Vec<u8>, String> {
 
 fn signing_key(private_key: &str) -> Result<k256::schnorr::SigningKey, String> {
     let scalar = decode_private_key(private_key)?;
-    k256::schnorr::SigningKey::from_slice(&scalar)
-        .map_err(|e| format!("invalid private key: {e}"))
+    k256::schnorr::SigningKey::from_slice(&scalar).map_err(|e| format!("invalid private key: {e}"))
 }
 
 /// x-only public key hex for a private key (hermes `public_key_hex`).
@@ -189,10 +182,7 @@ pub fn build_auth_event(
     auth_tag_json: &str,
     created_at: Option<i64>,
 ) -> Result<Value, String> {
-    let mut tags: Vec<Value> = vec![
-        json!(["relay", relay_url]),
-        json!(["challenge", challenge]),
-    ];
+    let mut tags: Vec<Value> = vec![json!(["relay", relay_url]), json!(["challenge", challenge])];
     let trimmed = auth_tag_json.trim();
     if !trimmed.is_empty() {
         let auth_tag: Value = serde_json::from_str(trimmed)
@@ -219,8 +209,15 @@ pub fn build_auth_event(
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0)
     });
-    let serialized = serde_json::to_string(&json!([0, Value::String(pubkey.clone()), json!(timestamp), json!(22242), json!(tags), json!("")]))
-        .map_err(|e| e.to_string())?;
+    let serialized = serde_json::to_string(&json!([
+        0,
+        Value::String(pubkey.clone()),
+        json!(timestamp),
+        json!(22242),
+        json!(tags),
+        json!("")
+    ]))
+    .map_err(|e| e.to_string())?;
     let event_id: [u8; 32] = Sha256::digest(serialized.as_bytes()).into();
     let sig = schnorr_sign(&event_id, private_key)?;
     Ok(json!({
@@ -241,10 +238,8 @@ mod tests {
     /// Vectors generated with hermes' own nostr_auth.py.
     const KEY_ONE: &str = "0000000000000000000000000000000000000000000000000000000000000001";
     const KEY_THREE: &str = "0000000000000000000000000000000000000000000000000000000000000003";
-    const KEY_MISC: &str =
-        "7f8a9b0c1d2e3f40516273849506a7b8c9d0e1f2031425364758697a8b9c0d1e";
-    const NSEC_ONE: &str =
-        "nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsmhltgl";
+    const KEY_MISC: &str = "7f8a9b0c1d2e3f40516273849506a7b8c9d0e1f2031425364758697a8b9c0d1e";
+    const NSEC_ONE: &str = "nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsmhltgl";
 
     #[test]
     fn pubkey_vectors_match_hermes() {
@@ -267,7 +262,10 @@ mod tests {
         let key = decode_private_key(NSEC_ONE).unwrap();
         assert_eq!(key[31], 1);
         assert!(key[..31].iter().all(|b| *b == 0));
-        assert_eq!(public_key_hex(NSEC_ONE).unwrap(), public_key_hex(KEY_ONE).unwrap());
+        assert_eq!(
+            public_key_hex(NSEC_ONE).unwrap(),
+            public_key_hex(KEY_ONE).unwrap()
+        );
         assert!(decode_private_key("nsec1invalid").is_err());
         assert!(decode_private_key("abc").is_err());
         assert!(decode_private_key(&"0".repeat(64)).is_err()); // zero key
@@ -291,7 +289,10 @@ mod tests {
         assert_eq!(event["created_at"], 1700000000);
         assert_eq!(
             event["tags"],
-            json!([["relay", "wss://relay.example/community"], ["challenge", "chal-123"]])
+            json!([
+                ["relay", "wss://relay.example/community"],
+                ["challenge", "chal-123"]
+            ])
         );
         // Signature verifies against the x-only pubkey (BIP-340).
         let id = hex_bytes(event["id"].as_str().unwrap()).unwrap();
@@ -306,16 +307,12 @@ mod tests {
 
     #[test]
     fn auth_tag_validation() {
-        let ok = build_auth_event(
-            KEY_ONE,
-            "c",
-            "wss://r",
-            r#"["auth","a","b","c"]"#,
-            Some(1),
-        );
+        let ok = build_auth_event(KEY_ONE, "c", "wss://r", r#"["auth","a","b","c"]"#, Some(1));
         assert!(ok.is_ok());
         assert_eq!(ok.unwrap()["tags"].as_array().unwrap().len(), 3);
-        assert!(build_auth_event(KEY_ONE, "c", "wss://r", r#"["nope","a","b","c"]"#, Some(1)).is_err());
+        assert!(
+            build_auth_event(KEY_ONE, "c", "wss://r", r#"["nope","a","b","c"]"#, Some(1)).is_err()
+        );
         assert!(build_auth_event(KEY_ONE, "c", "wss://r", r#"["auth","a","b"]"#, Some(1)).is_err());
         assert!(build_auth_event(KEY_ONE, "c", "wss://r", "not json", Some(1)).is_err());
     }

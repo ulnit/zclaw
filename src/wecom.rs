@@ -138,8 +138,7 @@ pub struct ResolvedWeCom {
 impl WeComConfig {
     pub fn resolve(&self) -> ResolvedWeCom {
         ResolvedWeCom {
-            bot_id: env_trim("WECOM_BOT_ID")
-                .unwrap_or_else(|| self.bot_id.trim().to_string()),
+            bot_id: env_trim("WECOM_BOT_ID").unwrap_or_else(|| self.bot_id.trim().to_string()),
             secret: env_trim("WECOM_SECRET").unwrap_or_else(|| self.secret.trim().to_string()),
             websocket_url: env_trim("WECOM_WEBSOCKET_URL")
                 .unwrap_or_else(|| self.websocket_url.trim().to_string()),
@@ -188,7 +187,10 @@ fn payload_req_id(payload: &Value) -> String {
 }
 
 fn response_error(response: &Value) -> Option<String> {
-    let errcode = response.get("errcode").and_then(|v| v.as_i64()).unwrap_or(0);
+    let errcode = response
+        .get("errcode")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
     if errcode == 0 {
         return None;
     }
@@ -242,7 +244,10 @@ pub fn decrypt_file_bytes(encrypted: &[u8], aes_key: &str) -> Result<Vec<u8>, St
     if pad_len < 1 || pad_len > 32 || pad_len > out.len() {
         return Err(format!("invalid PKCS#7 padding value: {pad_len}"));
     }
-    if out[out.len() - pad_len..].iter().any(|&b| b as usize != pad_len) {
+    if out[out.len() - pad_len..]
+        .iter()
+        .any(|&b| b as usize != pad_len)
+    {
         return Err("invalid PKCS#7 padding: bytes mismatch".into());
     }
     out.truncate(out.len() - pad_len);
@@ -537,7 +542,10 @@ async fn ws_session(
             authenticated = true;
         }
     }
-    eprintln!("[wecom] connected and subscribed as bot {}", runtime.cfg.bot_id);
+    eprintln!(
+        "[wecom] connected and subscribed as bot {}",
+        runtime.cfg.bot_id
+    );
 
     let mut ping_due = tokio::time::Instant::now() + Duration::from_secs(HEARTBEAT_INTERVAL_SECS);
     loop {
@@ -666,13 +674,12 @@ async fn handle_callback(
         );
         if !allowed {
             if let Some(store) = pairing {
-                if let Some(code_msg) = crate::messaging::pairing_offer_public(
-                    store,
-                    "wecom",
-                    &sender_id,
-                    &sender_id,
-                ) {
-                    let _ = runtime.send_reply_markdown(&inbound_req_id, &code_msg).await;
+                if let Some(code_msg) =
+                    crate::messaging::pairing_offer_public(store, "wecom", &sender_id, &sender_id)
+                {
+                    let _ = runtime
+                        .send_reply_markdown(&inbound_req_id, &code_msg)
+                        .await;
                 }
             }
             eprintln!("[wecom] DM sender {sender_id} blocked by policy");
@@ -771,7 +778,10 @@ async fn dispatch_wecom_event(
         dispatcher
             .try_send_with_ledger("wecom", &chat_id, &reply_text_out, || async {
                 if !reply_req.is_empty() {
-                    match runtime.send_reply_markdown(&reply_req, &reply_text_out).await {
+                    match runtime
+                        .send_reply_markdown(&reply_req, &reply_text_out)
+                        .await
+                    {
                         Ok(()) => Ok(()),
                         Err(e) => {
                             eprintln!("[wecom] reply failed: {e}");
@@ -779,7 +789,10 @@ async fn dispatch_wecom_event(
                         }
                     }
                 } else if !is_group {
-                    match runtime.send_proactive_markdown(&chat_id, &reply_text_out).await {
+                    match runtime
+                        .send_proactive_markdown(&chat_id, &reply_text_out)
+                        .await
+                    {
                         Ok(()) => Ok(()),
                         Err(e) => {
                             eprintln!("[wecom] proactive send failed: {e}");
@@ -992,7 +1005,9 @@ fn extract_quote_text(body: &Value) -> Option<String> {
         .to_lowercase();
     let content = match quote_type.as_str() {
         "text" => body.pointer("/quote/text/content").and_then(|v| v.as_str()),
-        "voice" => body.pointer("/quote/voice/content").and_then(|v| v.as_str()),
+        "voice" => body
+            .pointer("/quote/voice/content")
+            .and_then(|v| v.as_str()),
         _ => None,
     };
     content
@@ -1070,7 +1085,11 @@ async fn extract_media(runtime: &Arc<Runtime>, body: &Value) -> Vec<MediaAttachm
 async fn cache_media(runtime: &Arc<Runtime>, kind: &str, media: &Value) -> Option<MediaAttachment> {
     use base64::Engine;
     let home = crate::config::ulnclaw_home();
-    if let Some(b64) = media.get("base64").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+    if let Some(b64) = media
+        .get("base64")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
         let payload = b64.split(',').next_back().unwrap_or("").trim();
         let raw = base64::engine::general_purpose::STANDARD
             .decode(payload)
@@ -1114,7 +1133,11 @@ async fn cache_media(runtime: &Arc<Runtime>, kind: &str, media: &Value) -> Optio
         return None;
     }
     let mut raw = resp.bytes().await.ok()?.to_vec();
-    if let Some(aes_key) = media.get("aeskey").and_then(|v| v.as_str()).filter(|s| !s.trim().is_empty()) {
+    if let Some(aes_key) = media
+        .get("aeskey")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty())
+    {
         match decrypt_file_bytes(&raw, aes_key.trim()) {
             Ok(decrypted) => raw = decrypted,
             Err(e) => {
@@ -1192,7 +1215,10 @@ async fn send_media_path(
         return;
     }
     let pending: Arc<Mutex<HashMap<String, Value>>> = Arc::new(Mutex::new(HashMap::new()));
-    match runtime.upload_media(&data, media_type, &filename, &pending).await {
+    match runtime
+        .upload_media(&data, media_type, &filename, &pending)
+        .await
+    {
         Ok(media_id) => {
             let body = json!({"msgtype": media_type, media_type: {"media_id": media_id}});
             let _ = runtime

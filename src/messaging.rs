@@ -427,11 +427,7 @@ fn install_activity_callbacks(agent: &Agent) {
     agent.try_set_callbacks(crate::agent::AgentCallbacks {
         on_activity: Some(Box::new(|description: &str| {
             if let Some(ctx) = current_messaging_ctx() {
-                crate::session_activity::touch(
-                    &ctx.session_key,
-                    description,
-                    "agent.progress",
-                );
+                crate::session_activity::touch(&ctx.session_key, description, "agent.progress");
             }
         })),
         ..Default::default()
@@ -469,10 +465,7 @@ pub trait ProfileDispatcherFactory: Send + Sync {
         &self,
         profile: String,
     ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = std::result::Result<Arc<Dispatcher>, String>>
-                + Send,
-        >,
+        Box<dyn std::future::Future<Output = std::result::Result<Arc<Dispatcher>, String>> + Send>,
     >;
 }
 
@@ -480,16 +473,14 @@ pub trait ProfileDispatcherFactory: Send + Sync {
 impl<F, Fut> ProfileDispatcherFactory for F
 where
     F: Fn(String) -> Fut + Send + Sync,
-    Fut: std::future::Future<Output = std::result::Result<Arc<Dispatcher>, String>> + Send + 'static,
+    Fut:
+        std::future::Future<Output = std::result::Result<Arc<Dispatcher>, String>> + Send + 'static,
 {
     fn build(
         &self,
         profile: String,
     ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = std::result::Result<Arc<Dispatcher>, String>>
-                + Send,
-        >,
+        Box<dyn std::future::Future<Output = std::result::Result<Arc<Dispatcher>, String>> + Send>,
     > {
         Box::pin(self(profile))
     }
@@ -544,9 +535,7 @@ impl ProfileRoutingHub {
         let built = match self.factory.build(profile.to_string()).await {
             Ok(dispatcher) => dispatcher,
             Err(e) => {
-                tracing::warn!(
-                    "[messaging] profile '{profile}' dispatcher build failed: {e}"
-                );
+                tracing::warn!("[messaging] profile '{profile}' dispatcher build failed: {e}");
                 return None;
             }
         };
@@ -660,8 +649,9 @@ pub trait PlatformSender: Send + Sync {
 }
 
 fn platform_senders() -> &'static std::sync::Mutex<HashMap<String, Arc<dyn PlatformSender>>> {
-    static SENDERS: std::sync::OnceLock<std::sync::Mutex<HashMap<String, Arc<dyn PlatformSender>>>> =
-        std::sync::OnceLock::new();
+    static SENDERS: std::sync::OnceLock<
+        std::sync::Mutex<HashMap<String, Arc<dyn PlatformSender>>>,
+    > = std::sync::OnceLock::new();
     SENDERS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
 }
 
@@ -887,7 +877,10 @@ pub fn register_pending_inbound(session_key: &str, platform: &str, chat_id: &str
 
 /// Drop a session's pending-inbound row when its queue drains.
 pub fn unregister_pending_inbound(session_key: &str) {
-    pending_inbound_directory().lock().unwrap().remove(session_key);
+    pending_inbound_directory()
+        .lock()
+        .unwrap()
+        .remove(session_key);
 }
 
 /// Every session with parked inbound messages (stall watcher scan).
@@ -958,157 +951,183 @@ pub struct PlatformCatalogEntry {
 pub fn platform_catalog() -> Vec<PlatformCatalogEntry> {
     vec![
         PlatformCatalogEntry {
-            id: "telegram", name: "Telegram",
+            id: "telegram",
+            name: "Telegram",
             description: "Bot API long-polling adapter",
             env_keys: &[("TELEGRAM_BOT_TOKEN", true)],
             required_any: &[&["bot_token"]],
         },
         PlatformCatalogEntry {
-            id: "discord", name: "Discord",
+            id: "discord",
+            name: "Discord",
             description: "Gateway v10 websocket + REST adapter",
             env_keys: &[("DISCORD_BOT_TOKEN", true)],
             required_any: &[&["bot_token"]],
         },
         PlatformCatalogEntry {
-            id: "slack", name: "Slack",
+            id: "slack",
+            name: "Slack",
             description: "Socket Mode websocket + chat.postMessage adapter",
             env_keys: &[("SLACK_BOT_TOKEN", true), ("SLACK_APP_TOKEN", true)],
             required_any: &[&["bot_token"], &["app_token"]],
         },
         PlatformCatalogEntry {
-            id: "signal", name: "Signal",
+            id: "signal",
+            name: "Signal",
             description: "signal-cli HTTP daemon adapter",
             env_keys: &[],
             required_any: &[&["http_url"], &["account"]],
         },
         PlatformCatalogEntry {
-            id: "weixin", name: "Weixin",
+            id: "weixin",
+            name: "Weixin",
             description: "Weixin personal account via the iLink Bot API",
             env_keys: &[],
             required_any: &[&["token"], &["base_url"]],
         },
         PlatformCatalogEntry {
-            id: "qq", name: "QQ",
+            id: "qq",
+            name: "QQ",
             description: "Official QQ Bot API v2 adapter",
             env_keys: &[],
             required_any: &[&["app_id"], &["client_secret"]],
         },
         PlatformCatalogEntry {
-            id: "yuanbao", name: "Yuanbao",
+            id: "yuanbao",
+            name: "Yuanbao",
             description: "Yuanbao WS-gateway adapter",
             env_keys: &[],
             required_any: &[&["app_id"], &["app_secret"]],
         },
         PlatformCatalogEntry {
-            id: "email", name: "Email",
+            id: "email",
+            name: "Email",
             description: "Email via IMAP/SMTP",
             env_keys: &[],
             required_any: &[&["password"]],
         },
         PlatformCatalogEntry {
-            id: "mattermost", name: "Mattermost",
+            id: "mattermost",
+            name: "Mattermost",
             description: "Mattermost REST v4 + WebSocket adapter",
             env_keys: &[],
             required_any: &[&["url"], &["token"]],
         },
         PlatformCatalogEntry {
-            id: "matrix", name: "Matrix",
+            id: "matrix",
+            name: "Matrix",
             description: "Matrix Client-Server API adapter (sans E2EE)",
             env_keys: &[],
             required_any: &[&["homeserver"], &["access_token", "password"]],
         },
         PlatformCatalogEntry {
-            id: "dingtalk", name: "DingTalk",
+            id: "dingtalk",
+            name: "DingTalk",
             description: "DingTalk Stream Mode adapter",
             env_keys: &[],
             required_any: &[&["client_id"], &["client_secret"]],
         },
         PlatformCatalogEntry {
-            id: "wecom", name: "WeCom",
+            id: "wecom",
+            name: "WeCom",
             description: "WeCom AI Bot WebSocket gateway adapter",
             env_keys: &[],
             required_any: &[&["bot_id"], &["secret"]],
         },
         PlatformCatalogEntry {
-            id: "feishu", name: "Feishu/Lark",
+            id: "feishu",
+            name: "Feishu/Lark",
             description: "Feishu/Lark gateway webhook adapter",
             env_keys: &[],
             required_any: &[&["app_id"], &["app_secret"]],
         },
         PlatformCatalogEntry {
-            id: "homeassistant", name: "Home Assistant",
+            id: "homeassistant",
+            name: "Home Assistant",
             description: "Home Assistant WS API state-change events",
             env_keys: &[],
             required_any: &[&["url"], &["token"]],
         },
         PlatformCatalogEntry {
-            id: "sms", name: "SMS (Twilio)",
+            id: "sms",
+            name: "SMS (Twilio)",
             description: "Twilio SMS via REST + gateway webhook",
             env_keys: &[],
             required_any: &[&["account_sid"], &["auth_token"]],
         },
         PlatformCatalogEntry {
-            id: "whatsapp", name: "WhatsApp",
+            id: "whatsapp",
+            name: "WhatsApp",
             description: "WhatsApp via an external Baileys HTTP bridge",
             env_keys: &[],
             required_any: &[&["bridge_url"]],
         },
         PlatformCatalogEntry {
-            id: "irc", name: "IRC",
+            id: "irc",
+            name: "IRC",
             description: "IRC via a zero-dependency TLS client",
             env_keys: &[],
             required_any: &[&["server"], &["nickname"]],
         },
         PlatformCatalogEntry {
-            id: "ntfy", name: "ntfy",
+            id: "ntfy",
+            name: "ntfy",
             description: "ntfy topics via HTTP streaming",
             env_keys: &[],
             required_any: &[&["server"], &["topic"]],
         },
         PlatformCatalogEntry {
-            id: "simplex", name: "SimpleX",
+            id: "simplex",
+            name: "SimpleX",
             description: "SimpleX via the simplex-chat daemon WS API",
             env_keys: &[],
             required_any: &[&["ws_url"]],
         },
         PlatformCatalogEntry {
-            id: "teams", name: "Microsoft Teams",
+            id: "teams",
+            name: "Microsoft Teams",
             description: "Microsoft Teams via the raw Bot Framework protocol",
             env_keys: &[],
             required_any: &[&["client_id"], &["client_secret"]],
         },
         PlatformCatalogEntry {
-            id: "line", name: "LINE",
+            id: "line",
+            name: "LINE",
             description: "LINE Messaging API adapter",
             env_keys: &[],
             required_any: &[&["channel_access_token"], &["channel_secret"]],
         },
         PlatformCatalogEntry {
-            id: "google_chat", name: "Google Chat",
+            id: "google_chat",
+            name: "Google Chat",
             description: "Google Chat service-account HTTP events adapter",
             env_keys: &[],
             required_any: &[&["service_account_file"]],
         },
         PlatformCatalogEntry {
-            id: "buzz", name: "Buzz",
+            id: "buzz",
+            name: "Buzz",
             description: "Buzz CLI bridge adapter",
             env_keys: &[],
             required_any: &[&["cli_path"], &["self_pubkey"]],
         },
         PlatformCatalogEntry {
-            id: "photon", name: "Photon",
+            id: "photon",
+            name: "Photon",
             description: "Photon sidecar bridge adapter",
             env_keys: &[],
             required_any: &[&["sidecar_url"]],
         },
         PlatformCatalogEntry {
-            id: "raft", name: "Raft",
+            id: "raft",
+            name: "Raft",
             description: "Raft bridge runtime adapter",
             env_keys: &[],
             required_any: &[&["bridge_token"]],
         },
         PlatformCatalogEntry {
-            id: "a2a", name: "A2A",
+            id: "a2a",
+            name: "A2A",
             description: "Agent-to-agent protocol adapter",
             env_keys: &[],
             required_any: &[&["public_url"]],
@@ -1155,8 +1174,14 @@ pub fn platform_state_rows() -> Vec<(&'static str, &'static str, String)> {
     platform_catalog()
         .into_iter()
         .map(|entry| {
-            let section = messaging_value.get(entry.id).cloned().unwrap_or(Value::Null);
-            let enabled = section.get("enabled").and_then(Value::as_bool).unwrap_or(false);
+            let section = messaging_value
+                .get(entry.id)
+                .cloned()
+                .unwrap_or(Value::Null);
+            let enabled = section
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             let configured = platform_configured(&section, &entry);
             let state = if !enabled {
                 "disabled"
@@ -1235,9 +1260,7 @@ pub fn platform_ops_digest() -> String {
                 "  \u{b7} {id} \u{2014} retrying (attempt {})",
                 platform_retry_count(id)
             )),
-            "exited" => issues.push(format!(
-                "  \u{b7} {id} \u{2014} exited (retries exhausted)"
-            )),
+            "exited" => issues.push(format!("  \u{b7} {id} \u{2014} exited (retries exhausted)")),
             "starting" => issues.push(format!("  \u{b7} {id} \u{2014} starting")),
             _ => {}
         }
@@ -1300,7 +1323,11 @@ pub fn parse_slash_confirm_reply(text: &str) -> Option<crate::slash_confirm::Con
         return None;
     }
     if let Some(command) = trimmed.strip_prefix('/') {
-        let first = command.split_whitespace().next().unwrap_or("").to_lowercase();
+        let first = command
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_lowercase();
         match first.as_str() {
             "approve" | "yes" | "ok" | "confirm" => return Some(ConfirmChoice::Once),
             "always" | "remember" => return Some(ConfirmChoice::Always),
@@ -1427,7 +1454,11 @@ pub fn parse_approval_command(text: &str) -> Option<ApprovalCommand> {
             } else {
                 crate::approval_gateway::CHOICE_ONCE
             };
-            Some(ApprovalCommand { approve: true, all, choice })
+            Some(ApprovalCommand {
+                approve: true,
+                all,
+                choice,
+            })
         }
         "/deny" => Some(ApprovalCommand {
             approve: false,
@@ -1501,7 +1532,15 @@ pub fn messaging_aware_approve_fn(
             );
             let rendered = if let Some(sender) = platform_sender(&ctx.platform) {
                 let native = sender
-                    .send_exec_approval(&ctx.chat_id, &cmd, &ctx.session_key, &reason, true, true, false)
+                    .send_exec_approval(
+                        &ctx.chat_id,
+                        &cmd,
+                        &ctx.session_key,
+                        &reason,
+                        true,
+                        true,
+                        false,
+                    )
                     .await;
                 if !native {
                     sender
@@ -1517,7 +1556,10 @@ pub fn messaging_aware_approve_fn(
             };
             if !rendered {
                 // No outbound channel: fail closed.
-                crate::approval_gateway::resolve(&ctx.session_key, crate::approval_gateway::CHOICE_DENY);
+                crate::approval_gateway::resolve(
+                    &ctx.session_key,
+                    crate::approval_gateway::CHOICE_DENY,
+                );
                 return false;
             }
             matches!(handle.rx.await, Ok(choice) if choice != crate::approval_gateway::CHOICE_DENY)
@@ -1558,12 +1600,8 @@ pub fn messaging_clarify_fn() -> crate::tools::context::ClarifyFn {
                      your best judgment and state your assumptions in the final answer.",
                 ));
             };
-            let handle = crate::clarify_gateway::register(
-                &ctx.session_key,
-                &question,
-                &choices,
-                multi,
-            );
+            let handle =
+                crate::clarify_gateway::register(&ctx.session_key, &question, &choices, multi);
             let Some(sender) = platform_sender(&ctx.platform) else {
                 crate::clarify_gateway::resolve(&handle.clarify_id, "");
                 return Err(AgentError::tool(format!(
@@ -1677,8 +1715,7 @@ impl Dispatcher {
         if !crate::slash_access::is_known_command(&canonical) {
             return None;
         }
-        let chat_type =
-            crate::channel_directory::chat_type_for(&event.platform, &event.chat_id);
+        let chat_type = crate::channel_directory::chat_type_for(&event.platform, &event.chat_id);
         let scope = crate::slash_access::scope_for_chat_type(chat_type.as_deref());
         let policy = crate::slash_access::policy_for(
             self.agent
@@ -1768,11 +1805,9 @@ impl Dispatcher {
                     "args": raw_args,
                     "raw_args": raw_args,
                 });
-                let hook_results = crate::event_hooks::emit_collect(
-                    &format!("command:{canonical}"),
-                    hook_ctx,
-                )
-                .await;
+                let hook_results =
+                    crate::event_hooks::emit_collect(&format!("command:{canonical}"), hook_ctx)
+                        .await;
                 match crate::event_hooks::interpret_command_hook_results(&hook_results) {
                     crate::event_hooks::CommandHookDecision::Deny(message) => {
                         let reply = if message.is_empty() {
@@ -1866,14 +1901,8 @@ impl Dispatcher {
         let mut event = event;
         if event.text.trim().starts_with('/') {
             let home = self.agent.context().home.clone();
-            match crate::platform_slash::resolve(
-                &self.agent,
-                &self.store,
-                &home,
-                &key,
-                &event.text,
-            )
-            .await
+            match crate::platform_slash::resolve(&self.agent, &self.store, &home, &key, &event.text)
+                .await
             {
                 Some(crate::platform_slash::PlatformSlashOutcome::Direct(reply)) => {
                     return Ok(DispatchOutcome {
@@ -1954,7 +1983,9 @@ impl Dispatcher {
             chat_id: event.chat_id.clone(),
             session_key: key.clone(),
         };
-        let result = MESSAGING_CTX.scope(chat_ref, self.run_turn(&key, &event)).await;
+        let result = MESSAGING_CTX
+            .scope(chat_ref, self.run_turn(&key, &event))
+            .await;
         // Keep the busy flag while draining queued follow-ups so new
         // inbound messages queue instead of interleaving.
         self.drain_queued(&key).await;
@@ -1984,7 +2015,9 @@ impl Dispatcher {
                 chat_id: event.chat_id.clone(),
                 session_key: key.to_string(),
             };
-            let outcome = MESSAGING_CTX.scope(chat_ref, self.run_turn(key, &event)).await;
+            let outcome = MESSAGING_CTX
+                .scope(chat_ref, self.run_turn(key, &event))
+                .await;
             let sender = platform_sender(&event.platform);
             match outcome {
                 Ok(result) => {
@@ -2018,10 +2051,7 @@ impl Dispatcher {
                 Err(e) => {
                     if let Some(sender) = sender {
                         sender
-                            .send_text(
-                                &event.chat_id,
-                                &format!("(queued turn failed: {e})"),
-                            )
+                            .send_text(&event.chat_id, &format!("(queued turn failed: {e})"))
                             .await;
                     }
                 }
@@ -2034,13 +2064,8 @@ impl Dispatcher {
     /// parity for the direct-send adapters). The obligation records the
     /// text before the send and marks delivered after; a crash in
     /// between leaves a row the next boot's sweep redelivers.
-    pub async fn send_with_ledger<F, Fut>(
-        &self,
-        platform: &str,
-        chat_id: &str,
-        text: &str,
-        send: F,
-    ) where
+    pub async fn send_with_ledger<F, Fut>(&self, platform: &str, chat_id: &str, text: &str, send: F)
+    where
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = ()>,
     {
@@ -2130,7 +2155,12 @@ impl Dispatcher {
         key: &str,
         event: &MessageEvent,
     ) -> Result<DispatchOutcome> {
-        let confirm_required = self.agent.tool_context().config.approvals.mcp_reload_confirm;
+        let confirm_required = self
+            .agent
+            .tool_context()
+            .config
+            .approvals
+            .mcp_reload_confirm;
         if !confirm_required {
             return Ok(DispatchOutcome {
                 reply: self.run_reload_mcp(key).await,
@@ -2195,7 +2225,10 @@ impl Dispatcher {
             change_parts.push(format!("Removed servers: {}", report.removed.join(", ")));
         }
         if !report.reconnected.is_empty() {
-            change_parts.push(format!("Reconnected servers: {}", report.reconnected.join(", ")));
+            change_parts.push(format!(
+                "Reconnected servers: {}",
+                report.reconnected.join(", ")
+            ));
         }
         if change_parts.is_empty() {
             change_parts.push("server list unchanged".to_string());
@@ -2240,12 +2273,7 @@ impl Dispatcher {
             .list_session_rows(50)
             .unwrap_or_default()
             .into_iter()
-            .filter(|row| {
-                row.title
-                    .as_deref()
-                    .map(|t| !t.is_empty())
-                    .unwrap_or(false)
-            })
+            .filter(|row| row.title.as_deref().map(|t| !t.is_empty()).unwrap_or(false))
             .take(10)
             .collect();
         if name.is_empty() {
@@ -2272,8 +2300,10 @@ Usage: `/resume <session name>` or `/resume <number>` (e.g. `/resume 1`         
                     .to_string(),
             );
             return Ok(DispatchOutcome {
-                reply: lines.join("
-"),
+                reply: lines.join(
+                    "
+",
+                ),
                 transcript_echoes: Vec::new(),
             });
         }
@@ -2462,8 +2492,7 @@ Use `/resume` with no                      arguments to see available sessions."
         // inbound text unconditionally — the persisted transcript
         // stays clean regardless of the render toggle (hermes run.py
         // inbound path runs the strip before any toggle check).
-        user_text =
-            crate::message_timestamps::strip_leading_message_timestamps(&user_text).0;
+        user_text = crate::message_timestamps::strip_leading_message_timestamps(&user_text).0;
         let mut prompt = if event.sender_name.is_empty() {
             user_text
         } else {
@@ -2544,14 +2573,13 @@ Use `/resume` with no                      arguments to see available sessions."
         // withheld from the chat; prose merely mentioning a marker is
         // delivered normally. Empty replies are skipped by every
         // platform sender.
-        let reply = if crate::response_filters::is_intentional_silence_agent_result(
-            false,
-            &result.content,
-        ) {
-            String::new()
-        } else {
-            result.content
-        };
+        let reply =
+            if crate::response_filters::is_intentional_silence_agent_result(false, &result.content)
+            {
+                String::new()
+            } else {
+                result.content
+            };
         // P736: event hooks — agent:end adds the truncated response.
         crate::event_hooks::emit(
             "agent:end",
@@ -2630,11 +2658,7 @@ const MAX_MEDIA_BYTES: u64 = 25 * 1024 * 1024;
 
 /// Cache downloaded bytes and wrap failures into a text note (hermes
 /// degrades attachment problems to text, never fatal).
-fn cache_attachment(
-    data: Vec<u8>,
-    mime: &str,
-    original_name: &str,
-) -> Option<MediaAttachment> {
+fn cache_attachment(data: Vec<u8>, mime: &str, original_name: &str) -> Option<MediaAttachment> {
     if data.is_empty() || data.len() as u64 > MAX_MEDIA_BYTES {
         return None;
     }
@@ -2890,9 +2914,7 @@ pub async fn run_messaging(
         let recovery_dispatcher = dispatcher.clone();
         tokio::spawn(async move {
             for (session_key, event) in recovered {
-                tracing::info!(
-                    "[shutdown_flush] re-dispatching parked message for {session_key}"
-                );
+                tracing::info!("[shutdown_flush] re-dispatching parked message for {session_key}");
                 if let Err(e) = recovery_dispatcher.handle_event(event).await {
                     tracing::warn!(
                         "[shutdown_flush] recovery dispatch failed for {session_key}: {e}"
@@ -2915,7 +2937,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "telegram", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -2923,7 +2944,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { telegram::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.discord.enabled {
@@ -2931,7 +2951,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "discord", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -2939,7 +2958,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { discord::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.slack.enabled {
@@ -2947,7 +2965,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "slack", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -2955,7 +2972,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { slack::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.signal.enabled {
@@ -2963,7 +2979,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "signal", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -2971,7 +2986,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::signal::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.weixin.enabled {
@@ -2979,7 +2993,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "weixin", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -2987,7 +3000,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::weixin::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.qq.enabled {
@@ -2995,7 +3007,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "qq", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3003,7 +3014,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::qqbot::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.yuanbao.enabled {
@@ -3011,7 +3021,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "yuanbao", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3019,7 +3028,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::yuanbao::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.email.enabled {
@@ -3027,7 +3035,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "email", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3035,7 +3042,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::email_platform::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.mattermost.enabled {
@@ -3043,7 +3049,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "mattermost", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3051,7 +3056,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::mattermost::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.matrix.enabled {
@@ -3059,7 +3063,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "matrix", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3067,7 +3070,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::matrix::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.dingtalk.enabled {
@@ -3075,7 +3077,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "dingtalk", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3083,7 +3084,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::dingtalk::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.wecom.enabled {
@@ -3091,7 +3091,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "wecom", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3099,7 +3098,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::wecom::run(cfg, dispatcher, pairing).await }
-
         });
     }
     // Standalone `notify/notify` sender (hermes `_standalone_send`):
@@ -3111,7 +3109,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "homeassistant", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3119,7 +3116,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::homeassistant::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.whatsapp.enabled {
@@ -3127,7 +3123,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "whatsapp", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3135,7 +3130,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::whatsapp::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.irc.enabled {
@@ -3143,7 +3137,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "irc", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3151,7 +3144,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::irc::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.ntfy.enabled {
@@ -3159,7 +3151,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "ntfy", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3167,7 +3158,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::ntfy::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.simplex.enabled {
@@ -3175,7 +3165,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "simplex", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3183,7 +3172,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::simplex::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.teams.enabled {
@@ -3216,7 +3204,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "buzz", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3224,7 +3211,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::buzz::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.photon.enabled {
@@ -3232,7 +3218,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "photon", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3240,11 +3225,9 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::photon::run(cfg, dispatcher, pairing).await }
-
         });
     }
-    if msg.feishu.enabled
-        && crate::feishu::is_websocket_mode(&msg.feishu.resolve().connection_mode)
+    if msg.feishu.enabled && crate::feishu::is_websocket_mode(&msg.feishu.resolve().connection_mode)
     {
         // WebSocket long connection (hermes default); webhook mode
         // rides the gateway /webhooks/feishu route instead.
@@ -3252,7 +3235,6 @@ pub async fn run_messaging(
         let dispatcher = dispatcher.clone();
         let pairing = pairing.clone();
         spawn_platform_task(&mut tasks, "feishu", move || {
-
             let cfg = cfg.clone();
 
             let dispatcher = dispatcher.clone();
@@ -3260,7 +3242,6 @@ pub async fn run_messaging(
             let pairing = pairing.clone();
 
             async move { crate::feishu_ws::run(cfg, dispatcher, pairing).await }
-
         });
     }
     if msg.a2a.enabled {
@@ -3291,7 +3272,12 @@ pub fn resolve_telegram_token_public(cfg: &TelegramConfig) -> Option<String> {
 }
 
 /// Public send wrapper (see `resolve_telegram_token_public`).
-pub async fn telegram_send_public(client: &reqwest::Client, token: &str, chat_id: &str, text: &str) {
+pub async fn telegram_send_public(
+    client: &reqwest::Client,
+    token: &str,
+    chat_id: &str,
+    text: &str,
+) {
     telegram::send_message(client, token, chat_id, text).await
 }
 
@@ -3432,8 +3418,15 @@ pub mod telegram {
             question: &str,
             choices: &[String],
         ) -> bool {
-            send_clarify_message(&self.client, &self.token, chat_id, clarify_id, question, choices)
-                .await
+            send_clarify_message(
+                &self.client,
+                &self.token,
+                chat_id,
+                clarify_id,
+                question,
+                choices,
+            )
+            .await
         }
 
         /// Inline-keyboard exec-approval prompt (hermes Telegram
@@ -3496,7 +3489,12 @@ pub mod telegram {
 
         /// Native media delivery with hermes caption semantics
         /// (`_media_caption_split`, 1024-char Telegram cap).
-        async fn send_media(&self, chat_id: &str, text: &str, paths: &[std::path::PathBuf]) -> bool {
+        async fn send_media(
+            &self,
+            chat_id: &str,
+            text: &str,
+            paths: &[std::path::PathBuf],
+        ) -> bool {
             if paths.is_empty() {
                 return false;
             }
@@ -3516,7 +3514,11 @@ pub mod telegram {
         }
     }
 
-    pub async fn run(cfg: TelegramConfig, dispatcher: Arc<Dispatcher>, pairing: Option<Arc<crate::pairing::PairingStore>>) {
+    pub async fn run(
+        cfg: TelegramConfig,
+        dispatcher: Arc<Dispatcher>,
+        pairing: Option<Arc<crate::pairing::PairingStore>>,
+    ) {
         let Some(token) = resolve_token(&cfg.bot_token, "TELEGRAM_BOT_TOKEN") else {
             eprintln!("[telegram] disabled: no bot_token configured (set messaging.telegram.bot_token or TELEGRAM_BOT_TOKEN)");
             return;
@@ -3531,7 +3533,10 @@ pub mod telegram {
         );
         match api(&client, &token, "getMe", json!({})).await {
             Ok(me) => {
-                let username = me.pointer("/result/username").and_then(|v| v.as_str()).unwrap_or("?");
+                let username = me
+                    .pointer("/result/username")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
                 eprintln!("[telegram] connected as @{username}");
             }
             Err(e) => {
@@ -3559,17 +3564,21 @@ pub mod telegram {
                 }
             };
             for update in updates {
-                let update_id = update.get("update_id").and_then(|v| v.as_i64()).unwrap_or(0);
+                let update_id = update
+                    .get("update_id")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
                 offset = Some(offset.unwrap_or(0).max(update_id));
                 // Clarify button taps arrive as callback_query updates and
                 // resolve the pending clarify (hermes Telegram callback
                 // handler); they never enter the message pipeline.
                 if let Some(query) = update.get("callback_query") {
-                    handle_callback_query(&client, &token, &cfg, pairing.as_deref(), query)
-                        .await;
+                    handle_callback_query(&client, &token, &cfg, pairing.as_deref(), query).await;
                     continue;
                 }
-                let Some(message) = update.get("message") else { continue };
+                let Some(message) = update.get("message") else {
+                    continue;
+                };
                 let text = message.get("text").and_then(|v| v.as_str()).unwrap_or("");
                 // Media (photo/document/video/audio/voice) is downloaded
                 // and cached; media-only messages still flow (hermes).
@@ -3623,7 +3632,9 @@ pub mod telegram {
                          messaging.telegram.allowed_chat_ids or approve a pairing code"
                     );
                     if let Some(store) = pairing.as_ref() {
-                        if let Some(reply) = pairing_offer(store, "telegram", &event.sender_id, &event.sender_name) {
+                        if let Some(reply) =
+                            pairing_offer(store, "telegram", &event.sender_id, &event.sender_name)
+                        {
                             send_message(&client, &token, &chat_id, &reply).await;
                         }
                     }
@@ -3667,7 +3678,12 @@ pub mod telegram {
         }
     }
 
-    async fn api(client: &reqwest::Client, token: &str, method: &str, params: Value) -> Result<Value> {
+    async fn api(
+        client: &reqwest::Client,
+        token: &str,
+        method: &str,
+        params: Value,
+    ) -> Result<Value> {
         let url = format!("{}/bot{token}/{method}", telegram_api_base());
         let response = client
             .post(&url)
@@ -3685,7 +3701,10 @@ pub mod telegram {
         } else {
             Err(AgentError::Tool(format!(
                 "telegram {method}: {}",
-                value.get("description").and_then(|v| v.as_str()).unwrap_or("unknown error")
+                value
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown error")
             )))
         }
     }
@@ -3840,7 +3859,9 @@ pub mod telegram {
         pairing: Option<&crate::pairing::PairingStore>,
         query: &Value,
     ) {
-        let Some(data) = query.get("data").and_then(|v| v.as_str()) else { return };
+        let Some(data) = query.get("data").and_then(|v| v.as_str()) else {
+            return;
+        };
         if data.starts_with("ea:") {
             handle_approval_callback(client, token, cfg, pairing, query).await;
             return;
@@ -3854,7 +3875,9 @@ pub mod telegram {
         }
         let clarify_id = parts[1];
         let choice_token = parts[2];
-        let Some(query_id) = query.get("id").and_then(|v| v.as_str()) else { return };
+        let Some(query_id) = query.get("id").and_then(|v| v.as_str()) else {
+            return;
+        };
         let from = query.get("from").cloned().unwrap_or(json!({}));
         let caller_id = from.get("id").map(|v| v.to_string()).unwrap_or_default();
         let user_display = from
@@ -3876,7 +3899,10 @@ pub mod telegram {
                 other => other.as_str().unwrap_or("").to_string(),
             })
             .unwrap_or_default();
-        let message_id = message.get("message_id").and_then(|v| v.as_i64()).unwrap_or(0);
+        let message_id = message
+            .get("message_id")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
 
         // Auth union: configured allowlist OR an approved pairing code
         // (hermes `_is_callback_user_authorized`).
@@ -3910,8 +3936,15 @@ pub mod telegram {
             // Flip into text-capture mode; the next plain message in the
             // session resolves the clarify (hermes mark_awaiting_text).
             if !crate::clarify_gateway::mark_awaiting_text(clarify_id) {
-                notify_clarify_expired(client, token, query_id, &chat_id, message_id, &original_text)
-                    .await;
+                notify_clarify_expired(
+                    client,
+                    token,
+                    query_id,
+                    &chat_id,
+                    message_id,
+                    &original_text,
+                )
+                .await;
                 return;
             }
             answer_callback(client, token, query_id, "✏️ Type your answer in the chat.").await;
@@ -3945,8 +3978,15 @@ pub mod telegram {
         } else {
             // Entry evicted (clarify timeout / gateway restart) between ask
             // and tap — surface it instead of a misleading ✓.
-            notify_clarify_expired(client, token, query_id, &chat_id, message_id, &original_text)
-                .await;
+            notify_clarify_expired(
+                client,
+                token,
+                query_id,
+                &chat_id,
+                message_id,
+                &original_text,
+            )
+            .await;
         }
     }
 
@@ -3961,13 +4001,17 @@ pub mod telegram {
         pairing: Option<&crate::pairing::PairingStore>,
         query: &Value,
     ) {
-        let Some(data) = query.get("data").and_then(|v| v.as_str()) else { return };
+        let Some(data) = query.get("data").and_then(|v| v.as_str()) else {
+            return;
+        };
         let parts: Vec<&str> = data.splitn(3, ':').collect();
         if parts.len() != 3 {
             return;
         }
         let choice = parts[1];
-        let Some(query_id) = query.get("id").and_then(|v| v.as_str()) else { return };
+        let Some(query_id) = query.get("id").and_then(|v| v.as_str()) else {
+            return;
+        };
         let Ok(approval_id) = parts[2].parse::<u64>() else {
             answer_callback(client, token, query_id, "Invalid approval data.").await;
             return;
@@ -3988,7 +4032,10 @@ pub mod telegram {
                 other => other.as_str().unwrap_or("").to_string(),
             })
             .unwrap_or_default();
-        let message_id = message.get("message_id").and_then(|v| v.as_i64()).unwrap_or(0);
+        let message_id = message
+            .get("message_id")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
 
         // Auth union: configured allowlist OR an approved pairing code
         // (hermes `_is_callback_user_authorized`).
@@ -4047,8 +4094,14 @@ pub mod telegram {
             )
         };
         answer_callback(client, token, query_id, &label).await;
-        edit_clarify_message(client, token, &chat_id, message_id, &html_escape(&edit_text))
-            .await;
+        edit_clarify_message(
+            client,
+            token,
+            &chat_id,
+            message_id,
+            &html_escape(&edit_text),
+        )
+        .await;
     }
 
     /// answerCallbackQuery wrapper — always fire-and-forget; a failed
@@ -4091,7 +4144,13 @@ pub mod telegram {
         message_id: i64,
         original_text: &str,
     ) {
-        answer_callback(client, token, query_id, "⚠️ This prompt expired — please /retry.").await;
+        answer_callback(
+            client,
+            token,
+            query_id,
+            "⚠️ This prompt expired — please /retry.",
+        )
+        .await;
         let edited = format!(
             "❓ {}\n\n<i>⚠️ This question expired or the session reset — please /retry.</i>",
             html_escape(original_text)
@@ -4111,7 +4170,10 @@ pub mod telegram {
         let (file_id, mime, name): (String, &str, String) =
             if let Some(photo) = message.get("photo").and_then(|v| v.as_array()) {
                 // Bot API sends photos as a size ladder; last = largest.
-                match photo.last().and_then(|p| p.get("file_id").and_then(|v| v.as_str())) {
+                match photo
+                    .last()
+                    .and_then(|p| p.get("file_id").and_then(|v| v.as_str()))
+                {
                     Some(file_id) => (file_id.to_string(), "image/jpeg", String::new()),
                     None => return Vec::new(),
                 }
@@ -4127,7 +4189,10 @@ pub mod telegram {
                 let mime = if message.get("voice").is_some() {
                     "audio/ogg"
                 } else {
-                    media.get("mime_type").and_then(|v| v.as_str()).unwrap_or("")
+                    media
+                        .get("mime_type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
                 };
                 let name = media
                     .get("file_name")
@@ -4149,7 +4214,12 @@ pub mod telegram {
             return Vec::new();
         };
         let url = format!("{}/file/bot{token}/{file_path}", telegram_api_base());
-        match client.get(&url).send().await.and_then(|r| r.error_for_status()) {
+        match client
+            .get(&url)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+        {
             Ok(response) => match response.bytes().await {
                 Ok(bytes) => cache_attachment(bytes.to_vec(), mime, &name)
                     .into_iter()
@@ -4185,7 +4255,10 @@ pub mod telegram {
             .unwrap_or_else(|| "media".to_string());
         let mut form = reqwest::multipart::Form::new()
             .text("chat_id", chat_id.to_string())
-            .part("photo", reqwest::multipart::Part::bytes(data).file_name(file_name));
+            .part(
+                "photo",
+                reqwest::multipart::Part::bytes(data).file_name(file_name),
+            );
         if let Some(caption) = caption {
             form = form.text("caption", caption.to_string());
         }
@@ -4214,7 +4287,10 @@ pub mod telegram {
             .unwrap_or_else(|| "media".to_string());
         let mut form = reqwest::multipart::Form::new()
             .text("chat_id", chat_id.to_string())
-            .part("document", reqwest::multipart::Part::bytes(data).file_name(file_name));
+            .part(
+                "document",
+                reqwest::multipart::Part::bytes(data).file_name(file_name),
+            );
         if let Some(caption) = caption {
             form = form.text("caption", caption.to_string());
         }
@@ -4233,9 +4309,25 @@ pub mod telegram {
                 .map(|e| e.to_lowercase())
                 .as_deref(),
             Some(
-                "jpg" | "jpeg" | "png" | "webp" | "gif" | "mp4" | "mov" | "avi" | "mkv"
-                | "webm" | "3gp" | "pdf" | "doc" | "docx" | "txt" | "md" | "csv" | "xlsx"
-                | "zip"
+                "jpg"
+                    | "jpeg"
+                    | "png"
+                    | "webp"
+                    | "gif"
+                    | "mp4"
+                    | "mov"
+                    | "avi"
+                    | "mkv"
+                    | "webm"
+                    | "3gp"
+                    | "pdf"
+                    | "doc"
+                    | "docx"
+                    | "txt"
+                    | "md"
+                    | "csv"
+                    | "xlsx"
+                    | "zip"
             )
         )
     }
@@ -4284,8 +4376,8 @@ pub mod telegram {
                     "/botTEST/:method",
                     post(
                         move |State(log): State<Arc<std::sync::Mutex<Vec<(String, Value)>>>>,
-                         axum::extract::Path(method): axum::extract::Path<String>,
-                         axum::Json(body): axum::Json<Value>| async move {
+                              axum::extract::Path(method): axum::extract::Path<String>,
+                              axum::Json(body): axum::Json<Value>| async move {
                             log.lock().unwrap().push((method, body));
                             axum::Json(json!({ "ok": response_ok, "result": {} }))
                         },
@@ -4396,8 +4488,14 @@ pub mod telegram {
             );
             let clarify_id = handle.clarify_id.clone();
             let query = clarify_query(&clarify_id, "1");
-            handle_callback_query(&reqwest::Client::new(), "TEST", &authorized_cfg(), None, &query)
-                .await;
+            handle_callback_query(
+                &reqwest::Client::new(),
+                "TEST",
+                &authorized_cfg(),
+                None,
+                &query,
+            )
+            .await;
             std::env::remove_var("TELEGRAM_API_BASE");
             // The tool waiter received the tapped choice text.
             assert_eq!(handle.rx.await.unwrap(), "Beta");
@@ -4427,8 +4525,14 @@ pub mod telegram {
             );
             let clarify_id = handle.clarify_id.clone();
             let query = clarify_query(&clarify_id, "other");
-            handle_callback_query(&reqwest::Client::new(), "TEST", &authorized_cfg(), None, &query)
-                .await;
+            handle_callback_query(
+                &reqwest::Client::new(),
+                "TEST",
+                &authorized_cfg(),
+                None,
+                &query,
+            )
+            .await;
             std::env::remove_var("TELEGRAM_API_BASE");
             // Entry survives in text-capture mode; the next message in the
             // session resolves it (text intercept).
@@ -4457,8 +4561,14 @@ pub mod telegram {
             std::env::set_var("TELEGRAM_API_BASE", &base);
             // No entry registered — a tap on a resolved/unknown prompt.
             let query = clarify_query("zzzzzzzzzzzz", "0");
-            handle_callback_query(&reqwest::Client::new(), "TEST", &authorized_cfg(), None, &query)
-                .await;
+            handle_callback_query(
+                &reqwest::Client::new(),
+                "TEST",
+                &authorized_cfg(),
+                None,
+                &query,
+            )
+            .await;
             std::env::remove_var("TELEGRAM_API_BASE");
             let reqs = log.lock().unwrap();
             assert_eq!(reqs.len(), 1);
@@ -4518,8 +4628,14 @@ pub mod telegram {
             // The clarify tool gave up (receiver dropped) before the tap.
             drop(handle.rx);
             let query = clarify_query(&clarify_id, "1");
-            handle_callback_query(&reqwest::Client::new(), "TEST", &authorized_cfg(), None, &query)
-                .await;
+            handle_callback_query(
+                &reqwest::Client::new(),
+                "TEST",
+                &authorized_cfg(),
+                None,
+                &query,
+            )
+            .await;
             std::env::remove_var("TELEGRAM_API_BASE");
             let reqs = log.lock().unwrap();
             let methods: Vec<&str> = reqs.iter().map(|(m, _)| m.as_str()).collect();
@@ -4550,7 +4666,11 @@ pub mod telegram {
 
         #[test]
         fn telegram_approval_format_escapes_and_smart_deny() {
-            let text = format_exec_approval_html("cat <secret> && rm -rf /", "dangerous <b>cmd</b>", false);
+            let text = format_exec_approval_html(
+                "cat <secret> && rm -rf /",
+                "dangerous <b>cmd</b>",
+                false,
+            );
             assert!(text.starts_with("\u{26A0}\u{FE0F} <b>Command Approval Required</b>"));
             assert!(text.contains("<pre>cat &lt;secret&gt; &amp;&amp; rm -rf /</pre>"));
             assert!(text.contains("dangerous &lt;b&gt;cmd&lt;/b&gt;"));
@@ -4622,7 +4742,9 @@ pub mod telegram {
             assert!(datas[3].starts_with("ea:deny:"));
             // Smart-denied: Allow Once + Deny only, one row.
             let denied_body = &reqs[1].1;
-            let denied_rows = denied_body["reply_markup"]["inline_keyboard"].as_array().unwrap();
+            let denied_rows = denied_body["reply_markup"]["inline_keyboard"]
+                .as_array()
+                .unwrap();
             let denied_datas: Vec<&str> = denied_rows
                 .iter()
                 .flat_map(|r| r.as_array().unwrap())
@@ -4657,8 +4779,14 @@ pub mod telegram {
                 .unwrap()
                 .insert(4242, session_key.to_string());
             let query = approval_query(4242, "once");
-            handle_callback_query(&reqwest::Client::new(), "TEST", &authorized_cfg(), None, &query)
-                .await;
+            handle_callback_query(
+                &reqwest::Client::new(),
+                "TEST",
+                &authorized_cfg(),
+                None,
+                &query,
+            )
+            .await;
             std::env::remove_var("TELEGRAM_API_BASE");
             // The agent waiter received the tapped choice.
             assert_eq!(handle.rx.await.unwrap(), "once");
@@ -4667,8 +4795,14 @@ pub mod telegram {
             let reqs = log.lock().unwrap();
             let methods: Vec<&str> = reqs.iter().map(|(m, _)| m.as_str()).collect();
             assert_eq!(methods, vec!["answerCallbackQuery", "editMessageText"]);
-            assert!(reqs[0].1["text"].as_str().unwrap().contains("Approved once"));
-            assert!(reqs[1].1["text"].as_str().unwrap().contains("Approved once by Ann"));
+            assert!(reqs[0].1["text"]
+                .as_str()
+                .unwrap()
+                .contains("Approved once"));
+            assert!(reqs[1].1["text"]
+                .as_str()
+                .unwrap()
+                .contains("Approved once by Ann"));
         }
 
         #[tokio::test]
@@ -4686,11 +4820,20 @@ pub mod telegram {
                 .unwrap()
                 .insert(4343, "platform-telegram-ea-expired".to_string());
             let query = approval_query(4343, "once");
-            handle_callback_query(&reqwest::Client::new(), "TEST", &authorized_cfg(), None, &query)
-                .await;
+            handle_callback_query(
+                &reqwest::Client::new(),
+                "TEST",
+                &authorized_cfg(),
+                None,
+                &query,
+            )
+            .await;
             std::env::remove_var("TELEGRAM_API_BASE");
             let reqs = log.lock().unwrap();
-            assert!(reqs[0].1["text"].as_str().unwrap().contains("Approval expired"));
+            assert!(reqs[0].1["text"]
+                .as_str()
+                .unwrap()
+                .contains("Approval expired"));
             assert!(reqs[1].1["text"]
                 .as_str()
                 .unwrap()
@@ -4820,12 +4963,21 @@ pub mod discord {
 
         /// Native attachment delivery (hermes send_message MEDIA: path):
         /// one multipart message with payload_json content + files.
-        async fn send_media(&self, chat_id: &str, text: &str, paths: &[std::path::PathBuf]) -> bool {
+        async fn send_media(
+            &self,
+            chat_id: &str,
+            text: &str,
+            paths: &[std::path::PathBuf],
+        ) -> bool {
             send_media_message(&self.token, chat_id, text, paths).await
         }
     }
 
-    pub async fn run(cfg: DiscordConfig, dispatcher: Arc<Dispatcher>, pairing: Option<Arc<crate::pairing::PairingStore>>) {
+    pub async fn run(
+        cfg: DiscordConfig,
+        dispatcher: Arc<Dispatcher>,
+        pairing: Option<Arc<crate::pairing::PairingStore>>,
+    ) {
         let Some(token) = resolve_token(&cfg.bot_token, "DISCORD_BOT_TOKEN") else {
             eprintln!("[discord] disabled: no bot_token configured (set messaging.discord.bot_token or DISCORD_BOT_TOKEN)");
             return;
@@ -4845,7 +4997,12 @@ pub mod discord {
         }
     }
 
-    async fn run_session(cfg: &DiscordConfig, token: &str, dispatcher: Arc<Dispatcher>, pairing: Option<Arc<crate::pairing::PairingStore>>) -> Result<()> {
+    async fn run_session(
+        cfg: &DiscordConfig,
+        token: &str,
+        dispatcher: Arc<Dispatcher>,
+        pairing: Option<Arc<crate::pairing::PairingStore>>,
+    ) -> Result<()> {
         use futures::{SinkExt, StreamExt};
         let (ws, _) = tokio_tungstenite::connect_async(GATEWAY)
             .await
@@ -4923,9 +5080,20 @@ pub mod discord {
         }
     }
 
-    async fn handle_message_create(cfg: &DiscordConfig, token: &str, dispatcher: &Arc<Dispatcher>, data: Value, pairing: Option<&crate::pairing::PairingStore>) {
+    async fn handle_message_create(
+        cfg: &DiscordConfig,
+        token: &str,
+        dispatcher: &Arc<Dispatcher>,
+        data: Value,
+        pairing: Option<&crate::pairing::PairingStore>,
+    ) {
         // Ignore bot/webhook messages (never talk to ourselves).
-        if data.get("author").and_then(|a| a.get("bot")).and_then(|v| v.as_bool()).unwrap_or(false) {
+        if data
+            .get("author")
+            .and_then(|a| a.get("bot"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
             return;
         }
         let text = data.get("content").and_then(|v| v.as_str()).unwrap_or("");
@@ -4940,7 +5108,10 @@ pub mod discord {
                         continue;
                     };
                     let name = item.get("filename").and_then(|v| v.as_str()).unwrap_or("");
-                    let mime = item.get("content_type").and_then(|v| v.as_str()).unwrap_or("");
+                    let mime = item
+                        .get("content_type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
                     let size = item.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
                     if let Some(attachment) =
                         download_to_cache(&client, url, None, mime, name, size).await
@@ -4954,7 +5125,11 @@ pub mod discord {
         if text.is_empty() && attachments.is_empty() {
             return;
         }
-        let channel_id = data.get("channel_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let channel_id = data
+            .get("channel_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         if channel_id.is_empty() {
             return;
         }
@@ -4962,7 +5137,11 @@ pub mod discord {
         let mut event = MessageEvent {
             platform: "discord".into(),
             chat_id: channel_id.clone(),
-            sender_id: author.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            sender_id: author
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
             sender_name: author
                 .get("global_name")
                 .or_else(|| author.get("username"))
@@ -4970,7 +5149,11 @@ pub mod discord {
                 .unwrap_or("")
                 .to_string(),
             text: text.to_string(),
-            message_id: data.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            message_id: data
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
             attachments,
         };
         // Plugin gate before auth (hermes ordering).
@@ -4988,7 +5171,9 @@ pub mod discord {
                  messaging.discord.allowed_channel_ids or approve a pairing code"
             );
             if let Some(store) = pairing {
-                if let Some(reply) = pairing_offer(store, "discord", &event.sender_id, &event.sender_name) {
+                if let Some(reply) =
+                    pairing_offer(store, "discord", &event.sender_id, &event.sender_name)
+                {
                     send_channel_message(token, &channel_id, &reply).await;
                 }
             }
@@ -5033,8 +5218,10 @@ pub mod discord {
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "media".to_string());
-        let form = reqwest::multipart::Form::new()
-            .part("files[0]", reqwest::multipart::Part::bytes(data).file_name(file_name));
+        let form = reqwest::multipart::Form::new().part(
+            "files[0]",
+            reqwest::multipart::Part::bytes(data).file_name(file_name),
+        );
         let url = format!("{}/channels/{channel_id}/messages", discord_api_base());
         let response = reqwest::Client::new()
             .post(&url)
@@ -5103,7 +5290,10 @@ pub mod discord {
         let client = reqwest::Client::new();
         for chunk in chunk_text(text, 1900) {
             let result = client
-                .post(format!("{}/channels/{channel_id}/messages", discord_api_base()))
+                .post(format!(
+                    "{}/channels/{channel_id}/messages",
+                    discord_api_base()
+                ))
                 .header("Authorization", format!("Bot {token}"))
                 .json(&json!({"content": chunk}))
                 .send()
@@ -5176,7 +5366,10 @@ pub mod discord {
             }
         }
         if cut == len {
-            if let Some(pos) = truncated.iter().rposition(|c| matches!(c, '-' | ',' | '.' | ')')) {
+            if let Some(pos) = truncated
+                .iter()
+                .rposition(|c| matches!(c, '-' | ',' | '.' | ')'))
+            {
                 if pos >= half {
                     cut = pos + 1; // inclusive: label ends on the soft char
                 }
@@ -5278,7 +5471,10 @@ pub mod discord {
         });
         let client = reqwest::Client::new();
         let response = client
-            .post(format!("{}/channels/{channel_id}/messages", discord_api_base()))
+            .post(format!(
+                "{}/channels/{channel_id}/messages",
+                discord_api_base()
+            ))
             .header("Authorization", format!("Bot {token}"))
             .json(&body)
             .send()
@@ -5396,7 +5592,11 @@ pub mod discord {
             .or_else(|| data.pointer("/member/user"))
             .cloned()
             .unwrap_or(json!({}));
-        let user_id = user.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let user_id = user
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         let display_name = user
             .get("global_name")
             .or_else(|| user.get("username"))
@@ -5472,8 +5672,14 @@ pub mod discord {
         }
 
         let Ok(idx) = choice_token.parse::<usize>() else {
-            ephemeral_notice(&client, token, interaction_id, interaction_token, "Invalid choice.")
-                .await;
+            ephemeral_notice(
+                &client,
+                token,
+                interaction_id,
+                interaction_token,
+                "Invalid choice.",
+            )
+            .await;
             return;
         };
         // Canonical choice text from the registry (hermes `_entries`
@@ -5619,8 +5825,8 @@ pub mod discord {
                     "/channels/:channel/messages",
                     post(
                         move |State(log): State<Log>,
-                         axum::extract::Path(channel): axum::extract::Path<String>,
-                         axum::Json(body): axum::Json<Value>| async move {
+                              axum::extract::Path(channel): axum::extract::Path<String>,
+                              axum::Json(body): axum::Json<Value>| async move {
                             log.lock().unwrap().push((
                                 "POST".into(),
                                 format!("/channels/{channel}/messages"),
@@ -5634,11 +5840,11 @@ pub mod discord {
                     "/channels/:channel/messages/:message",
                     patch(
                         move |State(log): State<Log>,
-                         axum::extract::Path((channel, message)): axum::extract::Path<(
+                              axum::extract::Path((channel, message)): axum::extract::Path<(
                             String,
                             String,
                         )>,
-                         axum::Json(body): axum::Json<Value>| async move {
+                              axum::Json(body): axum::Json<Value>| async move {
                             log.lock().unwrap().push((
                                 "PATCH".into(),
                                 format!("/channels/{channel}/messages/{message}"),
@@ -5652,8 +5858,11 @@ pub mod discord {
                     "/interactions/:id/:token/callback",
                     post(
                         move |State(log): State<Log>,
-                         axum::extract::Path((id, _token)): axum::extract::Path<(String, String)>,
-                         axum::Json(body): axum::Json<Value>| async move {
+                              axum::extract::Path((id, _token)): axum::extract::Path<(
+                            String,
+                            String,
+                        )>,
+                              axum::Json(body): axum::Json<Value>| async move {
                             log.lock().unwrap().push((
                                 "POST".into(),
                                 format!("/interactions/{id}/callback"),
@@ -5782,8 +5991,8 @@ pub mod discord {
             let base = spawn_discord_api(log.clone()).await;
             std::env::set_var("DISCORD_API_BASE", &base);
             let choices: Vec<String> = (0..30).map(|i| format!("Choice {i}")).collect();
-            let ok = send_clarify_message("TOKEN", "42", "cid000000002", "Pick", &choices, 300)
-                .await;
+            let ok =
+                send_clarify_message("TOKEN", "42", "cid000000002", "Pick", &choices, 300).await;
             std::env::remove_var("DISCORD_API_BASE");
             assert!(ok);
             let reqs = log.lock().unwrap();
@@ -5888,7 +6097,10 @@ pub mod discord {
             let body = &reqs[0].2;
             assert_eq!(body["type"], 4);
             assert_eq!(body["data"]["flags"], 64);
-            assert_eq!(body["data"]["content"], "This prompt has already been answered~");
+            assert_eq!(
+                body["data"]["content"],
+                "This prompt has already been answered~"
+            );
         }
 
         #[tokio::test]
@@ -5956,7 +6168,10 @@ pub mod discord {
             assert_eq!(method, "PATCH");
             assert_eq!(path, "/channels/42/messages/777");
             assert_eq!(body["embeds"][0]["color"], 0x99AAB5);
-            assert_eq!(body["embeds"][0]["footer"]["text"], "⏱ Prompt expired — no action taken");
+            assert_eq!(
+                body["embeds"][0]["footer"]["text"],
+                "⏱ Prompt expired — no action taken"
+            );
             let rows = body["components"].as_array().unwrap();
             assert!(rows.iter().all(|row| row["components"]
                 .as_array()
@@ -5979,7 +6194,9 @@ pub mod discord {
                 &["Alpha".into()],
                 false,
             );
-            assert!(crate::clarify_gateway::mark_awaiting_text(&handle.clarify_id));
+            assert!(crate::clarify_gateway::mark_awaiting_text(
+                &handle.clarify_id
+            ));
             spawn_prompt_expiry(
                 "TOKEN",
                 "42",
@@ -5994,7 +6211,10 @@ pub mod discord {
             // No PATCH — the "Awaiting typed response" footer stays and the
             // typed answer can still arrive (documented hermes divergence).
             assert!(log.lock().unwrap().is_empty());
-            assert!(crate::clarify_gateway::resolve(&handle.clarify_id, "late answer"));
+            assert!(crate::clarify_gateway::resolve(
+                &handle.clarify_id,
+                "late answer"
+            ));
         }
     }
 }
@@ -6045,7 +6265,11 @@ pub mod slack {
             if name.is_empty() || message_id.trim().is_empty() {
                 return Some(false);
             }
-            let method = if remove { "reactions.remove" } else { "reactions.add" };
+            let method = if remove {
+                "reactions.remove"
+            } else {
+                "reactions.add"
+            };
             let params = json!({"channel": chat_id, "name": name, "timestamp": message_id.trim()});
             let client = reqwest::Client::new();
             match client
@@ -6071,7 +6295,12 @@ pub mod slack {
 
         /// Native file uploads (hermes send_message MEDIA: path): body
         /// text first, then one `files` upload per attachment.
-        async fn send_media(&self, chat_id: &str, text: &str, paths: &[std::path::PathBuf]) -> bool {
+        async fn send_media(
+            &self,
+            chat_id: &str,
+            text: &str,
+            paths: &[std::path::PathBuf],
+        ) -> bool {
             if paths.is_empty() {
                 return false;
             }
@@ -6085,7 +6314,11 @@ pub mod slack {
         }
     }
 
-    pub async fn run(cfg: SlackConfig, dispatcher: Arc<Dispatcher>, pairing: Option<Arc<crate::pairing::PairingStore>>) {
+    pub async fn run(
+        cfg: SlackConfig,
+        dispatcher: Arc<Dispatcher>,
+        pairing: Option<Arc<crate::pairing::PairingStore>>,
+    ) {
         let Some(bot_token) = resolve_token(&cfg.bot_token, "SLACK_BOT_TOKEN") else {
             eprintln!("[slack] disabled: no bot_token configured (set messaging.slack.bot_token or SLACK_BOT_TOKEN)");
             return;
@@ -6101,7 +6334,15 @@ pub mod slack {
             }),
         );
         loop {
-            match run_socket_session(&cfg, &bot_token, &app_token, dispatcher.clone(), pairing.clone()).await {
+            match run_socket_session(
+                &cfg,
+                &bot_token,
+                &app_token,
+                dispatcher.clone(),
+                pairing.clone(),
+            )
+            .await
+            {
                 Ok(()) => {}
                 Err(e) => eprintln!("[slack] socket session ended: {e} — reconnecting in 5s"),
             }
@@ -6116,11 +6357,17 @@ pub mod slack {
             .send()
             .await
             .map_err(|e| AgentError::Tool(format!("slack open: {e}")))?;
-        let value: Value = response.json().await.map_err(|e| AgentError::Tool(format!("slack open parse: {e}")))?;
+        let value: Value = response
+            .json()
+            .await
+            .map_err(|e| AgentError::Tool(format!("slack open parse: {e}")))?;
         if !value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
             return Err(AgentError::Tool(format!(
                 "slack apps.connections.open: {}",
-                value.get("error").and_then(|v| v.as_str()).unwrap_or("unknown")
+                value
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
             )));
         }
         value
@@ -6146,10 +6393,17 @@ pub mod slack {
         let (mut sink, mut stream) = ws.split();
         let own_bot_id: Option<String> = None;
         while let Some(Ok(message)) = stream.next().await {
-            let WsMessage::Text(text) = message else { continue };
-            let Ok(envelope) = serde_json::from_str::<Value>(&text) else { continue };
+            let WsMessage::Text(text) = message else {
+                continue;
+            };
+            let Ok(envelope) = serde_json::from_str::<Value>(&text) else {
+                continue;
+            };
             let envelope_type = envelope.get("type").and_then(|v| v.as_str()).unwrap_or("");
-            let envelope_id = envelope.get("envelope_id").and_then(|v| v.as_str()).unwrap_or("");
+            let envelope_id = envelope
+                .get("envelope_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             if envelope_type == "hello" {
                 continue;
             }
@@ -6189,16 +6443,29 @@ pub mod slack {
             if envelope_type != "events_api" {
                 continue;
             }
-            let event = envelope.pointer("/payload/event").cloned().unwrap_or(json!({}));
+            let event = envelope
+                .pointer("/payload/event")
+                .cloned()
+                .unwrap_or(json!({}));
             let event_type = event.get("type").and_then(|v| v.as_str()).unwrap_or("");
-            if event_type == "app_mention" || (event_type == "message" && event.get("subtype").is_none()) {
+            if event_type == "app_mention"
+                || (event_type == "message" && event.get("subtype").is_none())
+            {
                 if let Some(bot_id) = event.get("bot_id").and_then(|v| v.as_str()) {
                     if own_bot_id.as_deref() == Some(bot_id) || event.get("bot_profile").is_some() {
                         continue;
                     }
                 }
-                let channel = event.get("channel").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let text = event.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let channel = event
+                    .get("channel")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let text = event
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 let has_files = event
                     .get("files")
                     .and_then(|v| v.as_array())
@@ -6235,10 +6502,22 @@ pub mod slack {
                 let mut message_event = MessageEvent {
                     platform: "slack".into(),
                     chat_id: channel.clone(),
-                    sender_id: event.get("user").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    sender_name: event.get("user").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    sender_id: event
+                        .get("user")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    sender_name: event
+                        .get("user")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                     text,
-                    message_id: event.get("ts").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    message_id: event
+                        .get("ts")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                     attachments,
                 };
                 // Plugin gate before auth (hermes ordering).
@@ -6257,7 +6536,12 @@ pub mod slack {
                          messaging.slack.allowed_channel_ids or approve a pairing code"
                     );
                     if let Some(store) = pairing.as_ref() {
-                        if let Some(reply) = pairing_offer(store, "slack", &message_event.sender_id, &message_event.sender_name) {
+                        if let Some(reply) = pairing_offer(
+                            store,
+                            "slack",
+                            &message_event.sender_id,
+                            &message_event.sender_name,
+                        ) {
                             post_message(bot_token, &channel, &reply).await;
                         }
                     }
@@ -6446,7 +6730,13 @@ pub mod slack {
                 // P703: ledger-protected reply delivery.
                 dispatcher
                     .send_with_ledger("slack", &channel_id, &reply_text, || {
-                        deliver_slash_reply(&bot_token, &channel_id, &response_url, &reply_text, true)
+                        deliver_slash_reply(
+                            &bot_token,
+                            &channel_id,
+                            &response_url,
+                            &reply_text,
+                            true,
+                        )
                     })
                     .await;
             }
@@ -6477,10 +6767,7 @@ pub mod slack {
             });
             match client.post(response_url).json(&body).send().await {
                 Ok(resp) if resp.status().is_success() => return,
-                Ok(resp) => eprintln!(
-                    "[slack] response_url POST returned {}",
-                    resp.status()
-                ),
+                Ok(resp) => eprintln!("[slack] response_url POST returned {}", resp.status()),
                 Err(e) => eprintln!("[slack] response_url POST failed: {e}"),
             }
         }
@@ -6502,7 +6789,10 @@ pub mod slack {
                         if !value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
                             eprintln!(
                                 "[slack] postMessage failed: {}",
-                                value.get("error").and_then(|v| v.as_str()).unwrap_or("unknown")
+                                value
+                                    .get("error")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("unknown")
                             );
                         }
                     }
@@ -6535,7 +6825,10 @@ pub mod slack {
         let url_response = client
             .get(format!("{}/files.getUploadURLExternal", slack_api_base()))
             .header("Authorization", &auth)
-            .query(&[("filename", &file_name), ("length", &data.len().to_string())])
+            .query(&[
+                ("filename", &file_name),
+                ("length", &data.len().to_string()),
+            ])
             .send()
             .await;
         let url_value = match url_response {
@@ -6551,10 +6844,17 @@ pub mod slack {
                 return;
             }
         };
-        if !url_value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if !url_value
+            .get("ok")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
             eprintln!(
                 "[slack] getUploadURLExternal failed: {}",
-                url_value.get("error").and_then(|v| v.as_str()).unwrap_or("unknown")
+                url_value
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
             );
             return;
         }
@@ -6599,10 +6899,7 @@ pub mod slack {
         let complete = client
             .post(format!("{}/files.completeUploadExternal", slack_api_base()))
             .header("Authorization", &auth)
-            .form(&[
-                ("files", files_json.as_str()),
-                ("channel_id", channel),
-            ])
+            .form(&[("files", files_json.as_str()), ("channel_id", channel)])
             .send()
             .await;
         match complete {
@@ -6611,7 +6908,10 @@ pub mod slack {
                     if !value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
                         eprintln!(
                             "[slack] completeUploadExternal failed: {}",
-                            value.get("error").and_then(|v| v.as_str()).unwrap_or("unknown")
+                            value
+                                .get("error")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown")
                         );
                     }
                     let _ = channels_json;
@@ -6630,14 +6930,22 @@ pub mod slack {
     }
 
     fn env_or_none(name: &str) -> Option<String> {
-        std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+        std::env::var(name)
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
     }
 
     /// hermes `assistant.threads.setStatus` — show (or clear, when `status`
     /// is empty) the assistant thread status line next to the bot name.
     /// Requires the `assistant:write` scope; failures are logged but never
     /// fatal (hermes silently degrades to no indicator).
-    pub async fn set_thread_status(bot_token: &str, channel: &str, thread_ts: &str, status: &str) -> bool {
+    pub async fn set_thread_status(
+        bot_token: &str,
+        channel: &str,
+        thread_ts: &str,
+        status: &str,
+    ) -> bool {
         let client = reqwest::Client::new();
         let result = client
             .post(format!("{}/assistant.threads.setStatus", slack_api_base()))
@@ -6652,7 +6960,10 @@ pub mod slack {
                     if !ok {
                         eprintln!(
                             "[slack] assistant.threads.setStatus failed: {}",
-                            value.get("error").and_then(|v| v.as_str()).unwrap_or("unknown")
+                            value
+                                .get("error")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown")
                         );
                     }
                     ok
@@ -6885,7 +7196,10 @@ pub mod slack {
                 Ok(value) => {
                     eprintln!(
                         "[slack] send_clarify failed: {}",
-                        value.get("error").and_then(|v| v.as_str()).unwrap_or("unknown")
+                        value
+                            .get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
                     );
                     false
                 }
@@ -6948,9 +7262,11 @@ pub mod slack {
             .and_then(|rows| rows.first())
             .cloned()
             .unwrap_or(json!({}));
-        let action_id = action.get("action_id").and_then(|v| v.as_str()).unwrap_or("");
-        if !action_id.starts_with("hermes_clarify_choice_") && action_id != "hermes_clarify_other"
-        {
+        let action_id = action
+            .get("action_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if !action_id.starts_with("hermes_clarify_choice_") && action_id != "hermes_clarify_other" {
             return;
         }
         let value = action.get("value").and_then(|v| v.as_str()).unwrap_or("");
@@ -7000,7 +7316,10 @@ pub mod slack {
         // (first section block; Slack re-escapes entities in the payload,
         // so cap at the 3000-char section limit like hermes).
         let mut original_text = String::new();
-        if let Some(blocks) = payload.pointer("/message/blocks").and_then(|v| v.as_array()) {
+        if let Some(blocks) = payload
+            .pointer("/message/blocks")
+            .and_then(|v| v.as_array())
+        {
             for block in blocks {
                 if block.get("type").and_then(|v| v.as_str()) == Some("section") {
                     original_text = block
@@ -7065,9 +7384,7 @@ pub mod slack {
                 &channel_id,
                 &msg_ts,
                 &original_text,
-                &format!(
-                    "⏳ This prompt expired — please send a new request. (by {user_name})"
-                ),
+                &format!("⏳ This prompt expired — please send a new request. (by {user_name})"),
             )
             .await;
         }
@@ -7113,7 +7430,10 @@ pub mod slack {
                 Ok(value) if !value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) => {
                     eprintln!(
                         "[slack] chat.update failed: {}",
-                        value.get("error").and_then(|v| v.as_str()).unwrap_or("unknown")
+                        value
+                            .get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
                     );
                 }
                 Ok(_) => {}
@@ -7264,11 +7584,8 @@ pub mod slack {
                 false,
             );
             let clarify_id = handle.clarify_id.clone();
-            let payload = block_actions_payload(
-                &clarify_id,
-                "1",
-                &format!("hermes_clarify_choice_1"),
-            );
+            let payload =
+                block_actions_payload(&clarify_id, "1", &format!("hermes_clarify_choice_1"));
             handle_interactive_payload(&authorized_cfg(), "xoxb-TEST", payload, None).await;
             std::env::remove_var("SLACK_API_BASE");
             assert_eq!(handle.rx.await.unwrap(), "Beta");
@@ -7480,10 +7797,14 @@ mod tests {
         let session = "platform-teams-intercept";
         // No pending approvals: informational reply.
         let cmd = parse_approval_command("/approve").unwrap();
-        assert_eq!(apply_approval_command(session, cmd), "No pending approvals.");
+        assert_eq!(
+            apply_approval_command(session, cmd),
+            "No pending approvals."
+        );
         // Pending approval resolves oldest-first.
         let mut first = crate::approval_gateway::register(session, "cmd-a", "d", false, true, true);
-        let mut second = crate::approval_gateway::register(session, "cmd-b", "d", false, true, true);
+        let mut second =
+            crate::approval_gateway::register(session, "cmd-b", "d", false, true, true);
         let cmd = parse_approval_command("/approve").unwrap();
         assert_eq!(apply_approval_command(session, cmd), "✅ Allowed (once)");
         assert_eq!(first.rx.try_recv().unwrap(), "once");
@@ -7531,7 +7852,10 @@ mod tests {
         assert_eq!(paths, vec![media.clone()]);
         assert!(text.contains("Here is your clip!"));
         assert!(text.contains("Enjoy!"));
-        assert!(text.contains("/does/not/exist.png"), "missing files stay literal");
+        assert!(
+            text.contains("/does/not/exist.png"),
+            "missing files stay literal"
+        );
         assert!(!text.contains(&format!("MEDIA: {}", media.display())));
 
         // Tilde expansion (restore HOME — env is process-global).
@@ -7664,7 +7988,10 @@ mod tests {
 
     #[test]
     fn token_resolution_prefers_config() {
-        assert_eq!(resolve_token("abc", "ULNCLAW_NEVER_SET_XYZ").as_deref(), Some("abc"));
+        assert_eq!(
+            resolve_token("abc", "ULNCLAW_NEVER_SET_XYZ").as_deref(),
+            Some("abc")
+        );
         assert_eq!(resolve_token("  ", "ULNCLAW_NEVER_SET_XYZ"), None);
     }
 
@@ -7672,15 +7999,36 @@ mod tests {
     fn slack_typing_status_text_selection() {
         use std::time::Duration;
         // Default while fresh; elapsed heartbeat after 30 s (hermes #45702).
-        assert_eq!(slack::typing_status_text(Duration::from_secs(0), None), "is thinking...");
-        assert_eq!(slack::typing_status_text(Duration::from_secs(29), None), "is thinking...");
-        assert_eq!(slack::typing_status_text(Duration::from_secs(30), None), "still working… (30s)");
-        assert_eq!(slack::typing_status_text(Duration::from_secs(63), None), "still working… (1m03s)");
-        assert_eq!(slack::typing_status_text(Duration::from_secs(3661), None), "still working… (61m01s)");
+        assert_eq!(
+            slack::typing_status_text(Duration::from_secs(0), None),
+            "is thinking..."
+        );
+        assert_eq!(
+            slack::typing_status_text(Duration::from_secs(29), None),
+            "is thinking..."
+        );
+        assert_eq!(
+            slack::typing_status_text(Duration::from_secs(30), None),
+            "still working… (30s)"
+        );
+        assert_eq!(
+            slack::typing_status_text(Duration::from_secs(63), None),
+            "still working… (1m03s)"
+        );
+        assert_eq!(
+            slack::typing_status_text(Duration::from_secs(3661), None),
+            "still working… (61m01s)"
+        );
         // Configured text always wins, even after the heartbeat threshold;
         // an empty configured value falls back to the defaults.
-        assert_eq!(slack::typing_status_text(Duration::from_secs(90), Some("brewing…")), "brewing…");
-        assert_eq!(slack::typing_status_text(Duration::from_secs(0), Some("")), "is thinking...");
+        assert_eq!(
+            slack::typing_status_text(Duration::from_secs(90), Some("brewing…")),
+            "brewing…"
+        );
+        assert_eq!(
+            slack::typing_status_text(Duration::from_secs(0), Some("")),
+            "is thinking..."
+        );
     }
 
     #[tokio::test]
@@ -7712,9 +8060,8 @@ mod tests {
         let _env_guard = crate::models_dev::test_env_lock();
         let _home_guard = IsolatedHome::new();
         assert!(slack::GenericPhraseCtx::load().is_none());
-        let _home_guard2 = IsolatedHome::with_config(Some(
-            "[display]\nlong_running_notifications = true\n",
-        ));
+        let _home_guard2 =
+            IsolatedHome::with_config(Some("[display]\nlong_running_notifications = true\n"));
         assert!(slack::GenericPhraseCtx::load().is_none());
     }
 
@@ -7739,8 +8086,8 @@ mod tests {
                 "/assistant.threads.setStatus",
                 post(
                     move |State(log): State<Arc<Mutex<Vec<(String, Value)>>>>,
-                     headers: axum::http::HeaderMap,
-                     axum::Json(body): axum::Json<Value>| async move {
+                          headers: axum::http::HeaderMap,
+                          axum::Json(body): axum::Json<Value>| async move {
                         let auth = headers
                             .get("authorization")
                             .and_then(|v| v.to_str().ok())
@@ -7816,7 +8163,9 @@ mod tests {
         assert_eq!(statuses[0], "is thinking...");
         // hermes stop_typing: the final call clears the status.
         assert_eq!(statuses.last().map(String::as_str), Some(""));
-        assert!(statuses[..statuses.len() - 1].iter().all(|s| s == "is thinking..."));
+        assert!(statuses[..statuses.len() - 1]
+            .iter()
+            .all(|s| s == "is thinking..."));
     }
 
     // ------------------------------------------------------------------
@@ -7836,16 +8185,40 @@ mod tests {
     fn slash_confirm_reply_parsing() {
         use crate::slash_confirm::ConfirmChoice;
         // Slash-command forms.
-        assert_eq!(parse_slash_confirm_reply("/approve"), Some(ConfirmChoice::Once));
+        assert_eq!(
+            parse_slash_confirm_reply("/approve"),
+            Some(ConfirmChoice::Once)
+        );
         assert_eq!(parse_slash_confirm_reply("/yes"), Some(ConfirmChoice::Once));
-        assert_eq!(parse_slash_confirm_reply("/always"), Some(ConfirmChoice::Always));
-        assert_eq!(parse_slash_confirm_reply("/remember"), Some(ConfirmChoice::Always));
-        assert_eq!(parse_slash_confirm_reply("/cancel"), Some(ConfirmChoice::Cancel));
-        assert_eq!(parse_slash_confirm_reply("/deny"), Some(ConfirmChoice::Cancel));
+        assert_eq!(
+            parse_slash_confirm_reply("/always"),
+            Some(ConfirmChoice::Always)
+        );
+        assert_eq!(
+            parse_slash_confirm_reply("/remember"),
+            Some(ConfirmChoice::Always)
+        );
+        assert_eq!(
+            parse_slash_confirm_reply("/cancel"),
+            Some(ConfirmChoice::Cancel)
+        );
+        assert_eq!(
+            parse_slash_confirm_reply("/deny"),
+            Some(ConfirmChoice::Cancel)
+        );
         // Plain text + bang-prefixed (Slack-style).
-        assert_eq!(parse_slash_confirm_reply("approve once"), Some(ConfirmChoice::Once));
-        assert_eq!(parse_slash_confirm_reply("!always"), Some(ConfirmChoice::Always));
-        assert_eq!(parse_slash_confirm_reply("nevermind"), Some(ConfirmChoice::Cancel));
+        assert_eq!(
+            parse_slash_confirm_reply("approve once"),
+            Some(ConfirmChoice::Once)
+        );
+        assert_eq!(
+            parse_slash_confirm_reply("!always"),
+            Some(ConfirmChoice::Always)
+        );
+        assert_eq!(
+            parse_slash_confirm_reply("nevermind"),
+            Some(ConfirmChoice::Cancel)
+        );
         // Unrelated text falls through.
         assert_eq!(parse_slash_confirm_reply("hello there"), None);
         assert_eq!(parse_slash_confirm_reply(""), None);
@@ -7866,9 +8239,8 @@ mod tests {
 
     fn test_dispatcher() -> Arc<Dispatcher> {
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
         let provider = Arc::new(
             crate::provider::openai::OpenAiProvider::builder()
@@ -7878,18 +8250,21 @@ mod tests {
                 .build()
                 .expect("provider builds"),
         );
-        let agent =
-            crate::agent::Agent::new(provider, crate::tools::ToolRegistry::new()).with_store(store.clone());
+        let agent = crate::agent::Agent::new(provider, crate::tools::ToolRegistry::new())
+            .with_store(store.clone());
         Dispatcher::new(Arc::new(agent), store)
     }
 
     /// Dispatcher whose provider is unreachable (turns fail AFTER the
     /// session row is created) — used by the routing test.
-    fn test_dispatcher_parts() -> (Arc<crate::agent::Agent>, Arc<SqliteSessionStore>, Arc<Dispatcher>) {
+    fn test_dispatcher_parts() -> (
+        Arc<crate::agent::Agent>,
+        Arc<SqliteSessionStore>,
+        Arc<Dispatcher>,
+    ) {
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
         let provider = Arc::new(
             crate::provider::openai::OpenAiProvider::builder()
@@ -8004,13 +8379,23 @@ mod tests {
 
         // /reload-mcp is gated (approvals.mcp_reload_confirm defaults on):
         // the text-fallback prompt goes out and a confirm registers.
-        let outcome = dispatcher.handle_event(test_event("/reload-mcp", "m1")).await.unwrap();
-        assert!(outcome.reply.contains("Confirm /reload-mcp"), "{}", outcome.reply);
+        let outcome = dispatcher
+            .handle_event(test_event("/reload-mcp", "m1"))
+            .await
+            .unwrap();
+        assert!(
+            outcome.reply.contains("Confirm /reload-mcp"),
+            "{}",
+            outcome.reply
+        );
         assert!(outcome.reply.contains("/approve"), "{}", outcome.reply);
         assert!(crate::slash_confirm::get_pending(&key).is_some());
 
         // /approve resolves the pending confirm and runs the reload.
-        let outcome = dispatcher.handle_event(test_event("/approve", "m2")).await.unwrap();
+        let outcome = dispatcher
+            .handle_event(test_event("/approve", "m2"))
+            .await
+            .unwrap();
         assert!(
             outcome.reply.contains("No MCP servers connected"),
             "{}",
@@ -8036,8 +8421,14 @@ mod tests {
         let dispatcher = test_dispatcher();
         let key = "platform-testplat-chat-1".to_string();
 
-        dispatcher.handle_event(test_event("/reload-mcp", "m1")).await.unwrap();
-        let outcome = dispatcher.handle_event(test_event("cancel", "m2")).await.unwrap();
+        dispatcher
+            .handle_event(test_event("/reload-mcp", "m1"))
+            .await
+            .unwrap();
+        let outcome = dispatcher
+            .handle_event(test_event("cancel", "m2"))
+            .await
+            .unwrap();
         assert!(outcome.reply.contains("cancelled"), "{}", outcome.reply);
         assert!(crate::slash_confirm::get_pending(&key).is_none());
         let histories = chat_histories().lock().await;
@@ -8055,12 +8446,18 @@ mod tests {
         let dispatcher = test_dispatcher();
         let key = "platform-testplat-chat-1".to_string();
 
-        dispatcher.handle_event(test_event("/reload-mcp", "m1")).await.unwrap();
+        dispatcher
+            .handle_event(test_event("/reload-mcp", "m1"))
+            .await
+            .unwrap();
         // Busy flag short-circuits the agent turn; the point is the
         // intercept: "hello" matches no confirm keyword, so the pending
         // confirm survives (not stale yet).
         dispatcher.busy.lock().await.insert(key.clone(), true);
-        let outcome = dispatcher.handle_event(test_event("hello", "m2")).await.unwrap();
+        let outcome = dispatcher
+            .handle_event(test_event("hello", "m2"))
+            .await
+            .unwrap();
         assert!(outcome.reply.contains("queued"), "{}", outcome.reply);
         assert!(crate::slash_confirm::get_pending(&key).is_some());
         dispatcher.busy.lock().await.insert(key.clone(), false);
@@ -8071,9 +8468,8 @@ mod tests {
     async fn request_slash_confirm_registers_before_sending_and_supersedes() {
         let _guard = slash_confirm_test_lock();
         crate::slash_confirm::clear_all_for_tests();
-        let handler: crate::slash_confirm::ConfirmHandler = Box::new(|choice| {
-            Box::pin(async move { Some(format!("done:{}", choice.as_str())) })
-        });
+        let handler: crate::slash_confirm::ConfirmHandler =
+            Box::new(|choice| Box::pin(async move { Some(format!("done:{}", choice.as_str())) }));
         // No platform sender registered → text fallback returns the prompt.
         let ack = request_slash_confirm(
             "nosuchplat",
@@ -8155,7 +8551,9 @@ mod tests {
         let sends = Arc::new(std::sync::Mutex::new(Vec::new()));
         register_platform_sender(
             "telegram",
-            Arc::new(RestartCapture { sends: sends.clone() }),
+            Arc::new(RestartCapture {
+                sends: sends.clone(),
+            }),
         );
         assert_eq!(platform_lifecycle("telegram").as_deref(), Some("running"));
         let rows = platform_state_rows();
@@ -8202,19 +8600,37 @@ mod tests {
         let event = test_event("/resume", "m1");
 
         // No titled sessions yet.
-        let outcome = dispatcher.handle_resume_command("platform-testplat-chat-2", &event).await.unwrap();
-        assert!(outcome.reply.contains("No named sessions found"), "{}", outcome.reply);
+        let outcome = dispatcher
+            .handle_resume_command("platform-testplat-chat-2", &event)
+            .await
+            .unwrap();
+        assert!(
+            outcome.reply.contains("No named sessions found"),
+            "{}",
+            outcome.reply
+        );
 
         // Seed titled sessions (newest first).
         let store = dispatcher.store.clone();
-        store.create_named_session("sess-a", "platform:testplat", None, None).unwrap();
+        store
+            .create_named_session("sess-a", "platform:testplat", None, None)
+            .unwrap();
         store.set_session_title("sess-a", "Alpha work").unwrap();
-        store.create_named_session("sess-b", "platform:testplat", None, None).unwrap();
+        store
+            .create_named_session("sess-b", "platform:testplat", None, None)
+            .unwrap();
         store.set_session_title("sess-b", "Beta work").unwrap();
 
         // Listing is numbered, newest first.
-        let outcome = dispatcher.handle_resume_command("platform-testplat-chat-2", &event).await.unwrap();
-        assert!(outcome.reply.contains("Named Sessions"), "{}", outcome.reply);
+        let outcome = dispatcher
+            .handle_resume_command("platform-testplat-chat-2", &event)
+            .await
+            .unwrap();
+        assert!(
+            outcome.reply.contains("Named Sessions"),
+            "{}",
+            outcome.reply
+        );
         let alpha_pos = outcome.reply.find("Alpha work").unwrap();
         let beta_pos = outcome.reply.find("Beta work").unwrap();
         assert!(beta_pos < alpha_pos, "{}", outcome.reply);
@@ -8222,29 +8638,70 @@ mod tests {
 
         // Switch by number.
         let event = test_event("/resume 2", "m2");
-        let outcome = dispatcher.handle_resume_command("platform-testplat-chat-2", &event).await.unwrap();
-        assert!(outcome.reply.contains("Resumed session **Alpha work**"), "{}", outcome.reply);
-        assert_eq!(effective_session_id_for("platform-testplat-chat-2"), "sess-a");
+        let outcome = dispatcher
+            .handle_resume_command("platform-testplat-chat-2", &event)
+            .await
+            .unwrap();
+        assert!(
+            outcome.reply.contains("Resumed session **Alpha work**"),
+            "{}",
+            outcome.reply
+        );
+        assert_eq!(
+            effective_session_id_for("platform-testplat-chat-2"),
+            "sess-a"
+        );
 
         // Already on it.
         let event = test_event("/resume Alpha work", "m3");
-        let outcome = dispatcher.handle_resume_command("platform-testplat-chat-2", &event).await.unwrap();
-        assert!(outcome.reply.contains("Already on session"), "{}", outcome.reply);
+        let outcome = dispatcher
+            .handle_resume_command("platform-testplat-chat-2", &event)
+            .await
+            .unwrap();
+        assert!(
+            outcome.reply.contains("Already on session"),
+            "{}",
+            outcome.reply
+        );
 
         // Switch by title with bracket stripping, then by id prefix.
         let event = test_event("/resume <Beta work>", "m4");
-        let outcome = dispatcher.handle_resume_command("platform-testplat-chat-2", &event).await.unwrap();
-        assert!(outcome.reply.contains("Resumed session **Beta work**"), "{}", outcome.reply);
+        let outcome = dispatcher
+            .handle_resume_command("platform-testplat-chat-2", &event)
+            .await
+            .unwrap();
+        assert!(
+            outcome.reply.contains("Resumed session **Beta work**"),
+            "{}",
+            outcome.reply
+        );
         let event = test_event("/resume sess-a", "m5");
-        let outcome = dispatcher.handle_resume_command("platform-testplat-chat-2", &event).await.unwrap();
-        assert!(outcome.reply.contains("Resumed session **Alpha work**"), "{}", outcome.reply);
+        let outcome = dispatcher
+            .handle_resume_command("platform-testplat-chat-2", &event)
+            .await
+            .unwrap();
+        assert!(
+            outcome.reply.contains("Resumed session **Alpha work**"),
+            "{}",
+            outcome.reply
+        );
 
         // Unknown target + out-of-range index.
         let event = test_event("/resume ghost", "m6");
-        let outcome = dispatcher.handle_resume_command("platform-testplat-chat-2", &event).await.unwrap();
-        assert!(outcome.reply.contains("No session found matching"), "{}", outcome.reply);
+        let outcome = dispatcher
+            .handle_resume_command("platform-testplat-chat-2", &event)
+            .await
+            .unwrap();
+        assert!(
+            outcome.reply.contains("No session found matching"),
+            "{}",
+            outcome.reply
+        );
         let event = test_event("/resume 99", "m7");
-        let outcome = dispatcher.handle_resume_command("platform-testplat-chat-2", &event).await.unwrap();
+        let outcome = dispatcher
+            .handle_resume_command("platform-testplat-chat-2", &event)
+            .await
+            .unwrap();
         assert!(outcome.reply.contains("out of range"), "{}", outcome.reply);
         clear_session_remappings_for_tests();
     }
@@ -8254,8 +8711,15 @@ mod tests {
         let _guard = remap_test_lock();
         clear_session_remappings_for_tests();
         let dispatcher = test_dispatcher();
-        let outcome = dispatcher.handle_event(test_event("/resume", "m1")).await.unwrap();
-        assert!(outcome.reply.contains("No named sessions found"), "{}", outcome.reply);
+        let outcome = dispatcher
+            .handle_event(test_event("/resume", "m1"))
+            .await
+            .unwrap();
+        assert!(
+            outcome.reply.contains("No named sessions found"),
+            "{}",
+            outcome.reply
+        );
     }
 
     struct QueueCapture {
@@ -8290,16 +8754,32 @@ mod tests {
         let sends = Arc::new(std::sync::Mutex::new(Vec::new()));
         register_platform_sender(
             "testplat",
-            Arc::new(QueueCapture { sends: sends.clone() }),
+            Arc::new(QueueCapture {
+                sends: sends.clone(),
+            }),
         );
 
         // Force the busy state as if a turn were in flight.
         dispatcher.busy.lock().await.insert(key.clone(), true);
-        let outcome = dispatcher.handle_event(test_event("queued one", "m1")).await.unwrap();
+        let outcome = dispatcher
+            .handle_event(test_event("queued one", "m1"))
+            .await
+            .unwrap();
         assert!(outcome.reply.contains("queued"), "{}", outcome.reply);
-        assert!(outcome.reply.contains("message 1 in queue"), "{}", outcome.reply);
-        let outcome = dispatcher.handle_event(test_event("queued two", "m2")).await.unwrap();
-        assert!(outcome.reply.contains("message 2 in queue"), "{}", outcome.reply);
+        assert!(
+            outcome.reply.contains("message 1 in queue"),
+            "{}",
+            outcome.reply
+        );
+        let outcome = dispatcher
+            .handle_event(test_event("queued two", "m2"))
+            .await
+            .unwrap();
+        assert!(
+            outcome.reply.contains("message 2 in queue"),
+            "{}",
+            outcome.reply
+        );
         assert_eq!(dispatcher.queued_depth(&key).await, 2);
 
         // Drain: the test provider is unreachable, so each queued turn
@@ -8366,7 +8846,10 @@ mod tests {
             .handle_event(test_event("quiet queue", "m1"))
             .await
             .unwrap();
-        assert_eq!(outcome.reply, "(queued \u{2014} runs after the current turn)");
+        assert_eq!(
+            outcome.reply,
+            "(queued \u{2014} runs after the current turn)"
+        );
         assert!(!outcome.reply.contains("in queue"), "{}", outcome.reply);
 
         // Global display.busy_ack_detail=false applies to every platform.
@@ -8375,7 +8858,10 @@ mod tests {
             .handle_event(test_event("quiet queue two", "m2"))
             .await
             .unwrap();
-        assert_eq!(outcome.reply, "(queued \u{2014} runs after the current turn)");
+        assert_eq!(
+            outcome.reply,
+            "(queued \u{2014} runs after the current turn)"
+        );
 
         dispatcher.busy.lock().await.insert(key.clone(), false);
         dispatcher.drain_queued(&key).await;
@@ -8417,9 +8903,8 @@ mod tests {
     /// admin `u-admin`, non-admins may run only `/usage` (+ floor).
     fn gated_test_dispatcher() -> (Arc<Dispatcher>, Arc<SqliteSessionStore>) {
         let temp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
-        );
+        let store =
+            Arc::new(SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"));
         std::mem::forget(temp);
         let provider = Arc::new(
             crate::provider::openai::OpenAiProvider::builder()
@@ -8466,14 +8951,25 @@ mod tests {
 
         // Allowlisted command passes — the /usage handler's own
         // token-census reply proves it ran (gating let it through).
-        let outcome = dispatcher.handle_event(test_event("/usage", "m1")).await.unwrap();
+        let outcome = dispatcher
+            .handle_event(test_event("/usage", "m1"))
+            .await
+            .unwrap();
         assert!(outcome.reply.contains("messages:"), "{}", outcome.reply);
         // Floor commands always pass.
-        let outcome = dispatcher.handle_event(test_event("/help", "m2")).await.unwrap();
+        let outcome = dispatcher
+            .handle_event(test_event("/help", "m2"))
+            .await
+            .unwrap();
         assert!(outcome.reply.contains("/skills"), "{}", outcome.reply);
-        let outcome = dispatcher.handle_event(test_event("/whoami", "m3")).await.unwrap();
+        let outcome = dispatcher
+            .handle_event(test_event("/whoami", "m3"))
+            .await
+            .unwrap();
         assert!(
-            outcome.reply.contains("you are User (u1) on testplat in chat chat-1"),
+            outcome
+                .reply
+                .contains("you are User (u1) on testplat in chat chat-1"),
             "{}",
             outcome.reply
         );
@@ -8483,7 +8979,9 @@ mod tests {
             .await
             .unwrap();
         assert!(
-            outcome.reply.starts_with("\u{26d4} /title is admin-only here."),
+            outcome
+                .reply
+                .starts_with("\u{26d4} /title is admin-only here."),
             "{}",
             outcome.reply
         );
@@ -8506,7 +9004,9 @@ mod tests {
 
         // Unknown /text stays an ordinary agent message: it reaches
         // the turn (the unreachable provider then fails the turn).
-        let result = dispatcher.handle_event(test_event("/usr/bin/foo", "m7")).await;
+        let result = dispatcher
+            .handle_event(test_event("/usr/bin/foo", "m7"))
+            .await;
         assert!(result.is_err(), "unknown slash text must reach the agent");
         std::env::remove_var("ULNCLAW_HOME");
         crate::channel_directory::reset_for_tests();
@@ -8568,7 +9068,9 @@ mod tests {
         let sends = Arc::new(std::sync::Mutex::new(Vec::new()));
         register_platform_sender(
             "restart-test",
-            Arc::new(RestartCapture { sends: sends.clone() }),
+            Arc::new(RestartCapture {
+                sends: sends.clone(),
+            }),
         );
         crate::channel_directory::record_channel("restart-test", "old-chat", "Old", "dm", "m1");
         // updated_at has second granularity — sleep past the boundary

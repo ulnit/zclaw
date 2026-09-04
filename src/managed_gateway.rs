@@ -263,8 +263,9 @@ pub async fn upload_managed_media(
                     .map(|m| m.trim().to_string())
             })
             .filter(|m| !m.is_empty());
-        return Err(message
-            .unwrap_or_else(|| format!("the gateway refused the upload (HTTP {})", status)));
+        return Err(
+            message.unwrap_or_else(|| format!("the gateway refused the upload (HTTP {})", status))
+        );
     }
     let payload: serde_json::Value = presign
         .json()
@@ -294,7 +295,10 @@ pub async fn upload_managed_media(
         .await
         .map_err(|e| format!("storage upload failed: {}", e))?;
     if put.status() != 200 {
-        return Err(format!("storage refused the upload (HTTP {})", put.status()));
+        return Err(format!(
+            "storage refused the upload (HTTP {})",
+            put.status()
+        ));
     }
 
     Ok(format!("nous-upload:{}", token))
@@ -352,7 +356,9 @@ mod tests {
         assert!(is_managed_nous_gateway_url(
             "https://tool-gateway.nousresearch.com/api/bfl/generations"
         ));
-        assert!(!is_managed_nous_gateway_url("https://evil.example.com/api/bfl"));
+        assert!(!is_managed_nous_gateway_url(
+            "https://evil.example.com/api/bfl"
+        ));
         assert!(!is_managed_nous_gateway_url(""));
     }
 

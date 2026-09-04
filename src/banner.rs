@@ -108,8 +108,7 @@ pub fn terminal_width() -> usize {
 /// Colors apply only on a TTY without `NO_COLOR` (hermes rich consoles
 /// degrade the same way when stdout is redirected).
 fn color_enabled() -> bool {
-    std::env::var_os("NO_COLOR").is_none()
-        && std::io::IsTerminal::is_terminal(&std::io::stdout())
+    std::env::var_os("NO_COLOR").is_none() && std::io::IsTerminal::is_terminal(&std::io::stdout())
 }
 
 fn paint(hex: &str, bold: bool, text: &str, enabled: bool) -> String {
@@ -174,7 +173,11 @@ fn git_output(args: &[&str], cwd: Option<&Path>, timeout: Duration) -> Option<St
                 let mut out = String::new();
                 child.stdout.take()?.read_to_string(&mut out).ok()?;
                 let trimmed = out.trim().to_string();
-                return if trimmed.is_empty() { None } else { Some(trimmed) };
+                return if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed)
+                };
             }
             Ok(None) => {
                 if start.elapsed() > timeout {
@@ -255,7 +258,12 @@ pub fn resolve_repo_dir() -> Option<PathBuf> {
 /// exists, else `main`.
 fn upstream_branch(repo_dir: &Path) -> &'static str {
     if git_output(
-        &["rev-parse", "--verify", "--quiet", "refs/remotes/origin/master"],
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "refs/remotes/origin/master",
+        ],
         Some(repo_dir),
         Duration::from_secs(3),
     )
@@ -324,7 +332,11 @@ fn check_via_local_git(repo_dir: &Path) -> Option<i64> {
         // No history to count across the shallow boundary; compare tip SHAs
         // via FETCH_HEAD (just updated), falling back to the tracking ref.
         let origin_ref = format!("origin/{}", branch);
-        let head_rev = git_output(&["rev-parse", "HEAD"], Some(repo_dir), Duration::from_secs(5))?;
+        let head_rev = git_output(
+            &["rev-parse", "HEAD"],
+            Some(repo_dir),
+            Duration::from_secs(5),
+        )?;
         let target_rev = git_output(
             &["rev-parse", "FETCH_HEAD"],
             Some(repo_dir),
@@ -499,7 +511,11 @@ pub fn format_banner_version_label() -> String {
     if state.ahead == 0 || state.upstream == state.local {
         format!("{} · upstream {}", base, state.upstream)
     } else {
-        let word = if state.ahead == 1 { "commit" } else { "commits" };
+        let word = if state.ahead == 1 {
+            "commit"
+        } else {
+            "commits"
+        };
         format!(
             "{} · upstream {} · local {} (+{} carried {})",
             base, state.upstream, state.local, state.ahead, word
@@ -652,7 +668,14 @@ pub fn render_logo(enabled: bool) -> String {
     ULNCLAW_LOGO
         .lines()
         .enumerate()
-        .map(|(i, line)| paint(bands.get(i).cloned().unwrap_or_default().as_str(), i < 2, line, enabled))
+        .map(|(i, line)| {
+            paint(
+                bands.get(i).cloned().unwrap_or_default().as_str(),
+                i < 2,
+                line,
+                enabled,
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -683,7 +706,11 @@ pub fn build_welcome_banner(info: &BannerInfo, term_width: usize) -> String {
             2 => title_color.clone(),
             _ => dim.clone(),
         };
-        let color = if color.is_empty() { fallback.to_string() } else { color };
+        let color = if color.is_empty() {
+            fallback.to_string()
+        } else {
+            color
+        };
         left.push(vec![seg(&color, line)]);
     }
     left.push(Vec::new());
@@ -722,7 +749,10 @@ pub fn build_welcome_banner(info: &BannerInfo, term_width: usize) -> String {
     }
     left.push(vec![seg(&dim, info.cwd.clone())]);
     if let Some(session_id) = &info.session_id {
-        left.push(vec![seg(&session_color, format!("Session: {}", session_id))]);
+        left.push(vec![seg(
+            &session_color,
+            format!("Session: {}", session_id),
+        )]);
     }
 
     // ---- right column: tools, skills, summary ---------------------------
@@ -835,13 +865,25 @@ pub fn build_welcome_banner(info: &BannerInfo, term_width: usize) -> String {
     let dash_space = total.saturating_sub(2);
     let title_len = title_text.chars().count();
     let left_dash = dash_space.saturating_sub(title_len) / 2;
-    let right_dash = dash_space.saturating_sub(title_len).saturating_sub(left_dash);
+    let right_dash = dash_space
+        .saturating_sub(title_len)
+        .saturating_sub(left_dash);
 
     let mut out = String::new();
     out.push_str(&paint(&border_color, false, "┌", enabled));
-    out.push_str(&paint(&border_color, false, &"─".repeat(left_dash), enabled));
+    out.push_str(&paint(
+        &border_color,
+        false,
+        &"─".repeat(left_dash),
+        enabled,
+    ));
     out.push_str(&paint(&title_color, true, &title_text, enabled));
-    out.push_str(&paint(&border_color, false, &"─".repeat(right_dash), enabled));
+    out.push_str(&paint(
+        &border_color,
+        false,
+        &"─".repeat(right_dash),
+        enabled,
+    ));
     out.push_str(&paint(&border_color, false, "┐", enabled));
     out.push('\n');
 
@@ -969,9 +1011,15 @@ mod tests {
 
     #[test]
     fn official_ssh_remote_detection() {
-        assert!(is_official_ssh_remote(Some("git@gitee.com:ushaw/ulnclaw.git")));
-        assert!(!is_official_ssh_remote(Some("https://gitee.com/ushaw/ulnclaw.git")));
-        assert!(!is_official_ssh_remote(Some("git@gitee.com:someone/fork.git")));
+        assert!(is_official_ssh_remote(Some(
+            "git@gitee.com:ushaw/ulnclaw.git"
+        )));
+        assert!(!is_official_ssh_remote(Some(
+            "https://gitee.com/ushaw/ulnclaw.git"
+        )));
+        assert!(!is_official_ssh_remote(Some(
+            "git@gitee.com:someone/fork.git"
+        )));
         assert!(!is_official_ssh_remote(None));
     }
 
@@ -1047,7 +1095,12 @@ mod tests {
         write_update_cache(dir.path(), Some(3), crate::VERSION, now - 60);
         assert_eq!(check_for_updates(), Some(3));
         // Expired cache is not returned as-is.
-        write_update_cache(dir.path(), Some(7), crate::VERSION, now - UPDATE_CHECK_CACHE_SECONDS - 60);
+        write_update_cache(
+            dir.path(),
+            Some(7),
+            crate::VERSION,
+            now - UPDATE_CHECK_CACHE_SECONDS - 60,
+        );
         let fresh = std::fs::read_to_string(dir.path().join(".update_check")).unwrap();
         let cached: UpdateCache = serde_json::from_str(&fresh).unwrap();
         // check_for_updates ran git (or produced None) and rewrote the cache.

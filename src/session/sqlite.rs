@@ -303,18 +303,26 @@ pub fn initialize_schema(conn: &Connection) -> Result<bool> {
             .ok();
         if let (Some(fts), Some(msgs)) = (fts_rows, msg_rows) {
             if fts != msgs {
-                conn.execute("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')", [])
-                    .ok();
+                conn.execute(
+                    "INSERT INTO messages_fts(messages_fts) VALUES('rebuild')",
+                    [],
+                )
+                .ok();
             }
         }
     }
     let version: Option<i64> = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .optional()
         .map_err(|e| AgentError::session(e.to_string()))?;
     if version.is_none() {
-        conn.execute("INSERT INTO schema_version (version) VALUES (?1)", params![1])
-            .map_err(|e| AgentError::session(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO schema_version (version) VALUES (?1)",
+            params![1],
+        )
+        .map_err(|e| AgentError::session(e.to_string()))?;
     }
     Ok(has_fts)
 }
@@ -343,9 +351,11 @@ fn ensure_delegation_delivery_columns(conn: &Connection) -> Result<()> {
         alters.push("ALTER TABLE async_delegations ADD COLUMN delivery_claimed_at REAL;");
     }
     if !alters.is_empty() {
-        conn.execute_batch(&alters.join("
-"))
-            .map_err(|e| AgentError::session(format!("add delegation delivery columns: {}", e)))?;
+        conn.execute_batch(&alters.join(
+            "
+",
+        ))
+        .map_err(|e| AgentError::session(format!("add delegation delivery columns: {}", e)))?;
     }
     Ok(())
 }
@@ -397,32 +407,50 @@ impl SqliteSessionStore {
     }
 
     fn init_meta(&self) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let version: Option<i64> = conn
-            .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+            .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+                r.get(0)
+            })
             .optional()
             .map_err(|e| AgentError::session(e.to_string()))?;
         if version.is_none() {
-            conn.execute("INSERT INTO schema_version (version) VALUES (?1)", params![1])
-                .map_err(|e| AgentError::session(e.to_string()))?;
+            conn.execute(
+                "INSERT INTO schema_version (version) VALUES (?1)",
+                params![1],
+            )
+            .map_err(|e| AgentError::session(e.to_string()))?;
         }
         Ok(())
     }
 
     /// Number of sessions in the store (metrics/observability).
     pub fn count_sessions(&self) -> Result<usize> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
-        conn.query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get::<_, i64>(0))
-            .map(|count| count as usize)
-            .map_err(|e| AgentError::session(e.to_string()))
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
+        conn.query_row("SELECT COUNT(*) FROM sessions", [], |row| {
+            row.get::<_, i64>(0)
+        })
+        .map(|count| count as usize)
+        .map_err(|e| AgentError::session(e.to_string()))
     }
 
     /// Number of stored messages (metrics/observability).
     pub fn count_messages(&self) -> Result<usize> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
-        conn.query_row("SELECT COUNT(*) FROM messages", [], |row| row.get::<_, i64>(0))
-            .map(|count| count as usize)
-            .map_err(|e| AgentError::session(e.to_string()))
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
+        conn.query_row("SELECT COUNT(*) FROM messages", [], |row| {
+            row.get::<_, i64>(0)
+        })
+        .map(|count| count as usize)
+        .map_err(|e| AgentError::session(e.to_string()))
     }
 
     /// Database file path.
@@ -436,9 +464,17 @@ impl SqliteSessionStore {
     }
 
     /// Create a new session row, returning its id.
-    pub fn create_session(&self, source: &str, model: Option<&str>, cwd: Option<&str>) -> Result<String> {
+    pub fn create_session(
+        &self,
+        source: &str,
+        model: Option<&str>,
+        cwd: Option<&str>,
+    ) -> Result<String> {
         let id = uuid::Uuid::new_v4().to_string();
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "INSERT INTO sessions (id, source, model, cwd, started_at, last_activity_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
@@ -456,7 +492,10 @@ impl SqliteSessionStore {
         model: Option<&str>,
     ) -> Result<String> {
         let id = uuid::Uuid::new_v4().to_string();
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "INSERT INTO sessions (id, source, model, parent_session_id, started_at, last_activity_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
@@ -475,7 +514,10 @@ impl SqliteSessionStore {
         model: Option<&str>,
         parent: Option<&str>,
     ) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "INSERT INTO sessions (id, source, model, parent_session_id, started_at, last_activity_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
@@ -503,7 +545,10 @@ impl SqliteSessionStore {
         end_reason: Option<&str>,
         archived: bool,
     ) -> Result<bool> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let exists: i64 = conn
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?1)",
@@ -536,7 +581,10 @@ impl SqliteSessionStore {
         message: &Message,
         timestamp: f64,
     ) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let tool_calls = message
             .tool_calls
             .as_ref()
@@ -701,9 +749,13 @@ impl SqliteSessionStore {
             .and_then(|v| v.as_array())
             .cloned()
             .unwrap_or_default();
-        let previous = existing.iter().find(|r| r.get("author").and_then(|a| a.as_str()) == Some(author));
+        let previous = existing
+            .iter()
+            .find(|r| r.get("author").and_then(|a| a.as_str()) == Some(author));
         let toggling_off = emoji.map_or(false, |e| {
-            previous.map_or(false, |p| p.get("emoji").and_then(|x| x.as_str()) == Some(e))
+            previous.map_or(false, |p| {
+                p.get("emoji").and_then(|x| x.as_str()) == Some(e)
+            })
         });
 
         let mut reactions: Vec<serde_json::Value> = existing
@@ -752,7 +804,10 @@ impl SqliteSessionStore {
         origin_session: &str,
         tasks_json: &str,
     ) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "INSERT OR REPLACE INTO async_delegations
              (delegation_id, origin_session, parent_session_id, state, dispatched_at, updated_at, task_json)
@@ -765,8 +820,16 @@ impl SqliteSessionStore {
 
     /// Record the consolidated result of a finished delegation
     /// (`state` = completed | failed).
-    pub fn finish_delegation(&self, delegation_id: &str, state: &str, result_json: &str) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+    pub fn finish_delegation(
+        &self,
+        delegation_id: &str,
+        state: &str,
+        result_json: &str,
+    ) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "UPDATE async_delegations SET state = ?2, completed_at = ?3, updated_at = ?3, result_json = ?4
              WHERE delegation_id = ?1",
@@ -778,7 +841,10 @@ impl SqliteSessionStore {
 
     /// Mark a completed delegation as delivered to its session.
     pub fn mark_delegation_delivered(&self, delegation_id: &str) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "UPDATE async_delegations SET state = 'delivered', updated_at = ?2
              WHERE delegation_id = ?1 AND state IN ('completed', 'unknown')",
@@ -801,7 +867,10 @@ impl SqliteSessionStore {
     /// claims (older than 300s) are re-claimable. Returns true when this
     /// caller now owns the delivery.
     pub fn claim_delegation_delivery(&self, delegation_id: &str, claim_id: &str) -> Result<bool> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let now = now_secs();
         let rows = conn
             .execute(
@@ -818,8 +887,15 @@ impl SqliteSessionStore {
 
     /// Acknowledge delivery for the consumer holding the claim (hermes
     /// `complete_completion_delivery`).
-    pub fn complete_delegation_delivery(&self, delegation_id: &str, claim_id: &str) -> Result<bool> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+    pub fn complete_delegation_delivery(
+        &self,
+        delegation_id: &str,
+        claim_id: &str,
+    ) -> Result<bool> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let now = now_secs();
         let rows = conn
             .execute(
@@ -840,7 +916,10 @@ impl SqliteSessionStore {
     /// completion replays on every restart forever. Returns true when the
     /// row was terminally dropped.
     pub fn release_delegation_delivery(&self, delegation_id: &str, claim_id: &str) -> Result<bool> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let now = now_secs();
         let capped = conn
             .execute(
@@ -875,7 +954,10 @@ impl SqliteSessionStore {
     /// (not `delivered`) keeps the ack honest and restart recovery from
     /// replaying it.
     pub fn drop_delegation_delivery(&self, delegation_id: &str, claim_id: &str) -> Result<bool> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let now = now_secs();
         let rows = conn
             .execute(
@@ -921,7 +1003,10 @@ impl SqliteSessionStore {
         owner_started_at: Option<u64>,
         now: f64,
     ) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "INSERT OR REPLACE INTO delivery_obligations
              (obligation_id, session_key, platform, chat_id, thread_id, content,
@@ -945,8 +1030,17 @@ impl SqliteSessionStore {
 
     /// Transition one obligation's state (hermes `mark_attempting` /
     /// `mark_delivered` / `mark_failed` / abandon).
-    pub fn set_obligation_state(&self, obligation_id: &str, state: &str, last_error: Option<&str>, now: f64) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+    pub fn set_obligation_state(
+        &self,
+        obligation_id: &str,
+        state: &str,
+        last_error: Option<&str>,
+        now: f64,
+    ) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "UPDATE delivery_obligations SET state = ?2, updated_at = ?3, last_error = ?4
              WHERE obligation_id = ?1",
@@ -976,7 +1070,18 @@ impl SqliteSessionStore {
             return Vec::new();
         };
         let mut claimed = Vec::new();
-        let rows: Vec<(String, String, String, Option<String>, String, String, i64, f64, Option<i64>, Option<i64>)> = {
+        let rows: Vec<(
+            String,
+            String,
+            String,
+            Option<String>,
+            String,
+            String,
+            i64,
+            f64,
+            Option<i64>,
+            Option<i64>,
+        )> = {
             let mut stmt = match conn.prepare(
                 "SELECT obligation_id, platform, chat_id, thread_id, content, state,
                         attempts, created_at, owner_pid, owner_started_at
@@ -1000,10 +1105,24 @@ impl SqliteSessionStore {
                     row.get::<_, Option<i64>>(9)?,
                 ))
             });
-            let Ok(mapped) = mapped else { return Vec::new() };
+            let Ok(mapped) = mapped else {
+                return Vec::new();
+            };
             mapped.filter_map(|r| r.ok()).collect()
         };
-        for (oid, platform, chat_id, thread_id, content, state, attempts, created_at, opid, ostarted) in rows {
+        for (
+            oid,
+            platform,
+            chat_id,
+            thread_id,
+            content,
+            state,
+            attempts,
+            created_at,
+            opid,
+            ostarted,
+        ) in rows
+        {
             if liveness(opid, ostarted) {
                 continue; // a live gateway still owns this row
             }
@@ -1019,20 +1138,30 @@ impl SqliteSessionStore {
                 // spend an attempt on a no-op (hermes semantics).
                 continue;
             }
-            let updated = conn.execute(
-                "UPDATE delivery_obligations
+            let updated = conn
+                .execute(
+                    "UPDATE delivery_obligations
                  SET owner_pid = ?2, owner_started_at = ?3, attempts = attempts + 1, updated_at = ?4
                  WHERE obligation_id = ?1 AND (owner_pid IS ?5 OR owner_pid = ?5)",
-                params![
-                    oid,
-                    owner_pid,
-                    owner_started_at.map(|v| v as i64),
-                    now,
-                    opid,
-                ],
-            ).unwrap_or(0);
+                    params![
+                        oid,
+                        owner_pid,
+                        owner_started_at.map(|v| v as i64),
+                        now,
+                        opid,
+                    ],
+                )
+                .unwrap_or(0);
             if updated > 0 {
-                claimed.push((oid, platform, chat_id, thread_id, content, state != "pending", attempts + 1));
+                claimed.push((
+                    oid,
+                    platform,
+                    chat_id,
+                    thread_id,
+                    content,
+                    state != "pending",
+                    attempts + 1,
+                ));
             }
         }
         claimed
@@ -1040,8 +1169,16 @@ impl SqliteSessionStore {
 
     /// Retention prune: drop delivered/abandoned rows older than the
     /// retention window and cap the total row count (hermes `_prune`).
-    pub fn prune_obligations(&self, retention_seconds: f64, max_rows: usize, now: f64) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+    pub fn prune_obligations(
+        &self,
+        retention_seconds: f64,
+        max_rows: usize,
+        now: f64,
+    ) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let cutoff = now - retention_seconds;
         conn.execute(
             "DELETE FROM delivery_obligations WHERE state IN ('delivered', 'abandoned') AND updated_at < ?1",
@@ -1049,7 +1186,9 @@ impl SqliteSessionStore {
         )
         .map_err(|e| AgentError::session(e.to_string()))?;
         let total: i64 = conn
-            .query_row("SELECT COUNT(*) FROM delivery_obligations", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM delivery_obligations", [], |r| {
+                r.get(0)
+            })
             .unwrap_or(0);
         let excess = total.saturating_sub(max_rows as i64);
         if excess > 0 {
@@ -1226,7 +1365,15 @@ impl SqliteSessionStore {
     pub fn delegation_rows(
         &self,
         limit: usize,
-    ) -> Vec<(String, String, String, f64, Option<f64>, Option<String>, i64)> {
+    ) -> Vec<(
+        String,
+        String,
+        String,
+        f64,
+        Option<f64>,
+        Option<String>,
+        i64,
+    )> {
         let Ok(conn) = self.conn.lock() else {
             return Vec::new();
         };
@@ -1277,7 +1424,10 @@ impl SqliteSessionStore {
 
     /// Load all active messages of a session as `Message` values.
     pub fn load_messages(&self, session_id: &str) -> Result<Vec<Message>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
                 "SELECT role, content, tool_call_id, tool_calls, tool_name
@@ -1322,7 +1472,10 @@ impl SqliteSessionStore {
 
     /// Load messages with their stored timestamps (session export).
     pub fn load_messages_with_timestamps(&self, session_id: &str) -> Result<Vec<(f64, Message)>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
                 "SELECT timestamp, role, content, tool_call_id, tool_calls, tool_name
@@ -1369,12 +1522,11 @@ impl SqliteSessionStore {
         Ok(messages)
     }
     /// Full-text search over all messages. Returns (session_id, snippet, rank).
-    pub fn search_messages(
-        &self,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<(String, String)>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+    pub fn search_messages(&self, query: &str, limit: usize) -> Result<Vec<(String, String)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut results = Vec::new();
         if self.has_fts {
             let fts_query = query
@@ -1434,7 +1586,10 @@ impl SqliteSessionStore {
         output_tokens: u32,
         tool_calls: u32,
     ) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "UPDATE sessions SET input_tokens = input_tokens + ?2,
                 output_tokens = output_tokens + ?3,
@@ -1455,7 +1610,10 @@ impl SqliteSessionStore {
         model: Option<&str>,
         cwd: Option<&str>,
     ) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "INSERT INTO sessions (id, source, model, cwd, started_at, last_activity_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?5)
@@ -1468,7 +1626,10 @@ impl SqliteSessionStore {
 
     /// One session row, if present.
     pub fn get_session_row(&self, session_id: &str) -> Result<Option<SessionRow>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.query_row(
             "SELECT id, source, model, title, cwd, parent_session_id, started_at,
                     COALESCE(last_activity_at, started_at),
@@ -1504,10 +1665,13 @@ impl SqliteSessionStore {
     /// P553: ids of sessions forked from `parent_id`, oldest first —
     /// the gateway enriches single-session fetches with this lineage.
     pub fn child_session_ids(&self, parent_id: &str) -> Result<Vec<String>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
-        let mut stmt = match conn.prepare(
-            "SELECT id FROM sessions WHERE parent_session_id = ?1 ORDER BY started_at",
-        ) {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
+        let mut stmt = match conn
+            .prepare("SELECT id FROM sessions WHERE parent_session_id = ?1 ORDER BY started_at")
+        {
             Ok(s) => s,
             Err(e) => return Err(AgentError::session(e.to_string())),
         };
@@ -1521,7 +1685,10 @@ impl SqliteSessionStore {
 
     /// Recent sessions, newest first.
     pub fn list_session_rows(&self, limit: usize) -> Result<Vec<SessionRow>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
                 "SELECT id, source, model, title, cwd, parent_session_id, started_at,
@@ -1573,7 +1740,10 @@ impl SqliteSessionStore {
         if session_ids.is_empty() || max_chars == 0 {
             return Ok(previews);
         }
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let placeholders = vec!["?"; session_ids.len()].join(",");
         let sql = format!(
             "SELECT m.session_id, m.content FROM messages m
@@ -1586,8 +1756,10 @@ impl SqliteSessionStore {
         let mut stmt = conn
             .prepare(&sql)
             .map_err(|e| AgentError::session(e.to_string()))?;
-        let params: Vec<&dyn rusqlite::ToSql> =
-            session_ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+        let params: Vec<&dyn rusqlite::ToSql> = session_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::ToSql)
+            .collect();
         let rows = stmt
             .query_map(params.as_slice(), |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
@@ -1595,10 +1767,7 @@ impl SqliteSessionStore {
             .map_err(|e| AgentError::session(e.to_string()))?;
         for row in rows {
             let (session_id, content) = row.map_err(|e| AgentError::session(e.to_string()))?;
-            let collapsed: String = content
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+            let collapsed: String = content.split_whitespace().collect::<Vec<_>>().join(" ");
             let char_count = collapsed.chars().count();
             let mut preview: String = collapsed.chars().take(max_chars).collect();
             if char_count > max_chars {
@@ -1613,7 +1782,10 @@ impl SqliteSessionStore {
     /// `_get_models_analytics` grouping): sessions, messages, tokens and
     /// last use per model, largest footprint first.
     pub fn model_usage_since(&self, cutoff: f64) -> Result<Vec<ModelUsageRow>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
                 "SELECT model,
@@ -1653,7 +1825,10 @@ impl SqliteSessionStore {
     /// the key as the row id (session_key stays NULL on legacy rows), so
     /// both columns are considered. Newest activity first.
     pub fn list_platform_sessions(&self, limit: usize) -> Result<Vec<PlatformSessionRow>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
                 "SELECT id, source, user_id, session_key, title, started_at,
@@ -1692,7 +1867,10 @@ impl SqliteSessionStore {
     /// `get_messages` for the MCP bridge): chronological order, every
     /// role included.
     pub fn load_message_rows(&self, session_id: &str) -> Result<Vec<MessageRow>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
                 "SELECT id, role, COALESCE(content, ''), timestamp
@@ -1720,7 +1898,10 @@ impl SqliteSessionStore {
     /// All-time totals across every stored session:
     /// `(session_count, input_tokens, output_tokens)`.
     pub fn token_totals(&self) -> Result<(i64, i64, i64)> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.query_row(
             "SELECT COUNT(*), COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0)
              FROM sessions",
@@ -1732,7 +1913,10 @@ impl SqliteSessionStore {
 
     /// Mark a session ended.
     pub fn end_session(&self, session_id: &str, reason: &str) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "UPDATE sessions SET ended_at = ?2, end_reason = ?3 WHERE id = ?1",
             params![session_id, now_secs(), reason],
@@ -1744,7 +1928,10 @@ impl SqliteSessionStore {
     /// Clear a previously recorded end (unarchive — desktop P414): drops
     /// `ended_at`/`end_reason` so the session reads as open again.
     pub fn clear_session_end(&self, session_id: &str) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "UPDATE sessions SET ended_at = NULL, end_reason = NULL WHERE id = ?1",
             params![session_id],
@@ -1761,7 +1948,10 @@ impl SqliteSessionStore {
     /// does not exist.
     pub fn set_session_title(&self, session_id: &str, title: &str) -> Result<()> {
         let cleaned = sanitize_title(title).map_err(AgentError::session)?;
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         if let Some(cleaned) = &cleaned {
             let conflict: Option<String> = conn
                 .query_row(
@@ -1801,7 +1991,10 @@ impl SqliteSessionStore {
         exclude_sources: &[&str],
         include_archived: bool,
     ) -> Result<Vec<BrowseRow>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut sql = String::from(
             "SELECT s.id, s.title, s.source,
                     COALESCE(s.last_activity_at, s.started_at),
@@ -1830,12 +2023,12 @@ impl SqliteSessionStore {
             sql.push_str(" AND s.source != ?");
             values.push(Box::new((*excluded).to_string()));
         }
-        sql.push_str(
-            " ORDER BY COALESCE(s.last_activity_at, s.started_at) DESC LIMIT ?",
-        );
+        sql.push_str(" ORDER BY COALESCE(s.last_activity_at, s.started_at) DESC LIMIT ?");
         values.push(Box::new(limit as i64));
         let params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|p| p.as_ref()).collect();
-        let mut stmt = conn.prepare(&sql).map_err(|e| AgentError::session(e.to_string()))?;
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let rows = stmt
             .query_map(params.as_slice(), |row| {
                 Ok(BrowseRow {
@@ -1862,11 +2055,11 @@ impl SqliteSessionStore {
     /// (hermes `list_skill_scaffolded_sessions`), newest first. Those
     /// titles were generated from the expanded scaffold, so they describe
     /// the skill rather than the request.
-    pub fn list_skill_scaffolded_sessions(
-        &self,
-        limit: usize,
-    ) -> Result<Vec<SkillScaffoldedRow>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+    pub fn list_skill_scaffolded_sessions(&self, limit: usize) -> Result<Vec<SkillScaffoldedRow>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
                 "SELECT s.id, s.title, m.content
@@ -1885,7 +2078,10 @@ impl SqliteSessionStore {
             .map_err(|e| AgentError::session(e.to_string()))?;
         let rows = stmt
             .query_map(
-                params![crate::session::retitle::SKILL_SCAFFOLD_SQL_LIKE, limit as i64],
+                params![
+                    crate::session::retitle::SKILL_SCAFFOLD_SQL_LIKE,
+                    limit as i64
+                ],
                 |row| {
                     Ok(SkillScaffoldedRow {
                         id: row.get(0)?,
@@ -1902,7 +2098,10 @@ impl SqliteSessionStore {
     /// The session's first assistant reply as plain text, empty when none
     /// (hermes `get_first_assistant_text`).
     pub fn get_first_assistant_text(&self, session_id: &str) -> Result<String> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.query_row(
             "SELECT content FROM messages
              WHERE session_id = ?1 AND role = 'assistant' AND content IS NOT NULL
@@ -1918,7 +2117,10 @@ impl SqliteSessionStore {
     /// P559: first user message text of a session (empty string when the
     /// session has none) — the single-session retitler's raw material.
     pub fn get_first_user_text(&self, session_id: &str) -> Result<String> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.query_row(
             "SELECT content FROM messages
              WHERE session_id = ?1 AND role = 'user' AND content IS NOT NULL
@@ -1934,7 +2136,10 @@ impl SqliteSessionStore {
     /// P561: per-role message counts for a session (GROUP BY role) —
     /// the gateway enriches single-session fetches with this census.
     pub fn message_role_counts(&self, session_id: &str) -> Result<Vec<(String, i64)>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = match conn.prepare(
             "SELECT role, COUNT(*) FROM messages WHERE session_id = ?1 GROUP BY role ORDER BY role",
         ) {
@@ -1954,7 +2159,10 @@ impl SqliteSessionStore {
     /// P564: text of the session's most recent message with content
     /// (any role; empty string when the session has none).
     pub fn get_last_message_text(&self, session_id: &str) -> Result<String> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.query_row(
             "SELECT content FROM messages
              WHERE session_id = ?1 AND content IS NOT NULL
@@ -1972,8 +2180,9 @@ impl SqliteSessionStore {
     pub fn get_next_title_in_lineage(&self, base_title: &str) -> Result<String> {
         // Strip an existing " #N" suffix to find the true base.
         let base = match base_title.rfind(" #") {
-            Some(idx) if base_title[idx + 2..].chars().all(|c| c.is_ascii_digit())
-                && !base_title[idx + 2..].is_empty() =>
+            Some(idx)
+                if base_title[idx + 2..].chars().all(|c| c.is_ascii_digit())
+                    && !base_title[idx + 2..].is_empty() =>
             {
                 &base_title[..idx]
             }
@@ -1983,11 +2192,12 @@ impl SqliteSessionStore {
             .replace('\\', "\\\\")
             .replace('%', "\\%")
             .replace('_', "\\_");
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
-            .prepare(
-                "SELECT title FROM sessions WHERE title = ?1 OR title LIKE ?2 ESCAPE '\\'",
-            )
+            .prepare("SELECT title FROM sessions WHERE title = ?1 OR title LIKE ?2 ESCAPE '\\'")
             .map_err(|e| AgentError::session(e.to_string()))?;
         let titles: Vec<String> = stmt
             .query_map(params![base, format!("{escaped} #%")], |r| {
@@ -2014,7 +2224,10 @@ impl SqliteSessionStore {
     /// Most recent non-archived session id by last activity (hermes
     /// `--continue` target selection). `None` when the store is empty.
     pub fn latest_session_id(&self) -> Result<Option<String>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.query_row(
             "SELECT id FROM sessions WHERE archived = 0
              ORDER BY COALESCE(last_activity_at, started_at) DESC LIMIT 1",
@@ -2036,7 +2249,10 @@ impl SqliteSessionStore {
             .replace('\\', "\\\\")
             .replace('%', "\\%")
             .replace('_', "\\_");
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
                 "SELECT id FROM sessions WHERE id LIKE ?1 ESCAPE '\\'
@@ -2044,7 +2260,9 @@ impl SqliteSessionStore {
             )
             .map_err(|e| AgentError::session(e.to_string()))?;
         let rows = stmt
-            .query_map(params![format!("{escaped}%")], |row| row.get::<_, String>(0))
+            .query_map(params![format!("{escaped}%")], |row| {
+                row.get::<_, String>(0)
+            })
             .map_err(|e| AgentError::session(e.to_string()))?;
         let matches: Vec<String> = rows
             .collect::<std::result::Result<Vec<_>, _>>()
@@ -2059,11 +2277,17 @@ impl SqliteSessionStore {
     /// (hermes `sessions optimize`). Returns the number of FTS indexes
     /// merged.
     pub fn optimize_storage(&self) -> Result<usize> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut optimized = 0usize;
         if self.has_fts
             && conn
-                .execute("INSERT INTO messages_fts(messages_fts) VALUES('optimize')", [])
+                .execute(
+                    "INSERT INTO messages_fts(messages_fts) VALUES('optimize')",
+                    [],
+                )
                 .is_ok()
         {
             optimized = 1;
@@ -2092,14 +2316,20 @@ impl SqliteSessionStore {
     /// Current title of a session (`None` when the session exists but has
     /// no title, or when the session id is unknown).
     pub fn get_session_title(&self, session_id: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare("SELECT title FROM sessions WHERE id = ?1")
             .map_err(|e| AgentError::session(e.to_string()))?;
         let mut rows = stmt
             .query(params![session_id])
             .map_err(|e| AgentError::session(e.to_string()))?;
-        match rows.next().map_err(|e| AgentError::session(e.to_string()))? {
+        match rows
+            .next()
+            .map_err(|e| AgentError::session(e.to_string()))?
+        {
             Some(row) => row
                 .get::<_, Option<String>>(0)
                 .map_err(|e| AgentError::session(e.to_string())),
@@ -2114,7 +2344,10 @@ impl SqliteSessionStore {
     /// sessions are skipped. LIKE wildcards in the query title are
     /// escaped so `%`/`_` titles match literally.
     pub fn resolve_session_by_title(&self, title: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let escaped = title
             .replace('\\', "\\\\")
             .replace('%', "\\%")
@@ -2126,7 +2359,9 @@ impl SqliteSessionStore {
             )
             .map_err(|e| AgentError::session(e.to_string()))?;
         let numbered: Vec<String> = stmt
-            .query_map(params![format!("{escaped} #%")], |row| row.get::<_, String>(0))
+            .query_map(params![format!("{escaped} #%")], |row| {
+                row.get::<_, String>(0)
+            })
             .map_err(|e| AgentError::session(e.to_string()))?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| AgentError::session(e.to_string()))?;
@@ -2142,7 +2377,10 @@ impl SqliteSessionStore {
         let mut rows = stmt
             .query(params![title])
             .map_err(|e| AgentError::session(e.to_string()))?;
-        match rows.next().map_err(|e| AgentError::session(e.to_string()))? {
+        match rows
+            .next()
+            .map_err(|e| AgentError::session(e.to_string()))?
+        {
             Some(row) => row
                 .get::<_, String>(0)
                 .map(Some)
@@ -2156,7 +2394,10 @@ impl SqliteSessionStore {
     /// `compression` and has a continuation child, move to the newest
     /// child. Returns the tip id, or `None` when `session_id` is unknown.
     pub fn compression_tip(&self, session_id: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut current = session_id.to_string();
         for _ in 0..1000 {
             let (end_reason, exists): (Option<String>, bool) = conn
@@ -2199,7 +2440,10 @@ impl SqliteSessionStore {
         if title.contains(['\r', '\n', '\0']) {
             return Err(AgentError::session("invalid session title"));
         }
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let changed = conn
             .execute(
                 "UPDATE sessions SET title = ?2 WHERE id = ?1 AND (title IS NULL OR title = '')",
@@ -2213,7 +2457,10 @@ impl SqliteSessionStore {
     /// locked model is inherited by forks (via the `model` column) and
     /// survives `ensure_session` resumes.
     pub fn set_session_model(&self, session_id: &str, model: &str) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "UPDATE sessions SET model = ?2 WHERE id = ?1",
             params![session_id, model],
@@ -2224,7 +2471,10 @@ impl SqliteSessionStore {
 
     /// Set/get state metadata.
     pub fn set_meta(&self, key: &str, value: &str) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "INSERT INTO state_meta (key, value) VALUES (?1, ?2)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -2235,7 +2485,10 @@ impl SqliteSessionStore {
     }
 
     pub fn get_meta(&self, key: &str) -> Result<Option<String>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.query_row(
             "SELECT value FROM state_meta WHERE key = ?1",
             params![key],
@@ -2264,8 +2517,13 @@ impl SqliteSessionStore {
             where_clause
         );
         let values = filter_params_to_values(&params);
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
-        let mut stmt = conn.prepare(&sql).map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let rows = stmt
             .query_map(rusqlite::params_from_iter(values), |row| {
                 Ok(PruneCandidate {
@@ -2287,10 +2545,7 @@ impl SqliteSessionStore {
     /// Delete every session matching the filters (messages + FTS rows
     /// first). Only ENDED sessions are ever candidates. Returns the number
     /// of sessions deleted (hermes `prune_sessions`).
-    pub fn prune_sessions(
-        &self,
-        filters: &crate::session::filters::PruneFilters,
-    ) -> Result<usize> {
+    pub fn prune_sessions(&self, filters: &crate::session::filters::PruneFilters) -> Result<usize> {
         let candidates = self.list_prune_candidates(filters)?;
         for candidate in &candidates {
             self.delete_session(&candidate.id)?;
@@ -2318,7 +2573,10 @@ impl SqliteSessionStore {
 
     /// Flip the archived flag on one session (hermes `set_session_archived`).
     pub fn set_session_archived(&self, session_id: &str, archived: bool) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "UPDATE sessions SET archived = ?2 WHERE id = ?1",
             params![session_id, if archived { 1 } else { 0 }],
@@ -2330,12 +2588,17 @@ impl SqliteSessionStore {
     /// Session counts grouped by source, most numerous first (hermes
     /// `sessions stats`).
     pub fn session_count_by_source(&self) -> Result<Vec<(String, i64)>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare("SELECT source, COUNT(*) FROM sessions GROUP BY source ORDER BY COUNT(*) DESC")
             .map_err(|e| AgentError::session(e.to_string()))?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
             .map_err(|e| AgentError::session(e.to_string()))?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| AgentError::session(e.to_string()))
@@ -2364,14 +2627,19 @@ fn filter_params_to_values(
         .map(|param| match param {
             crate::session::filters::FilterParam::Real(v) => rusqlite::types::Value::Real(*v),
             crate::session::filters::FilterParam::Int(v) => rusqlite::types::Value::Integer(*v),
-            crate::session::filters::FilterParam::Text(s) => rusqlite::types::Value::Text(s.clone()),
+            crate::session::filters::FilterParam::Text(s) => {
+                rusqlite::types::Value::Text(s.clone())
+            }
         })
         .collect()
 }
 
 impl SessionStore for SqliteSessionStore {
     fn save_session(&self, session: &Session) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         conn.execute(
             "INSERT INTO sessions (id, source, model, parent_session_id, started_at, last_activity_at, title)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
@@ -2402,7 +2670,10 @@ impl SessionStore for SqliteSessionStore {
     }
 
     fn load_session(&self, session_id: &str) -> Result<Option<Session>> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let row = conn
             .query_row(
                 "SELECT id, source, model, parent_session_id, started_at, last_activity_at
@@ -2444,11 +2715,12 @@ impl SessionStore for SqliteSessionStore {
     fn list_sessions(&self, limit: usize) -> Result<Vec<Session>> {
         let mut ids: Vec<String> = Vec::new();
         {
-            let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+            let conn = self
+                .conn
+                .lock()
+                .map_err(|e| AgentError::session(e.to_string()))?;
             let mut stmt = conn
-                .prepare(
-                    "SELECT id FROM sessions ORDER BY last_activity_at DESC LIMIT ?1",
-                )
+                .prepare("SELECT id FROM sessions ORDER BY last_activity_at DESC LIMIT ?1")
                 .map_err(|e| AgentError::session(e.to_string()))?;
             let rows = stmt
                 .query_map(params![limit as i64], |row| row.get::<_, String>(0))
@@ -2469,7 +2741,10 @@ impl SessionStore for SqliteSessionStore {
     }
 
     fn delete_session(&self, session_id: &str) -> Result<()> {
-        let conn = self.conn.lock().map_err(|e| AgentError::session(e.to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         if self.has_fts {
             conn.execute(
                 "DELETE FROM messages_fts WHERE rowid IN
@@ -2478,8 +2753,11 @@ impl SessionStore for SqliteSessionStore {
             )
             .ok();
         }
-        conn.execute("DELETE FROM messages WHERE session_id = ?1", params![session_id])
-            .ok();
+        conn.execute(
+            "DELETE FROM messages WHERE session_id = ?1",
+            params![session_id],
+        )
+        .ok();
         conn.execute("DELETE FROM sessions WHERE id = ?1", params![session_id])
             .map_err(|e| AgentError::session(e.to_string()))?;
         Ok(())
@@ -2559,12 +2837,22 @@ mod tests {
         assert!(latest_user > previous_user);
         assert!(store.latest_message_row_id(&sid, "user", 2, true).is_none());
         // The latest assistant row with text is the "reply" row.
-        let assistant = store.latest_message_row_id(&sid, "assistant", 0, true).unwrap();
-        assert_eq!(store.message_role(&sid, assistant).as_deref(), Some("assistant"));
-        assert_eq!(store.message_role(&sid, latest_user).as_deref(), Some("user"));
+        let assistant = store
+            .latest_message_row_id(&sid, "assistant", 0, true)
+            .unwrap();
+        assert_eq!(
+            store.message_role(&sid, assistant).as_deref(),
+            Some("assistant")
+        );
+        assert_eq!(
+            store.message_role(&sid, latest_user).as_deref(),
+            Some("user")
+        );
         // Bad inputs.
         assert!(store.latest_message_row_id(&sid, "tool", 0, true).is_none());
-        assert!(store.latest_message_row_id(&sid, "user", -1, true).is_none());
+        assert!(store
+            .latest_message_row_id(&sid, "user", -1, true)
+            .is_none());
         assert!(store.latest_message_row_id("", "user", 0, true).is_none());
     }
 
@@ -2606,7 +2894,9 @@ mod tests {
         assert_eq!(agent["emoji"], "😂");
 
         // Empty emoji retracts.
-        let reactions = store.set_message_reaction(&sid, row, Some(""), "agent").unwrap();
+        let reactions = store
+            .set_message_reaction(&sid, row, Some(""), "agent")
+            .unwrap();
         assert_eq!(reactions.len(), 1);
         // None clears explicitly.
         let reactions = store.set_message_reaction(&sid, row, None, "user").unwrap();
@@ -2614,8 +2904,12 @@ mod tests {
         assert!(store.get_message_reactions(&sid, row).is_empty());
 
         // Row outside the session → None.
-        assert!(store.set_message_reaction("other-session", row, Some("👍"), "agent").is_none());
-        assert!(store.set_message_reaction(&sid, row + 999, Some("👍"), "agent").is_none());
+        assert!(store
+            .set_message_reaction("other-session", row, Some("👍"), "agent")
+            .is_none());
+        assert!(store
+            .set_message_reaction(&sid, row + 999, Some("👍"), "agent")
+            .is_none());
         assert!(store.message_role(&sid, row + 999).is_none());
     }
 
@@ -2628,7 +2922,9 @@ mod tests {
             let sid = store.create_session("cli", Some("m"), None).unwrap();
             store.append_message(&sid, &user_msg("persist me")).unwrap();
             let row = store.latest_message_row_id(&sid, "user", 0, true).unwrap();
-            store.set_message_reaction(&sid, row, Some("🎉"), "agent").unwrap();
+            store
+                .set_message_reaction(&sid, row, Some("🎉"), "agent")
+                .unwrap();
             sid
         };
         let store = SqliteSessionStore::open(&path).unwrap();
@@ -2642,7 +2938,9 @@ mod tests {
     fn test_sqlite_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         let store = SqliteSessionStore::open(dir.path().join("state.db")).unwrap();
-        let sid = store.create_session("cli", Some("test-model"), Some("/tmp")).unwrap();
+        let sid = store
+            .create_session("cli", Some("test-model"), Some("/tmp"))
+            .unwrap();
         store
             .append_message(
                 &sid,
@@ -2657,7 +2955,10 @@ mod tests {
             .unwrap();
         let messages = store.load_messages(&sid).unwrap();
         assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].content.as_deref(), Some("hello world from ulnclaw"));
+        assert_eq!(
+            messages[0].content.as_deref(),
+            Some("hello world from ulnclaw")
+        );
 
         let results = store.search_messages("ulnclaw", 5).unwrap();
         assert!(!results.is_empty());
@@ -2673,7 +2974,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = SqliteSessionStore::open(dir.path().join("state.db")).unwrap();
         let parent = store.create_session("cli", None, None).unwrap();
-        let child = store.create_child_session(&parent, "delegate", None).unwrap();
+        let child = store
+            .create_child_session(&parent, "delegate", None)
+            .unwrap();
         let child_session = store.load_session(&child).unwrap().unwrap();
         assert_eq!(child_session.parent_id.as_deref(), Some(parent.as_str()));
     }
@@ -2730,16 +3033,16 @@ mod tests {
         let sid = store.create_session("cli", None, None).unwrap();
         store.set_session_title(&sid, "wild%card_x").unwrap();
         assert_eq!(
-            store.resolve_session_by_title("wild%card_x").unwrap().as_deref(),
+            store
+                .resolve_session_by_title("wild%card_x")
+                .unwrap()
+                .as_deref(),
             Some(sid.as_str())
         );
         // The unescaped pattern must not match a different literal title.
         let other = store.create_session("cli", None, None).unwrap();
         store.set_session_title(&other, "wildXcard y").unwrap();
-        assert_eq!(
-            store.resolve_session_by_title("wild%card y").unwrap(),
-            None
-        );
+        assert_eq!(store.resolve_session_by_title("wild%card y").unwrap(), None);
         // Archived sessions are not resolvable by title.
         store.set_session_archived(&sid, true).unwrap();
         assert_eq!(store.resolve_session_by_title("wild%card_x").unwrap(), None);
@@ -2794,7 +3097,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = store_with(dir.path());
         let ended_cli = store.create_session("cli", Some("model-a"), None).unwrap();
-        store.append_message(&ended_cli, &user_msg("hello")).unwrap();
+        store
+            .append_message(&ended_cli, &user_msg("hello"))
+            .unwrap();
         store.end_session(&ended_cli, "ended").unwrap();
         let ended_cron = store.create_session("cron", Some("model-a"), None).unwrap();
         store.end_session(&ended_cron, "ended").unwrap();
@@ -2814,7 +3119,9 @@ mod tests {
         assert!(!candidates[0].archived);
 
         // No filters → both ended sessions, oldest activity first.
-        let all = store.list_prune_candidates(&PruneFilters::default()).unwrap();
+        let all = store
+            .list_prune_candidates(&PruneFilters::default())
+            .unwrap();
         assert_eq!(all.len(), 2);
     }
 
@@ -2930,11 +3237,15 @@ mod tests {
                 },
             )
             .unwrap();
-        store.set_session_title(&scaffolded, "Work skill bundle helper").unwrap();
+        store
+            .set_session_title(&scaffolded, "Work skill bundle helper")
+            .unwrap();
 
         // Plain session — must not be listed.
         let plain = store.create_session("cli", None, None).unwrap();
-        store.append_message(&plain, &user_msg("ordinary question")).unwrap();
+        store
+            .append_message(&plain, &user_msg("ordinary question"))
+            .unwrap();
         store.set_session_title(&plain, "Ordinary").unwrap();
         // Scaffolded but untitled — skipped (nothing to repair).
         let untitled = store.create_session("cli", None, None).unwrap();
@@ -2987,7 +3298,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = store_with(dir.path());
         let first = store.create_session("cli", None, None).unwrap();
-        store.append_message(&first, &user_msg("first user line")).unwrap();
+        store
+            .append_message(&first, &user_msg("first user line"))
+            .unwrap();
         store
             .append_message(
                 &first,
@@ -3001,12 +3314,16 @@ mod tests {
             )
             .unwrap();
         let second = store.create_session("cron", None, None).unwrap();
-        store.append_message(&second, &user_msg("cron line")).unwrap();
+        store
+            .append_message(&second, &user_msg("cron line"))
+            .unwrap();
         let tool_session = store.create_session("tool", None, None).unwrap();
 
         // Default browse excludes nothing on the store side (CLI passes the
         // exclusion list); newest first, preview = first user message.
-        let rows = store.list_sessions_for_browse(100, None, &[], false).unwrap();
+        let rows = store
+            .list_sessions_for_browse(100, None, &[], false)
+            .unwrap();
         assert_eq!(rows.len(), 3);
         assert_eq!(rows[0].id, tool_session); // newest, no messages
         assert_eq!(rows[0].preview, None);
@@ -3016,27 +3333,39 @@ mod tests {
         assert_eq!(cron_row.message_count, 1);
 
         // Excluding tool sources (hermes default browse behavior).
-        let rows = store.list_sessions_for_browse(100, None, &["tool"], false).unwrap();
+        let rows = store
+            .list_sessions_for_browse(100, None, &["tool"], false)
+            .unwrap();
         assert_eq!(rows.len(), 2);
         assert!(rows.iter().all(|r| r.source != "tool"));
 
         // Source filter.
-        let rows = store.list_sessions_for_browse(100, Some("cron"), &[], false).unwrap();
+        let rows = store
+            .list_sessions_for_browse(100, Some("cron"), &[], false)
+            .unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].id, second);
 
         // Archived sessions disappear by default…
         store.set_session_archived(&first, true).unwrap();
-        let rows = store.list_sessions_for_browse(100, Some("cli"), &[], false).unwrap();
+        let rows = store
+            .list_sessions_for_browse(100, Some("cli"), &[], false)
+            .unwrap();
         assert!(rows.is_empty());
         // …but surface (flagged) when include_archived is set (P513).
-        let rows = store.list_sessions_for_browse(100, Some("cli"), &[], true).unwrap();
+        let rows = store
+            .list_sessions_for_browse(100, Some("cli"), &[], true)
+            .unwrap();
         assert_eq!(rows.len(), 1);
         assert!(rows[0].archived);
 
         // The session cwd rides along for project resolution (P165).
-        let with_cwd = store.create_session("cli", None, Some("/work/repo")).unwrap();
-        let rows = store.list_sessions_for_browse(100, Some("cli"), &[], false).unwrap();
+        let with_cwd = store
+            .create_session("cli", None, Some("/work/repo"))
+            .unwrap();
+        let rows = store
+            .list_sessions_for_browse(100, Some("cli"), &[], false)
+            .unwrap();
         let row = rows.iter().find(|r| r.id == with_cwd).unwrap();
         assert_eq!(row.cwd.as_deref(), Some("/work/repo"));
     }
@@ -3049,7 +3378,10 @@ mod tests {
         let first = store.create_session("cli", None, None).unwrap();
         let second = store.create_session("cli", None, None).unwrap();
         // Newest by started_at wins when no activity is recorded.
-        assert_eq!(store.latest_session_id().unwrap().as_deref(), Some(second.as_str()));
+        assert_eq!(
+            store.latest_session_id().unwrap().as_deref(),
+            Some(second.as_str())
+        );
         // Activity on the older session promotes it.
         let conn = store.conn.lock().unwrap();
         conn.execute(
@@ -3058,10 +3390,16 @@ mod tests {
         )
         .unwrap();
         drop(conn);
-        assert_eq!(store.latest_session_id().unwrap().as_deref(), Some(first.as_str()));
+        assert_eq!(
+            store.latest_session_id().unwrap().as_deref(),
+            Some(first.as_str())
+        );
         // Archived sessions are skipped.
         store.set_session_archived(&first, true).unwrap();
-        assert_eq!(store.latest_session_id().unwrap().as_deref(), Some(second.as_str()));
+        assert_eq!(
+            store.latest_session_id().unwrap().as_deref(),
+            Some(second.as_str())
+        );
     }
 
     #[test]
@@ -3090,7 +3428,10 @@ mod tests {
         let err = sanitize_title(&long).unwrap_err();
         assert!(err.contains("Title too long"), "got: {err}");
         assert_eq!(
-            sanitize_title(&"x".repeat(MAX_TITLE_LENGTH)).unwrap().unwrap().len(),
+            sanitize_title(&"x".repeat(MAX_TITLE_LENGTH))
+                .unwrap()
+                .unwrap()
+                .len(),
             MAX_TITLE_LENGTH
         );
     }
@@ -3115,7 +3456,9 @@ mod tests {
         store.set_session_title(&first, "Fix the parser").unwrap();
 
         // A different session cannot take the same title.
-        let err = store.set_session_title(&second, "Fix the parser").unwrap_err();
+        let err = store
+            .set_session_title(&second, "Fix the parser")
+            .unwrap_err();
         assert!(err.to_string().contains("already in use"), "got: {err}");
 
         // Whitespace-only clears the title.
@@ -3162,7 +3505,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = store_with(dir.path());
         let sid = store.create_session("cli", None, None).unwrap();
-        store.append_message(&sid, &user_msg("to be deleted")).unwrap();
+        store
+            .append_message(&sid, &user_msg("to be deleted"))
+            .unwrap();
         assert_eq!(store.count_messages().unwrap(), 1);
 
         store.delete_session(&sid).unwrap();

@@ -41,14 +41,21 @@ fn normalize_handles(value: Option<&Value>, field_name: &str) -> Result<Vec<Stri
     let mut cleaned = Vec::new();
     if let Some(items) = value.and_then(|v| v.as_array()) {
         for item in items {
-            let handle = item.as_str().unwrap_or("").trim().trim_start_matches('@').to_string();
+            let handle = item
+                .as_str()
+                .unwrap_or("")
+                .trim()
+                .trim_start_matches('@')
+                .to_string();
             if !handle.is_empty() {
                 cleaned.push(handle);
             }
         }
     }
     if cleaned.len() > MAX_HANDLES {
-        return Err(format!("{field_name} supports at most {MAX_HANDLES} handles"));
+        return Err(format!(
+            "{field_name} supports at most {MAX_HANDLES} handles"
+        ));
     }
     Ok(cleaned)
 }
@@ -91,19 +98,37 @@ fn validate_date_range(from_date: &str, to_date: &str) -> Result<(), String> {
 }
 
 fn extract_response_text(payload: &Value) -> String {
-    let output_text = payload.get("output_text").and_then(|v| v.as_str()).unwrap_or("").trim();
+    let output_text = payload
+        .get("output_text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
     if !output_text.is_empty() {
         return output_text.to_string();
     }
     let mut parts = Vec::new();
-    for item in payload.get("output").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+    for item in payload
+        .get("output")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+    {
         if item.get("type").and_then(|v| v.as_str()) != Some("message") {
             continue;
         }
-        for content in item.get("content").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+        for content in item
+            .get("content")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+        {
             let ctype = content.get("type").and_then(|v| v.as_str()).unwrap_or("");
             if ctype == "output_text" || ctype == "text" {
-                let text = content.get("text").and_then(|v| v.as_str()).unwrap_or("").trim();
+                let text = content
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim();
                 if !text.is_empty() {
                     parts.push(text.to_string());
                 }
@@ -115,11 +140,21 @@ fn extract_response_text(payload: &Value) -> String {
 
 fn extract_inline_citations(payload: &Value) -> Vec<Value> {
     let mut citations = Vec::new();
-    for item in payload.get("output").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+    for item in payload
+        .get("output")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+    {
         if item.get("type").and_then(|v| v.as_str()) != Some("message") {
             continue;
         }
-        for content in item.get("content").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+        for content in item
+            .get("content")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+        {
             for annotation in content
                 .get("annotations")
                 .and_then(|v| v.as_array())
@@ -145,9 +180,23 @@ fn extract_inline_citations(payload: &Value) -> Vec<Value> {
 fn http_error_message(status: u16, body: &str) -> String {
     if let Ok(payload) = serde_json::from_str::<Value>(body) {
         if payload.is_object() {
-            let code = payload.get("code").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-            let error = payload.get("error").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-            let message = if error.is_empty() { body.to_string() } else { error };
+            let code = payload
+                .get("code")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let error = payload
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let message = if error.is_empty() {
+                body.to_string()
+            } else {
+                error
+            };
             let message = if !code.is_empty() && !message.contains(&code) {
                 format!("{code}: {message}")
             } else {
@@ -162,7 +211,10 @@ fn http_error_message(status: u16, body: &str) -> String {
     if text.is_empty() {
         format!("HTTP {status}")
     } else {
-        format!("HTTP {status}: {}", text.chars().take(500).collect::<String>())
+        format!(
+            "HTTP {status}: {}",
+            text.chars().take(500).collect::<String>()
+        )
     }
 }
 
@@ -456,16 +508,24 @@ mod tests {
         let many: Vec<String> = (0..11).map(|i| format!("user{i}")).collect();
         let list = json!(many);
         assert!(normalize_handles(Some(&list), "allowed_x_handles").is_err());
-        assert!(normalize_handles(None, "allowed_x_handles").unwrap().is_empty());
+        assert!(normalize_handles(None, "allowed_x_handles")
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
     fn date_range_validation() {
         assert!(validate_date_range("", "").is_ok());
         assert!(validate_date_range("2026-01-01", "2026-01-31").is_ok());
-        assert!(validate_date_range("2026-01-31", "2026-01-01").is_err(), "inverted");
+        assert!(
+            validate_date_range("2026-01-31", "2026-01-01").is_err(),
+            "inverted"
+        );
         assert!(validate_date_range("not-a-date", "").is_err(), "malformed");
-        assert!(validate_date_range("2099-01-01", "").is_err(), "future from_date");
+        assert!(
+            validate_date_range("2099-01-01", "").is_err(),
+            "future from_date"
+        );
         // to_date in the future is allowed.
         assert!(validate_date_range("2026-01-01", "2099-01-01").is_ok());
     }

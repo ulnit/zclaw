@@ -76,9 +76,7 @@ pub fn proc_summary(pid: u32) -> Value {
     if let Some(state) = read_proc_field(pid, "State") {
         map.insert("state".into(), Value::String(state));
     }
-    if let Some(ppid) = read_proc_field(pid, "PPid")
-        .and_then(|raw| raw.parse::<u32>().ok())
-    {
+    if let Some(ppid) = read_proc_field(pid, "PPid").and_then(|raw| raw.parse::<u32>().ok()) {
         map.insert("ppid".into(), json!(ppid));
     }
     if let Some(uid) = read_proc_field(pid, "Uid") {

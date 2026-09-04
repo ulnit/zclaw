@@ -74,7 +74,10 @@ async fn run_python(ctx: &Arc<ToolContext>, code: &str) -> Result<serde_json::Va
     // Write the script to a temp file inside the sandbox dir.
     let sandbox = ctx.home.join("sandboxes");
     std::fs::create_dir_all(&sandbox).ok();
-    let script_path = sandbox.join(format!("exec-{}.py", &uuid::Uuid::new_v4().to_string()[..8]));
+    let script_path = sandbox.join(format!(
+        "exec-{}.py",
+        &uuid::Uuid::new_v4().to_string()[..8]
+    ));
     if let Err(e) = std::fs::write(&script_path, code) {
         return Ok(json!({"success": false, "error": format!("write script: {}", e)}));
     }
@@ -89,7 +92,9 @@ async fn run_python(ctx: &Arc<ToolContext>, code: &str) -> Result<serde_json::Va
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .env_clear()
-            .envs(crate::env_guard::scrubbed_env(&ctx.env_passthrough_snapshot()))
+            .envs(crate::env_guard::scrubbed_env(
+                &ctx.env_passthrough_snapshot(),
+            ))
             .output(),
     )
     .await;
@@ -99,8 +104,10 @@ async fn run_python(ctx: &Arc<ToolContext>, code: &str) -> Result<serde_json::Va
 
     match output {
         Ok(Ok(output)) => {
-            let stdout = crate::ansi::strip_ansi(&String::from_utf8_lossy(&output.stdout)).into_owned();
-            let stderr = crate::ansi::strip_ansi(&String::from_utf8_lossy(&output.stderr)).into_owned();
+            let stdout =
+                crate::ansi::strip_ansi(&String::from_utf8_lossy(&output.stdout)).into_owned();
+            let stderr =
+                crate::ansi::strip_ansi(&String::from_utf8_lossy(&output.stderr)).into_owned();
             Ok(json!({
                 "success": output.status.success(),
                 "exit_code": output.status.code().unwrap_or(-1),

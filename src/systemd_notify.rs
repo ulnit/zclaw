@@ -266,7 +266,10 @@ mod tests {
         let sock_path = dir.path().join("notify.sock");
         let receiver = std::os::unix::net::UnixDatagram::bind(&sock_path).unwrap();
         receiver.set_nonblocking(true).unwrap();
-        assert!(notify_to(sock_path.to_str().unwrap(), "READY=1\nSTATUS=testing"));
+        assert!(notify_to(
+            sock_path.to_str().unwrap(),
+            "READY=1\nSTATUS=testing"
+        ));
         let mut buf = [0u8; 128];
         let n = receiver.recv(&mut buf).unwrap();
         assert_eq!(&buf[..n], b"READY=1\nSTATUS=testing");

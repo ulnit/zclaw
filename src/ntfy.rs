@@ -117,8 +117,8 @@ pub struct ResolvedNtfy {
 impl NtfyConfig {
     pub fn resolve(&self) -> ResolvedNtfy {
         let topic = env_trim("NTFY_TOPIC").unwrap_or_else(|| self.topic.clone());
-        let publish_topic = env_trim("NTFY_PUBLISH_TOPIC")
-            .unwrap_or_else(|| self.publish_topic.clone());
+        let publish_topic =
+            env_trim("NTFY_PUBLISH_TOPIC").unwrap_or_else(|| self.publish_topic.clone());
         ResolvedNtfy {
             server: env_trim("NTFY_SERVER_URL")
                 .unwrap_or_else(|| self.server.clone())

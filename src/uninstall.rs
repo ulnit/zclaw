@@ -35,7 +35,9 @@ fn log_warn(msg: &str) {
 
 /// The running binary's canonical path.
 fn current_exe() -> Option<PathBuf> {
-    std::env::current_exe().ok().and_then(|p| p.canonicalize().ok())
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.canonicalize().ok())
 }
 
 /// Locate the ulnclaw code checkout that owns the running binary: walk up
@@ -247,7 +249,10 @@ pub fn print_dry_run(plan: &UninstallPlan) {
     }
     println!("  3. Remove wrapper symlinks:");
     for candidate in wrapper_candidates() {
-        println!("     - {} (only if it links into this install)", candidate.display());
+        println!(
+            "     - {} (only if it links into this install)",
+            candidate.display()
+        );
     }
     match &plan.project_root {
         Some(root) => println!("  4. Remove code checkout: {}", root.display()),
@@ -256,7 +261,10 @@ pub fn print_dry_run(plan: &UninstallPlan) {
     if plan.full {
         println!("  5. FULL: wipe config + data: {}", plan.home.display());
     } else {
-        println!("  5. Keep config + data in {} (--full to wipe)", plan.home.display());
+        println!(
+            "  5. Keep config + data in {} (--full to wipe)",
+            plan.home.display()
+        );
     }
 }
 
@@ -320,7 +328,10 @@ pub fn perform_uninstall(plan: &UninstallPlan) {
             match std::fs::remove_dir_all(&plan.home) {
                 Ok(()) => log_success(&format!("Removed {}", plan.home.display())),
                 Err(e) => {
-                    log_warn(&format!("Could not fully remove {}: {e}", plan.home.display()));
+                    log_warn(&format!(
+                        "Could not fully remove {}: {e}",
+                        plan.home.display()
+                    ));
                     log_info("You may need to manually remove it");
                 }
             }
@@ -361,7 +372,9 @@ mod tests {
     fn wrapper_candidates_include_standard_locations() {
         let candidates = wrapper_candidates();
         assert!(candidates.iter().any(|p| p.ends_with(".local/bin/ulnclaw")));
-        assert!(candidates.iter().any(|p| p == Path::new("/usr/local/bin/ulnclaw")));
+        assert!(candidates
+            .iter()
+            .any(|p| p == Path::new("/usr/local/bin/ulnclaw")));
     }
 
     #[test]

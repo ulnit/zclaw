@@ -80,7 +80,11 @@ pub fn snapshot(key: &str) -> Option<ActivitySnapshot> {
 /// no usable stamp — callers must not fall back to turn-start or
 /// pending-inbound clocks (hermes #72039 single progress source).
 pub fn seconds_since(key: &str, now: f64) -> Option<f64> {
-    let at = registry().lock().unwrap().get(key).map(|s| s.last_activity_at)?;
+    let at = registry()
+        .lock()
+        .unwrap()
+        .get(key)
+        .map(|s| s.last_activity_at)?;
     if !at.is_finite() {
         return None;
     }
@@ -120,7 +124,10 @@ mod tests {
 
     #[test]
     fn bounds_descriptions_to_the_shared_budget() {
-        assert_eq!(bound_activity_description("  tool call: read_file  "), "tool call: read_file");
+        assert_eq!(
+            bound_activity_description("  tool call: read_file  "),
+            "tool call: read_file"
+        );
         let long = "x".repeat(300);
         let bounded = bound_activity_description(&long);
         assert_eq!(bounded.chars().count(), ACTIVITY_DESCRIPTION_MAX);
@@ -132,7 +139,12 @@ mod tests {
         let _guard = crate::models_dev::test_env_lock();
         clear_for_tests();
         assert!(snapshot("platform-test-chat-1").is_none());
-        touch_at("platform-test-chat-1", "turn started", "gateway.turn", 1000.0);
+        touch_at(
+            "platform-test-chat-1",
+            "turn started",
+            "gateway.turn",
+            1000.0,
+        );
         let snap = snapshot("platform-test-chat-1").unwrap();
         assert_eq!(snap.last_activity_at, 1000.0);
         assert_eq!(snap.description, "turn started");
@@ -143,7 +155,10 @@ mod tests {
         assert_eq!(seconds_since("platform-test-ghost", 1000.0), None);
         // Blank provenance normalizes to unknown.
         touch_at("platform-test-chat-1", "x", "  ", 1001.0);
-        assert_eq!(snapshot("platform-test-chat-1").unwrap().provenance, "unknown");
+        assert_eq!(
+            snapshot("platform-test-chat-1").unwrap().provenance,
+            "unknown"
+        );
         remove("platform-test-chat-1");
         assert!(snapshot("platform-test-chat-1").is_none());
         clear_for_tests();

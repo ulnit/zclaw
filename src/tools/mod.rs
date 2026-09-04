@@ -5,10 +5,10 @@
 //! requirements for dangerous operations.
 
 pub mod approval;
-pub mod fuzzy;
-pub mod hints;
 pub mod builtin;
 pub mod context;
+pub mod fuzzy;
+pub mod hints;
 
 pub use context::ToolContext;
 
@@ -104,9 +104,9 @@ impl ToolResult {
     }
 
     pub fn to_value(&self) -> serde_json::Value {
-        serde_json::to_value(self).unwrap_or_else(|_| {
-            serde_json::json!({"success": false, "error": "Failed to serialize result"})
-        })
+        serde_json::to_value(self).unwrap_or_else(
+            |_| serde_json::json!({"success": false, "error": "Failed to serialize result"}),
+        )
     }
 }
 
@@ -139,10 +139,7 @@ impl ToolRegistry {
         let name = tool.definition.name.clone();
         let toolset = tool.toolset.clone();
 
-        self.toolsets
-            .entry(toolset)
-            .or_default()
-            .push(name.clone());
+        self.toolsets.entry(toolset).or_default().push(name.clone());
         self.tools.insert(name.clone(), tool);
         debug!("Registered tool: {}", name);
     }

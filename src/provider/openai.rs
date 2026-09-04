@@ -7,13 +7,13 @@ use super::{
     FunctionCall, Message, Provider, ProviderRequest, ProviderResponse, ProviderStream, ToolCall,
     Usage,
 };
-use futures::TryStreamExt;
 use crate::error::{AgentError, Result};
 use crate::tools::ToolDefinition;
 use async_trait::async_trait;
+use futures::TryStreamExt;
 use reqwest::Client;
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::debug;
 
 /// OpenAI-compatible provider
@@ -71,10 +71,7 @@ impl OpenAiProvider {
 
     /// Statuses worth retrying (rate limits + transient server errors).
     fn retriable_status(status: reqwest::StatusCode) -> bool {
-        matches!(
-            status.as_u16(),
-            408 | 429 | 500 | 502 | 503 | 504
-        )
+        matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504)
     }
 
     /// Exponential backoff with a small jitter: 500ms, 1s, 2s, ... capped.
@@ -90,7 +87,11 @@ impl OpenAiProvider {
     /// POST the request body, retrying transient failures (network errors,
     /// 429/5xx).  Returns the successful response; non-retriable HTTP errors
     /// are parsed into `AgentError::Provider`.
-    async fn send_api_request(&self, url: &str, api_request: &ApiRequest) -> Result<reqwest::Response> {
+    async fn send_api_request(
+        &self,
+        url: &str,
+        api_request: &ApiRequest,
+    ) -> Result<reqwest::Response> {
         let mut last_error: Option<AgentError> = None;
         for attempt in 0..=self.max_retries {
             if attempt > 0 {
@@ -100,11 +101,17 @@ impl OpenAiProvider {
                     attempt,
                     self.max_retries,
                     delay,
-                    last_error.as_ref().map(|e| e.to_string()).unwrap_or_default()
+                    last_error
+                        .as_ref()
+                        .map(|e| e.to_string())
+                        .unwrap_or_default()
                 );
                 tokio::time::sleep(delay).await;
             }
-            let mut req_builder = self.client.post(url).header("Content-Type", "application/json");
+            let mut req_builder = self
+                .client
+                .post(url)
+                .header("Content-Type", "application/json");
             if let Some(ref key) = self.api_key {
                 req_builder = req_builder.bearer_auth(key);
             }
@@ -125,12 +132,19 @@ impl OpenAiProvider {
                 .map(|api_err| api_err.error.message)
                 .unwrap_or_else(|_| error_body.chars().take(500).collect::<String>());
             if Self::retriable_status(status) && attempt < self.max_retries {
-                last_error = Some(AgentError::Provider(format!("API error ({}): {}", status, message)));
+                last_error = Some(AgentError::Provider(format!(
+                    "API error ({}): {}",
+                    status, message
+                )));
                 continue;
             }
-            return Err(AgentError::Provider(format!("API error ({}): {}", status, message)));
+            return Err(AgentError::Provider(format!(
+                "API error ({}): {}",
+                status, message
+            )));
         }
-        Err(last_error.unwrap_or_else(|| AgentError::Provider("request failed after retries".into())))
+        Err(last_error
+            .unwrap_or_else(|| AgentError::Provider("request failed after retries".into())))
     }
 }
 
@@ -530,7 +544,8 @@ impl Provider for OpenAiProvider {
         let url = self.api_url();
         debug!("OpenAI API call to: {}", url);
 
-        let mut api_messages: Vec<ApiMessage> = request.messages.iter().map(message_to_api).collect();
+        let mut api_messages: Vec<ApiMessage> =
+            request.messages.iter().map(message_to_api).collect();
         if let Some(ref images) = request.images {
             attach_images(&mut api_messages, images);
         }
@@ -602,7 +617,8 @@ impl Provider for OpenAiProvider {
         let url = self.api_url();
         debug!("OpenAI streaming call to: {}", url);
 
-        let mut api_messages: Vec<ApiMessage> = request.messages.iter().map(message_to_api).collect();
+        let mut api_messages: Vec<ApiMessage> =
+            request.messages.iter().map(message_to_api).collect();
         if let Some(ref images) = request.images {
             attach_images(&mut api_messages, images);
         }
@@ -690,7 +706,11 @@ impl Provider for OpenAiProvider {
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
-            return Err(AgentError::provider(format!("vision API {}: {}", status, &text[..text.len().min(300)])));
+            return Err(AgentError::provider(format!(
+                "vision API {}: {}",
+                status,
+                &text[..text.len().min(300)]
+            )));
         }
         let payload: serde_json::Value = response
             .json()
@@ -751,12 +771,9 @@ impl Provider for OpenAiProvider {
     }
 }
 
-
 /// Incremental SSE line reader over a byte stream.
 struct SseLineReader {
-    stream: std::pin::Pin<
-        Box<dyn futures::Stream<Item = reqwest::Result<bytes::Bytes>> + Send>,
-    >,
+    stream: std::pin::Pin<Box<dyn futures::Stream<Item = reqwest::Result<bytes::Bytes>> + Send>>,
     buf: Vec<u8>,
     eof: bool,
 }
@@ -846,11 +863,19 @@ mod streaming_tests {
     #[test]
     fn test_retriable_status() {
         use reqwest::StatusCode;
-        assert!(OpenAiProvider::retriable_status(StatusCode::TOO_MANY_REQUESTS));
-        assert!(OpenAiProvider::retriable_status(StatusCode::INTERNAL_SERVER_ERROR));
+        assert!(OpenAiProvider::retriable_status(
+            StatusCode::TOO_MANY_REQUESTS
+        ));
+        assert!(OpenAiProvider::retriable_status(
+            StatusCode::INTERNAL_SERVER_ERROR
+        ));
         assert!(OpenAiProvider::retriable_status(StatusCode::BAD_GATEWAY));
-        assert!(OpenAiProvider::retriable_status(StatusCode::SERVICE_UNAVAILABLE));
-        assert!(OpenAiProvider::retriable_status(StatusCode::GATEWAY_TIMEOUT));
+        assert!(OpenAiProvider::retriable_status(
+            StatusCode::SERVICE_UNAVAILABLE
+        ));
+        assert!(OpenAiProvider::retriable_status(
+            StatusCode::GATEWAY_TIMEOUT
+        ));
         assert!(!OpenAiProvider::retriable_status(StatusCode::BAD_REQUEST));
         assert!(!OpenAiProvider::retriable_status(StatusCode::UNAUTHORIZED));
         assert!(!OpenAiProvider::retriable_status(StatusCode::NOT_FOUND));
@@ -910,9 +935,9 @@ mod streaming_tests {
             temperature: None,
             stream: false,
             stop: None,
-        
-        images: None,
-};
+
+            images: None,
+        };
         let response = provider.chat_completion(request).await.unwrap();
         assert_eq!(response.content.as_deref(), Some("recovered"));
         assert_eq!(attempts.load(Ordering::SeqCst), 2);
@@ -959,9 +984,9 @@ mod streaming_tests {
             temperature: None,
             stream: false,
             stop: None,
-        
-        images: None,
-};
+
+            images: None,
+        };
         let err = provider.chat_completion(request).await.unwrap_err();
         assert!(err.to_string().contains("429"), "got: {}", err);
         assert_eq!(attempts.load(Ordering::SeqCst), 2); // initial + 1 retry

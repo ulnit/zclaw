@@ -159,8 +159,7 @@ pub fn parse_client_secret(json_str: &str) -> Result<ClientSecret, String> {
         .get("installed")
         .or_else(|| data.get("web"))
         .ok_or_else(|| {
-            "not a Google OAuth client secret file (missing 'installed' or 'web' key)"
-                .to_string()
+            "not a Google OAuth client secret file (missing 'installed' or 'web' key)".to_string()
         })?;
     let client_id = block
         .get("client_id")
@@ -270,7 +269,9 @@ pub fn start_auth(home: &Path, email: Option<&str>) -> Result<String, String> {
 
 /// Accept a raw auth code OR the full failed-redirect URL (hermes
 /// `_extract_code_and_state`). Returns `(code, state?, granted_scopes?)`.
-pub fn extract_code_and_state(code_or_url: &str) -> Result<(String, Option<String>, Option<String>), String> {
+pub fn extract_code_and_state(
+    code_or_url: &str,
+) -> Result<(String, Option<String>, Option<String>), String> {
     if !code_or_url.starts_with("http") {
         return Ok((code_or_url.trim().to_string(), None, None));
     }
@@ -298,7 +299,11 @@ fn load_pending(home: &Path, email: Option<&str>) -> Result<Value, String> {
         .map_err(|_| "no pending OAuth session found — run the auth-url step first".to_string())?;
     let data: Value =
         serde_json::from_str(&body).map_err(|e| format!("cannot read pending session: {e}"))?;
-    if data.get("state").and_then(|v| v.as_str()).unwrap_or("").is_empty()
+    if data
+        .get("state")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .is_empty()
         || data
             .get("code_verifier")
             .and_then(|v| v.as_str())
@@ -426,9 +431,7 @@ pub async fn exchange_code(
     let (code, returned_state, granted_scope) = extract_code_and_state(code_or_url)?;
     if let Some(returned_state) = &returned_state {
         if *returned_state != pending_state {
-            return Err(
-                "OAuth state mismatch — start a fresh session and retry".to_string(),
-            );
+            return Err("OAuth state mismatch — start a fresh session and retry".to_string());
         }
     }
     let form = [
@@ -533,7 +536,11 @@ pub async fn refresh_token(
         .unwrap_or(0);
     let mut refreshed = token.clone();
     refreshed.access_token = access.to_string();
-    refreshed.expires_at = now + body.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(3600);
+    refreshed.expires_at = now
+        + body
+            .get("expires_in")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(3600);
     if let Some(scope) = body.get("scope").and_then(|v| v.as_str()) {
         if !scope.is_empty() {
             refreshed.scope = scope.to_string();
@@ -588,10 +595,15 @@ pub async fn revoke(home: &Path, client: &reqwest::Client, email: Option<&str>) 
                 outcome.push_str("revoked remote grant; ");
             }
             Ok(resp) => {
-                outcome.push_str(&format!("remote revoke HTTP {} (deleting local token anyway); ", resp.status()));
+                outcome.push_str(&format!(
+                    "remote revoke HTTP {} (deleting local token anyway); ",
+                    resp.status()
+                ));
             }
             Err(e) => {
-                outcome.push_str(&format!("remote revoke failed: {e} (deleting local token anyway); "));
+                outcome.push_str(&format!(
+                    "remote revoke failed: {e} (deleting local token anyway); "
+                ));
             }
         }
     }
@@ -608,7 +620,10 @@ mod tests {
 
     #[test]
     fn email_sanitization() {
-        assert_eq!(sanitize_email("Ramon.Fernandez@NTTData.com"), "ramon.fernandez@nttdata.com");
+        assert_eq!(
+            sanitize_email("Ramon.Fernandez@NTTData.com"),
+            "ramon.fernandez@nttdata.com"
+        );
         assert_eq!(sanitize_email("a+b@c.com"), "a_b@c.com");
         assert_eq!(sanitize_email("  "), "_unknown_");
         assert_eq!(sanitize_email("weird!#$%x@y.z"), "weird____x@y.z");
@@ -676,7 +691,7 @@ mod tests {
         let (state, verifier, challenge) = generate_pkce();
         assert_eq!(state.len(), 32); // 16 bytes hex
         assert!(verifier.len() >= 43); // RFC 7636 minimum
-        // challenge == base64url(sha256(verifier))
+                                       // challenge == base64url(sha256(verifier))
         let expected = base64_url_nopad(&Sha256::digest(verifier.as_bytes()));
         assert_eq!(challenge, expected);
         assert!(!challenge.contains('='));
@@ -693,9 +708,11 @@ mod tests {
         assert!(url.contains("state=st4te"));
         assert!(url.contains("code_challenge=ch4llenge"));
         assert!(url.contains("code_challenge_method=S256"));
-        let scope_encoded: String = url::form_urlencoded::byte_serialize(USER_AUTH_SCOPE.as_bytes()).collect();
+        let scope_encoded: String =
+            url::form_urlencoded::byte_serialize(USER_AUTH_SCOPE.as_bytes()).collect();
         assert!(url.contains(&scope_encoded));
-        let redirect_encoded: String = url::form_urlencoded::byte_serialize(REDIRECT_URI.as_bytes()).collect();
+        let redirect_encoded: String =
+            url::form_urlencoded::byte_serialize(REDIRECT_URI.as_bytes()).collect();
         assert!(url.contains(&redirect_encoded));
     }
 
@@ -704,13 +721,18 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         assert!(start_auth(temp.path(), Some("a@b.c")).is_err());
         let src = temp.path().join("cs.json");
-        std::fs::write(&src, r#"{"installed":{"client_id":"cid","client_secret":"cs"}}"#).unwrap();
+        std::fs::write(
+            &src,
+            r#"{"installed":{"client_id":"cid","client_secret":"cs"}}"#,
+        )
+        .unwrap();
         store_client_secret(temp.path(), &src).unwrap();
         let url = start_auth(temp.path(), Some("a@b.c")).unwrap();
         assert!(url.contains("client_id=cid"));
-        let pending: Value =
-            serde_json::from_str(&std::fs::read_to_string(pending_path(temp.path(), Some("a@b.c"))).unwrap())
-                .unwrap();
+        let pending: Value = serde_json::from_str(
+            &std::fs::read_to_string(pending_path(temp.path(), Some("a@b.c"))).unwrap(),
+        )
+        .unwrap();
         assert!(!pending["state"].as_str().unwrap().is_empty());
         assert!(!pending["code_verifier"].as_str().unwrap().is_empty());
         assert_eq!(pending["redirect_uri"], REDIRECT_URI);
@@ -773,7 +795,10 @@ mod tests {
         assert_eq!(loaded.access_token, "at");
         assert_eq!(loaded.refresh_token, "rt");
         assert_eq!(loaded.expires_at, 123);
-        assert_eq!(list_authorized_emails(temp.path()), vec!["alice@x.y".to_string()]);
+        assert_eq!(
+            list_authorized_emails(temp.path()),
+            vec!["alice@x.y".to_string()]
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -790,8 +815,14 @@ mod tests {
     async fn load_missing_credentials_is_none() {
         let temp = tempfile::tempdir().expect("tempdir");
         let client = reqwest::Client::new();
-        assert!(load_user_credentials(temp.path(), &client, Some("nobody@x.y")).await.is_none());
-        assert!(load_user_credentials(temp.path(), &client, None).await.is_none());
+        assert!(
+            load_user_credentials(temp.path(), &client, Some("nobody@x.y"))
+                .await
+                .is_none()
+        );
+        assert!(load_user_credentials(temp.path(), &client, None)
+            .await
+            .is_none());
     }
 
     #[tokio::test]

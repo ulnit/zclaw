@@ -286,8 +286,14 @@ mod tests {
 
     #[test]
     fn interpret_curl_codes() {
-        assert_eq!(interpret_exit_code("curl https://x", 6), Some("Could not resolve host"));
-        assert_eq!(interpret_exit_code("curl https://x", 28), Some("Operation timed out"));
+        assert_eq!(
+            interpret_exit_code("curl https://x", 6),
+            Some("Could not resolve host")
+        );
+        assert_eq!(
+            interpret_exit_code("curl https://x", 28),
+            Some("Operation timed out")
+        );
         assert_eq!(interpret_exit_code("curl https://x", 0), None);
         assert_eq!(interpret_exit_code("curl https://x", 5), None);
     }
@@ -330,7 +336,8 @@ mod tests {
 
     #[test]
     fn annotate_module_not_found() {
-        let out = "Traceback (most recent call last):\nModuleNotFoundError: No module named 'requests'";
+        let out =
+            "Traceback (most recent call last):\nModuleNotFoundError: No module named 'requests'";
         let hint = annotate_failure("python3 a.py", 1, out).unwrap();
         assert!(hint.contains("requests"), "got: {hint}");
         assert!(hint.contains("venv"), "got: {hint}");
@@ -363,7 +370,8 @@ mod tests {
 
     #[test]
     fn annotate_permission_denied() {
-        let hint = annotate_failure("cat /etc/shadow", 1, "cat: /etc/shadow: Permission denied").unwrap();
+        let hint =
+            annotate_failure("cat /etc/shadow", 1, "cat: /etc/shadow: Permission denied").unwrap();
         assert!(hint.contains("Permission denied"), "got: {hint}");
     }
 

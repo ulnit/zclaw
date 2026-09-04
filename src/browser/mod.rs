@@ -446,7 +446,8 @@ impl BrowserSession {
 
     /// Evaluate JS in the page.
     pub async fn evaluate(&self, expression: &str, timeout_ms: Option<u64>) -> Result<Value> {
-        let mut params = json!({"expression": expression, "returnByValue": true, "awaitPromise": true});
+        let mut params =
+            json!({"expression": expression, "returnByValue": true, "awaitPromise": true});
         if let Some(timeout) = timeout_ms {
             params["timeout"] = json!(timeout);
         }
@@ -468,19 +469,41 @@ impl BrowserSession {
             .client
             .call("Accessibility.getFullAXTree", json!({}))
             .await?;
-        let nodes = tree.get("nodes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+        let nodes = tree
+            .get("nodes")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
 
         const INTERACTIVE: &[&str] = &[
-            "link", "button", "textbox", "checkbox", "radio", "combobox", "menuitem", "tab",
-            "switch", "searchbox", "slider", "spinbutton", "option", "treeitem", "cell",
-            "menuitemcheckbox", "menuitemradio", "listbox",
+            "link",
+            "button",
+            "textbox",
+            "checkbox",
+            "radio",
+            "combobox",
+            "menuitem",
+            "tab",
+            "switch",
+            "searchbox",
+            "slider",
+            "spinbutton",
+            "option",
+            "treeitem",
+            "cell",
+            "menuitemcheckbox",
+            "menuitemradio",
+            "listbox",
         ];
 
         let mut lines = Vec::new();
         let mut refs = Vec::new();
         let mut next_ref = 1usize;
         for node in &nodes {
-            let ignored = node.get("ignored").and_then(|v| v.as_bool()).unwrap_or(false);
+            let ignored = node
+                .get("ignored")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             if ignored {
                 continue;
             }
@@ -726,7 +749,9 @@ impl BrowserSession {
         if let Some(text) = prompt_text {
             params["promptText"] = json!(text);
         }
-        self.client.call("Page.handleJavaScriptDialog", params).await?;
+        self.client
+            .call("Page.handleJavaScriptDialog", params)
+            .await?;
         Ok(json!({"handled": true, "accept": accept}))
     }
 }
@@ -873,7 +898,10 @@ pub async fn launch_managed_browser() -> Result<String> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .map_err(|e| AgentError::Tool(format!("bind ephemeral port: {}", e)))?;
-        listener.local_addr().map(|a| a.port()).map_err(|e| AgentError::Tool(e.to_string()))?
+        listener
+            .local_addr()
+            .map(|a| a.port())
+            .map_err(|e| AgentError::Tool(e.to_string()))?
     };
 
     let user_data_dir = std::env::temp_dir().join(format!("ulnclaw-browser-{}", port));
@@ -905,9 +933,7 @@ pub async fn launch_managed_browser() -> Result<String> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|e| {
-            AgentError::Tool(format!("launch {}: {}", binary.display(), e))
-        })?;
+        .map_err(|e| AgentError::Tool(format!("launch {}: {}", binary.display(), e)))?;
 
     let http_base = format!("http://127.0.0.1:{}", port);
     // Wait for the DevTools endpoint to come up.
@@ -935,7 +961,11 @@ pub async fn launch_managed_browser() -> Result<String> {
         let mut slot = managed_slot().write().await;
         *slot = Some(managed.clone());
     }
-    tracing::info!("managed browser launched: {} on port {}", binary.display(), port);
+    tracing::info!(
+        "managed browser launched: {} on port {}",
+        binary.display(),
+        port
+    );
     Ok(http_base)
 }
 
@@ -960,7 +990,8 @@ pub fn is_auto_mode(raw: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 fn global_session_slot() -> &'static RwLock<Option<Arc<BrowserSession>>> {
-    static SLOT: std::sync::OnceLock<RwLock<Option<Arc<BrowserSession>>>> = std::sync::OnceLock::new();
+    static SLOT: std::sync::OnceLock<RwLock<Option<Arc<BrowserSession>>>> =
+        std::sync::OnceLock::new();
     SLOT.get_or_init(|| RwLock::new(None))
 }
 
@@ -968,7 +999,8 @@ fn global_session_slot() -> &'static RwLock<Option<Arc<BrowserSession>>> {
 // BROWSER_CDP_URL for the process lifetime; the gateway exposes the same
 // via POST /v1/browser/connect. Precedence: live override > env var.
 fn override_slot() -> &'static std::sync::RwLock<Option<String>> {
-    static SLOT: std::sync::OnceLock<std::sync::RwLock<Option<String>>> = std::sync::OnceLock::new();
+    static SLOT: std::sync::OnceLock<std::sync::RwLock<Option<String>>> =
+        std::sync::OnceLock::new();
     SLOT.get_or_init(|| std::sync::RwLock::new(None))
 }
 
@@ -1106,8 +1138,12 @@ mod tests {
             let (socket, _) = listener.accept().await.unwrap();
             let mut ws = tokio_tungstenite::accept_async(socket).await.unwrap();
             while let Some(Ok(message)) = ws.next().await {
-                let WsMessage::Text(text) = message else { continue };
-                let Ok(value) = serde_json::from_str::<Value>(&text) else { continue };
+                let WsMessage::Text(text) = message else {
+                    continue;
+                };
+                let Ok(value) = serde_json::from_str::<Value>(&text) else {
+                    continue;
+                };
                 let Some(id) = value.get("id") else { continue };
                 let method = value.get("method").and_then(|v| v.as_str()).unwrap_or("");
                 let result = match method {
@@ -1129,16 +1165,24 @@ mod tests {
             }
         });
 
-        let client = CdpClient::connect(&format!("ws://{}/", addr)).await.unwrap();
+        let client = CdpClient::connect(&format!("ws://{}/", addr))
+            .await
+            .unwrap();
 
         let evaluated = client
             .call("Runtime.evaluate", json!({"expression": "document.title"}))
             .await
             .unwrap();
-        assert_eq!(evaluated.pointer("/result/value").and_then(|v| v.as_str()), Some("mock-title"));
+        assert_eq!(
+            evaluated.pointer("/result/value").and_then(|v| v.as_str()),
+            Some("mock-title")
+        );
 
         // Snapshot parsing through a session-like flow (refs mapping).
-        let tree = client.call("Accessibility.getFullAXTree", json!({})).await.unwrap();
+        let tree = client
+            .call("Accessibility.getFullAXTree", json!({}))
+            .await
+            .unwrap();
         let nodes = tree.get("nodes").and_then(|v| v.as_array()).unwrap();
         let interactive: Vec<&Value> = nodes
             .iter()
@@ -1182,7 +1226,9 @@ mod tests {
             drop(ws);
         });
 
-        let client = CdpClient::connect(&format!("ws://{}/", addr)).await.unwrap();
+        let client = CdpClient::connect(&format!("ws://{}/", addr))
+            .await
+            .unwrap();
         assert!(client.is_connected());
 
         // Wait for the read loop to observe the close.

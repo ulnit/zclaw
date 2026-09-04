@@ -251,8 +251,11 @@ pub fn drain_notification_suppressed(home: Option<&Path>) -> bool {
 
 fn atomic_json_write(path: &Path, value: &Value) -> Result<(), String> {
     let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, serde_json::to_string_pretty(value).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
+    std::fs::write(
+        &tmp,
+        serde_json::to_string_pretty(value).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
     #[cfg(unix)]
     {
@@ -277,13 +280,17 @@ pub async fn run_drain_watcher(
         if drain_requested(None) {
             if !state.restart.load(std::sync::atomic::Ordering::SeqCst) {
                 tracing::warn!("[drain] external drain marker active — refusing new runs");
-                state.restart.store(true, std::sync::atomic::Ordering::SeqCst);
+                state
+                    .restart
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
             }
             flipped_by_marker = true;
         } else if flipped_by_marker {
             if state.restart.load(std::sync::atomic::Ordering::SeqCst) {
                 tracing::info!("[drain] drain marker removed — accepting runs again");
-                state.restart.store(false, std::sync::atomic::Ordering::SeqCst);
+                state
+                    .restart
+                    .store(false, std::sync::atomic::Ordering::SeqCst);
             }
             flipped_by_marker = false;
         }
@@ -413,8 +420,7 @@ mod tests {
     fn test_gateway_state() -> std::sync::Arc<crate::gateway::GatewayState> {
         let temp = tempfile::tempdir().expect("tempdir");
         let store = std::sync::Arc::new(
-            crate::SqliteSessionStore::open(temp.path().join("state.db"))
-                .expect("store opens"),
+            crate::SqliteSessionStore::open(temp.path().join("state.db")).expect("store opens"),
         );
         std::mem::forget(temp);
         let provider = std::sync::Arc::new(
@@ -425,8 +431,8 @@ mod tests {
                 .build()
                 .expect("provider builds"),
         );
-        let agent = crate::agent::Agent::new(provider, crate::tools::ToolRegistry::new())
-            .with_store(store);
+        let agent =
+            crate::agent::Agent::new(provider, crate::tools::ToolRegistry::new()).with_store(store);
         crate::gateway::GatewayState::new(
             std::sync::Arc::new(agent),
             "test-model".into(),

@@ -162,52 +162,48 @@ pub fn global_default(setting: DisplaySetting) -> Option<DisplayValue> {
 pub fn platform_default(platform: &str, setting: DisplaySetting) -> Option<DisplayValue> {
     let key = platform_key(platform);
     match key.as_str() {
-            // Tier 1 — full edit support, personal/team use.
-            // Telegram is usually a mobile inbox: keep tool_progress quiet
-            // and skip the verbose busy-ack counter, but DO surface real
-            // mid-turn assistant commentary and periodic heartbeats so the
-            // user has signal between turn start and final answer.
-            "telegram" => match setting {
-                DisplaySetting::ToolProgress => return Some(DisplayValue::Text("off".into())),
-                DisplaySetting::BusyAckDetail => return Some(DisplayValue::Flag(false)),
-                other => Tier::High.defaults(other),
-            },
-            // Discord has a native "subtext" primitive (-# small grey
-            // text) that reads as metadata rather than content, so
-            // reasoning summaries default to it here.
-            "discord" => match setting {
-                DisplaySetting::ReasoningStyle => {
-                    return Some(DisplayValue::Text("subtext".into()))
-                }
-                other => Tier::High.defaults(other),
-            },
-            // Tier 2 — Slack: tool_progress off by default — Bolt posts
-            // cannot be edited like CLI; "new"/"all" spam permanent lines
-            // in channels (hermes-agent#14663).
-            "slack" => match setting {
-                DisplaySetting::ToolProgress => return Some(DisplayValue::Text("off".into())),
-                DisplaySetting::LongRunningNotifications => {
-                    return Some(DisplayValue::Flag(false))
-                }
-                DisplaySetting::BusyAckDetail => return Some(DisplayValue::Flag(false)),
-                other => Tier::Medium.defaults(other),
-            },
-            "mattermost" | "matrix" | "feishu" => Tier::Medium.defaults(setting),
-            // WhatsApp's Baileys bridge supports /edit → tier 2.
-            "whatsapp" => Tier::Medium.defaults(setting),
-            // Tier 3 — no edit support, progress messages are permanent.
-            "signal" => Tier::Low.defaults(setting),
-            "weixin" | "wecom" | "wecom_callback" | "dingtalk" => Tier::Low.defaults(setting),
-            // Tier 4 — batch or non-interactive delivery.
-            "email" | "sms" | "webhook" | "homeassistant" => Tier::Minimal.defaults(setting),
-            // OpenAI-compatible API surface: full features, no previews.
-            "api_server" => match setting {
-                DisplaySetting::ToolPreviewLength => return Some(DisplayValue::Number(0)),
-                other => Tier::High.defaults(other),
-            },
-            // Unlisted platforms inherit the global defaults (hermes
-            // parity).
-            _ => None,
+        // Tier 1 — full edit support, personal/team use.
+        // Telegram is usually a mobile inbox: keep tool_progress quiet
+        // and skip the verbose busy-ack counter, but DO surface real
+        // mid-turn assistant commentary and periodic heartbeats so the
+        // user has signal between turn start and final answer.
+        "telegram" => match setting {
+            DisplaySetting::ToolProgress => return Some(DisplayValue::Text("off".into())),
+            DisplaySetting::BusyAckDetail => return Some(DisplayValue::Flag(false)),
+            other => Tier::High.defaults(other),
+        },
+        // Discord has a native "subtext" primitive (-# small grey
+        // text) that reads as metadata rather than content, so
+        // reasoning summaries default to it here.
+        "discord" => match setting {
+            DisplaySetting::ReasoningStyle => return Some(DisplayValue::Text("subtext".into())),
+            other => Tier::High.defaults(other),
+        },
+        // Tier 2 — Slack: tool_progress off by default — Bolt posts
+        // cannot be edited like CLI; "new"/"all" spam permanent lines
+        // in channels (hermes-agent#14663).
+        "slack" => match setting {
+            DisplaySetting::ToolProgress => return Some(DisplayValue::Text("off".into())),
+            DisplaySetting::LongRunningNotifications => return Some(DisplayValue::Flag(false)),
+            DisplaySetting::BusyAckDetail => return Some(DisplayValue::Flag(false)),
+            other => Tier::Medium.defaults(other),
+        },
+        "mattermost" | "matrix" | "feishu" => Tier::Medium.defaults(setting),
+        // WhatsApp's Baileys bridge supports /edit → tier 2.
+        "whatsapp" => Tier::Medium.defaults(setting),
+        // Tier 3 — no edit support, progress messages are permanent.
+        "signal" => Tier::Low.defaults(setting),
+        "weixin" | "wecom" | "wecom_callback" | "dingtalk" => Tier::Low.defaults(setting),
+        // Tier 4 — batch or non-interactive delivery.
+        "email" | "sms" | "webhook" | "homeassistant" => Tier::Minimal.defaults(setting),
+        // OpenAI-compatible API surface: full features, no previews.
+        "api_server" => match setting {
+            DisplaySetting::ToolPreviewLength => return Some(DisplayValue::Number(0)),
+            other => Tier::High.defaults(other),
+        },
+        // Unlisted platforms inherit the global defaults (hermes
+        // parity).
+        _ => None,
     }
 }
 
@@ -280,9 +276,7 @@ fn override_value(
             DisplayValue::Text(override_cfg.tool_progress_grouping.clone()?)
         }
         DisplaySetting::ShowReasoning => DisplayValue::Flag(override_cfg.show_reasoning?),
-        DisplaySetting::ReasoningStyle => {
-            DisplayValue::Text(override_cfg.reasoning_style.clone()?)
-        }
+        DisplaySetting::ReasoningStyle => DisplayValue::Text(override_cfg.reasoning_style.clone()?),
         DisplaySetting::ToolPreviewLength => {
             DisplayValue::Number(override_cfg.tool_preview_length?)
         }
@@ -290,9 +284,11 @@ fn override_value(
         DisplaySetting::InterimAssistantMessages => {
             DisplayValue::Flag(override_cfg.interim_assistant_messages?)
         }
-        DisplaySetting::LongRunningNotifications => match override_cfg.long_running_notifications.as_ref()? {
-            crate::config::BoolOrMode::Flag(flag) => DisplayValue::Flag(*flag),
-            crate::config::BoolOrMode::Mode(mode) => DisplayValue::Text(mode.clone()),
+        DisplaySetting::LongRunningNotifications => {
+            match override_cfg.long_running_notifications.as_ref()? {
+                crate::config::BoolOrMode::Flag(flag) => DisplayValue::Flag(*flag),
+                crate::config::BoolOrMode::Mode(mode) => DisplayValue::Text(mode.clone()),
+            }
         }
         DisplaySetting::BusyAckDetail => DisplayValue::Flag(override_cfg.busy_ack_detail?),
         DisplaySetting::BusySteerAckEnabled => {
@@ -316,9 +312,11 @@ fn global_value(display: &DisplayConfig, setting: DisplaySetting) -> Option<Disp
         DisplaySetting::InterimAssistantMessages => {
             DisplayValue::Flag(display.interim_assistant_messages?)
         }
-        DisplaySetting::LongRunningNotifications => match display.long_running_notifications.as_ref()? {
-            crate::config::BoolOrMode::Flag(flag) => DisplayValue::Flag(*flag),
-            crate::config::BoolOrMode::Mode(mode) => DisplayValue::Text(mode.clone()),
+        DisplaySetting::LongRunningNotifications => {
+            match display.long_running_notifications.as_ref()? {
+                crate::config::BoolOrMode::Flag(flag) => DisplayValue::Flag(*flag),
+                crate::config::BoolOrMode::Mode(mode) => DisplayValue::Text(mode.clone()),
+            }
         }
         DisplaySetting::BusyAckDetail => DisplayValue::Flag(display.busy_ack_detail?),
         DisplaySetting::BusySteerAckEnabled => DisplayValue::Flag(display.busy_steer_ack_enabled?),
@@ -458,21 +456,33 @@ pub fn resolve_or(
 
 /// Boolean convenience accessor (normalized; missing = built-in default,
 /// unknown platform = global default).
-pub fn resolve_flag(display: &DisplayConfig, platform: Option<&str>, setting: DisplaySetting) -> bool {
+pub fn resolve_flag(
+    display: &DisplayConfig,
+    platform: Option<&str>,
+    setting: DisplaySetting,
+) -> bool {
     resolve(display, platform, setting)
         .and_then(|value| value.as_flag())
         .unwrap_or(false)
 }
 
 /// Text convenience accessor.
-pub fn resolve_text(display: &DisplayConfig, platform: Option<&str>, setting: DisplaySetting) -> String {
+pub fn resolve_text(
+    display: &DisplayConfig,
+    platform: Option<&str>,
+    setting: DisplaySetting,
+) -> String {
     resolve(display, platform, setting)
         .map(|value| value.as_text())
         .unwrap_or_default()
 }
 
 /// Integer convenience accessor.
-pub fn resolve_int(display: &DisplayConfig, platform: Option<&str>, setting: DisplaySetting) -> i64 {
+pub fn resolve_int(
+    display: &DisplayConfig,
+    platform: Option<&str>,
+    setting: DisplaySetting,
+) -> i64 {
     resolve(display, platform, setting)
         .and_then(|value| value.as_number())
         .unwrap_or(0)
@@ -549,7 +559,11 @@ mod tests {
             DisplaySetting::LongRunningNotifications
         ));
         assert_eq!(
-            resolve(&display, Some("telegram"), DisplaySetting::ToolPreviewLength),
+            resolve(
+                &display,
+                Some("telegram"),
+                DisplaySetting::ToolPreviewLength
+            ),
             Some(DisplayValue::Number(40))
         );
         // Discord: reasoning_style subtext.
@@ -589,7 +603,11 @@ mod tests {
         );
         // api_server: high tier, previews off.
         assert_eq!(
-            resolve(&display, Some("api_server"), DisplaySetting::ToolPreviewLength),
+            resolve(
+                &display,
+                Some("api_server"),
+                DisplaySetting::ToolPreviewLength
+            ),
             Some(DisplayValue::Number(0))
         );
         assert_eq!(
@@ -685,7 +703,10 @@ streaming = true
 "#,
         );
         assert_eq!(resolve(&display, None, DisplaySetting::Streaming), None);
-        assert_eq!(resolve(&display, Some("discord"), DisplaySetting::Streaming), None);
+        assert_eq!(
+            resolve(&display, Some("discord"), DisplaySetting::Streaming),
+            None
+        );
         // Explicit per-platform override still wins.
         assert_eq!(
             resolve(&display, Some("signal"), DisplaySetting::Streaming),
@@ -705,15 +726,24 @@ streaming = true
             DisplayValue::Text("all".into())
         );
         assert_eq!(
-            normalise(DisplaySetting::ToolProgress, DisplayValue::Text("NO".into())),
+            normalise(
+                DisplaySetting::ToolProgress,
+                DisplayValue::Text("NO".into())
+            ),
             DisplayValue::Text("off".into())
         );
         assert_eq!(
-            normalise(DisplaySetting::ToolProgress, DisplayValue::Text("bogus".into())),
+            normalise(
+                DisplaySetting::ToolProgress,
+                DisplayValue::Text("bogus".into())
+            ),
             DisplayValue::Text("all".into())
         );
         assert_eq!(
-            normalise(DisplaySetting::ToolProgress, DisplayValue::Text("log".into())),
+            normalise(
+                DisplaySetting::ToolProgress,
+                DisplayValue::Text("log".into())
+            ),
             DisplayValue::Text("log".into())
         );
         // live_status tri-state.
@@ -722,11 +752,17 @@ streaming = true
             DisplayValue::Text("full".into())
         );
         assert_eq!(
-            normalise(DisplaySetting::LiveStatus, DisplayValue::Text("verb".into())),
+            normalise(
+                DisplaySetting::LiveStatus,
+                DisplayValue::Text("verb".into())
+            ),
             DisplayValue::Text("verb".into())
         );
         assert_eq!(
-            normalise(DisplaySetting::LiveStatus, DisplayValue::Text("weird".into())),
+            normalise(
+                DisplaySetting::LiveStatus,
+                DisplayValue::Text("weird".into())
+            ),
             DisplayValue::Text("full".into())
         );
         // long_running_notifications keeps the "generic" visibility mode.
@@ -746,7 +782,10 @@ streaming = true
         );
         // reasoning_style + grouping fall back on unknown values.
         assert_eq!(
-            normalise(DisplaySetting::ReasoningStyle, DisplayValue::Text("fancy".into())),
+            normalise(
+                DisplaySetting::ReasoningStyle,
+                DisplayValue::Text("fancy".into())
+            ),
             DisplayValue::Text("code".into())
         );
         assert_eq!(
@@ -765,11 +804,17 @@ streaming = true
         );
         // tool_preview_length parses text.
         assert_eq!(
-            normalise(DisplaySetting::ToolPreviewLength, DisplayValue::Text("64".into())),
+            normalise(
+                DisplaySetting::ToolPreviewLength,
+                DisplayValue::Text("64".into())
+            ),
             DisplayValue::Number(64)
         );
         assert_eq!(
-            normalise(DisplaySetting::ToolPreviewLength, DisplayValue::Text("x".into())),
+            normalise(
+                DisplaySetting::ToolPreviewLength,
+                DisplayValue::Text("x".into())
+            ),
             DisplayValue::Number(0)
         );
     }

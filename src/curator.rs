@@ -281,7 +281,10 @@ pub fn run_slash(home: &Path, rest: &str) -> String {
             if names.is_empty() {
                 return "(o_o) no archived skills.\n".to_string();
             }
-            let mut out = format!("{} archived skill(s) — /curator restore <name> to recover:\n", names.len());
+            let mut out = format!(
+                "{} archived skill(s) — /curator restore <name> to recover:\n",
+                names.len()
+            );
             for name in names {
                 out.push_str(&format!("  {name}\n"));
             }
@@ -300,11 +303,8 @@ mod tests {
 
     fn temp_home() -> std::path::PathBuf {
         let n = HOME_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "ulnclaw-curator-{}-{}",
-            std::process::id(),
-            n
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("ulnclaw-curator-{}-{}", std::process::id(), n));
         std::fs::create_dir_all(dir.join("skills")).unwrap();
         dir
     }
@@ -320,7 +320,8 @@ mod tests {
     }
 
     fn iso_days_ago(days: i64) -> String {
-        (chrono::Utc::now() - chrono::Duration::days(days)).to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        (chrono::Utc::now() - chrono::Duration::days(days))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
     }
 
     #[test]

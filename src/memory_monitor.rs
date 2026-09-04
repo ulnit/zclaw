@@ -28,7 +28,11 @@ pub fn rss_mb() -> Option<u64> {
     {
         if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
             if let Some(line) = status.lines().find(|l| l.starts_with("VmRSS:")) {
-                if let Some(kb) = line.split_whitespace().nth(1).and_then(|v| v.parse::<u64>().ok()) {
+                if let Some(kb) = line
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|v| v.parse::<u64>().ok())
+                {
                     return Some(kb / 1024);
                 }
             }
@@ -55,7 +59,11 @@ pub fn thread_count() -> usize {
     {
         if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
             if let Some(line) = status.lines().find(|l| l.starts_with("Threads:")) {
-                if let Some(count) = line.split_whitespace().nth(1).and_then(|v| v.parse::<usize>().ok()) {
+                if let Some(count) = line
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|v| v.parse::<usize>().ok())
+                {
                     return count;
                 }
             }

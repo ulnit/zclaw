@@ -82,8 +82,7 @@ pub trait CloudBrowserProvider: Send + Sync {
 // ---------------------------------------------------------------------------
 
 fn registry_slot() -> &'static Mutex<HashMap<String, Arc<dyn CloudBrowserProvider>>> {
-    static SLOT: OnceLock<Mutex<HashMap<String, Arc<dyn CloudBrowserProvider>>>> =
-        OnceLock::new();
+    static SLOT: OnceLock<Mutex<HashMap<String, Arc<dyn CloudBrowserProvider>>>> = OnceLock::new();
     SLOT.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -151,9 +150,7 @@ const LEGACY_PREFERENCE: &[&str] = &["browser-use", "browserbase"];
 /// `configured` is the raw `[browser] cloud_provider` value: `"local"`
 /// disables cloud mode; an explicit name wins regardless of availability;
 /// otherwise the legacy preference walk filtered by availability runs.
-pub fn resolve_cloud_provider(
-    configured: Option<&str>,
-) -> Option<Arc<dyn CloudBrowserProvider>> {
+pub fn resolve_cloud_provider(configured: Option<&str>) -> Option<Arc<dyn CloudBrowserProvider>> {
     ensure_builtins();
     let configured = configured
         .map(|s| s.trim().to_ascii_lowercase())
@@ -220,9 +217,7 @@ pub fn session_expiry_timestamp(expires_at: Option<&str>) -> Option<f64> {
     if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&normalized) {
         return Some(dt.timestamp() as f64);
     }
-    if let Ok(naive) =
-        chrono::NaiveDateTime::parse_from_str(&normalized, "%Y-%m-%dT%H:%M:%S%.f")
-    {
+    if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(&normalized, "%Y-%m-%dT%H:%M:%S%.f") {
         // Naive timestamps are treated as UTC (hermes semantics).
         return Some(naive.and_utc().timestamp() as f64);
     }
@@ -274,7 +269,11 @@ impl BrowserbaseProvider {
         let project_id = env_trimmed("BROWSERBASE_PROJECT_ID")?;
         let base_url = env_trimmed("BROWSERBASE_BASE_URL")
             .unwrap_or_else(|| "https://api.browserbase.com".to_string());
-        Some((api_key, project_id, base_url.trim_end_matches('/').to_string()))
+        Some((
+            api_key,
+            project_id,
+            base_url.trim_end_matches('/').to_string(),
+        ))
     }
 
     fn config() -> Result<(String, String, String), String> {
@@ -285,8 +284,16 @@ impl BrowserbaseProvider {
         })
     }
 
-    async fn post_release(base_url: &str, api_key: &str, project_id: &str, session_id: &str, timeout: Duration) -> bool {
-        let Ok(client) = http_client(timeout) else { return false };
+    async fn post_release(
+        base_url: &str,
+        api_key: &str,
+        project_id: &str,
+        session_id: &str,
+        timeout: Duration,
+    ) -> bool {
+        let Ok(client) = http_client(timeout) else {
+            return false;
+        };
         match client
             .post(format!("{base_url}/v1/sessions/{session_id}"))
             .header("X-BB-API-Key", api_key)
@@ -338,7 +345,8 @@ impl CloudBrowserProvider for BrowserbaseProvider {
                     .to_ascii_lowercase()
             };
             let enable_proxies = env_flag("BROWSERBASE_PROXIES", "true") != "false";
-            let enable_advanced_stealth = env_flag("BROWSERBASE_ADVANCED_STEALTH", "false") == "true";
+            let enable_advanced_stealth =
+                env_flag("BROWSERBASE_ADVANCED_STEALTH", "false") == "true";
             let enable_keep_alive = env_flag("BROWSERBASE_KEEP_ALIVE", "true") != "false";
             let custom_timeout = env_trimmed("BROWSERBASE_SESSION_TIMEOUT");
 
@@ -479,7 +487,14 @@ impl CloudBrowserProvider for BrowserbaseProvider {
                 );
                 return false;
             };
-            Self::post_release(&base_url, &api_key, &project_id, &session_id, Duration::from_secs(10)).await
+            Self::post_release(
+                &base_url,
+                &api_key,
+                &project_id,
+                &session_id,
+                Duration::from_secs(10),
+            )
+            .await
         })
     }
 
@@ -492,7 +507,14 @@ impl CloudBrowserProvider for BrowserbaseProvider {
                 );
                 return;
             };
-            Self::post_release(&base_url, &api_key, &project_id, &session_id, Duration::from_secs(5)).await;
+            Self::post_release(
+                &base_url,
+                &api_key,
+                &project_id,
+                &session_id,
+                Duration::from_secs(5),
+            )
+            .await;
         })
     }
 }
@@ -515,11 +537,16 @@ fn pending_create_keys() -> &'static Mutex<HashMap<String, String>> {
 /// "already in progress" on retried POSTs, so the original key is forwarded
 /// for deduplication.
 fn get_or_create_pending_create_key(task_id: &str) -> String {
-    let mut map = pending_create_keys().lock().unwrap_or_else(|e| e.into_inner());
+    let mut map = pending_create_keys()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     if let Some(existing) = map.get(task_id) {
         return existing.clone();
     }
-    let created = format!("browser-use-session-create:{}", uuid::Uuid::new_v4().simple());
+    let created = format!(
+        "browser-use-session-create:{}",
+        uuid::Uuid::new_v4().simple()
+    );
     map.insert(task_id.to_string(), created.clone());
     created
 }
@@ -733,10 +760,14 @@ impl CloudBrowserProvider for BrowserUseProvider {
         let session_id = session_id.to_string();
         Box::pin(async move {
             let Ok(config) = Self::config() else {
-                tracing::warn!("cannot close Browser Use session {session_id} — missing credentials");
+                tracing::warn!(
+                    "cannot close Browser Use session {session_id} — missing credentials"
+                );
                 return false;
             };
-            let Ok(client) = http_client(Duration::from_secs(10)) else { return false };
+            let Ok(client) = http_client(Duration::from_secs(10)) else {
+                return false;
+            };
             match client
                 .patch(format!("{}/browsers/{session_id}", config.base_url))
                 .header("Content-Type", "application/json")
@@ -772,7 +803,9 @@ impl CloudBrowserProvider for BrowserUseProvider {
                 );
                 return;
             };
-            let Ok(client) = http_client(Duration::from_secs(5)) else { return };
+            let Ok(client) = http_client(Duration::from_secs(5)) else {
+                return;
+            };
             if let Err(e) = client
                 .patch(format!("{}/browsers/{session_id}", config.base_url))
                 .header("Content-Type", "application/json")
@@ -781,7 +814,9 @@ impl CloudBrowserProvider for BrowserUseProvider {
                 .send()
                 .await
             {
-                tracing::debug!("emergency cleanup failed for Browser Use session {session_id}: {e}");
+                tracing::debug!(
+                    "emergency cleanup failed for Browser Use session {session_id}: {e}"
+                );
             }
         })
     }
@@ -886,7 +921,9 @@ impl CloudBrowserProvider for FirecrawlProvider {
                 tracing::warn!("cannot close Firecrawl session {session_id} — missing credentials");
                 return false;
             };
-            let Ok(client) = http_client(Duration::from_secs(10)) else { return false };
+            let Ok(client) = http_client(Duration::from_secs(10)) else {
+                return false;
+            };
             match client
                 .delete(format!("{}/v2/browser/{session_id}", Self::api_url()))
                 .header("Content-Type", "application/json")
@@ -921,7 +958,9 @@ impl CloudBrowserProvider for FirecrawlProvider {
                 );
                 return;
             }
-            let Ok(client) = http_client(Duration::from_secs(5)) else { return };
+            let Ok(client) = http_client(Duration::from_secs(5)) else {
+                return;
+            };
             if let Ok(api_key) = Self::api_key() {
                 if let Err(e) = client
                     .delete(format!("{}/v2/browser/{session_id}", Self::api_url()))
@@ -1057,7 +1096,8 @@ mod tests {
             }
             // Isolate config/auth reads (managed gateway token, .env) in an
             // empty scratch home for the duration of the test.
-            let scratch = std::env::temp_dir().join(format!("ulnclaw-cloud-{}", std::process::id()));
+            let scratch =
+                std::env::temp_dir().join(format!("ulnclaw-cloud-{}", std::process::id()));
             std::fs::create_dir_all(&scratch).ok();
             std::env::set_var("ULNCLAW_HOME", &scratch);
             Self { saved, _lock: lock }
@@ -1135,7 +1175,10 @@ mod tests {
     #[test]
     fn list_providers_includes_builtins() {
         let _guard = EnvGuard::acquire();
-        let names: Vec<String> = list_providers().iter().map(|p| p.name().to_string()).collect();
+        let names: Vec<String> = list_providers()
+            .iter()
+            .map(|p| p.name().to_string())
+            .collect();
         assert!(names.contains(&"browser-use".to_string()));
         assert!(names.contains(&"browserbase".to_string()));
         assert!(names.contains(&"firecrawl".to_string()));
@@ -1183,9 +1226,7 @@ mod tests {
 
     // -- HTTP lifecycle against a mock server -----------------------------
 
-    async fn spawn_mock(
-        app: axum::Router,
-    ) -> String {
+    async fn spawn_mock(app: axum::Router) -> String {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move {
@@ -1203,38 +1244,39 @@ mod tests {
         let attempts_for_route = attempts.clone();
         let app = axum::Router::new().route(
             "/v1/sessions",
-            axum::routing::post(
-                move |axum::Json(body): axum::Json<Value>| {
-                    let attempts = attempts_for_route.clone();
-                    async move {
-                        let attempt = attempts.fetch_add(1, Ordering::SeqCst) + 1;
-                        let has_keepalive = body.get("keepAlive").is_some();
-                        let has_proxies = body.get("proxies").is_some();
-                        if attempt == 1 && has_keepalive {
-                            // Paid keepAlive unavailable.
-                            (
-                                axum::http::StatusCode::PAYMENT_REQUIRED,
-                                axum::Json(json!({"error": "keepAlive requires paid plan"})),
-                            )
-                        } else if attempt == 2 && has_proxies {
-                            // Paid proxies unavailable.
-                            (
-                                axum::http::StatusCode::PAYMENT_REQUIRED,
-                                axum::Json(json!({"error": "proxies require paid plan"})),
-                            )
-                        } else {
-                            assert_eq!(body.get("projectId").and_then(Value::as_str), Some("proj-1"));
-                            (
-                                axum::http::StatusCode::OK,
-                                axum::Json(json!({
-                                    "id": "sess-123",
-                                    "connectUrl": "wss://cloud.browserbase.dev/sess-123",
-                                })),
-                            )
-                        }
+            axum::routing::post(move |axum::Json(body): axum::Json<Value>| {
+                let attempts = attempts_for_route.clone();
+                async move {
+                    let attempt = attempts.fetch_add(1, Ordering::SeqCst) + 1;
+                    let has_keepalive = body.get("keepAlive").is_some();
+                    let has_proxies = body.get("proxies").is_some();
+                    if attempt == 1 && has_keepalive {
+                        // Paid keepAlive unavailable.
+                        (
+                            axum::http::StatusCode::PAYMENT_REQUIRED,
+                            axum::Json(json!({"error": "keepAlive requires paid plan"})),
+                        )
+                    } else if attempt == 2 && has_proxies {
+                        // Paid proxies unavailable.
+                        (
+                            axum::http::StatusCode::PAYMENT_REQUIRED,
+                            axum::Json(json!({"error": "proxies require paid plan"})),
+                        )
+                    } else {
+                        assert_eq!(
+                            body.get("projectId").and_then(Value::as_str),
+                            Some("proj-1")
+                        );
+                        (
+                            axum::http::StatusCode::OK,
+                            axum::Json(json!({
+                                "id": "sess-123",
+                                "connectUrl": "wss://cloud.browserbase.dev/sess-123",
+                            })),
+                        )
                     }
-                },
-            ),
+                }
+            }),
         );
         let base = spawn_mock(app).await;
 
@@ -1244,7 +1286,10 @@ mod tests {
 
         let provider = get_provider("browserbase").unwrap();
         assert!(provider.is_available());
-        let info = provider.create_session("task1").await.expect("session created");
+        let info = provider
+            .create_session("task1")
+            .await
+            .expect("session created");
         assert_eq!(info.bb_session_id, "sess-123");
         assert_eq!(info.cdp_url, "wss://cloud.browserbase.dev/sess-123");
         assert!(info.session_name.starts_with("ulnclaw_task1_"));
@@ -1310,7 +1355,10 @@ mod tests {
 
         let provider = get_provider("browser-use").unwrap();
         assert!(provider.is_available());
-        let info = provider.create_session("task2").await.expect("session created");
+        let info = provider
+            .create_session("task2")
+            .await
+            .expect("session created");
         assert_eq!(info.bb_session_id, "bu-1");
         assert_eq!(info.cdp_url, "wss://proxy.browser-use.com/bu-1");
         assert_eq!(info.expires_at.as_deref(), Some("2999-01-01T00:00:00.000Z"));
@@ -1357,7 +1405,10 @@ mod tests {
         std::env::set_var("FIRECRAWL_BROWSER_TTL", "600");
 
         let provider = get_provider("firecrawl").unwrap();
-        let info = provider.create_session("task3").await.expect("session created");
+        let info = provider
+            .create_session("task3")
+            .await
+            .expect("session created");
         assert_eq!(info.bb_session_id, "fc-1");
         assert_eq!(info.cdp_url, "wss://browser.firecrawl.dev/fc-1");
         assert!(provider.close_session("fc-1").await);
@@ -1389,13 +1440,15 @@ mod tests {
             )
             .route(
                 "/v1/sessions/:id",
-                axum::routing::post(move |axum::extract::Path(_id): axum::extract::Path<String>| {
-                    let closes = closes_for_route.clone();
-                    async move {
-                        closes.fetch_add(1, Ordering::SeqCst);
-                        axum::Json(json!({}))
-                    }
-                }),
+                axum::routing::post(
+                    move |axum::extract::Path(_id): axum::extract::Path<String>| {
+                        let closes = closes_for_route.clone();
+                        async move {
+                            closes.fetch_add(1, Ordering::SeqCst);
+                            axum::Json(json!({}))
+                        }
+                    },
+                ),
             );
         let base = spawn_mock(app).await;
 

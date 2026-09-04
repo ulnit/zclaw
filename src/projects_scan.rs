@@ -87,11 +87,7 @@ pub fn scan_for_repos(roots: &[PathBuf], max_depth: usize) -> Vec<DiscoveredRepo
             };
             for entry in entries.flatten() {
                 // Symlinks are never followed (loop + escape hatch safety).
-                if entry
-                    .file_type()
-                    .map(|t| t.is_symlink())
-                    .unwrap_or(false)
-                {
+                if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
                     continue;
                 }
                 let path = entry.path();
@@ -156,9 +152,18 @@ mod tests {
         let found = scan_for_repos(&[root.to_path_buf()], DEFAULT_MAX_DEPTH);
         let roots: Vec<&str> = found.iter().map(|r| r.root.as_str()).collect();
         let norm = |p: &Path| crate::projects_db::normalize_path(&p.to_string_lossy());
-        assert!(roots.contains(&norm(&repo_a).as_str()), "repo-a missing: {roots:?}");
-        assert!(roots.contains(&norm(&repo_b).as_str()), "repo-b missing: {roots:?}");
-        assert!(roots.contains(&norm(&sub).as_str()), "sub-checkout missing: {roots:?}");
+        assert!(
+            roots.contains(&norm(&repo_a).as_str()),
+            "repo-a missing: {roots:?}"
+        );
+        assert!(
+            roots.contains(&norm(&repo_b).as_str()),
+            "repo-b missing: {roots:?}"
+        );
+        assert!(
+            roots.contains(&norm(&sub).as_str()),
+            "sub-checkout missing: {roots:?}"
+        );
         assert_eq!(found.len(), 3, "noise leaked: {roots:?}");
         // Label falls back to the basename.
         let b = found.iter().find(|r| r.root == norm(&repo_b)).unwrap();
@@ -189,10 +194,7 @@ mod tests {
         let repo = mkdirs(root, "code/repo");
         touch_git(&repo, false);
         // Scanning both the root and a subpath must not duplicate.
-        let found = scan_for_repos(
-            &[root.to_path_buf(), root.join("code")],
-            DEFAULT_MAX_DEPTH,
-        );
+        let found = scan_for_repos(&[root.to_path_buf(), root.join("code")], DEFAULT_MAX_DEPTH);
         assert_eq!(found.len(), 1);
     }
 }

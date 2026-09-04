@@ -88,7 +88,10 @@ pub struct HooksConfig {
     /// Oversized hook-context spill settings (hermes
     /// `hooks.output_spill`); the named field takes precedence over the
     /// flattened event map.
-    #[serde(default, skip_serializing_if = "crate::hook_output_spill::SpillConfig::is_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "crate::hook_output_spill::SpillConfig::is_default"
+    )]
     pub output_spill: crate::hook_output_spill::SpillConfig,
     /// Event name → command lines (every other key).
     #[serde(flatten)]
@@ -185,7 +188,11 @@ pub fn discover_dir_plugins(home: &Path, disabled: &[String]) -> (Vec<LoadedPlug
     let dir = plugins_dir(home);
     if dir.is_dir() {
         let mut entries: Vec<PathBuf> = std::fs::read_dir(&dir)
-            .map(|rd| rd.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.is_dir()).collect())
+            .map(|rd| {
+                rd.filter_map(|e| e.ok().map(|e| e.path()))
+                    .filter(|p| p.is_dir())
+                    .collect()
+            })
             .unwrap_or_default();
         entries.sort();
         for entry in entries {
@@ -210,7 +217,11 @@ pub fn discover_dir_plugins(home: &Path, disabled: &[String]) -> (Vec<LoadedPlug
                         continue;
                     }
                     let is_disabled = disabled.iter().any(|d| d == &manifest.name);
-                    plugins.push(LoadedPlugin { manifest, dir: entry, disabled: is_disabled });
+                    plugins.push(LoadedPlugin {
+                        manifest,
+                        dir: entry,
+                        disabled: is_disabled,
+                    });
                 }
                 Err(e) => {
                     warnings.push(format!("plugins: {} manifest error: {e}", entry.display()));
@@ -326,7 +337,12 @@ async fn build_runtime(home: &Path, config: &crate::config::UlncLawConfig) -> Pl
     // 2. Config shell hooks with first-use consent (hermes shell_hooks).
     let auto_accept = config.hooks.auto_accept
         || std::env::var("ULNCLAW_ACCEPT_HOOKS")
-            .map(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+            .map(|v| {
+                matches!(
+                    v.trim().to_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
             .unwrap_or(false);
     let mut allowlist = load_allowlist(home);
     let mut allowlist_changed = false;
@@ -334,7 +350,9 @@ async fn build_runtime(home: &Path, config: &crate::config::UlncLawConfig) -> Pl
     events.sort_by(|a, b| a.0.cmp(b.0));
     for (event, commands) in events {
         if !VALID_HOOKS.contains(&event.as_str()) {
-            warnings.push(format!("hooks: unknown event {event:?} in config (ignored)"));
+            warnings.push(format!(
+                "hooks: unknown event {event:?} in config (ignored)"
+            ));
             continue;
         }
         for command in commands {
@@ -363,15 +381,16 @@ async fn build_runtime(home: &Path, config: &crate::config::UlncLawConfig) -> Pl
         save_allowlist(home, &allowlist);
     }
 
-    PluginRuntime { plugins, hooks, warnings }
+    PluginRuntime {
+        plugins,
+        hooks,
+        warnings,
+    }
 }
 
 /// Discovered plugins (empty before `init`).
 pub fn loaded_plugins() -> Vec<LoadedPlugin> {
-    RUNTIME
-        .get()
-        .map(|r| r.plugins.clone())
-        .unwrap_or_default()
+    RUNTIME.get().map(|r| r.plugins.clone()).unwrap_or_default()
 }
 
 /// Registered hook callbacks for one event, plugins first (hermes:
@@ -515,10 +534,7 @@ pub fn context_injections(responses: &[Value]) -> Vec<String> {
         .iter()
         .filter_map(|r| match r {
             Value::String(s) => Some(s.clone()),
-            Value::Object(_) => r
-                .get("context")
-                .and_then(|v| v.as_str())
-                .map(String::from),
+            Value::Object(_) => r.get("context").and_then(|v| v.as_str()).map(String::from),
             _ => None,
         })
         .map(|s| s.trim().to_string())
@@ -600,7 +616,11 @@ pub fn register_plugin_tools(registry: &mut ToolRegistry) -> usize {
                             })?;
                             if let Some(mut stdin) = child.stdin.take() {
                                 stdin
-                                    .write_all(serde_json::to_string(&payload).unwrap_or_default().as_bytes())
+                                    .write_all(
+                                        serde_json::to_string(&payload)
+                                            .unwrap_or_default()
+                                            .as_bytes(),
+                                    )
                                     .await
                                     .ok();
                             }
@@ -612,7 +632,9 @@ pub fn register_plugin_tools(registry: &mut ToolRegistry) -> usize {
                             .map_err(|_| {
                                 crate::error::AgentError::Tool("plugin tool timed out".into())
                             })?
-                            .map_err(|e| crate::error::AgentError::Tool(format!("plugin tool: {e}")))?;
+                            .map_err(|e| {
+                                crate::error::AgentError::Tool(format!("plugin tool: {e}"))
+                            })?;
                             let text = String::from_utf8_lossy(&output.stdout);
                             if !output.status.success() {
                                 return Ok(json!({
@@ -620,8 +642,9 @@ pub fn register_plugin_tools(registry: &mut ToolRegistry) -> usize {
                                     "error": format!("plugin tool exited with {}", output.status),
                                 }));
                             }
-                            Ok(serde_json::from_str::<Value>(text.trim())
-                                .unwrap_or_else(|_| json!({"success": true, "output": text.trim()})))
+                            Ok(serde_json::from_str::<Value>(text.trim()).unwrap_or_else(
+                                |_| json!({"success": true, "output": text.trim()}),
+                            ))
                         }
                     })
                     .toolset(toolset)
@@ -712,19 +735,37 @@ pub fn revoke_allowlist(home: &Path, command: &str) -> usize {
 /// runtime payloads.
 pub fn default_hook_payload(event: &str) -> Value {
     let raw: &str = match event {
-        "pre_tool_call" => r#"{"tool_name":"terminal","args":{"command":"echo hello"},"session_id":"test-session","task_id":"test-task","tool_call_id":"test-call"}"#,
-        "post_tool_call" => r#"{"tool_name":"terminal","args":{"command":"echo hello"},"session_id":"test-session","task_id":"test-task","tool_call_id":"test-call","result":"{\"output\": \"hello\"}","duration_ms":42}"#,
-        "pre_llm_call" => r#"{"session_id":"test-session","user_message":"What is the weather?","conversation_history":[],"is_first_turn":true,"model":"gpt-4","platform":"cli"}"#,
+        "pre_tool_call" => {
+            r#"{"tool_name":"terminal","args":{"command":"echo hello"},"session_id":"test-session","task_id":"test-task","tool_call_id":"test-call"}"#
+        }
+        "post_tool_call" => {
+            r#"{"tool_name":"terminal","args":{"command":"echo hello"},"session_id":"test-session","task_id":"test-task","tool_call_id":"test-call","result":"{\"output\": \"hello\"}","duration_ms":42}"#
+        }
+        "pre_llm_call" => {
+            r#"{"session_id":"test-session","user_message":"What is the weather?","conversation_history":[],"is_first_turn":true,"model":"gpt-4","platform":"cli"}"#
+        }
         "post_llm_call" => r#"{"session_id":"test-session","model":"gpt-4","platform":"cli"}"#,
-        "pre_verify" => r#"{"session_id":"test-session","platform":"cli","model":"gpt-4","coding":true,"attempt":0,"final_response":"All done — the change is applied.","changed_paths":["src/app.tsx"]}"#,
+        "pre_verify" => {
+            r#"{"session_id":"test-session","platform":"cli","model":"gpt-4","coding":true,"attempt":0,"final_response":"All done — the change is applied.","changed_paths":["src/app.tsx"]}"#
+        }
         "on_session_start" => r#"{"session_id":"test-session"}"#,
-        "on_session_end" => r#"{"session_id":"test-session","task_id":"test-task","turn_id":"test-turn","completed":true,"failed":false,"interrupted":false,"turn_exit_reason":"text_response(stop)","model":"gpt-4","platform":"cli"}"#,
+        "on_session_end" => {
+            r#"{"session_id":"test-session","task_id":"test-task","turn_id":"test-turn","completed":true,"failed":false,"interrupted":false,"turn_exit_reason":"text_response(stop)","model":"gpt-4","platform":"cli"}"#
+        }
         "on_session_finalize" => r#"{"session_id":"test-session"}"#,
         "on_session_reset" => r#"{"session_id":"test-session"}"#,
-        "pre_api_request" => r#"{"session_id":"test-session","task_id":"test-task","platform":"cli","model":"claude-sonnet-4-6","provider":"anthropic","base_url":"https://api.anthropic.com","api_mode":"anthropic_messages","api_call_count":1,"message_count":4,"tool_count":12,"approx_input_tokens":2048,"request_char_count":8192,"max_tokens":4096}"#,
-        "post_api_request" => r#"{"session_id":"test-session","task_id":"test-task","platform":"cli","model":"claude-sonnet-4-6","provider":"anthropic","base_url":"https://api.anthropic.com","api_mode":"anthropic_messages","api_call_count":1,"api_duration":1.234,"finish_reason":"stop","message_count":4,"response_model":"claude-sonnet-4-6","usage":{"input_tokens":2048,"output_tokens":512},"assistant_content_chars":1200,"assistant_tool_call_count":0}"#,
-        "subagent_stop" => r#"{"parent_session_id":"parent-sess","child_role":null,"child_summary":"Synthetic summary for hooks test","child_status":"completed","tool_call_history":[{"tool_name":"write_file","tool_input":{"argument_keys":["content","path"],"targets":{"path":"/tmp/report.txt"}},"input_bytes":128,"output_bytes":32,"status":"ok"}],"duration_ms":1234}"#,
-        "pre_gateway_dispatch" => r#"{"platform":"telegram","chat_id":"12345","sender_id":"67890","sender_name":"test-user","text":"hello","message_id":"1"}"#,
+        "pre_api_request" => {
+            r#"{"session_id":"test-session","task_id":"test-task","platform":"cli","model":"claude-sonnet-4-6","provider":"anthropic","base_url":"https://api.anthropic.com","api_mode":"anthropic_messages","api_call_count":1,"message_count":4,"tool_count":12,"approx_input_tokens":2048,"request_char_count":8192,"max_tokens":4096}"#
+        }
+        "post_api_request" => {
+            r#"{"session_id":"test-session","task_id":"test-task","platform":"cli","model":"claude-sonnet-4-6","provider":"anthropic","base_url":"https://api.anthropic.com","api_mode":"anthropic_messages","api_call_count":1,"api_duration":1.234,"finish_reason":"stop","message_count":4,"response_model":"claude-sonnet-4-6","usage":{"input_tokens":2048,"output_tokens":512},"assistant_content_chars":1200,"assistant_tool_call_count":0}"#
+        }
+        "subagent_stop" => {
+            r#"{"parent_session_id":"parent-sess","child_role":null,"child_summary":"Synthetic summary for hooks test","child_status":"completed","tool_call_history":[{"tool_name":"write_file","tool_input":{"argument_keys":["content","path"],"targets":{"path":"/tmp/report.txt"}},"input_bytes":128,"output_bytes":32,"status":"ok"}],"duration_ms":1234}"#
+        }
+        "pre_gateway_dispatch" => {
+            r#"{"platform":"telegram","chat_id":"12345","sender_id":"67890","sender_name":"test-user","text":"hello","message_id":"1"}"#
+        }
         _ => r#"{"extra":{}}"#,
     };
     serde_json::from_str(raw).unwrap_or_else(|_| json!({"extra": {}}))
@@ -785,8 +826,13 @@ pub async fn doctor_hooks(home: &Path, config: &crate::config::UlncLawConfig) ->
                 consented: true,
                 ok: outcome.is_some(),
                 detail: match outcome {
-                    Some(value) => format!("responded: {}", truncate_for_display(&value.to_string(), 80)),
-                    None => "no valid JSON response (exit != 0, timeout, or unparseable stdout)".into(),
+                    Some(value) => format!(
+                        "responded: {}",
+                        truncate_for_display(&value.to_string(), 80)
+                    ),
+                    None => {
+                        "no valid JSON response (exit != 0, timeout, or unparseable stdout)".into()
+                    }
                 },
             });
         }
@@ -833,7 +879,12 @@ fn write_disabled_list(config_path: &Path, disabled: &[String]) -> Result<(), St
     let plugins_table = plugins.as_table_mut().ok_or("[plugins] is not a table")?;
     plugins_table.insert(
         "disabled".to_string(),
-        toml::Value::Array(disabled.iter().map(|s| toml::Value::String(s.clone())).collect()),
+        toml::Value::Array(
+            disabled
+                .iter()
+                .map(|s| toml::Value::String(s.clone()))
+                .collect(),
+        ),
     );
     // toml::to_string renders document form ([plugins] section), unlike
     // Value's Display which emits inline tables.
@@ -856,7 +907,9 @@ pub fn enable_plugin(home: &Path, name: &str) -> Result<String, String> {
     }
     disabled.retain(|d| d != name);
     write_disabled_list(&config_path, &disabled)?;
-    Ok(format!("✓ Enabled plugin {name} (takes effect on next start)."))
+    Ok(format!(
+        "✓ Enabled plugin {name} (takes effect on next start)."
+    ))
 }
 
 /// Disable a plugin (add to the deny-list) — hermes `plugins disable`.
@@ -868,14 +921,15 @@ pub fn disable_plugin(home: &Path, name: &str) -> Result<String, String> {
     }
     disabled.push(name.to_string());
     write_disabled_list(&config_path, &disabled)?;
-    Ok(format!("✓ Disabled plugin {name} (takes effect on next start)."))
+    Ok(format!(
+        "✓ Disabled plugin {name} (takes effect on next start)."
+    ))
 }
 
 /// GitHub browser-URL segments that mark a repo page rather than a
 /// cloneable URL (hermes `_GITHUB_BROWSER_SEGMENTS`).
 const GITHUB_BROWSER_SEGMENTS: &[&str] = &[
-    "actions", "blob", "commit", "commits", "issues", "pull", "pulls",
-    "releases", "tree", "wiki",
+    "actions", "blob", "commit", "commits", "issues", "pull", "pulls", "releases", "tree", "wiki",
 ];
 
 /// Git subprocess wall-clock cap (hermes 60 s clone/pull timeout).
@@ -905,7 +959,11 @@ pub fn resolve_git_url(identifier: &str) -> Result<(String, Option<String>), Str
                 let repo = parts[1].strip_suffix(".git").unwrap_or(parts[1]);
                 let subdir = if parts[2] == "tree" && parts.len() >= 5 {
                     let joined = parts[4..].join("/").trim_matches('/').to_string();
-                    if joined.is_empty() { None } else { Some(joined) }
+                    if joined.is_empty() {
+                        None
+                    } else {
+                        Some(joined)
+                    }
                 } else {
                     None
                 };
@@ -921,7 +979,11 @@ pub fn resolve_git_url(identifier: &str) -> Result<(String, Option<String>), Str
             let frag = frag[1..].trim_matches('/');
             return Ok((
                 url.to_string(),
-                if frag.is_empty() { None } else { Some(frag.to_string()) },
+                if frag.is_empty() {
+                    None
+                } else {
+                    Some(frag.to_string())
+                },
             ));
         }
         // Natural `.git/` boundary (GitHub-style URLs).
@@ -930,7 +992,11 @@ pub fn resolve_git_url(identifier: &str) -> Result<(String, Option<String>), Str
             let subdir = id[idx + 5..].trim_matches('/');
             return Ok((
                 url.to_string(),
-                if subdir.is_empty() { None } else { Some(subdir.to_string()) },
+                if subdir.is_empty() {
+                    None
+                } else {
+                    Some(subdir.to_string())
+                },
             ));
         }
         return Ok((id.to_string(), None));
@@ -946,7 +1012,11 @@ pub fn resolve_git_url(identifier: &str) -> Result<(String, Option<String>), Str
         let subdir = subdir.trim_matches('/').to_string();
         return Ok((
             format!("https://github.com/{}/{}.git", parts[0], parts[1]),
-            if subdir.is_empty() { None } else { Some(subdir) },
+            if subdir.is_empty() {
+                None
+            } else {
+                Some(subdir)
+            },
         ));
     }
     Err(format!(
@@ -990,7 +1060,9 @@ pub fn sanitize_plugin_target(home: &Path, name: &str) -> Result<PathBuf, String
     // Defense in depth: the joined path must stay inside the plugins dir.
     let norm_plugins = plugins.components().count();
     if target.components().count() != norm_plugins + 1 {
-        return Err(format!("Plugin name '{name}' escapes the plugins directory."));
+        return Err(format!(
+            "Plugin name '{name}' escapes the plugins directory."
+        ));
     }
     Ok(target)
 }
@@ -1097,7 +1169,11 @@ fn run_git(args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
         let err = String::from_utf8_lossy(&err_buf);
         let out = String::from_utf8_lossy(&out_buf);
         let detail = err.trim();
-        let detail = if detail.is_empty() { out.trim() } else { detail };
+        let detail = if detail.is_empty() {
+            out.trim()
+        } else {
+            detail
+        };
         return Err(format!(
             "Git {} failed:\n{}",
             args.first().copied().unwrap_or("run"),
@@ -1111,12 +1187,22 @@ fn run_git(args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
 /// `_install_plugin_core`): shallow clone to a temp dir, optional
 /// subdir with traversal guard, manifest-name discovery, sanitized
 /// target, `force` reinstalls over an existing directory.
-pub fn install_plugin(home: &Path, identifier: &str, force: bool) -> Result<InstalledPlugin, String> {
+pub fn install_plugin(
+    home: &Path,
+    identifier: &str,
+    force: bool,
+) -> Result<InstalledPlugin, String> {
     let (git_url, subdir) = resolve_git_url(identifier)?;
     let temp = tempfile::tempdir().map_err(|e| e.to_string())?;
     let clone_root = temp.path().join("plugin");
     run_git(
-        &["clone", "--depth", "1", &git_url, clone_root.to_str().unwrap_or_default()],
+        &[
+            "clone",
+            "--depth",
+            "1",
+            &git_url,
+            clone_root.to_str().unwrap_or_default(),
+        ],
         None,
     )?;
 
@@ -1127,11 +1213,13 @@ pub fn install_plugin(home: &Path, identifier: &str, force: bool) -> Result<Inst
             let canon_root = clone_root
                 .canonicalize()
                 .map_err(|e| format!("clone root: {e}"))?;
-            let canon = candidate
-                .canonicalize()
-                .map_err(|_| format!("Plugin subdirectory '{sub}' does not exist in the repository."))?;
+            let canon = candidate.canonicalize().map_err(|_| {
+                format!("Plugin subdirectory '{sub}' does not exist in the repository.")
+            })?;
             if canon != canon_root && !canon.starts_with(&canon_root) {
-                return Err(format!("Plugin subdirectory '{sub}' escapes the repository."));
+                return Err(format!(
+                    "Plugin subdirectory '{sub}' escapes the repository."
+                ));
             }
             if !canon.is_dir() {
                 return Err(format!("Plugin subdirectory '{sub}' is not a directory."));
@@ -1146,9 +1234,13 @@ pub fn install_plugin(home: &Path, identifier: &str, force: bool) -> Result<Inst
         .clone()
         .filter(|n| !n.is_empty())
         .or_else(|| {
-            subdir
-                .as_ref()
-                .map(|s| s.trim_end_matches('/').rsplit('/').next().unwrap_or("").to_string())
+            subdir.as_ref().map(|s| {
+                s.trim_end_matches('/')
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or("")
+                    .to_string()
+            })
         })
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| repo_name_from_url(&git_url));
@@ -1297,7 +1389,11 @@ pub fn load_hub_catalog(home: &Path) -> Vec<HubCatalogEntry> {
 
     if hub.is_dir() {
         let mut dirs: Vec<PathBuf> = std::fs::read_dir(&hub)
-            .map(|rd| rd.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.is_dir()).collect())
+            .map(|rd| {
+                rd.filter_map(|e| e.ok().map(|e| e.path()))
+                    .filter(|p| p.is_dir())
+                    .collect()
+            })
             .unwrap_or_default();
         dirs.sort();
         for dir in dirs {
@@ -1335,7 +1431,11 @@ pub fn load_hub_catalog(home: &Path) -> Vec<HubCatalogEntry> {
 /// Install a plugin from a local directory candidate (hub `local-dir`
 /// source): manifest-name discovery, sanitized target, recursive copy.
 /// Git-backed identifiers go through [`install_plugin`] instead.
-pub fn install_local_dir(home: &Path, source: &Path, force: bool) -> Result<InstalledPlugin, String> {
+pub fn install_local_dir(
+    home: &Path,
+    source: &Path,
+    force: bool,
+) -> Result<InstalledPlugin, String> {
     let source = source
         .canonicalize()
         .map_err(|e| format!("Plugin source directory '{}': {e}", source.display()))?;
@@ -1346,14 +1446,12 @@ pub fn install_local_dir(home: &Path, source: &Path, force: bool) -> Result<Inst
         ));
     }
     let (manifest_name, has_manifest) = read_manifest_name(&source);
-    let plugin_name = manifest_name
-        .filter(|n| !n.is_empty())
-        .ok_or_else(|| {
-            format!(
-                "Plugin source '{}' carries no readable manifest name.",
-                source.display()
-            )
-        })?;
+    let plugin_name = manifest_name.filter(|n| !n.is_empty()).ok_or_else(|| {
+        format!(
+            "Plugin source '{}' carries no readable manifest name.",
+            source.display()
+        )
+    })?;
     let target = sanitize_plugin_target(home, &plugin_name)?;
     if target.exists() {
         if !force {
@@ -1431,12 +1529,19 @@ mod tests {
     #[test]
     fn context_injections_collected() {
         let responses = vec![json!({"context": "a"}), json!({}), json!({"context": "b"})];
-        assert_eq!(context_injections(&responses), vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(
+            context_injections(&responses),
+            vec!["a".to_string(), "b".to_string()]
+        );
     }
 
     #[test]
     fn dispatch_decision_shapes() {
-        let responses = vec![json!("noise"), json!({}), json!({"action": "skip", "reason": "handled elsewhere"})];
+        let responses = vec![
+            json!("noise"),
+            json!({}),
+            json!({"action": "skip", "reason": "handled elsewhere"}),
+        ];
         let (action, detail) = dispatch_decision(&responses).unwrap();
         assert_eq!(action, "skip");
         assert_eq!(detail.as_deref(), Some("handled elsewhere"));
@@ -1496,7 +1601,10 @@ mod tests {
             ],
         );
         assert_eq!(revoke_allowlist(&dir, "/tmp/b.sh"), 2);
-        assert_eq!(allowlist_entries(&dir), vec!["pre_tool_call\t/tmp/a.sh".to_string()]);
+        assert_eq!(
+            allowlist_entries(&dir),
+            vec!["pre_tool_call\t/tmp/a.sh".to_string()]
+        );
         assert_eq!(revoke_allowlist(&dir, "/tmp/missing.sh"), 0);
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -1510,21 +1618,26 @@ mod tests {
             "on_session_start".to_string(),
             vec!["/bin/echo ignored".to_string()],
         );
-        config.hooks.events.insert(
-            "not_an_event".to_string(),
-            vec!["/bin/true".to_string()],
-        );
+        config
+            .hooks
+            .events
+            .insert("not_an_event".to_string(), vec!["/bin/true".to_string()]);
         // Nothing consented: both probes report not-consented / unknown.
         let probes = doctor_hooks(&dir, &config).await;
         assert_eq!(probes.len(), 2);
         assert!(probes.iter().all(|p| !p.ok));
-        assert!(probes.iter().any(|p| p.detail.contains("unknown hook event")));
+        assert!(probes
+            .iter()
+            .any(|p| p.detail.contains("unknown hook event")));
         assert!(probes.iter().any(|p| p.detail.contains("not consented")));
         // Consent the echo hook: it runs and responds (echo emits JSON-ish
         // text that fails to parse, so ok stays false but the probe ran).
         save_allowlist(&dir, &["on_session_start\t/bin/echo ignored".to_string()]);
         let probes = doctor_hooks(&dir, &config).await;
-        let echo_probe = probes.iter().find(|p| p.command == "/bin/echo ignored").unwrap();
+        let echo_probe = probes
+            .iter()
+            .find(|p| p.command == "/bin/echo ignored")
+            .unwrap();
         assert!(echo_probe.consented);
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -1535,7 +1648,10 @@ mod tests {
             "pre_tool_call",
             "sess1",
             Path::new("/tmp"),
-            vec![("tool_name", json!("terminal")), ("tool_input", json!({"command": "ls"}))],
+            vec![
+                ("tool_name", json!("terminal")),
+                ("tool_input", json!({"command": "ls"})),
+            ],
             json!({"turn_id": 3}),
         );
         assert_eq!(payload["hook_event_name"], json!("pre_tool_call"));
@@ -1581,7 +1697,8 @@ mod tests {
             event: "pre_tool_call".into(),
             command: script.display().to_string(),
         };
-        let response = run_hook_callback(&callback, &json!({"hook_event_name": "pre_tool_call"})).await;
+        let response =
+            run_hook_callback(&callback, &json!({"hook_event_name": "pre_tool_call"})).await;
         assert_eq!(
             response.and_then(|r| r.get("reason").and_then(|v| v.as_str()).map(String::from)),
             Some("test-block".to_string())
@@ -1626,8 +1743,7 @@ mod tests {
 
     #[test]
     fn resolve_git_url_browser_tree() {
-        let (url, sub) =
-            resolve_git_url("https://github.com/o/r/tree/main/plugins/foo").unwrap();
+        let (url, sub) = resolve_git_url("https://github.com/o/r/tree/main/plugins/foo").unwrap();
         assert_eq!(url, "https://github.com/o/r.git");
         assert_eq!(sub.as_deref(), Some("plugins/foo"));
         let (url, sub) = resolve_git_url("https://github.com/o/r/issues").unwrap();
@@ -1674,9 +1790,12 @@ mod tests {
             (Some("toml-plugin".to_string()), true)
         );
         let dir2 = tempfile::tempdir().unwrap();
-        std::fs::write(dir2.path().join("plugin.yaml"), "name: yaml-plugin
-version: 1")
-            .unwrap();
+        std::fs::write(
+            dir2.path().join("plugin.yaml"),
+            "name: yaml-plugin
+version: 1",
+        )
+        .unwrap();
         assert_eq!(
             read_manifest_name(dir2.path()),
             (Some("yaml-plugin".to_string()), true)
@@ -1736,7 +1855,11 @@ version: 1")
 
         // Update (clone carries .git); a second repo-less plugin cannot.
         let output = update_plugin(home.path(), "roundtrip").unwrap();
-        assert!(output.contains("up to date") || output.contains("Updating") || !output.trim().is_empty());
+        assert!(
+            output.contains("up to date")
+                || output.contains("Updating")
+                || !output.trim().is_empty()
+        );
         std::fs::create_dir_all(home.path().join("plugins").join("nogy")).unwrap();
         assert!(update_plugin(home.path(), "nogy").is_err());
 

@@ -43,7 +43,11 @@ pub struct BreakdownParts {
 }
 
 fn chars_to_tokens(text: &str) -> usize {
-    if text.is_empty() { 0 } else { (text.len() + 3) / 4 }
+    if text.is_empty() {
+        0
+    } else {
+        (text.len() + 3) / 4
+    }
 }
 
 /// Token cost of the static per-call payload (system prompt, tool/MCP
@@ -72,8 +76,16 @@ pub fn compute(
     context_max: usize,
 ) -> ContextBreakdown {
     let raw: [(&str, &str, usize); 5] = [
-        ("system_prompt", "System prompt", chars_to_tokens(&parts.system_prompt)),
-        ("tool_definitions", "Tool definitions", chars_to_tokens(&parts.builtin_tools_json)),
+        (
+            "system_prompt",
+            "System prompt",
+            chars_to_tokens(&parts.system_prompt),
+        ),
+        (
+            "tool_definitions",
+            "Tool definitions",
+            chars_to_tokens(&parts.builtin_tools_json),
+        ),
         ("mcp", "MCP", chars_to_tokens(&parts.mcp_tools_json)),
         ("memory", "Memory", chars_to_tokens(&parts.memory_block)),
         ("conversation", "Conversation", conversation_tokens),
@@ -108,11 +120,11 @@ pub fn compute(
 // can drop the grid (proportional monospace is not guaranteed there).
 
 const CATEGORY_GLYPHS: [(&str, char); 5] = [
-    ("system_prompt", '\u{25A0}'), // ■
+    ("system_prompt", '\u{25A0}'),    // ■
     ("tool_definitions", '\u{25A3}'), // ▣
-    ("mcp", '\u{25A5}'), // ▥
-    ("memory", '\u{25A7}'), // ▧
-    ("conversation", '\u{25A8}'), // ▨
+    ("mcp", '\u{25A5}'),              // ▥
+    ("memory", '\u{25A7}'),           // ▧
+    ("conversation", '\u{25A8}'),     // ▨
 ];
 const FREE_GLYPH: char = '\u{00B7}'; // ·
 const GRID_COLUMNS: usize = 20;
@@ -244,8 +256,8 @@ mod tests {
 
     fn parts() -> BreakdownParts {
         BreakdownParts {
-            system_prompt: "x".repeat(4000), // ~1000 tokens
-            memory_block: "m".repeat(2000), // ~500 tokens
+            system_prompt: "x".repeat(4000),      // ~1000 tokens
+            memory_block: "m".repeat(2000),       // ~500 tokens
             builtin_tools_json: "t".repeat(8000), // ~2000 tokens
             mcp_tools_json: String::new(),
             model: "test-model".to_string(),
@@ -256,7 +268,15 @@ mod tests {
     fn test_compute_categories_and_percent() {
         let payload = compute(&parts(), 500, 10_000);
         let ids: Vec<&str> = payload.categories.iter().map(|c| c.id.as_str()).collect();
-        assert_eq!(ids, vec!["system_prompt", "tool_definitions", "memory", "conversation"]);
+        assert_eq!(
+            ids,
+            vec![
+                "system_prompt",
+                "tool_definitions",
+                "memory",
+                "conversation"
+            ]
+        );
         assert_eq!(payload.estimated_total, 4000);
         assert_eq!(payload.context_used, 4000);
         assert_eq!(payload.context_percent, 40);
@@ -308,14 +328,18 @@ mod tests {
         assert_eq!(lines[0], "Estimated usage by category");
         assert!(lines.iter().any(|l| l.contains("System prompt")));
         assert!(lines.iter().any(|l| l.contains("Conversation")));
-        assert!(lines.iter().any(|l| l.contains("Free space") && l.contains("6,000")));
+        assert!(lines
+            .iter()
+            .any(|l| l.contains("Free space") && l.contains("6,000")));
     }
 
     #[test]
     fn test_render_breakdown_lines_with_and_without_grid() {
         let payload = compute(&parts(), 500, 10_000);
         let with_grid = render_breakdown_lines(&payload, true);
-        assert!(with_grid.iter().any(|l| l.contains("Context window: 4,000 / 10,000 tokens (40%)")));
+        assert!(with_grid
+            .iter()
+            .any(|l| l.contains("Context window: 4,000 / 10,000 tokens (40%)")));
         let without = render_breakdown_lines(&payload, false);
         assert_eq!(without.len(), with_grid.len() - GRID_ROWS - 1);
     }

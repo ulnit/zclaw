@@ -90,13 +90,26 @@ pub fn build_provider_entries(config: &UlncLawConfig) -> Vec<(String, String)> {
 }
 
 /// Persist the provider/model choice (base_url left untouched).
-pub fn apply_model_choice(doc: &mut toml::Value, provider: &str, model: &str) -> Result<(), String> {
-    config_cmd::set_nested(doc, "model.provider", toml::Value::String(provider.to_string()))?;
+pub fn apply_model_choice(
+    doc: &mut toml::Value,
+    provider: &str,
+    model: &str,
+) -> Result<(), String> {
+    config_cmd::set_nested(
+        doc,
+        "model.provider",
+        toml::Value::String(provider.to_string()),
+    )?;
     config_cmd::set_nested(doc, "model.model", toml::Value::String(model.to_string()))
 }
 
 /// Render the confirmation line shown after a successful switch.
-pub fn render_switch_summary(provider: &str, model: &str, base_url: &str, key_state: &str) -> String {
+pub fn render_switch_summary(
+    provider: &str,
+    model: &str,
+    base_url: &str,
+    key_state: &str,
+) -> String {
     format!(
         "✓ Model switched\n  Provider: {provider}\n  Model:    {model}\n  Endpoint: {base_url}\n  API key:  {key_state}\n"
     )
@@ -211,8 +224,20 @@ mod tests {
         assert!(entries.iter().any(|(id, _)| id == "mybox"));
         // Built-ins all present exactly once.
         let ids: Vec<&str> = entries.iter().map(|(id, _)| id.as_str()).collect();
-        for builtin in ["openai", "anthropic", "openrouter", "dashscope", "ollama", "llamacpp", "custom"] {
-            assert_eq!(ids.iter().filter(|id| **id == builtin).count(), 1, "{builtin}");
+        for builtin in [
+            "openai",
+            "anthropic",
+            "openrouter",
+            "dashscope",
+            "ollama",
+            "llamacpp",
+            "custom",
+        ] {
+            assert_eq!(
+                ids.iter().filter(|id| **id == builtin).count(),
+                1,
+                "{builtin}"
+            );
         }
     }
 
@@ -240,7 +265,12 @@ mod tests {
 
     #[test]
     fn render_switch_summary_includes_state() {
-        let out = render_switch_summary("openai", "gpt-5.2", "https://api.openai.com/v1", "configured");
+        let out = render_switch_summary(
+            "openai",
+            "gpt-5.2",
+            "https://api.openai.com/v1",
+            "configured",
+        );
         assert!(out.contains("openai"));
         assert!(out.contains("gpt-5.2"));
         assert!(out.contains("configured"));

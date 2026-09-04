@@ -116,7 +116,12 @@ impl DiskCache {
             "secrets": entry.secrets,
             "fetched_at": entry.fetched_at,
         });
-        atomic_write_0600(cache_dir, &path, ".secrets_cache_", payload.to_string().as_bytes());
+        atomic_write_0600(
+            cache_dir,
+            &path,
+            ".secrets_cache_",
+            payload.to_string().as_bytes(),
+        );
     }
 
     /// Delete the on-disk cache file if present (idempotent).
@@ -370,7 +375,9 @@ fn fill_random(buf: &mut [u8]) {
         .unwrap_or(0)
         ^ (std::process::id() as u128);
     for byte in buf.iter_mut() {
-        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         *byte = (seed >> 64) as u8;
     }
 }
@@ -454,9 +461,17 @@ mod tests {
             let home = tmp_home("perm");
             let cache = DiskCache::new("perm.json");
             cache.write("k", &sample_entry(), 300.0, &home);
-            let file_mode = std::fs::metadata(cache.path(&home)).unwrap().permissions().mode() & 0o777;
+            let file_mode = std::fs::metadata(cache.path(&home))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
             assert_eq!(file_mode, 0o600);
-            let dir_mode = std::fs::metadata(home.join("cache")).unwrap().permissions().mode() & 0o777;
+            let dir_mode = std::fs::metadata(home.join("cache"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
             assert_eq!(dir_mode, 0o700);
             let _ = std::fs::remove_dir_all(&home);
         }

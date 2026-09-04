@@ -55,7 +55,8 @@ pub fn style_hint(style: Option<&str>) -> &'static str {
     }
 }
 
-const BACKGROUND_SPEC: &str = "Center the character on a SINGLE flat, uniform, high-contrast chroma-key \
+const BACKGROUND_SPEC: &str =
+    "Center the character on a SINGLE flat, uniform, high-contrast chroma-key \
 background — pure hot magenta #FF00FF (only if magenta appears on the \
 character, use pure green #00FF00 instead). The background is ONE continuous \
 even color that completely surrounds the character with NO gradient, \
@@ -119,7 +120,12 @@ pub fn build_base_prompt(concept: &str, style: Option<&str>, variation: &str) ->
 
 /// A row strip: `frame_count` poses of the SAME character, left→right
 /// (hermes `build_row_prompt`).
-pub fn build_row_prompt(state: &str, frame_count: u32, concept: &str, style: Option<&str>) -> String {
+pub fn build_row_prompt(
+    state: &str,
+    frame_count: u32,
+    concept: &str,
+    style: Option<&str>,
+) -> String {
     let action = state_action(state);
     // NB: hermes binds `concept` here too but never interpolates it — the
     // attached reference image carries the identity, not the text.
@@ -220,15 +226,23 @@ fn rejected_background(error: &str) -> bool {
 /// `_humanize_image_error`).
 pub fn humanize_image_error(error: &str) -> String {
     let low = error.to_lowercase();
-    if ["moderation_blocked", "safety system", "content policy", "content_policy"]
-        .iter()
-        .any(|s| low.contains(s))
+    if [
+        "moderation_blocked",
+        "safety system",
+        "content policy",
+        "content_policy",
+    ]
+    .iter()
+    .any(|s| low.contains(s))
     {
         return "The image provider blocked this prompt — its safety filter rejects \
                 trademarked characters and real people. Try an original description."
             .to_string();
     }
-    if ["api key", "unauthorized", "401", "auth"].iter().any(|s| low.contains(s)) {
+    if ["api key", "unauthorized", "401", "auth"]
+        .iter()
+        .any(|s| low.contains(s))
+    {
         return "The image provider rejected the request — check your API key in Settings → Providers."
             .to_string();
     }
@@ -324,7 +338,10 @@ pub fn generate_image(
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().unwrap_or_default();
-            return Err(format!("image API {status}: {}", &body[..body.len().min(300)]));
+            return Err(format!(
+                "image API {status}: {}",
+                &body[..body.len().min(300)]
+            ));
         }
         let body: serde_json::Value = response
             .json()
@@ -386,9 +403,7 @@ pub fn generate_base_drafts(
     on_draft: Option<&dyn Fn(usize, &RgbaImage)>,
     is_cancelled: Option<&AtomicBool>,
 ) -> Result<Vec<RgbaImage>, String> {
-    let cancelled = |flag: Option<&AtomicBool>| {
-        flag.map_or(false, |f| f.load(Ordering::SeqCst))
-    };
+    let cancelled = |flag: Option<&AtomicBool>| flag.map_or(false, |f| f.load(Ordering::SeqCst));
     let n = n.max(1);
     let results: Mutex<Vec<(usize, Result<RgbaImage, String>)>> = Mutex::new(Vec::new());
 
@@ -474,13 +489,18 @@ pub fn hatch_pet(
 
     // Save the base once so row calls can attach it as a multipart reference.
     let scratch = home.join("pets").join(".hatch");
-    std::fs::create_dir_all(&scratch)
-        .map_err(|e| format!("create {}: {e}", scratch.display()))?;
-    let base_path = scratch.join(format!("base-{}.png", &uuid::Uuid::new_v4().to_string()[..8]));
+    std::fs::create_dir_all(&scratch).map_err(|e| format!("create {}: {e}", scratch.display()))?;
+    let base_path = scratch.join(format!(
+        "base-{}.png",
+        &uuid::Uuid::new_v4().to_string()[..8]
+    ));
     {
         let mut buffer: Vec<u8> = Vec::new();
         base_image
-            .write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageFormat::Png)
+            .write_to(
+                &mut std::io::Cursor::new(&mut buffer),
+                image::ImageFormat::Png,
+            )
             .map_err(|e| format!("encode base: {e}"))?;
         std::fs::write(&base_path, &buffer).map_err(|e| format!("write base: {e}"))?;
     }
@@ -528,15 +548,11 @@ pub fn hatch_pet(
                     for attempt in 0..ROW_GEN_ATTEMPTS {
                         let strict = attempt + 1 < ROW_GEN_ATTEMPTS;
                         let method = if strict { "components" } else { "auto" };
-                        let strip_bytes = match generate_image(
-                            &endpoint,
-                            &prompt,
-                            Some(&base_path),
-                            true,
-                        ) {
-                            Ok(bytes) => bytes,
-                            Err(_) => continue,
-                        };
+                        let strip_bytes =
+                            match generate_image(&endpoint, &prompt, Some(&base_path), true) {
+                                Ok(bytes) => bytes,
+                                Err(_) => continue,
+                            };
                         let Ok(strip) = image::load_from_memory(&strip_bytes) else {
                             continue;
                         };
@@ -606,8 +622,11 @@ pub fn hatch_pet(
     if !validation.ok {
         return Err(validation.errors.join("; "));
     }
-    let filled: std::collections::HashSet<&str> =
-        validation.filled_states.iter().map(|s| s.as_str()).collect();
+    let filled: std::collections::HashSet<&str> = validation
+        .filled_states
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
     let missing: Vec<&str> = REQUIRED_STATES
         .iter()
         .filter(|state| !filled.contains(*state))
@@ -808,16 +827,14 @@ pub fn cmd_hatch(
         };
         let slug = crate::pets::slugify(&name);
 
-        let progress = |event: &str, detail: &str| {
-            match event {
-                "row" => {
-                    let state = detail.split(':').next().unwrap_or(detail);
-                    println!("  ┊ drawing {state}…");
-                }
-                "compose" => println!("  ┊ composing spritesheet…"),
-                "save" => println!("  ┊ saving…"),
-                _ => {}
+        let progress = |event: &str, detail: &str| match event {
+            "row" => {
+                let state = detail.split(':').next().unwrap_or(detail);
+                println!("  ┊ drawing {state}…");
             }
+            "compose" => println!("  ┊ composing spritesheet…"),
+            "save" => println!("  ┊ saving…"),
+            _ => {}
         };
 
         match hatch_pet(

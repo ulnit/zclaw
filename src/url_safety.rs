@@ -164,7 +164,10 @@ fn host_from_authority(authority: &str) -> String {
             None => host_port,
         }
     };
-    host.trim().to_ascii_lowercase().trim_end_matches('.').to_string()
+    host.trim()
+        .to_ascii_lowercase()
+        .trim_end_matches('.')
+        .to_string()
 }
 
 struct ParsedHttpUrl {
@@ -242,7 +245,12 @@ fn v6_segments(ip: std::net::Ipv6Addr) -> [u16; 8] {
 pub fn is_blocked_ip(ip: IpAddr) -> bool {
     match canonical_ip(ip) {
         IpAddr::V4(v4) => {
-            if v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_multicast() || v4.is_unspecified() {
+            if v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_multicast()
+                || v4.is_unspecified()
+            {
                 return true;
             }
             // Ranges Python's is_private/is_reserved cover beyond Rust's:
@@ -350,7 +358,9 @@ fn resolve_sync(hostname: &str) -> Result<Vec<IpAddr>, ()> {
 }
 
 async fn resolve_async(hostname: &str) -> Result<Vec<IpAddr>, ()> {
-    let addrs = tokio::net::lookup_host((hostname, 0u16)).await.map_err(|_| ())?;
+    let addrs = tokio::net::lookup_host((hostname, 0u16))
+        .await
+        .map_err(|_| ())?;
     Ok(addrs.map(|sa| sa.ip()).collect())
 }
 
@@ -359,7 +369,9 @@ enum Resolution {
     /// DNS failure for a non-literal hostname: with a proxy configured the
     /// request is delegated to the proxy (hermes carve-out), otherwise the
     /// caller fails closed.
-    DnsFailed { proxy_pass: bool },
+    DnsFailed {
+        proxy_pass: bool,
+    },
 }
 
 fn resolve_hostname(hostname: &str, resolver: Resolver) -> Resolution {
@@ -408,7 +420,10 @@ fn is_safe_url_inner(parsed: &ParsedHttpUrl, resolution: Resolution) -> bool {
             return true;
         }
         Resolution::DnsFailed { proxy_pass: false } => {
-            tracing::warn!("Blocked request — DNS resolution failed for: {}", parsed.host);
+            tracing::warn!(
+                "Blocked request — DNS resolution failed for: {}",
+                parsed.host
+            );
             return false;
         }
     };
@@ -508,10 +523,9 @@ fn percent_decode(input: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(
-                std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""),
-                16,
-            ) {
+            if let Ok(byte) =
+                u8::from_str_radix(std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""), 16)
+            {
                 out.push(byte);
                 i += 3;
                 continue;
@@ -545,7 +559,8 @@ pub fn sensitive_query_param_name(url: &str) -> Option<String> {
             None => (pair, ""),
         };
         if !value.is_empty()
-            && SENSITIVE_QUERY_PARAM_NAMES.contains(&percent_decode(key).to_ascii_lowercase().as_str())
+            && SENSITIVE_QUERY_PARAM_NAMES
+                .contains(&percent_decode(key).to_ascii_lowercase().as_str())
         {
             return Some(key.to_string());
         }
@@ -625,7 +640,10 @@ pub fn normalize_url_for_request(url: &str) -> String {
 pub fn ssrf_guarded_client(timeout: std::time::Duration) -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(timeout)
-        .user_agent(concat!("Mozilla/5.0 (X11; Linux x86_64) ulnclaw/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!(
+            "Mozilla/5.0 (X11; Linux x86_64) ulnclaw/",
+            env!("CARGO_PKG_VERSION")
+        ))
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
             let target = attempt.url().to_string();
             if is_safe_url_sync(&target) {
@@ -714,9 +732,13 @@ mod tests {
     fn metadata_hostname_blocked_without_dns() {
         let _lock = ENV_LOCK.lock().unwrap();
         clear_toggle_env();
-        assert!(!is_safe_url_sync("http://metadata.google.internal/computeMetadata/v1/"));
+        assert!(!is_safe_url_sync(
+            "http://metadata.google.internal/computeMetadata/v1/"
+        ));
         assert!(!is_safe_url_sync("https://metadata.goog/"));
-        assert!(is_always_blocked_url_sync("http://metadata.google.internal/"));
+        assert!(is_always_blocked_url_sync(
+            "http://metadata.google.internal/"
+        ));
     }
 
     #[test]
@@ -724,7 +746,9 @@ mod tests {
         let _lock = ENV_LOCK.lock().unwrap();
         clear_toggle_env();
         set_env("ULNCLAW_ALLOW_PRIVATE_URLS", Some("true"));
-        assert!(!is_safe_url_sync("http://169.254.169.254/latest/meta-data/"));
+        assert!(!is_safe_url_sync(
+            "http://169.254.169.254/latest/meta-data/"
+        ));
         assert!(!is_safe_url_sync("http://metadata.google.internal/"));
         assert!(!is_safe_url_sync("http://[::ffff:169.254.169.254]/"));
         // But ordinary private addresses pass with the toggle on.
@@ -740,13 +764,18 @@ mod tests {
         set_env("HERMES_ALLOW_PRIVATE_URLS", Some("yes"));
         assert!(allow_private_urls());
         set_env("HERMES_ALLOW_PRIVATE_URLS", Some("false"));
-        assert!(!allow_private_urls(), "explicit false must not fall through");
+        assert!(
+            !allow_private_urls(),
+            "explicit false must not fall through"
+        );
         clear_toggle_env();
     }
 
     #[test]
     fn ipv4_mapped_always_blocked() {
-        assert!(is_always_blocked_url_sync("http://[::ffff:169.254.169.254]/"));
+        assert!(is_always_blocked_url_sync(
+            "http://[::ffff:169.254.169.254]/"
+        ));
         assert!(is_always_blocked_url_sync("http://169.254.170.2/"));
         assert!(!is_always_blocked_url_sync("http://8.8.8.8/"));
         assert!(!is_always_blocked_url_sync("http://192.168.1.1/"));
@@ -841,8 +870,14 @@ mod tests {
 
     #[test]
     fn trusted_private_host_helper() {
-        assert!(allows_private_ip_resolution("multimedia.nt.qq.com.cn", "https"));
-        assert!(!allows_private_ip_resolution("multimedia.nt.qq.com.cn", "http"));
+        assert!(allows_private_ip_resolution(
+            "multimedia.nt.qq.com.cn",
+            "https"
+        ));
+        assert!(!allows_private_ip_resolution(
+            "multimedia.nt.qq.com.cn",
+            "http"
+        ));
         assert!(!allows_private_ip_resolution("other.example.com", "https"));
     }
 

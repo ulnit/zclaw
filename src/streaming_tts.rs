@@ -145,7 +145,10 @@ impl SentenceChunker {
     }
 
     fn is_boundary(c: char) -> bool {
-        matches!(c, '.' | '!' | '?' | '…' | '。' | '！' | '？' | '；' | ';' | '\n')
+        matches!(
+            c,
+            '.' | '!' | '?' | '…' | '。' | '！' | '？' | '；' | ';' | '\n'
+        )
     }
 
     fn is_closer(c: char) -> bool {
@@ -383,7 +386,9 @@ impl<S: StreamingTtsSink + 'static> StreamingTtsConsumer<S> {
 
     /// Receive a text delta from the agent. Non-blocking.
     pub fn on_delta(self: &Arc<Self>, text: &str) {
-        if self.aborted.load(Ordering::SeqCst) || !self.active || self.finished.load(Ordering::SeqCst)
+        if self.aborted.load(Ordering::SeqCst)
+            || !self.active
+            || self.finished.load(Ordering::SeqCst)
         {
             return;
         }
@@ -864,7 +869,11 @@ mod tests {
         assert!(!out.is_empty());
         assert!(out.iter().all(|c| c.chars().count() <= 20));
         let tail = chunker.flush();
-        let total: usize = out.iter().chain(tail.iter()).map(|c| c.chars().count()).sum();
+        let total: usize = out
+            .iter()
+            .chain(tail.iter())
+            .map(|c| c.chars().count())
+            .sum();
         // All 80 non-whitespace chars survive; inter-word spaces may be
         // trimmed at split boundaries.
         assert!(total >= 80, "total {total}");

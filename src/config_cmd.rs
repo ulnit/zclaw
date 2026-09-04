@@ -65,7 +65,11 @@ pub fn is_env_config_key(key: &str) -> bool {
         && key
             .chars()
             .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
-        && key.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false)
+        && key
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_uppercase())
+            .unwrap_or(false)
 }
 
 pub fn get_nested<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
@@ -101,11 +105,15 @@ pub fn unset_nested(value: &mut Value, key: &str) -> bool {
         if parts.is_empty() {
             return false;
         }
-        let Some(table) = value.as_table_mut() else { return false };
+        let Some(table) = value.as_table_mut() else {
+            return false;
+        };
         if parts.len() == 1 {
             return table.remove(parts[0]).is_some();
         }
-        let Some(child) = table.get_mut(parts[0]) else { return false };
+        let Some(child) = table.get_mut(parts[0]) else {
+            return false;
+        };
         walk(child, &parts[1..])
     }
     walk(value, &parts)
@@ -150,9 +158,7 @@ fn toml_to_json(value: &Value) -> serde_json::Value {
             .unwrap_or(serde_json::Value::Null),
         Value::Boolean(flag) => serde_json::Value::Bool(*flag),
         Value::Datetime(datetime) => serde_json::Value::String(datetime.to_string()),
-        Value::Array(items) => {
-            serde_json::Value::Array(items.iter().map(toml_to_json).collect())
-        }
+        Value::Array(items) => serde_json::Value::Array(items.iter().map(toml_to_json).collect()),
         Value::Table(table) => serde_json::Value::Object(
             table
                 .iter()
@@ -208,7 +214,10 @@ pub fn show_config() -> Result<String, String> {
     out.push_str("◆ Paths\n");
     out.push_str(&format!("  Config:       {}\n", path.display()));
     out.push_str(&format!("  Secrets:      {}\n", env_path().display()));
-    out.push_str(&format!("  Home:         {}\n", crate::config::ulnclaw_home().display()));
+    out.push_str(&format!(
+        "  Home:         {}\n",
+        crate::config::ulnclaw_home().display()
+    ));
     out.push('\n');
     out.push_str("◆ Configuration (secrets redacted)\n");
     let rendered = if value.as_table().map(|t| t.is_empty()).unwrap_or(true) {
@@ -254,7 +263,8 @@ pub fn get_config_value(key: &str, as_json: bool) -> Result<String, String> {
             let mut rendered = if other.is_array() {
                 let mut wrapper = toml::map::Map::new();
                 wrapper.insert("v".to_string(), other.clone());
-                let text = toml::to_string_pretty(&Value::Table(wrapper)).map_err(|e| e.to_string())?;
+                let text =
+                    toml::to_string_pretty(&Value::Table(wrapper)).map_err(|e| e.to_string())?;
                 text.trim_start_matches("v = ").to_string()
             } else {
                 toml::to_string_pretty(other).map_err(|e| e.to_string())?
@@ -366,7 +376,11 @@ pub(crate) fn remove_env_value(name: &str) -> Result<bool, String> {
 }
 
 /// Dispatch for `ulnclaw config <action>` (hermes `config_command`).
-pub fn handle_config_command(args: &[String], as_json: bool, force: bool) -> Result<String, String> {
+pub fn handle_config_command(
+    args: &[String],
+    as_json: bool,
+    force: bool,
+) -> Result<String, String> {
     let sub = args.first().map(|s| s.as_str()).unwrap_or("show");
     match sub {
         "show" => show_config(),
@@ -453,7 +467,10 @@ mod tests {
         assert_eq!(parse_scalar("1.5"), Value::Float(1.5));
         assert_eq!(parse_scalar("docker"), Value::String("docker".into()));
         let array = parse_scalar("[\"a\", \"b\"]");
-        assert!(array.as_array().map(|a| a.len() == 2).unwrap_or(false), "{array:?}");
+        assert!(
+            array.as_array().map(|a| a.len() == 2).unwrap_or(false),
+            "{array:?}"
+        );
     }
 
     #[test]
@@ -467,7 +484,10 @@ mod tests {
 
         set_nested(&mut doc, "model.model", Value::String("qwen".into())).unwrap();
         set_nested(&mut doc, "gateway.port", Value::Integer(9999)).unwrap();
-        assert_eq!(get_nested(&doc, "gateway.port").and_then(|v| v.as_integer()), Some(9999));
+        assert_eq!(
+            get_nested(&doc, "gateway.port").and_then(|v| v.as_integer()),
+            Some(9999)
+        );
 
         assert!(unset_nested(&mut doc, "model.model"));
         assert!(get_nested(&doc, "model.model").is_none());
@@ -523,7 +543,10 @@ mod tests {
             .unwrap();
             let out = show_config().unwrap();
             assert!(out.contains("ulnclaw Configuration"));
-            assert!(!out.contains("sk-1234567890abcdef"), "secret leaked:\n{out}");
+            assert!(
+                !out.contains("sk-1234567890abcdef"),
+                "secret leaked:\n{out}"
+            );
             assert!(out.contains("sk-…cdef"));
             assert!(out.contains("Paths"));
         });

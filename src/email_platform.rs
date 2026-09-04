@@ -51,7 +51,6 @@ const NOREPLY_PATTERNS: &[&str] = &[
     "automailer",
 ];
 
-
 /// `[messaging.email]` — IMAP/SMTP email adapter (hermes
 /// `platforms.email` plugin config + `EMAIL_*` env vars).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,10 +150,10 @@ impl EmailConfig {
     pub fn resolve(&self) -> ResolvedEmail {
         let address = env_trim("EMAIL_ADDRESS").unwrap_or_else(|| self.address.trim().to_string());
         let password = env_trim("EMAIL_PASSWORD").unwrap_or_else(|| self.password.clone());
-        let imap_host = env_trim("EMAIL_IMAP_HOST")
-            .unwrap_or_else(|| self.imap_host.trim().to_string());
-        let smtp_host = env_trim("EMAIL_SMTP_HOST")
-            .unwrap_or_else(|| self.smtp_host.trim().to_string());
+        let imap_host =
+            env_trim("EMAIL_IMAP_HOST").unwrap_or_else(|| self.imap_host.trim().to_string());
+        let smtp_host =
+            env_trim("EMAIL_SMTP_HOST").unwrap_or_else(|| self.smtp_host.trim().to_string());
         let allowed_users = match env_trim("EMAIL_ALLOWED_USERS") {
             Some(raw) => raw
                 .split(',')
@@ -171,12 +170,12 @@ impl EmailConfig {
         let allow_all_users = env_bool("EMAIL_ALLOW_ALL_USERS")
             .or_else(|| env_bool("GATEWAY_ALLOW_ALL_USERS"))
             .unwrap_or(self.allow_all_users);
-        let require_authenticated_sender =
-            if let Some(trust) = env_bool("EMAIL_TRUST_FROM_HEADER") {
-                !trust
-            } else {
-                self.require_authenticated_sender
-            };
+        let require_authenticated_sender = if let Some(trust) = env_bool("EMAIL_TRUST_FROM_HEADER")
+        {
+            !trust
+        } else {
+            self.require_authenticated_sender
+        };
         ResolvedEmail {
             address,
             password,
@@ -194,7 +193,6 @@ impl EmailConfig {
                 .unwrap_or_else(|| self.authserv_id.trim().to_lowercase()),
         }
     }
-
 }
 
 // ---------------------------------------------------------------------------
@@ -246,8 +244,7 @@ async fn tcp_connect(host: &str, port: u16) -> Result<tokio::net::TcpStream, Str
     let attempt = |list: Vec<std::net::SocketAddr>| async move {
         let mut last = String::new();
         for addr in list {
-            match tokio::time::timeout(CONNECT_TIMEOUT, tokio::net::TcpStream::connect(addr))
-                .await
+            match tokio::time::timeout(CONNECT_TIMEOUT, tokio::net::TcpStream::connect(addr)).await
             {
                 Ok(Ok(stream)) => return Ok(stream),
                 Ok(Err(e)) => last = e.to_string(),
@@ -378,9 +375,8 @@ impl ImapConn {
     /// (hermes `_send_imap_id`).
     async fn send_id(&mut self) {
         let version = env!("CARGO_PKG_VERSION");
-        let cmd = format!(
-            "ID (\"name\" \"ulnclaw\" \"version\" \"{version}\" \"vendor\" \"ulnclaw\")"
-        );
+        let cmd =
+            format!("ID (\"name\" \"ulnclaw\" \"version\" \"{version}\" \"vendor\" \"ulnclaw\")");
         let _ = self.command(&cmd).await;
     }
 
@@ -400,9 +396,7 @@ impl ImapConn {
     }
 
     async fn uid_fetch_rfc822(&mut self, uid: u64) -> Result<Vec<u8>, String> {
-        let resp = self
-            .command(&format!("UID FETCH {uid} (RFC822)"))
-            .await?;
+        let resp = self.command(&format!("UID FETCH {uid} (RFC822)")).await?;
         resp.literals
             .into_iter()
             .next()
@@ -615,9 +609,7 @@ impl SmtpConn {
         if !reply.starts_with('3') {
             return Err(format!("DATA rejected: {reply}"));
         }
-        self.stream
-            .write_all(dot_stuff(data).as_bytes())
-            .await?;
+        self.stream.write_all(dot_stuff(data).as_bytes()).await?;
         self.stream.write_all(b"\r\n.\r\n").await?;
         let reply = self.read_reply().await?;
         if !reply.starts_with('2') {
@@ -775,11 +767,19 @@ fn part_is_attachment(part: &mailparse::ParsedMail<'_>) -> bool {
 pub fn strip_html(html: &str) -> String {
     let mut text = html.to_string();
     for (pattern, replacement) in [
-        (regex::Regex::new(r"(?i)<br\s*/?>").unwrap(), "\n".to_string()),
-        (regex::Regex::new(r"(?i)<p[^>]*>").unwrap(), "\n".to_string()),
+        (
+            regex::Regex::new(r"(?i)<br\s*/?>").unwrap(),
+            "\n".to_string(),
+        ),
+        (
+            regex::Regex::new(r"(?i)<p[^>]*>").unwrap(),
+            "\n".to_string(),
+        ),
         (regex::Regex::new(r"(?i)</p>").unwrap(), "\n".to_string()),
     ] {
-        text = pattern.replace_all(&text, replacement.as_str()).into_owned();
+        text = pattern
+            .replace_all(&text, replacement.as_str())
+            .into_owned();
     }
     text = regex::Regex::new(r"<[^>]+>")
         .unwrap()
@@ -886,12 +886,7 @@ pub fn verify_sender_authentication(
     for raw in auth_results {
         let value: String = raw.split_whitespace().collect::<Vec<_>>().join(" ");
         if !authserv_id.is_empty() {
-            let serv = value
-                .split(';')
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_lowercase();
+            let serv = value.split(';').next().unwrap_or("").trim().to_lowercase();
             if !domains_aligned(&serv, authserv_id) && serv != authserv_id.to_lowercase() {
                 continue;
             }
@@ -927,10 +922,7 @@ pub fn verify_sender_authentication(
     }
     // 2) SPF pass aligned with the From domain.
     if methods.get("spf").map(|s| s.as_str()) == Some("pass") {
-        let mut spf_domain = props
-            .get("smtp.mailfrom")
-            .cloned()
-            .unwrap_or_default();
+        let mut spf_domain = props.get("smtp.mailfrom").cloned().unwrap_or_default();
         if spf_domain.is_empty() {
             spf_domain = props.get("smtp.from").cloned().unwrap_or_default();
         }
@@ -1060,9 +1052,7 @@ fn collect_attachments(mail: &mailparse::ParsedMail<'_>, out: &mut Vec<ParsedAtt
             .get("filename")
             .or_else(|| part.ctype.params.get("name"))
             .map(|f| decode_rfc2047(f))
-            .unwrap_or_else(|| {
-                format!("attachment.{}", mime.split('/').nth(1).unwrap_or("bin"))
-            });
+            .unwrap_or_else(|| format!("attachment.{}", mime.split('/').nth(1).unwrap_or("bin")));
         out.push(ParsedAttachment {
             bytes,
             filename,
@@ -1092,8 +1082,7 @@ impl EmailRuntime {
     }
 
     fn allowlist_in_effect(&self) -> bool {
-        !self.cfg.allowed_users.is_empty()
-            || env_trim("GATEWAY_ALLOWED_USERS").is_some()
+        !self.cfg.allowed_users.is_empty() || env_trim("GATEWAY_ALLOWED_USERS").is_some()
     }
 
     fn sender_allowed(&self, addr: &str) -> bool {
@@ -1164,7 +1153,10 @@ pub async fn run(
         }
         Err(e) => {
             eprintln!("[email] IMAP connection failed: {e}");
-            eprintln!("[email] will keep polling every {}s", resolved.poll_interval_secs);
+            eprintln!(
+                "[email] will keep polling every {}s",
+                resolved.poll_interval_secs
+            );
         }
     }
 
@@ -1206,7 +1198,10 @@ fn trim_seen_uids(seen: &mut HashSet<u64>) {
     *seen = keepers;
 }
 
-async fn poll_once(runtime: &Arc<EmailRuntime>, dispatcher: &Arc<Dispatcher>) -> Result<(), String> {
+async fn poll_once(
+    runtime: &Arc<EmailRuntime>,
+    dispatcher: &Arc<Dispatcher>,
+) -> Result<(), String> {
     let cfg = &runtime.cfg;
     let mut conn = ImapConn::connect(&cfg.imap_host, cfg.imap_port).await?;
     conn.login(&cfg.address, &cfg.password)
@@ -1296,12 +1291,8 @@ async fn dispatch_email(
     let mut attachments: Vec<MediaAttachment> = Vec::new();
     if !runtime.cfg.skip_attachments {
         for att in &inbound.attachments {
-            match crate::media_cache::cache_media_bytes(
-                &home,
-                &att.bytes,
-                &att.mime,
-                &att.filename,
-            ) {
+            match crate::media_cache::cache_media_bytes(&home, &att.bytes, &att.mime, &att.filename)
+            {
                 Ok(path) => attachments.push(MediaAttachment {
                     bytes: att.bytes.len() as u64,
                     mime: att.mime.clone(),
@@ -1331,7 +1322,10 @@ async fn dispatch_email(
         message_id: inbound.message_id.clone(),
         attachments,
     };
-    println!("[email] new message from {}: {subject}", inbound.sender_addr);
+    println!(
+        "[email] new message from {}: {subject}",
+        inbound.sender_addr
+    );
     let outcome = match dispatcher.handle_event(event).await {
         Ok(outcome) => outcome,
         Err(e) => crate::messaging::DispatchOutcome {
@@ -1544,7 +1538,10 @@ mod tests {
 
     #[test]
     fn extract_address_from_display_form() {
-        assert_eq!(extract_email_address("Alice <Alice@Example.com>"), "alice@example.com");
+        assert_eq!(
+            extract_email_address("Alice <Alice@Example.com>"),
+            "alice@example.com"
+        );
         assert_eq!(extract_email_address("bob@example.com "), "bob@example.com");
     }
 
@@ -1567,9 +1564,7 @@ mod tests {
 
     #[test]
     fn auth_results_spf_aligned_pass() {
-        let ar = vec![
-            "mx.example.com; spf=pass smtp.mailfrom=user@mail.sender.com".to_string(),
-        ];
+        let ar = vec!["mx.example.com; spf=pass smtp.mailfrom=user@mail.sender.com".to_string()];
         let (ok, _) = verify_sender_authentication(&ar, "user@sender.com", "");
         assert!(ok);
     }
@@ -1609,22 +1604,17 @@ mod tests {
     #[test]
     fn authserv_id_pinning() {
         let ar = vec!["other-mx.com; dmarc=pass header.from=sender.com".to_string()];
-        let (ok, reason) =
-            verify_sender_authentication(&ar, "user@sender.com", "mx.example.com");
+        let (ok, reason) = verify_sender_authentication(&ar, "user@sender.com", "mx.example.com");
         assert!(!ok);
         assert!(reason.contains("authserv-id"));
         let ar = vec!["mx.example.com; dmarc=pass header.from=sender.com".to_string()];
-        let (ok, _) =
-            verify_sender_authentication(&ar, "user@sender.com", "mx.example.com");
+        let (ok, _) = verify_sender_authentication(&ar, "user@sender.com", "mx.example.com");
         assert!(ok);
     }
 
     #[test]
     fn rfc2047_b_and_q_decode() {
-        assert_eq!(
-            decode_rfc2047("=?utf-8?B?5L2g5aW9?= test"),
-            "你好 test"
-        );
+        assert_eq!(decode_rfc2047("=?utf-8?B?5L2g5aW9?= test"), "你好 test");
         assert_eq!(decode_rfc2047("=?utf-8?Q?Hello_World?="), "Hello World");
         assert_eq!(decode_rfc2047("plain subject"), "plain subject");
     }

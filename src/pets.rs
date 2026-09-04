@@ -491,7 +491,12 @@ fn resolve_spritesheet(directory: &Path, meta: &serde_json::Value) -> PathBuf {
             return candidate;
         }
     }
-    for name in ["spritesheet.webp", "spritesheet.png", "sprite.webp", "sprite.png"] {
+    for name in [
+        "spritesheet.webp",
+        "spritesheet.png",
+        "sprite.webp",
+        "sprite.png",
+    ] {
         let candidate = directory.join(name);
         if candidate.is_file() {
             return candidate;
@@ -622,8 +627,10 @@ fn download_to(url: &str, dest: &Path, timeout_secs: u64) -> Result<(), PetStore
         "{}.part",
         dest.extension().and_then(|s| s.to_str()).unwrap_or("")
     ));
-    std::fs::write(&tmp, &bytes).map_err(|e| PetStoreError(format!("write {}: {e}", tmp.display())))?;
-    std::fs::rename(&tmp, dest).map_err(|e| PetStoreError(format!("rename {}: {e}", dest.display())))?;
+    std::fs::write(&tmp, &bytes)
+        .map_err(|e| PetStoreError(format!("write {}: {e}", tmp.display())))?;
+    std::fs::rename(&tmp, dest)
+        .map_err(|e| PetStoreError(format!("rename {}: {e}", dest.display())))?;
     Ok(())
 }
 
@@ -698,7 +705,10 @@ pub fn install_pet(home: &Path, slug: &str, force: bool) -> Result<InstalledPet,
     }
     meta.insert(
         "spritesheetPath".into(),
-        serde_json::json!(sprite_path.file_name().and_then(|s| s.to_str()).unwrap_or("")),
+        serde_json::json!(sprite_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")),
     );
     if !meta.contains_key("id") {
         meta.insert("id".into(), serde_json::json!(slug));
@@ -785,8 +795,11 @@ pub fn register_local_pet(
         "createdBy": "generator",
     });
     let pet_json = directory.join("pet.json");
-    std::fs::write(&pet_json, serde_json::to_string_pretty(&meta).unwrap_or_default())
-        .map_err(|e| PetStoreError(format!("write {}: {e}", pet_json.display())))?;
+    std::fs::write(
+        &pet_json,
+        serde_json::to_string_pretty(&meta).unwrap_or_default(),
+    )
+    .map_err(|e| PetStoreError(format!("write {}: {e}", pet_json.display())))?;
 
     match load_pet(home, &slug) {
         Some(pet) if pet.exists() => Ok(pet),
@@ -808,7 +821,10 @@ pub fn export_pet(home: &Path, slug: &str) -> Result<(String, Vec<u8>), PetStore
         .map(|parent| Some(parent) == root.canonicalize().ok())
         .unwrap_or(false);
     if !is_child || !directory.is_dir() {
-        return Err(PetStoreError(format!("pet '{}' is not installed", slug.trim())));
+        return Err(PetStoreError(format!(
+            "pet '{}' is not installed",
+            slug.trim()
+        )));
     }
 
     let name = directory
@@ -907,7 +923,12 @@ pub fn thumbnail_png(home: &Path, slug: &str, source_url: &str) -> Option<Vec<u8
     let crop_h = THUMB_FRAME_H.min(image.height());
     let frame = image::imageops::crop_imm(&image, 0, 0, crop_w, crop_h).to_image();
     let height = (THUMB_W as f64 * THUMB_FRAME_H as f64 / THUMB_FRAME_W as f64).round() as u32;
-    let thumb = image::imageops::resize(&frame, THUMB_W, height, image::imageops::FilterType::Nearest);
+    let thumb = image::imageops::resize(
+        &frame,
+        THUMB_W,
+        height,
+        image::imageops::FilterType::Nearest,
+    );
     let mut png: Vec<u8> = Vec::new();
     thumb
         .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
@@ -983,7 +1004,9 @@ pub fn rename_pet(home: &Path, slug: &str, display_name: &str) -> Option<String>
 /// (env-based, non-blocking — hermes `detect_terminal_graphics`).
 pub fn detect_terminal_graphics() -> &'static str {
     let term = std::env::var("TERM").unwrap_or_default().to_lowercase();
-    let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default().to_lowercase();
+    let term_program = std::env::var("TERM_PROGRAM")
+        .unwrap_or_default()
+        .to_lowercase();
 
     // VS Code/Cursor embedded xterm.js can't display inline images unless
     // explicitly enabled — default to half-blocks there (hermes parity).
@@ -991,7 +1014,9 @@ pub fn detect_terminal_graphics() -> &'static str {
         return "unicode";
     }
 
-    if std::env::var("KITTY_WINDOW_ID").is_ok() || term.contains("kitty") || term.contains("ghostty")
+    if std::env::var("KITTY_WINDOW_ID").is_ok()
+        || term.contains("kitty")
+        || term.contains("ghostty")
     {
         return "kitty";
     }
@@ -1050,7 +1075,9 @@ fn frame_is_blank(frame: &image::RgbaImage) -> bool {
 /// Decode a spritesheet into RGBA (returns `None` on any decode failure).
 pub fn open_sheet(path: &Path) -> Option<image::RgbaImage> {
     let bytes = std::fs::read(path).ok()?;
-    image::load_from_memory(&bytes).ok().map(|img| img.to_rgba8())
+    image::load_from_memory(&bytes)
+        .ok()
+        .map(|img| img.to_rgba8())
 }
 
 /// Cropped, padding-trimmed RGBA frames for one state row (unscaled) —
@@ -1078,8 +1105,8 @@ pub fn raw_frames_from_sheet(
         if right <= left || bottom <= top {
             break;
         }
-        let frame = image::imageops::crop_imm(sheet, left, top, right - left, bottom - top)
-            .to_image();
+        let frame =
+            image::imageops::crop_imm(sheet, left, top, right - left, bottom - top).to_image();
         if frame_is_blank(&frame) {
             break; // trailing transparent padding — real frames end here
         }
@@ -1105,7 +1132,10 @@ pub fn state_frame_counts(sheet: &image::RgbaImage) -> HashMap<String, usize> {
 fn png_bytes(frame: &image::RgbaImage) -> Option<Vec<u8>> {
     let mut buffer: Vec<u8> = Vec::new();
     frame
-        .write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageFormat::Png)
+        .write_to(
+            &mut std::io::Cursor::new(&mut buffer),
+            image::ImageFormat::Png,
+        )
         .ok()?;
     Some(buffer)
 }
@@ -1176,7 +1206,12 @@ fn snap_frames_to_cell_grid(frames: Vec<image::RgbaImage>) -> Vec<image::RgbaIma
     frames
         .iter()
         .map(|frame| {
-            image::imageops::resize(frame, target.0, target.1, image::imageops::FilterType::Lanczos3)
+            image::imageops::resize(
+                frame,
+                target.0,
+                target.1,
+                image::imageops::FilterType::Lanczos3,
+            )
         })
         .collect()
 }
@@ -1203,7 +1238,11 @@ fn kitty_apc(ctrl: &str, data: &str) -> String {
 
 /// Encode one frame via the kitty graphics protocol (transmit + display) —
 /// hermes `_encode_kitty`.
-pub fn encode_kitty(frame: &image::RgbaImage, cell_cols: Option<u32>, cell_rows: Option<u32>) -> String {
+pub fn encode_kitty(
+    frame: &image::RgbaImage,
+    cell_cols: Option<u32>,
+    cell_rows: Option<u32>,
+) -> String {
     let mut ctrl = "f=100,a=T,q=2".to_string();
     if let Some(cols) = cell_cols {
         ctrl.push_str(&format!(",c={cols}"));
@@ -1213,7 +1252,10 @@ pub fn encode_kitty(frame: &image::RgbaImage, cell_cols: Option<u32>, cell_rows:
     }
     let payload = png_bytes(frame).unwrap_or_default();
     use base64::Engine;
-    kitty_apc(&ctrl, &base64::engine::general_purpose::STANDARD.encode(payload))
+    kitty_apc(
+        &ctrl,
+        &base64::engine::general_purpose::STANDARD.encode(payload),
+    )
 }
 
 const KITTY_PLACEHOLDER: char = '\u{10EEEE}';
@@ -1221,36 +1263,31 @@ const KITTY_PLACEHOLDER: char = '\u{10EEEE}';
 /// Row/column diacritics, in order — verbatim from kitty's
 /// gen/rowcolumn-diacritics.txt (Unicode 6.0.0, combining class 230).
 const ROWCOL_DIACRITICS: &[u32] = &[
-    0x0305, 0x030D, 0x030E, 0x0310, 0x0312, 0x033D, 0x033E, 0x033F, 0x0346, 0x034A,
-    0x034B, 0x034C, 0x0350, 0x0351, 0x0352, 0x0357, 0x035B, 0x0363, 0x0364, 0x0365,
-    0x0366, 0x0367, 0x0368, 0x0369, 0x036A, 0x036B, 0x036C, 0x036D, 0x036E, 0x036F,
-    0x0483, 0x0484, 0x0485, 0x0486, 0x0487, 0x0592, 0x0593, 0x0594, 0x0595, 0x0597,
-    0x0598, 0x0599, 0x059C, 0x059D, 0x059E, 0x059F, 0x05A0, 0x05A1, 0x05A8, 0x05A9,
-    0x05AB, 0x05AC, 0x05AF, 0x05C4, 0x0610, 0x0611, 0x0612, 0x0613, 0x0614, 0x0615,
-    0x0616, 0x0617, 0x0657, 0x0658, 0x0659, 0x065A, 0x065B, 0x065D, 0x065E, 0x06D6,
-    0x06D7, 0x06D8, 0x06D9, 0x06DA, 0x06DB, 0x06DC, 0x06DF, 0x06E0, 0x06E1, 0x06E2,
-    0x06E4, 0x06E7, 0x06E8, 0x06EB, 0x06EC, 0x0730, 0x0732, 0x0733, 0x0735, 0x0736,
-    0x073A, 0x073D, 0x073F, 0x0740, 0x0741, 0x0743, 0x0745, 0x0747, 0x0749, 0x074A,
-    0x07EB, 0x07EC, 0x07ED, 0x07EE, 0x07EF, 0x07F0, 0x07F1, 0x07F3, 0x0816, 0x0817,
-    0x0818, 0x0819, 0x081B, 0x081C, 0x081D, 0x081E, 0x081F, 0x0820, 0x0821, 0x0822,
-    0x0823, 0x0825, 0x0826, 0x0827, 0x0829, 0x082A, 0x082B, 0x082C, 0x082D, 0x0951,
-    0x0953, 0x0954, 0x0F82, 0x0F83, 0x0F86, 0x0F87, 0x135D, 0x135E, 0x135F, 0x17DD,
-    0x193A, 0x1A17, 0x1A75, 0x1A76, 0x1A77, 0x1A78, 0x1A79, 0x1A7A, 0x1A7B, 0x1A7C,
-    0x1B6B, 0x1B6D, 0x1B6E, 0x1B6F, 0x1B70, 0x1B71, 0x1B72, 0x1B73, 0x1CD0, 0x1CD1,
-    0x1CD2, 0x1CDA, 0x1CDB, 0x1CE0, 0x1DC0, 0x1DC1, 0x1DC3, 0x1DC4, 0x1DC5, 0x1DC6,
-    0x1DC7, 0x1DC8, 0x1DC9, 0x1DCB, 0x1DCC, 0x1DD1, 0x1DD2, 0x1DD3, 0x1DD4, 0x1DD5,
-    0x1DD6, 0x1DD7, 0x1DD8, 0x1DD9, 0x1DDA, 0x1DDB, 0x1DDC, 0x1DDD, 0x1DDE, 0x1DDF,
-    0x1DE0, 0x1DE1, 0x1DE2, 0x1DE3, 0x1DE4, 0x1DE5, 0x1DE6, 0x1DFE, 0x20D0, 0x20D1,
-    0x20D4, 0x20D5, 0x20D6, 0x20D7, 0x20DB, 0x20DC, 0x20E1, 0x20E7, 0x20E9, 0x20F0,
-    0x2CEF, 0x2CF0, 0x2CF1, 0x2DE0, 0x2DE1, 0x2DE2, 0x2DE3, 0x2DE4, 0x2DE5, 0x2DE6,
-    0x2DE7, 0x2DE8, 0x2DE9, 0x2DEA, 0x2DEB, 0x2DEC, 0x2DED, 0x2DEE, 0x2DEF, 0x2DF0,
-    0x2DF1, 0x2DF2, 0x2DF3, 0x2DF4, 0x2DF5, 0x2DF6, 0x2DF7, 0x2DF8, 0x2DF9, 0x2DFA,
-    0x2DFB, 0x2DFC, 0x2DFD, 0x2DFE, 0x2DFF, 0xA66F, 0xA67C, 0xA67D, 0xA6F0, 0xA6F1,
-    0xA8E0, 0xA8E1, 0xA8E2, 0xA8E3, 0xA8E4, 0xA8E5, 0xA8E6, 0xA8E7, 0xA8E8, 0xA8E9,
-    0xA8EA, 0xA8EB, 0xA8EC, 0xA8ED, 0xA8EE, 0xA8EF, 0xA8F0, 0xA8F1, 0xAAB0, 0xAAB2,
-    0xAAB3, 0xAAB7, 0xAAB8, 0xAABE, 0xAABF, 0xAAC1, 0xFE20, 0xFE21, 0xFE22, 0xFE23,
-    0xFE24, 0xFE25, 0xFE26, 0x10A0F, 0x10A38, 0x1D185, 0x1D186, 0x1D187, 0x1D188,
-    0x1D189, 0x1D1AA, 0x1D1AB, 0x1D1AC, 0x1D1AD, 0x1D242, 0x1D243, 0x1D244,
+    0x0305, 0x030D, 0x030E, 0x0310, 0x0312, 0x033D, 0x033E, 0x033F, 0x0346, 0x034A, 0x034B, 0x034C,
+    0x0350, 0x0351, 0x0352, 0x0357, 0x035B, 0x0363, 0x0364, 0x0365, 0x0366, 0x0367, 0x0368, 0x0369,
+    0x036A, 0x036B, 0x036C, 0x036D, 0x036E, 0x036F, 0x0483, 0x0484, 0x0485, 0x0486, 0x0487, 0x0592,
+    0x0593, 0x0594, 0x0595, 0x0597, 0x0598, 0x0599, 0x059C, 0x059D, 0x059E, 0x059F, 0x05A0, 0x05A1,
+    0x05A8, 0x05A9, 0x05AB, 0x05AC, 0x05AF, 0x05C4, 0x0610, 0x0611, 0x0612, 0x0613, 0x0614, 0x0615,
+    0x0616, 0x0617, 0x0657, 0x0658, 0x0659, 0x065A, 0x065B, 0x065D, 0x065E, 0x06D6, 0x06D7, 0x06D8,
+    0x06D9, 0x06DA, 0x06DB, 0x06DC, 0x06DF, 0x06E0, 0x06E1, 0x06E2, 0x06E4, 0x06E7, 0x06E8, 0x06EB,
+    0x06EC, 0x0730, 0x0732, 0x0733, 0x0735, 0x0736, 0x073A, 0x073D, 0x073F, 0x0740, 0x0741, 0x0743,
+    0x0745, 0x0747, 0x0749, 0x074A, 0x07EB, 0x07EC, 0x07ED, 0x07EE, 0x07EF, 0x07F0, 0x07F1, 0x07F3,
+    0x0816, 0x0817, 0x0818, 0x0819, 0x081B, 0x081C, 0x081D, 0x081E, 0x081F, 0x0820, 0x0821, 0x0822,
+    0x0823, 0x0825, 0x0826, 0x0827, 0x0829, 0x082A, 0x082B, 0x082C, 0x082D, 0x0951, 0x0953, 0x0954,
+    0x0F82, 0x0F83, 0x0F86, 0x0F87, 0x135D, 0x135E, 0x135F, 0x17DD, 0x193A, 0x1A17, 0x1A75, 0x1A76,
+    0x1A77, 0x1A78, 0x1A79, 0x1A7A, 0x1A7B, 0x1A7C, 0x1B6B, 0x1B6D, 0x1B6E, 0x1B6F, 0x1B70, 0x1B71,
+    0x1B72, 0x1B73, 0x1CD0, 0x1CD1, 0x1CD2, 0x1CDA, 0x1CDB, 0x1CE0, 0x1DC0, 0x1DC1, 0x1DC3, 0x1DC4,
+    0x1DC5, 0x1DC6, 0x1DC7, 0x1DC8, 0x1DC9, 0x1DCB, 0x1DCC, 0x1DD1, 0x1DD2, 0x1DD3, 0x1DD4, 0x1DD5,
+    0x1DD6, 0x1DD7, 0x1DD8, 0x1DD9, 0x1DDA, 0x1DDB, 0x1DDC, 0x1DDD, 0x1DDE, 0x1DDF, 0x1DE0, 0x1DE1,
+    0x1DE2, 0x1DE3, 0x1DE4, 0x1DE5, 0x1DE6, 0x1DFE, 0x20D0, 0x20D1, 0x20D4, 0x20D5, 0x20D6, 0x20D7,
+    0x20DB, 0x20DC, 0x20E1, 0x20E7, 0x20E9, 0x20F0, 0x2CEF, 0x2CF0, 0x2CF1, 0x2DE0, 0x2DE1, 0x2DE2,
+    0x2DE3, 0x2DE4, 0x2DE5, 0x2DE6, 0x2DE7, 0x2DE8, 0x2DE9, 0x2DEA, 0x2DEB, 0x2DEC, 0x2DED, 0x2DEE,
+    0x2DEF, 0x2DF0, 0x2DF1, 0x2DF2, 0x2DF3, 0x2DF4, 0x2DF5, 0x2DF6, 0x2DF7, 0x2DF8, 0x2DF9, 0x2DFA,
+    0x2DFB, 0x2DFC, 0x2DFD, 0x2DFE, 0x2DFF, 0xA66F, 0xA67C, 0xA67D, 0xA6F0, 0xA6F1, 0xA8E0, 0xA8E1,
+    0xA8E2, 0xA8E3, 0xA8E4, 0xA8E5, 0xA8E6, 0xA8E7, 0xA8E8, 0xA8E9, 0xA8EA, 0xA8EB, 0xA8EC, 0xA8ED,
+    0xA8EE, 0xA8EF, 0xA8F0, 0xA8F1, 0xAAB0, 0xAAB2, 0xAAB3, 0xAAB7, 0xAAB8, 0xAABE, 0xAABF, 0xAAC1,
+    0xFE20, 0xFE21, 0xFE22, 0xFE23, 0xFE24, 0xFE25, 0xFE26, 0x10A0F, 0x10A38, 0x1D185, 0x1D186,
+    0x1D187, 0x1D188, 0x1D189, 0x1D1AA, 0x1D1AB, 0x1D1AC, 0x1D1AD, 0x1D242, 0x1D243, 0x1D244,
 ];
 
 /// zlib-compatible IEEE CRC-32 (for stable per-pet kitty image ids).
@@ -1261,7 +1298,11 @@ fn crc32(data: &[u8]) -> u32 {
         for i in 0..256u32 {
             let mut crc = i;
             for _ in 0..8 {
-                crc = if crc & 1 != 0 { 0xEDB8_8320 ^ (crc >> 1) } else { crc >> 1 };
+                crc = if crc & 1 != 0 {
+                    0xEDB8_8320 ^ (crc >> 1)
+                } else {
+                    crc >> 1
+                };
             }
             table[i as usize] = crc;
         }
@@ -1316,12 +1357,19 @@ pub fn encode_kitty_virtual(
     let ctrl = format!("a=T,U=1,i={image_id},c={cols},r={rows},f=100,q=2");
     let payload = png_bytes(frame).unwrap_or_default();
     use base64::Engine;
-    kitty_apc(&ctrl, &base64::engine::general_purpose::STANDARD.encode(payload))
+    kitty_apc(
+        &ctrl,
+        &base64::engine::general_purpose::STANDARD.encode(payload),
+    )
 }
 
 /// Encode one frame as an iTerm2 inline image (OSC 1337 File) — hermes
 /// `_encode_iterm`.
-pub fn encode_iterm(frame: &image::RgbaImage, cell_cols: Option<u32>, cell_rows: Option<u32>) -> String {
+pub fn encode_iterm(
+    frame: &image::RgbaImage,
+    cell_cols: Option<u32>,
+    cell_rows: Option<u32>,
+) -> String {
     let payload = png_bytes(frame).unwrap_or_default();
     use base64::Engine;
     let encoded = base64::engine::general_purpose::STANDARD.encode(payload);
@@ -1355,8 +1403,16 @@ fn median_cut_quantize(pixels: &[[u8; 3]], max_colors: usize) -> (Vec<[u8; 3]>, 
                 continue;
             }
             for channel in 0..3u8 {
-                let min = bucket.iter().map(|p| p[channel as usize]).min().unwrap_or(0);
-                let max = bucket.iter().map(|p| p[channel as usize]).max().unwrap_or(0);
+                let min = bucket
+                    .iter()
+                    .map(|p| p[channel as usize])
+                    .min()
+                    .unwrap_or(0);
+                let max = bucket
+                    .iter()
+                    .map(|p| p[channel as usize])
+                    .max()
+                    .unwrap_or(0);
                 let range = max - min;
                 if range > 0 && best.map_or(true, |(_, _, r)| range > r) {
                     best = Some((idx, channel, range));
@@ -1428,7 +1484,12 @@ pub fn encode_sixel(frame: &image::RgbaImage) -> String {
     out.push_str("\x1bP0;1;0q");
     out.push_str(&format!("\"1;1;{width};{height}"));
 
-    let mut used: Vec<u16> = indices.iter().copied().collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+    let mut used: Vec<u16> = indices
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
     used.sort_unstable();
     for idx in &used {
         let entry = palette[*idx as usize];
@@ -1500,8 +1561,7 @@ pub type Cell = ([u8; 4], [u8; 4]);
 pub fn downscale_cells(frame: &image::RgbaImage, target_cols: u32) -> Vec<Vec<Cell>> {
     let target_cols = target_cols.max(4);
     let aspect = frame.height() as f64 / (frame.width().max(1)) as f64;
-    let target_rows =
-        (((target_cols as f64 * aspect * 0.5).round() as u32).max(2)) * 2;
+    let target_rows = (((target_cols as f64 * aspect * 0.5).round() as u32).max(2)) * 2;
     let small = image::imageops::resize(
         frame,
         target_cols,
@@ -1844,7 +1904,10 @@ pub fn toggle_pet_display(home: &Path) -> (bool, Option<String>, Option<String>)
                 (
                     false,
                     None,
-                    Some("no pets installed — pets list to browse, or pets install <slug>".to_string()),
+                    Some(
+                        "no pets installed — pets list to browse, or pets install <slug>"
+                            .to_string(),
+                    ),
                 )
             } else {
                 let first = &installed[0];
@@ -1898,8 +1961,10 @@ pub fn cmd_list(home: &Path, query: &str, installed_only: bool, limit: usize) ->
     } else {
         filtered.clone()
     };
-    let installed: std::collections::HashSet<String> =
-        installed_pets(home).into_iter().map(|pet| pet.slug).collect();
+    let installed: std::collections::HashSet<String> = installed_pets(home)
+        .into_iter()
+        .map(|pet| pet.slug)
+        .collect();
 
     let suffix = if query.is_empty() {
         String::new()
@@ -1908,8 +1973,15 @@ pub fn cmd_list(home: &Path, query: &str, installed_only: bool, limit: usize) ->
     };
     println!("petdex gallery — {} pet(s){}:", filtered.len(), suffix);
     for entry in &shown {
-        let mark = if installed.contains(&entry.slug) { "✓" } else { " " };
-        println!("  {mark} {:<28} {}  ({})", entry.slug, entry.display_name, entry.kind);
+        let mark = if installed.contains(&entry.slug) {
+            "✓"
+        } else {
+            " "
+        };
+        println!(
+            "  {mark} {:<28} {}  ({})",
+            entry.slug, entry.display_name, entry.kind
+        );
     }
     if limit > 0 && filtered.len() > limit {
         println!(
@@ -1931,7 +2003,11 @@ pub fn cmd_install(home: &Path, slug: &str, force: bool, select: bool) -> i32 {
             return 1;
         }
     };
-    println!("✓ installed {} → {}", pet.display_name, pet.directory.display());
+    println!(
+        "✓ installed {} → {}",
+        pet.display_name,
+        pet.directory.display()
+    );
 
     if select || !has_active_pet() {
         if let Err(e) = set_active(&pet.slug) {
@@ -2030,16 +2106,27 @@ pub fn cmd_doctor(home: &Path) -> i32 {
     println!(
         "  installed:       {} ({})",
         pets.len(),
-        if slugs.is_empty() { "none".to_string() } else { slugs.join(", ") }
+        if slugs.is_empty() {
+            "none".to_string()
+        } else {
+            slugs.join(", ")
+        }
     );
     println!("  display.pet.enabled:     {}", config.enabled);
     println!(
         "  display.pet.slug:        {}",
-        if config.slug.is_empty() { "(unset)" } else { &config.slug }
+        if config.slug.is_empty() {
+            "(unset)"
+        } else {
+            &config.slug
+        }
     );
     println!(
         "  active (resolved):       {}",
-        active.as_ref().map(|pet| pet.slug.as_str()).unwrap_or("(none)")
+        active
+            .as_ref()
+            .map(|pet| pet.slug.as_str())
+            .unwrap_or("(none)")
     );
     println!("  display.pet.render_mode: {}", config.render_mode);
     println!("  detected graphics:       {}", detect_terminal_graphics());
@@ -2144,7 +2231,13 @@ pub fn cmd_show(home: &Path, options: &ShowOptions) -> i32 {
     let cols = resolve_cols(scale, config.unicode_cols);
 
     let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
-    let renderer = build_renderer(pet.spritesheet.clone(), Some(&mode_cfg), scale, cols, is_tty);
+    let renderer = build_renderer(
+        pet.spritesheet.clone(),
+        Some(&mode_cfg),
+        scale,
+        cols,
+        is_tty,
+    );
     if !renderer.available() {
         eprintln!(
             "✗ cannot render here (no TTY / graphics disabled). Effective mode: {}.",
@@ -2159,7 +2252,9 @@ pub fn cmd_show(home: &Path, options: &ShowOptions) -> i32 {
         match PetState::parse(&requested) {
             Some(state) => vec![state],
             None => {
-                eprintln!("✗ unknown state '{requested}' (idle/run/review/failed/wave/jump/waiting)");
+                eprintln!(
+                    "✗ unknown state '{requested}' (idle/run/review/failed/wave/jump/waiting)"
+                );
                 return 1;
             }
         }
@@ -2177,7 +2272,9 @@ pub fn cmd_show(home: &Path, options: &ShowOptions) -> i32 {
     };
 
     // Right-align the sprite against the terminal's right edge.
-    let term_cols = crossterm::terminal::size().map(|(w, _)| w as u32).unwrap_or(80);
+    let term_cols = crossterm::terminal::size()
+        .map(|(w, _)| w as u32)
+        .unwrap_or(80);
     let mut indent = String::new();
     let mut graphics_indent = String::new();
     if is_unicode {
@@ -2286,8 +2383,11 @@ mod tests {
 
     fn png_bytes_for(img: &image::RgbaImage) -> Vec<u8> {
         let mut buffer: Vec<u8> = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageFormat::Png)
-            .unwrap();
+        img.write_to(
+            &mut std::io::Cursor::new(&mut buffer),
+            image::ImageFormat::Png,
+        )
+        .unwrap();
         buffer
     }
 
@@ -2415,7 +2515,10 @@ mod tests {
         let active = resolve_active_pet(home, None).unwrap();
         assert_eq!(active.slug, "test-pet");
         // Configured-but-missing slug falls back to first installed.
-        assert_eq!(resolve_active_pet(home, Some("ghost")).unwrap().slug, "test-pet");
+        assert_eq!(
+            resolve_active_pet(home, Some("ghost")).unwrap().slug,
+            "test-pet"
+        );
 
         let new_slug = rename_pet(home, "test-pet", "Renamed Buddy").unwrap();
         assert_eq!(new_slug, "renamed-buddy");
@@ -2453,9 +2556,11 @@ mod tests {
     #[test]
     fn raw_frames_trim_blank_padding() {
         let sheet = synthetic_sheet(4);
-        let frames = raw_frames_from_sheet(&sheet, PetState::Idle, FRAME_W, FRAME_H, FRAMES_PER_STATE);
+        let frames =
+            raw_frames_from_sheet(&sheet, PetState::Idle, FRAME_W, FRAME_H, FRAMES_PER_STATE);
         assert_eq!(frames.len(), 4); // stops at first blank column
-        let waving = raw_frames_from_sheet(&sheet, PetState::Wave, FRAME_W, FRAME_H, FRAMES_PER_STATE);
+        let waving =
+            raw_frames_from_sheet(&sheet, PetState::Wave, FRAME_W, FRAME_H, FRAMES_PER_STATE);
         assert_eq!(waving.len(), 1);
         let counts = state_frame_counts(&sheet);
         assert_eq!(counts["idle"], 4);
@@ -2470,22 +2575,34 @@ mod tests {
         std::fs::write(&sheet_path, png_bytes_for(&synthetic_sheet(2))).unwrap();
 
         let cases: Vec<(&str, Box<dyn Fn(&str)>)> = vec![
-            ("unicode", Box::new(|out: &str| {
-                assert!(out.contains('▀'));
-                assert!(out.contains("\x1b[38;2;"));
-            })),
-            ("kitty", Box::new(|out: &str| {
-                assert!(out.starts_with("\x1b_G"));
-                assert!(out.contains("f=100,a=T,q=2"));
-            })),
-            ("iterm", Box::new(|out: &str| {
-                assert!(out.contains("\x1b]1337;File=inline=1;"));
-            })),
-            ("sixel", Box::new(|out: &str| {
-                assert!(out.starts_with("\x1bP0;1;0q"));
-                assert!(out.ends_with("\x1b\\"));
-                assert!(out.contains("#0;2;"));
-            })),
+            (
+                "unicode",
+                Box::new(|out: &str| {
+                    assert!(out.contains('▀'));
+                    assert!(out.contains("\x1b[38;2;"));
+                }),
+            ),
+            (
+                "kitty",
+                Box::new(|out: &str| {
+                    assert!(out.starts_with("\x1b_G"));
+                    assert!(out.contains("f=100,a=T,q=2"));
+                }),
+            ),
+            (
+                "iterm",
+                Box::new(|out: &str| {
+                    assert!(out.contains("\x1b]1337;File=inline=1;"));
+                }),
+            ),
+            (
+                "sixel",
+                Box::new(|out: &str| {
+                    assert!(out.starts_with("\x1bP0;1;0q"));
+                    assert!(out.ends_with("\x1b\\"));
+                    assert!(out.contains("#0;2;"));
+                }),
+            ),
         ];
         for (mode, check) in cases {
             let renderer = PetRenderer::new(sheet_path.clone(), mode, 0.5, 20);
@@ -2495,7 +2612,10 @@ mod tests {
             assert!(!out.is_empty(), "mode {mode} produced no output");
             check(&out);
             // Index wraps modulo the frame count.
-            assert_eq!(renderer.frame(PetState::Idle, 5), renderer.frame(PetState::Idle, 1));
+            assert_eq!(
+                renderer.frame(PetState::Idle, 5),
+                renderer.frame(PetState::Idle, 1)
+            );
         }
 
         // Off mode + missing sheet degrade to empty.
@@ -2542,7 +2662,9 @@ mod tests {
         let sheet_path = dir.path().join("sheet.png");
         std::fs::write(&sheet_path, png_bytes_for(&synthetic_sheet(2))).unwrap();
         let renderer = PetRenderer::new(sheet_path, "kitty", 1.0, 20);
-        let payload = renderer.kitty_payload(PetState::Idle, kitty_image_id("test")).unwrap();
+        let payload = renderer
+            .kitty_payload(PetState::Idle, kitty_image_id("test"))
+            .unwrap();
         assert!(payload.cols >= 1 && payload.rows >= 1);
         assert_eq!(payload.placeholder.len(), payload.rows as usize);
         assert_eq!(payload.frames.len(), 2);
@@ -2554,6 +2676,9 @@ mod tests {
         assert_eq!(resolve_mode(Some("off"), true), "off");
         assert_eq!(resolve_mode(Some("kitty"), false), "off"); // no TTY
         assert_eq!(resolve_mode(Some("sixel"), true), "sixel");
-        assert_eq!(resolve_mode(Some("bogus"), true), detect_terminal_graphics());
+        assert_eq!(
+            resolve_mode(Some("bogus"), true),
+            detect_terminal_graphics()
+        );
     }
 }
