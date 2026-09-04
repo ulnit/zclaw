@@ -1,330 +1,232 @@
 # ulnclaw 🦞
 
-[English](#english) | [中文](#中文)
+<p align="center">
+  <img src="https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-green?style=for-the-badge" alt="License: MIT OR Apache-2.0">
+  <img src="https://img.shields.io/badge/Language-Rust-DEA584?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/Parity-hermes--agent%20v2026.8.3-blueviolet?style=for-the-badge" alt="hermes-agent v2026.8.3 parity">
+  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/Lang-中文-red?style=for-the-badge" alt="中文"></a>
+</p>
 
----
-
-## English
-
-**A high-performance AI agent engine written in Rust — a port of [hermes-agent v2026.8.3](https://github.com/NousResearch/hermes-agent/tree/v2026.8.3)**
+**A high-performance AI agent engine written in Rust — a port of [hermes-agent v2026.8.3](https://github.com/NousResearch/hermes-agent/tree/v2026.8.3) by [Nous Research](https://nousresearch.com).**
 
 ulnclaw re-implements the Hermes Agent engine in Rust: the same tool surface
-(50+ built-in tools), the same SQLite session/memory/skills/cron storage
+(50+ built-in tools), the same SQLite session / memory / skills / cron storage
 layout, the same toolset composition — with native performance and a single
-static musl binary. See the [parity matrix](docs/en/hermes-parity.md) for the
-full feature-by-feature mapping — core parity with hermes-agent v2026.8.3 is
-complete, including the messaging-platform gateways (Telegram/Discord/Slack/Signal/Weixin/QQ/Yuanbao/Email/Mattermost/Matrix/DingTalk/WeCom/Feishu/Home Assistant/SMS (Twilio)/WhatsApp (Baileys bridge)/IRC/ntfy/SimpleX/Teams/LINE/Google Chat/Buzz/Photon (iMessage)/Raft/A2A),
-the plugin + shell-hook system, secrets vaults, computer-use, OAuth login +
-skill sync + local OAuth upstream proxy, and the hermes-style Electron desktop GUI (`desktop-electron/`, "ulnclaw desktop").
+static musl binary. Use any model you want (OpenAI-compatible endpoints,
+Ollama, Anthropic, DashScope, …) and switch with `ulnclaw model` — no code
+changes. Run it on your laptop, a $5 VPS, or in Docker sandboxes — and talk to
+it from the terminal, the desktop app, or 26 messaging platforms.
 
-### Key Features
+Core parity with hermes-agent v2026.8.3 is complete — see the
+[parity matrix](docs/en/hermes-parity.md) for the full feature-by-feature
+mapping, including the HTTP route parity appendix.
 
-- **🤖 Agent loop** — tool calling with iteration budgets, usage accounting, memory injection, step/tool callbacks
-- **🔧 50+ built-in tools** — terminal/process, file read/write/patch/search, web search/extract, X (Twitter) search via xAI (`x_search`, opt-in toolset + `XAI_API_KEY`), video understanding (`video_analyze`, opt-in `video` toolset), memory, todo, session search, clarify, skills, delegation, execute_code, cronjob, vision, image generation, video generation (`video_generate` registry — BFL FLUX 3 via the Nous tool gateway, xAI Imagine incl. edit/extend, FAL six-family queue, DeepInfra), desktop projects (`project_list/create/switch`, opt-in `project` toolset), Discord server tools (`discord`/`discord_admin` — bot token, intents-gated schema, `server_actions` allowlist), Feishu/Lark document tools (`feishu_doc_read` + `feishu_drive_*` comment tools — app credentials via env/secret scope/`[messaging.feishu]`), Spotify tools (7 `spotify_*` tools — playback/devices/queue/search/playlists/albums/library via PKCE OAuth, `ulnclaw spotify-auth login`), Yuanbao tools (5 `yb_*` tools — group info/members, DMs, sticker search/send over the live adapter), cross-channel messaging (`send_message` — send/list/react/unreact across every connected platform via the channel directory + home channels, `MEDIA:<path>` native attachments on Telegram/Discord/Slack, emoji reactions with most-recent-message fallback), learning timeline (`ulnclaw journey`), TTS, Home Assistant, kanban, tool search
-- **🧰 Toolsets** — hermes-compatible grouping (`coding`, `web`, `file`, `safe`, `debugging`, ...) with composition and enable/disable policy
-- **🛡️ Approval system** — command normalization, hardline floor (auto-block), confirm-before-run for costly operations; REPL prompts plus gateway run approvals over HTTP with fail-closed timeout and persisted `always` grants; tirith pre-exec content scanner (exit-code verdict, auto-install with SHA-256/cosign verification, fail-open circuit breaker)
-- **💾 SQLite state** — sessions/messages with FTS5 full-text search, lineage (parent/child sessions), cron jobs, kanban board; offline non-destructive `sessions recover` for damaged databases (rowid salvage, orphan-session reconstruction, FTS rebuild), and raw-mode session browsing (`sessions show --raw` / `--json` / `--timestamps` — every message rendered with its timestamp, tool name/id and tool_calls JSON, a grep-friendly trace display; P740)
-- **🗜️ Context compression** — budget-triggered middle-turn summarization via a secondary model call, plus three-layer tool-result persistence: oversized tool outputs (>100K chars, `read_file` exempt) are saved to `ulnclaw-results/` through the terminal backend and swapped for a preview + path, with a 200K-char per-turn aggregate budget spilling the largest results first, plus a live context-window breakdown: `/context` renders a hermes-style glyph grid + per-category table (system prompt / tool definitions / MCP / memory / conversation) with `/context all` appending per-toolset and per-skill costs, and `GET /api/sessions/:id/context` serves the same payload as JSON for UI surfaces (P624)
-- **🤝 Delegation** — parallel sub-agents with isolated contexts and depth limits; top-level delegations run fire-and-forget in the background (live transcripts under `cache/delegation/live/`) and one consolidated result re-enters the conversation when the batch finishes; dispatches and results persist in the SQLite delegation registry, so finished work survives restarts (rows still running after a crash recover as terminal "outcome unknown" reports)
-- **🧬 Mixture of Agents** — `[moa]` presets fan a prompt out to reference models in parallel and synthesize their answers via an aggregator (`ulnclaw moa run/list/delete`, REPL `/moa`); set `[model] provider = "moa"` to run the entire agent loop on a preset (persistent facade with per-turn reference caching, `save_traces` JSONL traces, `privacy_filter` PII redaction); `GET|PUT /api/model/moa` expose the presets for the desktop Models view, which renders each preset's references/aggregator and a JSON editor that validates + persists `[moa]` (hermes MoA dashboard parity; P606)
-- **🗺️ Model catalog** — models.dev-backed multi-provider inventory with a three-tier cache (memory → disk → network with 5-min failure backoff): `ulnclaw models providers|list|info|refresh`, gateway `/api/model/options` multi-provider picker inventory + `?refresh=true`, `ULNCLAW_MODELS_DEV_URL` mirror override
-- **⏰ Cron** — `30m` / `every 2h` / `0 9 * * *` / ISO one-shot schedules with a poll scheduler
-- **📐 Blueprints** — skills with a `metadata.hermes.blueprint.schedule` frontmatter become cron jobs (`skills blueprints`, `skills schedule/unschedule`)
-- **🛡️ Skills guard** — `skills scan <name>` runs the `skills-guard-v1` static scanner (119 threat patterns, invisible-unicode + structural checks, source trust levels) before you install or run third-party skills; dangerous skills are blocked even from trusted sources
-- **🔌 MCP client** — stdio JSON-RPC plus remote Streamable HTTP / SSE transports (`url` + optional `transport = "sse"` + static `headers`; `auth = "oauth"` runs OAuth 2.1 + PKCE with discovery, dynamic registration, loopback callback, token refresh and 401 recovery): any MCP server's tools appear as `mcp__<server>__<tool>`; npx/uvx launches get an OSV malware preflight (MAL-* advisories block, fail-open); `lazy = true` servers register from an on-disk schema cache without spawning — the child starts on first tool call (hermes lazy startup); server management rides `/api/mcp/servers` — list with transport/auth/enabled posture, add/update/remove (`POST|PUT|DELETE`), an `enabled` flag that skips registration, `PUT /api/mcp/servers/<name>/enabled` and a `POST /api/mcp/servers/<name>/test` connection probe, all backed by the desktop Doctor view's MCP panel (add-server dialog, per-row test/enable/disable/delete; hermes MCP management parity; P603); a curated catalog (`GET /api/mcp/catalog` + `POST /api/mcp/catalog/install`) lists well-known reference servers (filesystem, fetch, memory, time, everything, sequential-thinking, github, gitlab, brave-search, puppeteer) with required-env prompts, and the Doctor panel offers one-click install with installed/enabled badges (hermes optional-mcps parity; P604); REPL `/reload-mcp` reconnects servers from fresh config with a prompt-cache invalidation confirm (once/always/cancel); stdio children run with a filtered environment (safe baseline + `XDG_*` + `<home>/.env` keys + declared `env` only — ambient secrets never leak) and `${VAR}`/`${env:VAR}` placeholders interpolate from the secret scope first; the gateway brokers MCP OAuth from the dashboard: `POST /api/mcp/servers/<name>/auth` starts a flow and returns the authorization URL to open, the browser redirect lands on the open `GET /api/mcp/oauth/callback/<server>` route (state-validated), and `GET /api/mcp/oauth/flows/<id>` reports status + discovered tools; 401 recoveries dedupe per failed token, and tokens another process refreshed on disk are picked up on the next request (mtime watch); `/reload-mcp` also works in platform chats — native buttons where the adapter supports them, `/approve`/`/always`/`/cancel` text replies otherwise
-- **📡 MCP channel bridge** — `ulnclaw mcp serve [--verbose]` exposes messaging conversations to any MCP client (Claude Code, Cursor, Codex, …) over stdio JSON-RPC: `conversations_list`/`conversation_get`/`messages_read`/`attachments_fetch` across every platform session, `events_poll`/`events_wait` long-poll event stream (200 ms mtime-gated DB polling, no startup replay), `messages_send` via the `send_message` pipeline (incl. standalone Telegram/Discord/Slack REST delivery without a live gateway), `channels_list` targets from the channel directory, and `permissions_list_open`/`permissions_respond` for bridge-session approvals
-- **✍️ ACP adapter** — `ulnclaw acp [--verbose]` runs ulnclaw as an Agent Client Protocol stdio server for editors like Zed: session management with history replay, streaming `session/update` notifications (message/thought chunks, tool calls with kind mapping, native plan updates from `todo`), multimodal prompts (image blocks ride the native vision path), cooperative cancel, and tool approvals rendered as `session/request_permission` editor prompts
-- **📦 Batch runner** — `ulnclaw batch --dataset-file data.jsonl --run-name my_run [--batch-size N] [--resume]` runs the agent across a JSONL prompt dataset with a parallel worker pool, checkpointed resumption (content-scan + index checkpoint), hermes from/value trajectory files per batch, aggregated tool-usage/reasoning statistics, and a final `summary.json`
-- **📨 Send CLI** — `ulnclaw send --to telegram "deploy finished"` (or pipe stdin, `--file`, `--subject`, `--list [platform]`, `--json`, `--quiet`) delivers messages from scripts/cron/CI with no LLM and no running gateway for bot-token platforms — hermes exit-code contract (0/1/2)
-- **🌐 Browser automation** — 12 `browser_*` tools over a CDP WebSocket client (accessibility snapshots with element refs, click/type/scroll/press, screenshots + vision, console/eval, raw CDP, dialogs); managed headless Chrome (`ULNCLAW_BROWSER_CDP=auto`), any existing DevTools endpoint, the Camofox anti-detect REST backend (`CAMOFOX_URL`), or on-demand cloud sessions via Browserbase / Browser Use / Firecrawl (`[browser] cloud_provider`), with hermes-grade SSRF guards (metadata floor, private-address gating, redirect rechecks, raw-CDP allowlist) and forced secret redaction on browser output
-- **🚪 HTTP gateway** — `ulnclaw gateway`: OpenAI-compatible `/v1/chat/completions` + `/v1/responses` (with session continuity), `stream: true` SSE streaming on both (token deltas, tool-progress/function-call events), async `/v1/runs` with SSE events + approval resolution, sessions API (incl. `PATCH`/fork + enforced per-session model lock, and `GET /api/sessions?preview=true` last-message snippets per row for UI lists — P509, plus an `archived` flag per row mirroring the sessions-table column the TUI F8 flow sets — P519, and server-side `?source=` / `?end_reason=` list filters (`end_reason=none` selects open sessions) — P521, and `POST /api/sessions/retitle-skills` regenerating leaked `/skill` scaffold titles through the LLM titler — dry-run by default, `apply: true` writes; P530, and `GET /api/sessions/:id` enriched with `child_session_ids` fork lineage + `total_tokens` + a per-role `message_counts` census — P553, P561, and `POST /api/sessions/:id/retitle` regenerating any session's title through the LLM titler — dry-run by default, `apply: true` writes with a desktop palette action retitling the open session in place; P559, P560), `/api/jobs` cron management (CRUD + pause/resume/run, plus a curated automation-blueprint catalog over `GET /api/jobs/blueprints` with slot-form job instantiation over `POST /api/jobs/blueprints/instantiate` — P655) with a built-in scheduler that auto-runs due jobs, external delivery targets (`deliver`: `origin`/platform/`platform:chat[:thread]`/`all`, resolved against platform senders + home-channel env vars with `[SILENT]` suppression, wrapped headers and failure summaries — `GET /api/jobs/delivery-targets` lists them) and the Chronos NAS fire webhook `POST /api/jobs/fire` (JWT-verified from `[cron.chronos]`, 202 + background run), `/v1/skills` + `/v1/toolsets` discovery, `/api/model/options` (multi-provider picker inventory), Prometheus `/metrics`, bounded readiness probes at `/health/detailed` (state.db/config/model/disk/gateway/background-queue checks with an overall ok|degraded status plus gateway busy/drainable derivations, the platform state map, pid and uptime — hermes readiness parity; P697), a restart-loop circuit breaker (stale-pidfile detection records crash-restart boots in `gateway/restart_loop.json` — three or more unclean boots within 60s trips the breaker with a loud warning and surfaces `restart_loop_tripped` in `/health/detailed`; hermes restart_loop_guard parity; P698), periodic grep-friendly `[MEMORY] rss=…` telemetry with baseline and shutdown snapshots (`[logging] memory_monitor = false` disables, `memory_monitor_interval_secs` sets the cadence; hermes memory_monitor parity; P698), a richer `GET /api/channels` (per-platform runtime state ladder, configured home channel and seen-channel counts per row, plus a top-level seen-channels `directory` grouped per platform with newest activity first — hermes ChannelsPage deepening; P699), a durable delivery-obligation ledger (queued-turn replies and cron deliveries are recorded as `pending` rows in `state.db` before the send and marked `delivered` after — on the next boot, replies orphaned by a dead gateway process are claimed and redelivered: `pending` plainly, ambiguous `attempting`/`failed` rows with a visible ♻️ recovered-reply marker for honest at-least-once delivery, capped at 3 attempts with 24h stale abandonment and 7-day retention pruning; hermes delivery_ledger parity; P700), ledger protection extended to the Telegram/Discord/Slack turn-reply send paths through a shared `send_with_ledger` dispatcher helper (P703), then to Signal/Matrix/Mattermost/Feishu/Email/Weixin/QQ/WhatsApp Cloud/BlueBubbles reply paths through a failure-aware variant that marks definitive send rejections `failed` so the next boot retries them (P704), completing the rollout with Google Chat, Line, WhatsApp, DingTalk (AI-card + webhook fallback), WeCom, Teams, IRC, ntfy, SimpleX, SMS, Home Assistant, Photon, Buzz and Feishu-meeting — chunked and multi-path sends covered; raft/a2a deliver via response bodies and need no ledger (P705), a delivery-ledger ops surface (`GET /api/delivery-ledger` — recent obligation rows newest-first with per-state counts and an outstanding rollup, rendered in the Doctor's Delivery ledger panel with state badges; P706), a dead-target ops endpoint (`GET /api/dead-targets` — the P707 registry's confirmed-unreachable targets, newest first, self-healing on any successful send; rendered in the Doctor's Dead targets panel; P713), a session stall watchdog (`[gateway] session_stall_timeout_secs`, `ULNCLAW_SESSION_STALL_TIMEOUT` override, default 300s, 0 disables — when follow-up messages sit parked behind a busy turn and the agent's progress goes silent for the timeout, the chat gets a one-shot ⚠️ stall notice pointing at /new; progress comes only from the shared activity contract — turn boundaries, tool calls and streaming deltas stamp it, never turn-start or inbound clocks — the notify-once latch clears when the episode ends and sends are bounded so a wedged transport cannot stall the watcher; hermes session_stall parity; P714), a runtime-metadata footer (`[display.runtime_footer]` with per-platform overrides under `[display.platforms.<platform>.runtime_footer]` — appends a compact `model · context% · cwd` line to the FINAL reply of a messaging turn when enabled (off by default; `latency` is an opt-in extra field, fields missing data skip silently); `/footer [on|off|status]` toggles it from any gateway platform, persisting to config.toml and latching the running process; hermes runtime_footer parity; P715), a stall-watch ops endpoint (`GET /api/stall-watch` — the P714 pending-inbound directory joined with the shared activity stamps: resolved watchdog timeout, parked sessions stalled-first with idle seconds, last progress description and a stalled flag; rendered in the Doctor's Stall watch panel; P716), binary code-skew detection (the gateway snapshots the running executable's mtime+size fingerprint at boot and `GET /health/detailed` reports `code_skew` when the binary on disk was replaced underneath the process — a rebuild or upgrade — so operators get a clear restart signal instead of wondering why new features are missing; hermes code_skew parity; P717), per-platform slash-command access control (`[messaging.slash_access.<platform>]` — `allow_admin_from` / `group_allow_admin_from` list the admins who can run every command, `user_allowed_commands` / `group_user_allowed_commands` what non-admins may run, with an implicit `/help` + `/whoami` floor; unset platforms keep the legacy ungated behavior, scope follows the channel directory's recorded chat type, plain chat is never gated, and denials answer with the ⛔ admin-only copy plus an allowed-command preview; hermes slash_access parity; P718), a per-platform display/verbosity resolver (`[display]` + `[display.platforms.<platform>]` with built-in tiered defaults per platform capability — tool-progress mode/grouping, reasoning visibility/style, tool-preview length, interim commentary, long-turn heartbeats, busy-ack detail, steer acks, progress cleanup and live-status text, resolved platform-override → global → tier default; legacy `[display.tool_progress_overrides]` still honored; hermes display_config parity; P721), generic status-phrase catalogs (`[display.status_phrases]` + legacy `[display.generic_status_phrases]`, per-platform sections, and conventional `status_phrases.yaml` / `status_phrases/*.yaml` files under the ulnclaw home — profile-relative YAML only, absolute paths and `..` escapes ignored, append/replace merge modes; `long_running_notifications = "generic"` swaps the Slack typing-line elapsed heartbeat for rotating catalog phrases, one per 30 s window; hermes status_phrases parity; P722), placeholder-aware messaging terminal cwd (`[terminal] cwd` placeholders `.`, `auto`, `cwd` resolved per backend — local falls back to `MESSAGING_CWD` then `$HOME`, docker-with-`docker_mount_cwd_to_workspace` needs an explicit host path for the `/workspace` mapping, docker mount-off and other backends stay on the sandbox default; `TERMINAL_ENV`/`ULNCLAW_TERMINAL_CWD`/`TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE` env overrides; applied to the gateway + profile agent contexts at startup; hermes cwd_placeholder parity; P723), gateway response silence filters (exact-marker suppression for interactive turns — `NO_REPLY`/`[SILENT]` and friends, edge punctuation stripped but brackets kept structural, prose merely mentioning a marker is delivered; the cron lane's loose matcher now shares the canonical marker set, and the streaming partial-marker prefix check is ported for the SSE path; hermes response_filters parity; P724), an external drain-marker contract (`<home>/.drain_request.json` — dashboard-style begin/cancel-drain writes or removes the marker, a gateway background watcher flips the drain flag on presence so new runs are refused; markers are stamped with the instantiation epoch — boot id + PID-1 start time — so an orphaned marker that survives a machine restart is ignored, corrupt markers fail safe toward quiescing, and a `suppress_notification` flag can silence the shutdown broadcast; hermes drain_control parity; P725), out-of-loop shutdown + liveness backstops (a plain OS-thread shutdown watchdog arms on `/restart` — if the drain wedges past drain-timeout + 60 s grace it dumps diagnostics to `logs/gateway-shutdown-watchdog.log`, records the watchdog exit in the lifecycle ledger and forces the exit; `<home>/state/gateway.heartbeat` is rewritten every 30 s with pid/start-time/memory so external monitors can tell process-alive from runtime-frozen; a loop-liveness watchdog probes the runtime every 30 s and hard-exits after 3 missed probes, opt out via `[gateway] loop_watchdog = false`; hermes shutdown_watchdog parity; P726), shutdown forensics on SIGTERM/SIGINT (the gateway now installs signal handlers: a fast structured snapshot — signal, pid/ppid, parent and self `/proc` summaries, systemd context, load average, attached tracer — is logged immediately, a detached `ps`-walk diagnostic appends to `logs/gateway-shutdown-diagnostic.log` without blocking teardown, and the lifecycle ledger records a clean signal shutdown; hermes shutdown_forensics parity; P727), a drain-control ops surface (`GET /api/drain` status — marker payload, instantiation epoch, staleness and the live drain flag; `POST /api/drain` begin with principal + shutdown-notice suppression; `DELETE /api/drain` cancel — the dashboard half of the P725 marker contract; P728), a lifecycle ops surface (`GET /api/lifecycle` — prior-exit label, sentinel payload, loop-heartbeat freshness with pid and age, and presence/size of the shutdown watchdog dump + forensics diagnostic log; P729), a display-settings ops surface (`GET /api/display` — every platform's resolved display settings through the P721 chain: platform override → global → tier default, with enabled posture and explicit-override flags across all 26 channels; P730), a status-phrase ops surface (`GET /api/status-phrases` — resolved catalog counts + samples, conventional profile phrase files, config-section presence, and per-platform catalogs where sections exist; P731), a terminal ops surface (`GET /api/terminal` — resolved terminal backend with env-override flag, configured cwd with placeholder marker, the P723-resolved messaging cwd, docker mount/container/image or ssh target details, command timeouts and env-passthrough posture; P732), a cgroup orphan-reaper surface (`GET /api/cgroup` — cgroup v2 path detection with the live PID census, the hermes ExecStopPost safety net ported to run at gateway exit: orphaned helpers (adb, platform bridges) left in the unit cgroup are SIGKILLed per-PID so Restart=always never stalls; P733), a streaming-TTS consumer (`streaming_tts` — port of hermes gateway/streaming_tts_consumer.py: LLM text deltas feed a sentence chunker and a bounded clause queue that an async drain task synthesises into PCM for voice-capable sinks, with the hermes started/audible/partial/dropped completion matrix deciding whether the whole-file TTS fallback stays suppressed; P734), a shutdown flush (`shutdown_flush` — hermes issue #72680 safety net: parked busy-policy follow-ups that never got their turn before exit are serialised to `pending_messages/` as atomic 0600 payloads and re-dispatched on the next boot, plus an agent-history snapshot hook for manual salvage when session-DB persistence raises; P735), an event-hook system (`event_hooks` — hermes hooks.py port: hooks discovered under `hooks/` (HOOK.yaml manifest + handler) fire at gateway:startup, agent:start/agent:end and command:* wildcard points, hermes-style Python handlers run through an in-subprocess compat bootstrap while executable handlers receive the JSON payload on stdin, and handler errors never block the pipeline; P736), command + session hook firing (the hermes `command:<name>` decision protocol — deny/handled/rewrite intercepts dispatch right after slash access control — plus session:start on a session's first message and session:end + session:reset on /new and /reset; P737), a display-settings editor endpoint (`PUT /api/display` — persists or removes global and per-platform overrides for the twelve overridable display keys, validated and written straight into the config file; P738), a terminal-settings editor endpoint (`PUT /api/terminal` — persists backend, cwd, docker/ssh target, timeout and mount settings with type + backend validation, a null value removes the key back to its default; P739), a portal-auth status surface (`GET /api/portal` — read-only snapshot of the stored OAuth tokens for the dashboard: login state, expiry, scope and refresh-token presence, refresh-free by contract so polling never burns a refresh token; P742), a status-phrase preview surface (`GET /api/status-phrases/preview` — a clock-rotated sample of the exact phrases the resolved catalog rotates through, filterable by platform and kind so operators can tune phrase files against what the status line would actually emit; P743), an approvals-settings editor (`PUT /api/approvals/settings` — persists the approval knobs the mode switch does not cover: decision timeout, cron deny/approve mode, smart-guardian policy, denial-breaker threshold, command deny globs and the MCP-reload confirm flag, type-checked with null removal, while `GET /api/approvals` now returns the full settings snapshot; P744), a gateway-settings surface (`GET /api/gateway-settings` — resolved listener identity with env-override flags and a configured-key flag that never leaks the secret, plus multiplexing, message timestamps, loop/systemd watchdogs, session cap and stall timeout; `PUT /api/gateway-settings` persists those behavior knobs with validation, listener identity stays read-only; P745), an agent-settings surface (`GET /api/agent-settings` — iteration budget, approval gate, tool concurrency, context budget, verbose logging and environment probe, plus pointers to the surfaces owning reasoning effort, service tier and personality; `PUT /api/agent-settings` persists the knobs with validation and keeps foreign-surface keys out; P746), a web-search settings surface (`GET /api/web-settings` — configured search/extract backends, the allowed values and which provider credentials are present so operators can see what `auto` resolves to; `PUT /api/web-settings` pins or clears the backends with search-side validation; P747), a delegation-settings surface (`GET /api/delegation-settings` — concurrent children cap, child iteration budget and max nesting depth; `PUT /api/delegation-settings` persists the limits with positive-integer validation; P748), memory-limit editing (`PUT /api/memory` — persists the MEMORY.md/USER.md char limits with positive-integer validation, while the existing census now reports the persisted limits from disk; P749), a model-catalog surface (`GET /api/model-catalog` — excluded provider slugs plus the canonical and custom provider inventories; `PUT /api/model-catalog` persists the exclusions with slug normalization; P750), a checkpoint-settings surface (`GET /api/checkpoints/settings` — master switch, snapshot cap, store size ceiling, file skip size, retention window and auto-prune cadence; `PUT /api/checkpoints/settings` persists the knobs with type validation; P751), a security-settings surface (`GET /api/security-settings` — SSRF private-URL allowance and tirith scanner posture with env-override flags; `PUT /api/security-settings` persists the knobs with validation; P752), a tool-output settings surface (`GET /api/tool-output-settings` — resolved terminal byte cap, file line cap and per-line length cap; `PUT /api/tool-output-settings` persists the limits with positive-integer validation; P753), a logging-settings surface (`GET /api/logging-settings` — the periodic memory-monitor switch and cadence; `PUT /api/logging-settings` persists them with validation; P754), a cron-delivery settings surface (`GET /api/cron-settings` — delivery wrapping and session-mirror switches; `PUT /api/cron-settings` persists them with boolean validation; P755), a voice-pipeline settings surface (`GET /api/voice-settings` — STT switch/echo/provider/language and TTS provider/edge voice; `PUT /api/voice-settings` persists them with provider validation; P756), a kanban-dispatcher settings surface (`GET /api/kanban-settings` — in-gateway dispatch switch and cadence, worker cap, worktree workspaces, child auto-promotion, the auto-decompose safety toggle with its per-tick fan-out and the stale-task timeout; `PUT /api/kanban-settings` persists them with validation and most knobs are re-read every tick; P757), an x-search settings surface (`GET /api/x-search-settings` — the x_search server-tool model, reasoning-effort pin, request timeout and retries; `PUT /api/x-search-settings` persists them with effort/timeout validation; P758), a video-generation settings surface (`GET /api/video-gen-settings` — active backend, default model and FAL model-family override, all nullable for auto-select; `PUT /api/video-gen-settings` persists or clears them (empty string restores auto); P759, a Mixture-of-Agents settings surface (`GET /api/moa-settings` — default preset, trace persistence and directory, privacy filter and the configured preset names; `PUT /api/moa-settings` persists or clears them with `default_preset` validated against configured presets and `privacy_filter` limited to off|display|full, empty values restoring defaults); P760, a Discord tool settings surface (`GET /api/discord-settings` — the `server_actions` allowlist normalised to a list plus the known action names; `PUT /api/discord-settings` persists or clears the allowlist with unknown actions rejected, accepting arrays or comma-separated strings); P761, a pet image-generation settings surface (`GET /api/pets-settings` — images base URL and model overrides plus a configured-flag for the images API key and env-fallback presence; `PUT /api/pets-settings` persists or clears the base URL/model while the API key stays secret and uneditable); P762, a browser tool settings surface (`GET /api/browser-settings` — persistent CDP endpoint, cloud provider override, managed-gateway preference and env-override flag; `PUT /api/browser-settings` persists or clears them with URL-shape, provider-name and boolean validation); P763, the curated font-choice list on `GET /api/dashboard/font` (font ids surface alongside the active override so shell editors can render a picker; P764, a timezone settings surface (`GET /api/timezone-settings` — configured IANA zone, env-override flag, effective name and validity; `PUT /api/timezone-settings` validates against the IANA database and clears the resolved-zone cache on persist); P767, a monitoring settings surface (`GET /api/monitoring-settings` — install id, health-export master switch and per-plane toggles, export cadences, OTLP switch and endpoint, all tri-state; `PUT /api/monitoring-settings` persists or clears them with cadence floors enforced — clearing the install id rotates it on next start; P768, a bearer-proxy settings surface (`GET /api/proxy-settings` — listener host/port, upstream URL, path allowlist, request cap and OAuth credential presence; `PUT /api/proxy-settings` persists or clears them with port range, URL scheme, path prefix and size-floor validation); P769, an auxiliary-task settings surface (`GET /api/auxiliary-settings` — per-slot provider/model/base-URL overrides, key-env name, title-generation kill switch and language pin for vision/compression/approval/title_generation, with API keys surfaced only as configured-flags; `PUT /api/auxiliary-settings` persists or clears each task.key pair, refusing the API key outright; P770, a custom-providers settings surface (`GET /api/providers-settings` — per-slug base URL, default model, wire dialect and key env with literal keys surfaced only as configured-flags; `PUT /api/providers-settings` persists or clears each slug.knob pair for existing `[providers.*]` entries, validating the dialect and refusing the API key; P771, and a profiles panel in Doctor over the P597 `/api/profiles` CRUD (multiplex posture plus one row per profile — provider:model, base URL, temperature and toolset lists — with a profile+field editor that persists through `POST /api/profiles`; P772, a hooks settings surface (`GET /api/hooks-settings` — auto-accept consent bypass and the oversized-output spill knobs: enabled, max chars, preview head/tail and directory override; `PUT /api/hooks-settings` persists or clears them with boolean and positive-integer validation; P773, a skills-sync settings surface (`GET /api/sync-settings` — sync endpoint URL, device label and a configured-flag for the static API key; `PUT /api/sync-settings` persists or clears the URL/device name while the API key stays secret and uneditable; P774, an OAuth device-flow settings surface (`GET /api/oauth-settings` — device authorization/token URLs, client id, scopes and portal page plus the derived configured gate; `PUT /api/oauth-settings` persists or clears them with http(s) validation on the flow URLs; P775, a toolset-gate settings surface (`GET /api/toolsets-settings` — enabled allowlist, disabled denylist and the registry's available toolset names; `PUT /api/toolsets-settings` persists or clears either gate with registry validation, accepting arrays or comma-separated strings; P776), a secrets vault sync action (`POST /api/secrets/sync` — dry-run report of the fetched winners by default; `{"apply": true}` persists them into `<home>/.env` for the next startup, responses never carry secret values; P801), on-demand skills-sync actions (`POST /api/sync/pull` and `POST /api/sync/push` — pull materializes new remote skills without clobbering local ones, push uploads the opted-in set; inert gate and transfer errors surface in-band; P802), a computer-use settings surface (`GET /api/computer-use-settings` — telemetry opt-in, screenshot dimension cap, capture-after mode and the overlay tri-state; `PUT /api/computer-use-settings` persists or clears them with boolean/integer/mode validation; P803), a persistent dead-target registry (`gateway/dead_targets.json` — when a platform reports a whole chat is permanently gone (deleted group, kicked/blocked bot, deactivated user) the target is marked dead and future cron deliveries and boot-sweep redeliveries short-circuit it instead of burning send attempts against flood control; send-error texts are classified with the hermes platform-neutral rules and only whole-chat deaths (`forbidden` + chat-level `not_found` — a deleted topic never kills its parent chat) mark a target, any successful send clears the flag (self-healing), and the ledger now records the platform's actual error text on `failed` rows; hermes dead_targets parity; P707), cron delivery-mirroring (opt-in via global `cron.mirror_delivery = true` or per-job `attach_to_session` on the cronjob tool / jobs API — each successful delivery to the job's own origin chat is appended to that chat's session transcript as a labelled user turn (`[Cron delivery: <name>]`), so the next reply there sees the cron output in context; fan-out targets are never mirrored and mirroring never creates sessions; hermes mirror parity; P708), hierarchical inbound profile routing (`[[gateway.profile_routes]]` with `[gateway] multiplex_profiles = true` — routes map platform chats to profiles with most-specific-first matching (thread > channel > guild, parent-chain matching for thread-bearing posts); a matching inbound message runs under the routed profile's own agent + session store (`<home>/profiles/<name>`), built lazily on first routed use without duplicating background loops; unmatched chats and routes targeting unknown profiles stay on the default profile — hermes profile_routing parity; P709), a per-session turn lease serializing transcript turns that share a session_id across routing keys (busy guards are keyed by chat while the durable transcript is owned by session_id, and `/resume`/`/handoff` remapping makes that mapping many-to-one — the lease closes the interleaved-flush window with ownership-checked idempotent release, fail-open degradation on a stuck holder, a bounded idle-evicting registry and mid-turn session rebind; hermes turn_lease parity; P710), message timestamps for temporal awareness (`[gateway] message_timestamps = true` renders exactly one `[Tue 2026-04-28 13:40:53 CST]`-style prefix per user message in the LLM context — replayed turns from each stored send time, fresh inbound text with the event time; stale prefixes are stripped unconditionally so persisted transcripts never accumulate `[ts] [ts] …` contamination regardless of the toggle — hermes message_timestamps parity; P711), systemd service integration (`[gateway] systemd_watchdog_seconds` arms sd_notify for `Type=notify` units — `READY=1` + status once the listener binds, `WATCHDOG=1` feeds at half the `WATCHDOG_USEC` cadence with a lag-budget health check that stops feeding on a stalled runtime so systemd restarts the unit, and `STOPPING=1` before shutdown; entirely best-effort, never blocks startup — hermes systemd_notify parity; P712), a lifecycle ledger for termination-reason forensics (a `state/gateway.lifecycle.json` sentinel tracks each life — on boot, a previous life that never reached any exit path is reported as an unclean death (SIGKILL / OOM / host death) with its last heartbeat memory sample and an OOM-suspicion hint appended to `logs/gateway-exit-diag.log`; graceful shutdown, `/api/gateway/stop` and restart drains record clean exits with code and reason; a 30s heartbeat keeps the memory snapshot fresh — hermes lifecycle_ledger parity; P701), token accounting `/api/usage`, background-delegation registry `/v1/delegations`, live browser CDP control `/v1/browser/status|connect|disconnect`, gateway monitoring with content-free OTLP health/diagnostics export (`[monitoring]`, `ulnclaw monitoring status`), bearer auth, gateway lifecycle over `POST /api/gateway/restart` (spawns a detached `--replace` takeover on the same host/port) and `POST /api/gateway/stop` (acknowledges then self-terminates; the Doctor view carries both actions behind confirms — hermes gateway-lifecycle parity; P609), and a single-instance pidfile guard (`gateway.pid` with a PID-reuse-proof start token — a second start refuses, `--replace` takes over from the running instance, `--force` runs alongside; `ulnclaw dashboard run|status|stop` manages the same server hermes-dashboard-style — start, report pid + URL, or stop it; P581)
-- **🖥️ Terminal environments** — run `terminal` locally (default), in docker (auto container creation), or over ssh (`[terminal] backend`)
-- **🩺 Terminal failure intelligence** — failed commands carry actionable guidance: benign exit codes are explained (`grep=1` → "no matches, not an error" as `exit_code_meaning`) and well-known failure shapes get one recovery `hint` (command/module not found, git conflicts, gh field drift & rate limits, permission errors, exits 124/126/137)
-- **🔬 Environment probe** — when the terminal backend is local, one deterministic Python-toolchain line (pip/python3 mismatch, missing pip module, PEP 668, missing bare `python`) is injected into the system prompt — silent on healthy machines, background-probed with fail-open timeout (`[agent] environment_probe`)
-- **🖥️ Desktop bridge tools** — `close_terminal` / `read_terminal` / `focus_pane` / `open_preview` / `react_to_message` (emoji tapbacks, `[display] message_reactions`) for GUI hosts: gated on `ULNCLAW_DESKTOP=1`, routed through the `desktop` bridge (host-installed emitter receives `terminal.close` / `pane.reveal` / `preview.open` events per UI session); settled `/v1/runs` additionally publish `run.completed` / `run.failed` envelopes on the bus, which the desktop shell surfaces as notifications with a jump-to-runs action, plus a Web-Notifications OS alert when the window is unfocused — upgraded to true native OS notifications under the desktop shell so alerts still land while the window hides in the tray (toggleable in settings; P433, P435; native P799 — joined by an optional WebAudio completion chime, off by default and armed on submit so the autoplay policy lets it ring; P786) — settling also drives live Sessions-browser updates: the sidebar list, browser rows and the open transcript reload in place (P467); runs waiting on a dangerous-command approval likewise publish `run.approval` envelopes surfaced as warning notifications with a jump-to-runs action (P437); session creation (POST /api/sessions, `/v1/runs` and cron job runs) publishes `session.created` so the shell's sidebar and sessions browser refresh live, with `session.updated` (rename/archive) and `session.deleted` parity (P444, P445) — cross-client session creation/deletion additionally raises shell toasts, suppressed for the shell's own actions (P473); every message append publishes `session.message` so the sessions browser catches up on the open transcript instantly, with sidebar and sessions-browser list counts/activity following on a 2 s debounce (P493, P494), and the chat view itself reloading the open session when it grows elsewhere while idle (P495); sessions that grow while not open gain unread accent-dot markers in the sidebar and sessions browser until opened, with a live unread-count badge on the Sessions tab and an unread-only quick toggle in the sessions browser — unread state persists across restarts and is pruned when sessions disappear (P496, P497, P499, P500); never kill processes, report "desktop only" without a wired host
-- **🧹 ANSI stripping** — terminal/execute_code output is cleaned of ECMA-48 escape sequences (colors, cursor moves, OSC titles, 8-bit C1) before it reaches the model, so escapes never leak into context or file writes
-- **🔒 Sandbox credential scrub** — terminal/execute_code child processes run with provider & tool credentials stripped from their environment (hermes GHSA-rhgp-j443-p4rf semantics); skills' `required_environment_variables` and `[terminal] env_passthrough` allowlist the rest — provider credentials can never be allowlisted
-- **🛡️ Web 工具 SSRF 防护** —— `web_extract` 拦截私有/内网目标（环回、RFC1918、CGNAT、ULA、IPv4 映射 IPv6），并拒绝在 URL 中嵌入凭证；云元数据端点（169.254.169.254 等）永远拦截，重定向逐跳重验；可用 `[security] allow_private_urls` 或 `ULNCLAW_ALLOW_PRIVATE_URLS=true` 放开
-- **🛡️ SSRF guard for web tools** — `web_extract` blocks private/internal targets (loopback, RFC1918, CGNAT, ULA, IPv4-mapped IPv6) and refuses URLs embedding credentials; cloud metadata endpoints (169.254.169.254 etc.) are always blocked, redirects are re-validated hop by hop; opt out with `[security] allow_private_urls` or `ULNCLAW_ALLOW_PRIVATE_URLS=true`
-- **🚫 Binary guard** — `read_file` refuses ~80 binary extensions (images, archives, executables, fonts, bytecode, databases) with a pointer to vision_analyze/terminal; `.pdf` stays readable
-- **📏 Configurable output limits** — `[tool_output] max_bytes/max_lines/max_line_length` tune terminal truncation, read_file pagination, and per-line clamping without patching source
-- **🕵️ Secret redaction** — ~55 vendor key prefixes, JWTs, private keys, DB connstrings, auth headers, and env-dump `KEY=value` pairs are masked before output reaches the model; file content gets non-reusable sentinels so truncated keys are never written back
-- **📸 Checkpoints** — transparent git-backed snapshots before file edits (shared shadow store, per-project chains), `ulnclaw checkpoints list/restore/diff/prune`
-- **📝 Working diff** — `ulnclaw diff [--staged|--all]` shows what changed in a git worktree (untracked files included), REPL `/gitdiff`
-- **🌐 Providers** — OpenAI-compatible endpoints (OpenAI, OpenRouter, DashScope, Ollama, llama.cpp) plus a native Anthropic Messages API provider (tool_use/tool_result blocks, SSE streaming, OAuth bearer), keyless local providers; per-task auxiliary routing (`[auxiliary.compression]`, `[auxiliary.vision]`, `[auxiliary.title_generation]`) sends secondary calls to a different provider/model; the desktop Models view shows and pins those slots (`GET /api/model/auxiliary` + `POST /api/model/set` with `scope=auxiliary`; blank/auto resets the slot — hermes auxiliary-slot parity; P605); `GET/PUT /api/reasoning` persists the `agent.reasoning_effort` pin (the HTTP twin of the `/reasoning` slash command), shown as a clickable ⚡ chip beside the desktop model badge (P615); `GET/PUT /api/fast` toggles Priority Processing (`service_tier=priority`) for OpenAI-flagship models — the HTTP twin of the `/fast [on|off] [--global]` slash command, gated by the same `gpt-`/`o1`/`o3`/`o4` model check as hermes and persisted via `agent.service_tier` (also settable through a global `--fast` CLI flag; P625); `[model] fallbacks` failover chain with per-turn primary restore; user-defined `[providers.<slug>]` entries (base_url/api_key/key_env/model/mode) surface in the `/api/model/options` multi-provider picker inventory alongside env-authenticated canonical providers and setup-hint skeletons (`[model_catalog] excluded_providers` hides rows)
-- **📡 Messaging platforms** — Telegram/Discord/Slack/Signal adapters run inside `ulnclaw gateway` (`[messaging.*]`, Signal via a signal-cli HTTP daemon, Slack typing status via `assistant.threads.setStatus`, Telegram clarify inline keyboards with callback_query tap routing, Discord clarify buttons with INTERACTION_CREATE routing, Slack Block Kit clarify buttons with block_actions routing), image attachments injected natively into the turn as multimodal content (P226 — ≤ 8 MB `image/*` base64 `data:` URLs on OpenAI-compat/Anthropic providers; `[messaging] multimodal_injection = false` keeps the path-reference flow), gateway restart pings to each platform's most recent channel on startup (`[messaging] gateway_restart_notification = false` disables; P684), inbound messages that arrive while a platform turn is busy are queued per chat and drained in FIFO order after the turn settles (queued ack with queue depth, gated per platform by the `busy_ack_detail` display setting; hermes busy-policy queue parity; P696), WhatsApp Cloud (`[messaging.whatsapp_cloud]` + `ulnclaw whatsapp-cloud` credential wizard with field-shape validation; P271) + Microsoft Graph ingress mount as gateway webhook routes (`/webhooks/whatsapp` HMAC-verified, `/webhooks/msgraph` clientState-verified with receipt dedup, resource filters and prompt templates), plus a generic signed-webhook platform (`[messaging.webhook]` routes at `/webhooks/hook/<name>` — Svix/GitHub/GitLab/HMAC-V2 signature schemes, per-route rate limits, delivery-id idempotency, `deliver_only` zero-LLM push) with CLI-managed dynamic subscriptions hot-reloaded per request at `/webhooks/<name>` (`ulnclaw webhook subscribe|list|remove|test`; 0600-permission secret store; P270), and BlueBubbles iMessage (`[messaging.bluebubbles]` → `/webhooks/bluebubbles` password-authenticated webhook, LRU-cached chat-GUID resolution, REST text/attachment sends), and Weixin personal accounts (`[messaging.weixin]` — Tencent iLink Bot API long-polling, QR login via `ulnclaw weixin login`, AES-128-ECB CDN media both ways, context_token echo sends), and QQ (`[messaging.qq]` — official QQ Bot API v2 WebSocket gateway + REST, markdown replies, chunked media uploads, `asr_refer_text` voice transcripts, inline-keyboard exec approvals with INTERACTION_CREATE routing, QR scan-to-configure onboarding (`ulnclaw qq login`) + full setup wizard with DM-policy and home-channel selection (`ulnclaw qq setup`)), and Yuanbao (`[messaging.yuanbao]` — Tencent Yuanbao app bots over a WebSocket gateway with a hand-rolled protobuf wire codec, HMAC-SHA256 sign-token auth, markdown-aware chunked text replies, outbound image/file media via COS upload, stickers (TIMFaceElem via `STICKER:` reply tags, fuzzy catalog lookup, inbound `[emoji: <name>]` rendering), inbound image/file media resolution + download into the media cache, quoted/observed-media backfill with the `[Replying to: …]` quote pointer, forwarded WeChat chat-record deep parsing (elem_type 1009)), and Email (`[messaging.email]` — IMAP polling + SMTP replies with `Re:` threading, SPF/DKIM/DMARC sender verification), and Mattermost (`[messaging.mattermost]` — REST v4 + WebSocket events, mention gating, thread replies, file upload/download), and Matrix (`[messaging.matrix]` — raw Client-Server API `/sync` loop, mxc media both ways, E2EE not supported), and DingTalk (`[messaging.dingtalk]` — hand-rolled Stream Mode WS, sessionWebhook markdown replies, downloadCode media, 🤔Thinking → 🥳Done emoji reactions, AI streaming cards via card_1_0 when `card_template_id` is set), and WeCom (`[messaging.wecom]` — AI Bot WS gateway, respond-msg markdown, chunked media upload, client-side text-split batching), and Feishu (`[messaging.feishu]` — lark_oapi WebSocket long connection with a hand-rolled protobuf frame codec (hermes default `connection_mode = "websocket"`) or gateway webhook `/webhooks/feishu` with signature-verified events, tenant-token media, Typing/CrossMark processing reactions + inbound reaction routing, interactive approval/update-prompt cards with webhook card-action routing (non-approval clicks become `/card` synthetic commands), Drive document-comment agent + meeting-invite satellites), and Home Assistant (`[messaging.homeassistant]` — WebSocket state_changed stream with closed-by-default watch filters + per-entity cooldowns, replies as persistent notifications, standalone `notify/notify` sender on credentials alone), and SMS/Twilio (`[messaging.sms]` — gateway webhook `/webhooks/twilio` with X-Twilio-Signature HMAC validation, markdown-stripped 1600-char REST replies), and WhatsApp (`[messaging.whatsapp]` — bundled Baileys bridge (`scripts/whatsapp-bridge/`) supervised by the gateway: npm-install hash stamp, pidfile/port stale cleanup, `bridge.log` spawn, two-phase readiness + `scriptHash` staleness handshake; `/health`/`/messages` polling, `/send` + `/send-media` + `/send-poll` + `/send-location` + `/edit` (native polls with poll-based clarify, location pins, message editing), read receipts, self-chat `[owner reply]` intake, and canonical sender identity — phone-JID/LID aliases collapsed through the bridge's `lid-mapping-*.json` files so session keys, allowlists and pairing agree on one stable identity per human, with bare outbound phone numbers normalized to bridge-safe JIDs; hermes whatsapp_identity parity; P719), and IRC (`[messaging.irc]` — rustls TCP client, NickServ support, channel addressing gate), and ntfy (`[messaging.ntfy]` — topic stream subscription + REST publish, echo-tag loop prevention), and SimpleX (`[messaging.simplex]` — simplex-chat daemon WS client, auto-accept contacts, voice/document media), and Teams (`[messaging.teams]` — gateway webhook `/webhooks/teams` over raw Bot Framework protocol, OAuth2 client-credentials sends, AdaptiveCard exec-approval buttons with default-deny tap gate), and LINE (`[messaging.line]` — gateway webhook `/webhooks/line` with X-Line-Signature verification, reply-token + push fallback, slow-LLM postback buttons, outbound media via token-gated `/line/media` HTTPS serving), and Google Chat (`[messaging.google_chat]` — gateway webhook `/webhooks/googlechat` with Google ID-token verification or Pub/Sub REST-pull inbound, service-account RS256 JWT Chat API sends, per-user OAuth native attachment delivery via in-chat `/setup-files` + `ulnclaw google-chat-oauth`, typing-indicator card patched in-place into the reply), Buzz (`[messaging.buzz]` — Block's Nostr-based platform: NIP-42-authenticated WebSocket subscription (signed kind-22242 auth, hermes `nostr_auth` port) with CLI-poll fallback, kind-9 chat events, require-mention gate, pubkey echo suppression, 👀 seen tapbacks, startup high-water seeding (history never replays) + `dms list`/`channels list` DM discovery, kind-44100 membership-event live DM rediscovery with dynamic `hermes-buzz-dm-<n>` subscriptions, p-tag DM latch classification), Photon (`[messaging.photon]` — iMessage via the Photon Spectrum sidecar HTTP API: `/healthz` gate, typed NDJSON inbound stream, rich-link rendering + preview-art/echo suppression, group wake-word mention gate, `/typing` indicators, URL-only `/send-richlink` replies, allowlist ∪ pairing gate, opt-in `PHOTON_REACTIONS` lifecycle tapbacks + inbound tapback routing), Raft (`[messaging.raft]` — gateway wake endpoint `/webhooks/raft/wake` with bridge-token verified `raft-activity.v1` events + auto-spawned `raft agent bridge` child process), and A2A (`[messaging.a2a]` — Agent2Agent v1.0 server surface: `/.well-known/agent-card.json` discovery + JSON-RPC `POST /a2a` message/send + task ledger): allowlist-gated pairing (fail closed) plus hermes-style interactive pairing codes (`pairing list/approve/revoke/clear-pending`), media attachments cached under `media-cache/` and delivered as path references (outbound `MEDIA:` tags upload natively on Telegram/Discord/Slack; WhatsApp media rides the Graph `/media` endpoint both ways), one persistent session per chat, hermes-style reply chunking. The `clarify` tool works in chats: WhatsApp renders native buttons/list sheets, Telegram inline keyboards, Discord/Slack buttons, other platforms numbered text; button taps and follow-up text resolve the pending question. Slack gets native slash commands: `ulnclaw slack manifest` generates the app manifest registering every platform command as a first-class slash (assistant/agent/flat DM experiences), slash envelopes dispatch through the normal path with `response_url` replies; every platform answers the direct set (`/help` `/skills` `/tools` `/recap` `/title` `/usage` `/insights`) without an LLM turn (P265)
-- **🎙️ Voice-note transcription (STT)** — inbound audio/voice messages are transcribed before the agent turn (`[stt]` config): built-in `local_command` / `groq` / `openai` / `mistral` / `xai` / `elevenlabs` / `deepinfra` providers plus custom `[stt.providers.<name>]` command providers, transcripts echoed back as 🎙️ messages and injected into the turn with hermes fallback/sentinel semantics; a `transcribe_audio` tool (opt-in `stt` toolset) covers arbitrary files. The Python-only faster-whisper `local` provider is replaced by `stt.local.command` / cloud backends
-- **🐾 Pets (petdex)** — `ulnclaw pets list|install|select|show|off|scale|remove|doctor|hatch`: adopt animated petdex mascots (live gallery of thousands, host-pinned installs under `<home>/pets/`), animate them in the terminal via kitty/iTerm2/sixel graphics or a truecolor half-block fallback, one `[display.pet]` scale knob resizes every surface — or `hatch` a brand-new pet from a text description: LLM base drafts → grounded animation rows → sliced/normalized spritesheet → auto-adopted (OpenAI-compatible images endpoint via `[pets]` config)
-- **📋 Kanban engine** — `ulnclaw kanban`: multi-board task engine in `kanban.db` (hermes statuses todo/ready/running/scheduled/blocked/done/archived with icons), TTL claim locks with stale takeover + heartbeats, a stale-run completion guard (workers carry their run id; reclaimed attempts cannot complete/block the fresh attempt), typed blocks (`kanban block --kind dependency|needs_input|capability|transient` — dependency waits in todo until parents finish; same-cause re-block loops escalate to triage), parent→child task links, comments + event trail, board CRUD, and a dispatcher (`kanban dispatch [--max-spawn N] [--dry-run]` + `POST /api/kanban/dispatch`) that reclaims stale claims, crashed workers (dead pid) and heartbeat-stale runners, promotes parent-done tasks (auto-recovering non-sticky blocked tasks whose parents finished, unless they sit at the failure limit), skips ready tasks assigned to unconfigured profiles (`skipped_nonspawnable` claim-pulled lanes), honors `[kanban] max_in_progress_per_profile` (#21582 per-profile in-flight cap) and the `[kanban] max_in_progress` global cap (#33488 — a saturated board skips the tick, otherwise spawns fill to the cap), warns exactly once per install when the first scratch workspace is materialized (`tip_scratch_workspace` event + `.scratch_tip_shown` sentinel), and `create --initial-status blocked` to park a card for human review, workflow-template hooks (`workflow_template_id`/`current_step_key` columns with a `list --workflow-template-id` filter), per-task model/provider/reasoning worker pinning (`create --model M --provider P`, `set-model [--provider P]`, `create --reasoning L`, `set-reasoning [L]` — spawned workers carry global `-m/--provider/--reasoning` flags; `L` ∈ none|minimal|low|medium|high|xhigh|max|ultra, `none` pins thinking off; the gateway exposes the same pins over `POST /api/kanban/tasks/:id/set-reasoning` and `POST /api/kanban/tasks/:id/set-model`, plus `POST /api/kanban/tasks/:id/edit` rewriting title/body, `POST /api/kanban/tasks/:id/archive` parking a task (in-flight run reclaimed, children unblocked), `DELETE /api/kanban/tasks/:id` purging archived tasks, `POST /api/kanban/tasks/:id/attach` adding file (existence-validated, stored absolute) or link attachments and `DELETE /api/kanban/attachments/:aid` removing them, `POST /api/kanban/tasks/:id/schedule` parking a task in the scheduled column and `POST /api/kanban/tasks/:id/reassign` moving or clearing its assignee, and `POST /api/kanban/tasks/:id/unlink` removing a parent link, plus `POST /api/kanban/tasks/:id/promote` moving a todo/blocked task straight to ready (`force` skips the dependency check), `POST /api/kanban/tasks/:id/reclaim` releasing an active worker claim back to ready, `POST /api/kanban/tasks/:id/assign` setting the assignee without touching the claim, `GET /api/kanban/tasks/:id/runs` listing a task's run history, and `GET /api/kanban/stats` (per-status + per-assignee counts, oldest-ready age) — P636, P637, P639, P640, P645, P646, P647, P659), and goal-mode workers (`kanban create --goal [--goal-max-turns N]` — the spawned worker loops in its session until the auxiliary judge agrees the card is done or the turn budget blocks it; goal completions pass a judge gate on `kanban done` / `kanban_complete`), runs each tick under a non-blocking `.dispatch.lock` (#35240 — a second dispatcher skips the tick instead of racing), and spawns detached `ulnclaw run` workers — each in a per-task workspace chosen at create time (`kanban create --workspace scratch|worktree|worktree:<path>|dir:<path>` with `--branch`, resolved and persisted by the dispatcher before spawn; `[kanban] worktrees` keeps the legacy worktree default; `kanban gc` cleans finished trees), and a swarm orchestrator (`kanban swarm <goal> --worker ASSIGNEE:TITLE --verifier X --synthesizer Y`: root blackboard task + parallel workers + verifier + synthesizer, promoted by the dispatcher as parents finish), a triage pipeline (`kanban create --triage` parks an idea; `kanban specify` / `kanban decompose` flesh it out or fan it into a routed child graph via the auxiliary LLM — the gateway dispatcher auto-decomposes fresh triage tasks each tick, `[kanban] auto_decompose` re-read live as a safety toggle), a read-only board doctor (`kanban diagnostics [id] [--min-severity warning|error|critical] [--json]` + `GET /api/kanban/diagnostics` board scan + `GET /api/kanban/tasks/:id/diagnostics` — stateless rules over task/events/runs: repeated failures, crash loops, stuck-blocked, stranded-in-ready, block/unblock cycling, hallucinated card refs; each diagnostic carries suggested recovery actions, the desktop kanban flags affected cards with a ⚠ badge and lists the signals in the task dialog — P678), gateway notification subscriptions (`kanban notify-subscribe / notify-list / notify-unsubscribe` — the gateway notifier loop delivers terminal events (✔ done / ⏸ blocked / ⏱ timed_out …) to the subscribed chats over the messaging platforms, and wakes the creator session — recorded via `session_id` when the agent creates the task — by resuming it with a `[kanban] Task …` turn over the gateway's own chat endpoint), per-task worker logs (`kanban log [--tail N]`, rotated at `[kanban] worker_log_rotate_bytes` — default 2 MiB — with one backup generation), a respawn guard defers ready tasks whose immediate retry cannot help (rate-limit cooldown, quota/auth blocker, recent success, open PR — each deferral logged as a `respawn_guarded` event), per-attempt run history (`kanban runs [--json]`, one `task_runs` row per claim→complete/block/reclaim/timeout attempt), full worker briefs with prior-attempt + parent-handoff context (`kanban context`, also served by the `kanban_show` tool), structured completion handoffs (`kanban done --summary … --metadata '{…}'` on the closing run), completion artifacts (`kanban done --artifact PATH…` — scratch-workspace files staged into `kanban/attachments/<task>/` before cleanup, 25 MiB cap), a review column (`kanban review <id> [--reason]` parks a running task after its PR opens; the dispatcher spawns a review agent — force-loading the `sdlc-review` skill when installed — that claims without re-gating parents), bulk lifecycle commands (`done/block/schedule/unblock/promote/archive` take multiple ids; `archive --rm` purges archived tasks; `promote --dry-run --json`), completion recovery (`kanban edit --result/--summary/--metadata` rewrites a done task's handoff; blocking comments `BLOCKED: <reason>` before the state change), an anti-hallucination gate on completion (`kanban done --created-card ID…` verifies every claimed card before anything mutates; phantom ids block with a `completion_blocked_hallucination` event, unresolved `t_<hex>` prose refs are flagged after completion), DB self-healing (`kanban repair`), `kanban assignees`, and a first-class project registry (`ulnclaw project create/list/show/add-folder/remove-folder/rename/set-primary/use/archive/restore/bind-board` — named multi-folder workspaces in `projects.db` with an active-project pointer; `kanban create --project <id|slug>` anchors the card's worktree under the project's primary repo (`<repo>/.worktrees/<task-id>`) with a deterministic `<slug>/<task-id>[-<title-slug>]` branch, and `project bind-board` mirrors the primary repo as the bound board's `default_workdir`; the registry is exposed to the desktop over the gateway `/api/projects/*` CRUD + `scan`/`repos` discovery endpoints); lifecycle transitions fire the `kanban_task_*` plugin hooks. One board, four surfaces: the agent `kanban_*` tools, the desktop board widget (gateway `/api/kanban/*`) and the REPL `/kanban` slash (list/show/create/done/block/unblock/comment/boards plus promote, reclaim, assign, runs and stats straight from the chat prompt; P662) share the same engine and database
-- **🔌 Plugins & hooks** — directory plugins (`~/.ulnclaw/plugins/<name>/plugin.toml`: hooks + subprocess tools) and `[hooks]` config shell hooks with hermes first-use consent (`plugins list/install/update/remove/enable/disable/accept-hooks` — install/update/remove manage git-hosted plugins, `hooks list/test/revoke/doctor`); the core fires all 13 hook events hermes emits at runtime (pre/post tool & LLM calls, API request lifecycle, session boundaries, gateway dispatch gating)
-- **🔑 Secrets vaults** — external secret sources applied at startup before providers read env (`secrets status/sync`): command helper, Bitwarden Secrets Manager (`bws` — pinned auto-install, AES-GCM-encrypted TTL cache, `secrets bitwarden setup` wizard), 1Password (`op://` refs, `secrets onepassword setup/set`) with full hermes precedence semantics
-- **🛡️ Egress firewall** — managed iron-proxy for Docker sandboxes (`egress install/setup/start/stop/restart/reload/status/disable/config`, `/egress` status): sandboxes only ever see minted proxy tokens — real provider keys are swapped in by the daemon on allowlisted hosts and never cross the boundary; pinned v0.39.0 binary with SHA-256 + GPG verification, openssl CA, fail-closed token rules, management-API hot reload (hermes `hermes egress`)
-- **🖱️ Computer use** — `computer_use` tool via the cua-driver daemon (MCP over stdio, full hermes schema), approval-gated like hermes; `computer-use status/doctor/install`
-- **🔄 OAuth + skill sync** — `auth login` RFC 8628 device flow against any `[oauth]` provider; `sync status/pull/push/now` keeps skills in sync over HTTP(S) or a shared directory; `proxy start` runs a local OpenAI-compatible proxy (`127.0.0.1:8645/v1`) that attaches the stored OAuth bearer (auto-refreshed) to a configured `[proxy] upstream_url` so external apps can ride the subscription
-- **🖥️ Desktop GUI** — `desktop-electron/`: **ulnclaw desktop**, a faithful port of the hermes Electron desktop (v2026.8.3) that replaced the earlier Tauri 2 shell: React 19 + Vite renderer (sixteen views — chat, sessions, jobs, usage, models, skills, kanban, projects, runs, webhooks, plugins, pairing, profiles, config, doctor, settings — plus the Ctrl/Cmd+K command palette, dashboard themes/fonts and a language picker), xterm.js terminal panes, a right-hand file tree with a git review pane, live turn streaming over a JSON-RPC WebSocket plus HTTP/SSE, and an Electron main process that spawns and supervises the bundled statically linked `ulnclaw` gateway (`ULNCLAW_DESKTOP=1`, health probes with capped respawn, boot diagnostics on the offline banner, tray + native menus, `ulnclaw://` deep links, single-instance handoff, window-state persistence); the desktop bridge tools (`close_terminal` / `read_terminal` / `focus_pane` / `open_preview` / `react_to_message`) reach the webview over the `/api/desktop/events` SSE bridge
+## Highlights
 
-### Desktop App (prebuilt installers)
+<table>
+<tr><td><b>🔧 50+ built-in tools</b></td><td>Terminal/process, file read/write/patch/search, web search/extract, memory, todo, delegation, <code>execute_code</code>, vision, image/video generation, browser automation, TTS, kanban, tool search — grouped into hermes-compatible toolsets (<code>coding</code>, <code>web</code>, <code>file</code>, <code>safe</code>, <code>debugging</code>, …) with enable/disable policy.</td></tr>
+<tr><td><b>💬 A real terminal interface</b></td><td>Interactive chat with slash commands (<code>/new /search /memory /skills /sessions /rollback /diff /recap /goal /kanban …</code>), streaming tool output, session resume (<code>--continue</code> / <code>--resume</code>).</td></tr>
+<tr><td><b>📡 Lives where you do</b></td><td>26 messaging platforms from a single gateway process — Telegram, Discord, Slack, Signal, WeChat, QQ, Yuanbao, Email, Mattermost, Matrix, DingTalk, WeCom, Feishu, Home Assistant, SMS, WhatsApp, IRC, ntfy, SimpleX, Teams, LINE, Google Chat, Buzz, Photon (iMessage), Raft, A2A — with cross-channel <code>send_message</code> and voice-note transcription.</td></tr>
+<tr><td><b>🧠 Memory &amp; skills</b></td><td>Persistent memory with prompt injection, FTS5 full-text session search, skills with security scanning, skill sync, learning timeline (<code>ulnclaw journey</code>).</td></tr>
+<tr><td><b>⏰ Scheduled automations</b></td><td>Built-in cron scheduler with delivery to any platform, schedulable skill blueprints, suggested automations.</td></tr>
+<tr><td><b>🤝 Delegates &amp; parallelizes</b></td><td>Background subagent delegation with a persistent async registry, kanban task engine with swarm mode, <code>execute_code</code> pipelines, Mixture-of-Agents fan-out (<code>moa</code>).</td></tr>
+<tr><td><b>🌐 Browser &amp; computer use</b></td><td>12 <code>browser_*</code> tools over CDP — managed headless Chrome/Chromium, Camofox anti-detect, cloud sessions (Browserbase / Browser Use / Firecrawl) — plus <code>computer_use</code> via the cua-driver daemon, approval-gated like hermes.</td></tr>
+<tr><td><b>🔌 Extensible</b></td><td>MCP client (stdio + Streamable HTTP/SSE, OAuth 2.1 + PKCE, lazy servers), plugins + shell hooks firing all 13 hermes hook events, ACP adapter, OpenAI-compatible HTTP gateway, MCP channel bridge.</td></tr>
+<tr><td><b>🛡️ Secure by default</b></td><td>Approval system with fail-closed gateway approvals, secrets vaults (Bitwarden SM / 1Password / command), SSRF guards, secret redaction, sandbox credential scrub, egress firewall for Docker sandboxes, transparent checkpoints.</td></tr>
+<tr><td><b>🗜️ Context management</b></td><td>Budget-triggered middle-turn compression, three-layer tool-result persistence, <code>/context</code> window breakdown.</td></tr>
+<tr><td><b>🖥️ Desktop GUI</b></td><td><b>ulnclaw desktop</b> — a faithful port of the hermes Electron desktop: 16 views, command palette, xterm.js terminal panes, live turn streaming over WebSocket/SSE, silent whole-shell auto-update.</td></tr>
+<tr><td><b>📦 Runs anywhere</b></td><td>Single static musl binary; terminal backends: local, Docker, SSH.</td></tr>
+</table>
 
-Prebuilt installers ship on the releases page for every `v*` tag, built by
-the `release-desktop` workflow from the Electron shell in `desktop-electron/`
-(product name **ulnclaw desktop**):
+## Quick Start
 
-- **Windows** — `ulnclaw-<ver>-win-x64.exe` (NSIS, per-user install; the
-  install directory is selectable). Run the installer, then launch **ulnclaw**
-  from the Start Menu. The installer is fully self-contained: a statically
-  linked `ulnclaw` gateway binary (static CRT — no Visual C++ runtime needed)
-  rides inside the bundle; the shell finds it, spawns `ulnclaw gateway` on
-  `127.0.0.1:8642` (with `ULNCLAW_DESKTOP=1`) and probes `/health` until it
-  is up. If the gateway fails to start, the boot card's **Diagnostics**
-  expander shows the resolved binary, the child pid state and the tail of
-  `%USERPROFILE%\.ulnclaw\gateway.log`.
-- **macOS** — `ulnclaw-<ver>-mac-arm64.dmg` (Apple Silicon) and
-  `ulnclaw-<ver>-mac-x64.dmg` (Intel). Drag to Applications. The bundle is
-  ad-hoc signed (no paid Apple Developer certificate), so Gatekeeper shows
-  "unidentified developer" on first launch — right-click › Open, or System
-  Settings › Privacy & Security › Open Anyway. If you still see "is damaged
-  and can't be opened", run `xattr -cr "/Applications/ulnclaw desktop.app"`.
-- **Linux** — `ulnclaw-<ver>-linux-x86_64.AppImage` (deb/rpm also build).
-
-**Silent whole-shell auto-update (v0.7.1+)** — the packaged shell embeds
-electron-updater on the GitHub release channel (generic provider over the
-release assets): it checks for a new release shortly after launch and every
-4 hours, downloads the installer in the background, and applies it the next
-time the app quits — replacing the entire shell (Electron app plus the
-bundled statically linked gateway binary) in one silent restart. Windows
-NSIS, macOS (zip transport) and Linux AppImage participate; Linux deb/rpm
-installs and dev builds skip the channel. Every step logs to
-`~/.ulnclaw/logs/desktop.log` under `[shell-update]`.
-
-First launch needs no pre-configured API key: the gateway boots keyless and
-the onboarding / Models view walk you through adding a provider key
-(persisted to `config.toml` / the credentials pool); restart the gateway once
-a key is saved (tray › Restart Gateway).
-
-Configuration lives in `~/.ulnclaw/config.toml` (on Windows:
-`%USERPROFILE%\.ulnclaw\config.toml`) — the app's Settings view edits
-gateway URL/key and shell behaviour; provider keys and messaging platforms
-are configured exactly as in the CLI flow below.
-
-Since v0.7.0 the desktop is the hermes-style Electron shell (a faithful port
-of hermes desktop v2026.8.3, replacing the earlier Tauri 2 shell): the full
-view stack plus command palette, themes/fonts and language picker, talking to
-the gateway over HTTP/SSE plus a JSON-RPC WebSocket for live turn streaming;
-the `ulnclaw gui` CLI command launches the packaged app (`--dev` runs the
-unpackaged app from `desktop-electron/`).
-
-### CLI Quick Start
+### Build from source
 
 ```bash
-cargo build --release --target x86_64-unknown-linux-musl
+cargo build --release --target x86_64-unknown-linux-musl   # static binary
+# binary: target/x86_64-unknown-linux-musl/release/ulnclaw
+```
 
-# Interactive onboarding wizard (provider, terminal, platforms, tools)
-./ulnclaw setup                 # or: ./ulnclaw setup model|terminal|gateway|tools|agent
-./ulnclaw model                 # switch provider/model interactively
-./ulnclaw gui                   # launch the desktop app (Electron; alias: desktop)
+### First run
 
-# Write a default config to ~/.ulnclaw/config.toml
-./ulnclaw init
+```bash
+ulnclaw setup        # interactive onboarding wizard (provider, terminal, platforms, tools)
+ulnclaw model        # switch provider/model interactively
+ulnclaw init         # write a default config to ~/.ulnclaw/config.toml
 
-# One-shot run
-./ulnclaw run "Summarize the README.md file"
+ulnclaw run "Summarize the README.md file"   # one-shot run
+ulnclaw chat                                 # interactive chat
+ulnclaw chat --continue                      # continue the most recent session
+ulnclaw chat --resume <session-id>           # resume a session by id or unique prefix
 
-# Interactive chat (slash commands: /new /search /memory /skills /sessions /rollback /diff /recap /goal /subgoal /focus /verbose /stash /kanban /pet /hatch /paste ...)
-./ulnclaw chat
-./ulnclaw chat --resume <session-id>   # resume a session by id or unique prefix (-r)
-./ulnclaw chat --continue              # continue the most recent session (-c)
-./ulnclaw chat --continue "my task"    # ...or the session matching a title/id
+ulnclaw gui          # launch the desktop app (alias: desktop)
+```
 
-# Management subcommands
-./ulnclaw tools            # list toolsets (state + tool counts) and enabled tools (--json)
-./ulnclaw tools disable X  # disable a toolset persistently (ulnclaw tools enable X restores; P580)
-./ulnclaw migrate xai       # diagnose/rewrite retired xAI model refs (--apply; P586)
-./ulnclaw sessions list    # recent sessions from state.db
-./ulnclaw sessions search "auth refactor"
-./ulnclaw sessions export <session-id> --out ./exports --format md|html
-./ulnclaw sessions recover ./damaged-state.db   # offline db recovery
-./ulnclaw sessions repair          # repair malformed state.db schema (--check-only)
-./ulnclaw sessions browse          # interactive picker: filter + resume sessions (⌂ project badge, end-reason row markers (✓/∞/⧉/⑂/■; P544), right-hand details pane with first-exchange + last-message preview + message count + end reason + token totals + session duration (P562) + live context-in-use (conversation estimate vs the configured budget; P630), Tab source filter, F2 sort toggle, / transcript FTS search, F4 show/hide archived, F6 rename, F7 fork, F8 archive/unarchive toggle, F9 delete, F10 model filter, F11 export the highlighted transcript to Markdown (P585), v opens a full-screen scrollable transcript viewer for the highlighted session (↑/↓/PgUp/PgDn/Home/End, Esc returns; P651), r toggles raw ↔ pretty inside the viewer (raw shows timestamps, tool names/ids and tool_calls JSON; P741), Ctrl+U/D details-pane scrolling (plus Ctrl+↑/↓ single-line and Ctrl+Home/End edge jumps; P551) over a deepened two-round conversation preview)
-./ulnclaw sessions retitle-skills  # fix titles that leaked /skill scaffolds (--apply)
-./ulnclaw sessions retitle <id>    # regenerate one session's title via the LLM (--apply; P569)
-./ulnclaw sessions import <file>   # import sessions from a JSON export (--dry-run to preview; P577)
-./ulnclaw sessions delete|rename|optimize # per-session delete / rename / FTS-merge + VACUUM
-./ulnclaw skills list
-./ulnclaw skills blueprints    # schedulable skills (skills schedule <name>)
-./ulnclaw skills scan <name>   # security scan before trusting a skill (--json, --source, --force)
-./ulnclaw cron list          # cron jobs (create/show/pause/resume/run + blueprints catalog — P661)
-./ulnclaw suggestions        # suggested automations (accept/dismiss/catalog/clear)
-./ulnclaw moa list           # MoA presets (run: ./ulnclaw moa run "<prompt>")
-./ulnclaw models providers   # models.dev catalog (list/info/refresh)
-./ulnclaw checkpoints list   # filesystem snapshots ([checkpoints] enabled = true)
-./ulnclaw diff               # git working-tree diff (--staged / --all)
-./ulnclaw doctor             # diagnose config/deps (--fix, --online, --json)
-./ulnclaw insights           # usage analytics over sessions (--days, --source, --json)
-./ulnclaw pets               # petdex mascots: list/install/select/show/scale/doctor/hatch
-./ulnclaw status             # status of all components (--deep)
-./ulnclaw logs               # tail/filter logs (-f, -n, --level, --since, --component)
-./ulnclaw update --check   # check for updates (ulnclaw update applies: stash -> ff pull -> rebuild)
-./ulnclaw config           # show/get/set/unset config (env-style keys go to .env)
-./ulnclaw secrets status   # external secret sources (secrets sync [--apply] fetches now)
-./ulnclaw secrets bitwarden setup   # wizard: install bws, store token, pick project (also: install/status/token/disable; onepassword setup/status/set/remove/disable)
-./ulnclaw computer-use status # background desktop control via cua-driver (doctor/install)
-./ulnclaw plugins list      # plugins + shell hooks (enable/disable/accept-hooks)
-./ulnclaw kanban list       # kanban task engine (init/boards/create [--max-runtime 30s|5m|2h|1d --max-retries N --workspace KIND --branch B --goal --initial-status blocked --model M --provider P --project P]/claim/done/review/block/comment/swarm/specify/decompose/diagnostics/schedule/promote/reclaim/reassign/edit/set-model [--provider P]/set-reasoning [L]/attach/tail/log/runs/context/repair/assignees/notify-subscribe/stats/...)
-./ulnclaw project list     # first-class project registry (create/show/add-folder/remove-folder/rename/set-primary/use/archive/restore/bind-board; kanban create --project anchors the worktree)
-./ulnclaw project scan     # git-repo discovery into the cache (scan [--root P --max-depth N]/repos [--clear])
-./ulnclaw hooks doctor      # probe every consented hook (list/test/revoke)
-./ulnclaw pairing list      # DM pairing codes for unknown senders (approve/revoke/clear-pending)
-./ulnclaw profiles          # named profiles: list/show/set/rename/delete `[profiles.*]` overrides (P597)
-./ulnclaw weixin login      # WeChat iLink QR-scan login for [messaging.weixin]
-./ulnclaw auth login        # OAuth device-flow login (status/refresh/logout/open)
-./ulnclaw sync status       # skill sync (pull/push/now/enable/disable/device)
-./ulnclaw completion bash  # shell completions (bash/zsh/fish/elvish/powershell)
-./ulnclaw dump             # copy-pasteable setup summary for support (--show-keys)
-./ulnclaw version          # version + install info + update status
-./ulnclaw uninstall        # remove code/PATH entries/wrappers (--full wipes data, --dry-run, --yes)
-./ulnclaw memory           # persistent memory status; `memory reset [all|memory|user]`
-./ulnclaw approvals        # terminal approval mode; `approvals manual|smart|off` to set
-./ulnclaw prompt-size      # system prompt + tool-schema footprint (--json)
-./ulnclaw debug report     # redacted diagnostic bundle for support (--no-redact)
-./ulnclaw bundles          # skill bundles: load N skills under one /command
-./ulnclaw import-agent     # import Claude Code / Codex setups (--dry-run)
-./ulnclaw security audit   # OSV.dev audit of pinned MCP packages (--json)
-./ulnclaw fallback         # fallback chain (add/remove/clear provider:model entries)
-./ulnclaw backup           # zip backup of home (-q quick snapshot, backup list/restore/prune)
-./ulnclaw import b.zip     # restore a backup zip (runtime-state files skipped, secrets 0600)
+## CLI Quick Reference
 
-# Browser automation: auto mode launches a managed headless Chrome/Chromium;
-# or point browser_* tools at an existing browser with remote debugging
-export ULNCLAW_BROWSER_CDP=http://127.0.0.1:9222     # or ws://.../devtools/browser/... or "auto"
-# or route browser_* through a Camofox anti-detect browser server:
-# export CAMOFOX_URL=http://127.0.0.1:9377            # + optional CAMOFOX_API_KEY
-# or let browser_* spin up on-demand cloud sessions (hermes cloud providers):
-#   config.toml [browser] cloud_provider = "browserbase" | "browser-use" | "firecrawl" | "local"
-#   + credentials: BROWSERBASE_API_KEY+BROWSERBASE_PROJECT_ID / BROWSER_USE_API_KEY / FIRECRAWL_API_KEY
+Every command ships `--help`; `ulnclaw completion bash|zsh|fish|elvish|powershell`
+generates shell completions.
 
-# HTTP gateway (OpenAI-compatible API server, default 127.0.0.1:8642)
-./ulnclaw gateway --host 127.0.0.1 --port 8642
-./ulnclaw dashboard status        # dashboard server status (run/stop; P581)
-./ulnclaw console                 # safe non-LLM command console REPL (P582)
-# messaging platforms run inside the gateway
-# ([messaging.telegram|discord|slack|signal|weixin|qq|yuanbao|email|mattermost|matrix|dingtalk|wecom|homeassistant|whatsapp|irc|ntfy|simplex|buzz|photon],
-#  plus webhook platforms: whatsapp_cloud/msgraph/webhook/bluebubbles/feishu/sms/teams/line/google_chat/raft/a2a)
-# the desktop app (desktop-electron/) and any browser dashboard talk to this
-# gateway over HTTP/SSE (local-app CORS is built in; see desktop-electron/README.md)
-curl -H "Authorization: Bearer $ULNCLAW_GATEWAY_KEY" \\
-     -H "Content-Type: application/json" \\
-     -d '{"messages":[{"role":"user","content":"Hello!"}]}' \\
+```bash
+# Sessions & history
+ulnclaw sessions list|search|browse        # browse = interactive picker + transcript viewer
+ulnclaw sessions export <id> --format md   # also: import / delete / rename / optimize
+ulnclaw sessions recover|repair            # offline recovery for damaged state.db
+ulnclaw insights                           # usage analytics over sessions
+
+# Skills & automations
+ulnclaw skills list|blueprints|scan        # scan = security check before trusting a skill
+ulnclaw cron list                          # create/show/pause/resume/run + blueprints
+ulnclaw suggestions                        # suggested automations (accept/dismiss)
+ulnclaw journey                            # learning timeline
+
+# Tools & models
+ulnclaw tools                              # list toolsets + enabled tools (enable/disable X)
+ulnclaw models providers                   # models.dev catalog (list/info/refresh)
+ulnclaw moa list|run                       # Mixture of Agents presets
+ulnclaw fallback add|remove                # provider:model failover chain
+
+# Gateway & platforms
+ulnclaw gateway --host 127.0.0.1 --port 8642   # OpenAI-compatible API + platforms
+ulnclaw dashboard status                   # dashboard server (run/stop)
+ulnclaw pairing list                       # DM pairing codes (approve/revoke)
+ulnclaw weixin login                       # WeChat QR-scan login
+ulnclaw spotify-auth login                 # Spotify PKCE OAuth for the spotify_* tools
+
+# Projects & kanban
+ulnclaw project list|create|scan           # first-class project registry + git discovery
+ulnclaw kanban list                        # task engine: create/claim/done/swarm/...
+
+# Security & secrets
+ulnclaw approvals                          # manual | smart | off
+ulnclaw secrets status|sync                # external vaults (bitwarden/onepassword setup)
+ulnclaw security audit                     # OSV.dev audit of pinned MCP packages
+ulnclaw computer-use status                # desktop control via cua-driver (doctor/install)
+ulnclaw plugins list                       # plugins + shell hooks (hooks doctor)
+
+# Ops
+ulnclaw doctor                             # diagnose config/deps (--fix, --online)
+ulnclaw status                             # status of all components (--deep)
+ulnclaw logs                               # tail/filter logs (-f, --level, --component)
+ulnclaw update --check                     # stash -> ff pull -> rebuild
+ulnclaw backup                             # zip backup of home (list/restore/prune)
+ulnclaw config get|set|unset               # env-style keys go to .env
+ulnclaw dump                               # copy-pasteable setup summary for support
+```
+
+## Desktop App
+
+Prebuilt installers ship on the releases page for every `v*` tag (product name
+**ulnclaw desktop**), built from the Electron shell in `desktop-electron/` — a
+faithful port of the hermes desktop (v2026.8.3): React 19 renderer with sixteen
+views (chat, sessions, jobs, usage, models, skills, kanban, projects, runs,
+webhooks, plugins, pairing, profiles, config, doctor, settings), command
+palette, xterm.js terminal panes, file tree with git review, and live turn
+streaming over a JSON-RPC WebSocket plus HTTP/SSE.
+
+- **Windows** — `ulnclaw-<ver>-win-x64.exe` (NSIS, per-user). Fully
+  self-contained: the statically linked `ulnclaw` gateway binary rides inside
+  the bundle; the shell spawns `ulnclaw gateway` on `127.0.0.1:8642` and
+  probes `/health`. Boot diagnostics on the failure card.
+- **macOS** — `ulnclaw-<ver>-mac-arm64.dmg` (Apple Silicon) /
+  `ulnclaw-<ver>-mac-x64.dmg` (Intel). Ad-hoc signed: on first launch use
+  right-click › Open, or run `xattr -cr "/Applications/ulnclaw desktop.app"`
+  if Gatekeeper reports it as damaged.
+- **Linux** — `ulnclaw-<ver>-linux-x86_64.AppImage` (deb/rpm also build).
+  Every release ships a `SHA256SUMS.txt`.
+- **Silent auto-update (v0.7.1+)** — electron-updater on the GitHub release
+  channel replaces the entire shell (app + bundled gateway) in one background
+  restart; logs under `[shell-update]` in `~/.ulnclaw/logs/desktop.log`.
+
+First launch needs no API key: the gateway boots keyless and the onboarding /
+Models view walk you through adding a provider key. Configuration lives in
+`~/.ulnclaw/config.toml`, exactly as in the CLI flow below. `ulnclaw gui`
+launches the packaged app (`--dev` runs the unpackaged app from
+`desktop-electron/`). See [desktop-electron/README.md](desktop-electron/README.md).
+
+## HTTP Gateway
+
+One process serves the OpenAI-compatible API, the messaging platforms, the
+desktop app, and any browser dashboard:
+
+```bash
+ulnclaw gateway --host 127.0.0.1 --port 8642
+
+curl -H "Authorization: Bearer $ULNCLAW_GATEWAY_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"messages":[{"role":"user","content":"Hello!"}]}' \
      http://127.0.0.1:8642/v1/chat/completions
 ```
 
-Example `~/.ulnclaw/config.toml`:
+- `/v1/chat/completions` + `/v1/responses` with SSE streaming; async
+  `/v1/runs` with approval resolution; sessions API; 100+ `/api` management
+  endpoints (local-app CORS built in).
+- Messaging platforms run inside the gateway
+  (`[messaging.telegram|discord|slack|signal|weixin|qq|yuanbao|email|...]`,
+  plus webhook platforms: whatsapp_cloud/msgraph/webhook/bluebubbles/feishu/
+  sms/teams/line/google_chat/raft/a2a).
+- Optional profile multiplexing (`multiplex_profiles`) serves
+  `/p/<profile>/...` mirrors with fail-closed secret scopes — see the
+  [multiplexing gateway design note](docs/design/multiplexing-gateway.md).
+
+## Configuration
+
+`ulnclaw init` writes a default `~/.ulnclaw/config.toml`:
 
 ```toml
-# timezone = "Asia/Shanghai"   # IANA zone for prompt timestamps
-                               # (ULNCLAW_TIMEZONE / HERMES_TIMEZONE env override)
+# timezone = "Asia/Shanghai"        # IANA zone for prompt timestamps
 
 [model]
-provider = "ollama"            # or "openai", "anthropic", "dashscope", ...
+provider = "ollama"                 # or "openai", "anthropic", "dashscope", ...
 model = "qwen3:32b"
 base_url = "http://localhost:11434/v1"
-# max_retries = 2              # retry 429/5xx/network with backoff
-# fallbacks = ["openai:gpt-5.2-mini", "ollama:qwen3:32b"]  # failover chain
+# max_retries = 2                   # retry 429/5xx/network with backoff
+# fallbacks = ["openai:gpt-5.2-mini", "ollama:qwen3:32b"]   # failover chain
 
-[agent]
-max_iterations = 90
-approval = true                # y/N prompt before dangerous commands
-environment_probe = true       # one-line Python toolchain note in the system prompt
-
-# [approvals]
-# timeout = 300                # gateway approvals fail closed after N seconds
-# mode = "manual"              # manual | smart (aux-LLM guardian) | off
-# cron_mode = "deny"           # deny | approve — unattended cron runs
-# smart_policy = ""            # operator rules for the smart-approval guardian
-# denial_breaker_threshold = 3  # consecutive guardian DENYs before the hard-stop escalation
-# deny = []                     # fnmatch globs that always block (even mode = "off")
-
-[delegation]
-max_concurrent_children = 3
-
-# [[mcp.servers]]
-# name = "filesystem"
-# command = "npx"
-# args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/me"]
-# lazy = false        # true = register from the schema cache, spawn on first call
-# [mcp.servers.env]   # stdio children only see filtered env: safe baseline +
-# API_TOKEN = "${MY_TOKEN}"  # XDG_* + ~/.ulnclaw/.env keys + this block;
-#                      # ${VAR}/${env:VAR} interpolate from the secret scope first
-
-# Remote MCP server (Streamable HTTP by default; transport = "sse" for the
-# legacy SSE protocol; headers ride on every request):
-# [[mcp.servers]]
-# name = "remote"
-# url = "https://mcp.example.com/mcp"
-# # transport = "sse"
-# [mcp.servers.headers]
-# Authorization = "Bearer sk-..."
-
-# OAuth-protected remote server (browser-based OAuth 2.1 + PKCE on first
-# use; tokens cached under mcp-tokens/, refreshed automatically):
-# [[mcp.servers]]
-# name = "oauth-remote"
-# url = "https://mcp.example.com/mcp"
-# auth = "oauth"
-# [mcp.servers.oauth]
-# # client_id = "pre-registered-id"   # skip dynamic registration
-# # scope = "read write"
-
-[gateway]
-host = "127.0.0.1"
-port = 8642
-# key = "sk-..."        # bearer token; env ULNCLAW_GATEWAY_KEY overrides
-# multiplex_profiles = false  # true = serve /p/<profile>/... mirrors, each
-                              # backed by its [profiles.<name>] override and
-                              # its own fail-closed secret scope
-                              # (profiles/<name>/.env; unscoped credential
-                              # reads error instead of leaking across profiles)
-
-# [terminal]
-# backend = "docker"    # "local" (default) | "docker" | "ssh"
-# container = "ulnclaw-dev"
-# image = "ubuntu:24.04"
-# env_passthrough = ["TENOR_API_KEY"]   # vars allowed past the sandbox credential scrub
-
-# [tool_output]
-# max_bytes = 100000        # terminal output head+tail cap
-# max_lines = 2000          # read_file pagination cap
-# max_line_length = 2000    # per-line clamp ('... [truncated]')
-
-# [security]
-# allow_private_urls = false  # true lets web tools fetch private/internal IPs
-#                             # (cloud metadata endpoints stay blocked either way;
-#                             #  env ULNCLAW_ALLOW_PRIVATE_URLS also works)
-
-# [checkpoints]
-# enabled = true        # transparent snapshots before write_file/patch
-
-# Auxiliary model routing: run secondary calls on a different model.
-# [auxiliary.compression]   # context-compression summaries
+# Auxiliary model routing — run secondary calls on a different model
+# [auxiliary.compression]           # context-compression summaries
 # provider = "openai"
 # model = "gpt-5.2-mini"
-# [auxiliary.vision]        # image analysis (vision_analyze / browser_vision)
-# model = "gpt-5.2"
-# [auxiliary.title_generation]  # session titles after the first exchange
-# enabled = true            # kill switch (is_truthy_value semantics)
-# language = ""             # pin title language; blank matches the user
+# [auxiliary.vision]                # vision_analyze / browser_vision
+# [auxiliary.title_generation]      # session titles after the first exchange
 
-# Mixture of Agents: parallel reference fan-out + aggregator synthesis
-# [moa]
-# default_preset = "default"
-# [[moa.presets.default.reference_models]]
-# provider = "ollama"
-# model = "qwen3:32b"
-# [moa.presets.default.aggregator]
-# provider = "openai"
-# model = "gpt-5.2"
+# MCP servers — stdio, remote HTTP/SSE, or OAuth-protected
+[[mcp.servers]]
+name = "filesystem"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/me"]
+# lazy = false                      # true = register from schema cache, spawn on first call
+
+# [[mcp.servers]]
+# name = "remote"
+# url = "https://mcp.example.com/mcp"   # transport = "sse" for legacy SSE
+# auth = "oauth"                        # OAuth 2.1 + PKCE on first use, tokens cached
+
+# [gateway]
+# host = "127.0.0.1"
+# port = 8642
+# key = "sk-..."                    # env ULNCLAW_GATEWAY_KEY overrides
+
+# [terminal]
+# backend = "docker"                # "local" (default) | "docker" | "ssh"
+
+# [approvals]
+# mode = "manual"                   # manual | smart (aux-LLM guardian) | off
+
+# [security]
+# allow_private_urls = false        # web tools stay away from private/internal IPs
+
+# [checkpoints]
+# enabled = true                    # transparent snapshots before write_file/patch
 ```
 
-### Library Quick Start
+Browser automation connects via `ULNCLAW_BROWSER_CDP` (an existing browser with
+remote debugging), `CAMOFOX_URL` (anti-detect server), or
+`[browser] cloud_provider` (browserbase / browser-use / firecrawl). See
+[docs/en/tools.md](docs/en/tools.md) and
+[docs/en/providers.md](docs/en/providers.md) for the full reference.
+
+## Library Quick Start
 
 ```rust
 use ulnclaw::prelude::*;
@@ -349,257 +251,45 @@ async fn main() -> Result<()> {
 }
 ```
 
-### Documentation
+## Documentation
 
-- [Hermes Parity Matrix](docs/en/hermes-parity.md) — tool/feature mapping vs hermes-agent v2026.8.3, incl. the HTTP route parity appendix (every hermes route covered or resolved by design; P339)
-- [Architecture Guide](docs/en/architecture.md) · [API Reference](docs/en/api-reference.md)
-- [Integration Guide](docs/en/integration.md) · [Development Guide](docs/en/development.md)
-- [Tool System](docs/en/tools.md) · [Provider System](docs/en/providers.md)
-- Design notes: [Multiplexing Gateway](docs/design/multiplexing-gateway.md) (multi-profile routing + fail-closed secret scopes) · [Browser CDP Client](docs/design/browser-cdp.md) (CDP session layer + `/v1/browser/*` control plane)
+| Topic | Description |
+|---|---|
+| [Hermes Parity Matrix](docs/en/hermes-parity.md) | Tool/feature mapping vs hermes-agent v2026.8.3, incl. HTTP route parity |
+| [Architecture](docs/en/architecture.md) | Project structure, agent loop, key modules |
+| [Tools & Toolsets](docs/en/tools.md) | 50+ tools, toolset composition, terminal backends |
+| [Providers](docs/en/providers.md) | Model providers, credentials, fallbacks |
+| [Integration Guide](docs/en/integration.md) | Gateway, embedding, messaging platforms |
+| [API Reference](docs/en/api-reference.md) | HTTP gateway endpoints |
+| [Development Guide](docs/en/development.md) | Dev setup, testing |
+| Design notes | [Multiplexing Gateway](docs/design/multiplexing-gateway.md) · [Browser CDP Client](docs/design/browser-cdp.md) · [Desktop Electron](docs/design/desktop-electron.md) |
+| [Desktop App](desktop-electron/README.md) | The Electron shell (`ulnclaw desktop`) |
 
-### Building & Testing
+## Migrating from hermes-agent
+
+ulnclaw targets feature parity with hermes-agent v2026.8.3 and reuses its
+storage layout (`~/.ulnclaw/` mirrors `~/.hermes/`), so sessions, memory,
+skills, and cron jobs follow the same SQLite schema. See the
+[parity matrix](docs/en/hermes-parity.md) for the exact mapping, and
+`ulnclaw import-agent` to import Claude Code / Codex setups.
+
+## Building & Testing
 
 ```bash
 cargo test                     # 990 tests
 cargo build --release --target x86_64-unknown-linux-musl   # static binary
 ```
 
-### License
+## Contributing
+
+Contributions are welcome! Please run `cargo test` before submitting a pull
+request, and keep the [parity matrix](docs/en/hermes-parity.md) in sync when
+adding or changing hermes-equivalent behaviour.
+
+## License
 
 MIT OR Apache-2.0
 
----
-
-## 中文
-
-**Rust 编写的高性能 AI Agent 引擎 —— [hermes-agent v2026.8.3](https://github.com/NousResearch/hermes-agent/tree/v2026.8.3) 的 Rust 移植**
-
-ulnclaw 用 Rust 重新实现了 Hermes Agent 引擎：相同的工具面（50+ 内置工具）、
-相同的 SQLite 会话/记忆/技能/定时任务存储布局、相同的工具集组合方式 ——
-原生性能，单一静态 musl 二进制。完整的逐项对标见
-[对标矩阵](docs/zh/hermes-parity.md) —— 与 hermes-agent v2026.8.3 的核心
-对齐已完成，含消息平台网关（Telegram/Discord/Slack/Signal/微信/QQ/元宝/邮件/Mattermost/Matrix/钉钉/企微/飞书/Home Assistant/SMS (Twilio)/WhatsApp (Baileys 桥)/IRC/ntfy/SimpleX/Teams/LINE/Google Chat/Buzz/Photon (iMessage)/Raft/A2A）、插件与 shell 钩子
-体系、Secrets 保险库、computer-use、OAuth 登录 + 技能同步 + 本地 OAuth 上游代理，以及 hermes 风格的 Electron 桌面 GUI（`desktop-electron/`）。
-
-### 核心特性
-
-- **🤖 Agent 循环** —— 工具调用、迭代预算、用量统计、记忆注入、步骤/工具回调
-- **🔧 50+ 内置工具** —— terminal/process、文件读/写/补丁/搜索、web 搜索/抽取、经 xAI 的 X（Twitter）搜索（`x_search`，可选工具集 + `XAI_API_KEY`）、视频理解（`video_analyze`，可选 `video` 工具集）、记忆、todo、会话搜索、clarify、技能、委派、execute_code、cronjob、视觉、图像生成、视频生成（`video_generate` 注册表 —— BFL FLUX 3 经 Nous 工具网关、xAI Imagine 含 edit/extend、FAL 六家族队列、DeepInfra）、桌面项目（`project_list/create/switch`，可选 `project` 工具集）、Discord 服务器工具（`discord`/`discord_admin` —— Bot 令牌、意图门控 schema、`server_actions` 白名单）、飞书/Lark 文档工具（`feishu_doc_read` + `feishu_drive_*` 评论工具 —— 应用凭据经 env/secret scope/`[messaging.feishu]`）、Spotify 工具（7 个 `spotify_*` 工具 —— 播放/设备/队列/搜索/歌单/专辑/资料库，经 PKCE OAuth，`ulnclaw spotify-auth login`）、元宝工具（5 个 `yb_*` 工具 —— 群信息/成员、私信、贴纸搜索/发送，经存活适配器）、跨频道消息（`send_message` —— 经频道目录 + 主频道在所有已连接平台 send/list/react/unreact，Telegram/Discord/Slack 原生 `MEDIA:<path>` 附件，表情回应支持最近消息回退）、学习时间线（`ulnclaw journey`）、TTS、Home Assistant、kanban、工具搜索
-- **🧰 工具集** —— hermes 兼容分组（`coding`、`web`、`file`、`safe`、`debugging`……），支持组合与启用/禁用策略
-- **🛡️ 审批系统** —— 命令归一化、硬性底线（自动阻止）、高成本操作先确认再执行；REPL 提示 + 网关 HTTP 运行审批（fail-closed 超时、`always` 授权持久化）；tirith 执行前内容扫描（退出码裁决、SHA-256/cosign 校验自动安装、fail-open 熔断器）
-- **💾 SQLite 状态库** —— 会话/消息 FTS5 全文检索、会话血缘（父子会话）、定时任务、kanban 看板；受损数据库的离线非破坏性 `sessions recover`（rowid 抢救、孤儿会话重建、FTS 重建），以及原始模式会话浏览（`sessions show --raw` / `--json` / `--timestamps`——逐条消息渲染时间戳、工具名/工具调用 id 与 tool_calls JSON，便于 grep 的 trace 展示；P740）
-- **🗜️ 上下文压缩** —— 预算触发，中段对话经二次模型调用摘要，外加三层工具结果持久化：超大工具输出（>10 万字符，`read_file` 豁免）经 terminal backend 存入 `ulnclaw-results/` 并替换为预览 + 路径，单轮 20 万字符聚合预算优先溢出最大结果，另含实时上下文窗口构成分析：`/context` 渲染 hermes 风格的字符网格 + 分类表（系统提示 / 工具定义 / MCP / 记忆 / 对话），`/context all` 追加每工具集与每技能开销，`GET /api/sessions/:id/context` 以 JSON 提供同一载荷供界面使用（P624）
-- **🤝 委派** —— 并行子代理，隔离上下文，深度限制；顶层委派后台即发即忘（实时记录在 `cache/delegation/live/`），整批完成后以单条汇总结果重回会话；派发与结果持久化于 SQLite 委派登记表，完成的工作可跨重启保留（崩溃后仍在运行的委派以终态 "outcome unknown" 报告恢复投递）
-- **🧬 混合智能体（MoA）** —— `[moa]` 预设将提示词并行扇出给参考模型，经聚合器综合（`ulnclaw moa run/list/delete`、REPL `/moa`）；设置 `[model] provider = "moa"` 可让整个 agent 循环跑在预设上（持久门面：按轮参考缓存、`save_traces` JSONL trace、`privacy_filter` PII 脱敏）；`GET|PUT /api/model/moa` 向桌面 Models 视图开放预设——渲染各预设的参考/聚合模型，并提供校验后写回 `[moa]` 的 JSON 编辑器（对应 hermes MoA dashboard；P606）
-- **🗺️ 模型目录** —— models.dev 多 provider 清单，三级缓存（内存 → 磁盘 → 网络失败退避 5 分钟）：`ulnclaw models providers|list|info|refresh`、网关 `/api/model/options` 多 provider 选择器清单 + `?refresh=true`、`ULNCLAW_MODELS_DEV_URL` 镜像覆盖
-- **⏰ 定时任务** —— `30m` / `every 2h` / `0 9 * * *` / ISO 一次性计划 + 轮询调度器
-- **📐 蓝图（Blueprints）** —— frontmatter 声明 `metadata.hermes.blueprint.schedule` 的技能可排程（`skills blueprints`、`skills schedule/unschedule`）
-- **🛡️ 技能守卫** —— `skills scan <name>` 运行 `skills-guard-v1` 静态扫描器（119 条威胁模式、不可见 Unicode 与结构检查、来源信任等级），在安装/运行第三方技能前把关；dangerous 技能即使来自受信任仓库也会被拦截
-- **🔌 MCP 客户端** —— stdio JSON-RPC + 远程 Streamable HTTP / SSE 传输（`url` + 可选 `transport = "sse"` + 静态 `headers`；`auth = "oauth"` 运行 OAuth 2.1 + PKCE（元数据发现、动态注册、loopback 回调、令牌刷新、401 恢复））：任意 MCP 服务器的工具以 `mcp__<server>__<tool>` 注册；npx/uvx 启动前经 OSV 恶意软件检查（MAL-* 通告阻止、fail-open）；`lazy = true` 的服务器直接从磁盘 schema 缓存注册、不拉起子进程，首次工具调用才启动（hermes 懒启动）；服务器管理经 `/api/mcp/servers` 提供——列表含传输/认证/启用状态，增/改/删（`POST|PUT|DELETE`），`enabled` 标志可跳过注册，`PUT /api/mcp/servers/<name>/enabled` 切换启用，`POST /api/mcp/servers/<name>/test` 连接探测，均由桌面诊断视图 MCP 面板承载（添加服务器对话框、逐行测试/启用/禁用/删除；对应 hermes MCP 管理；P603）；精选目录（`GET /api/mcp/catalog` + `POST /api/mcp/catalog/install`）列出知名参考服务器（filesystem、fetch、memory、time、everything、sequential-thinking、github、gitlab、brave-search、puppeteer），带必填环境变量提示，诊断面板可一键安装并显示已安装/启用徽标（对应 hermes optional-mcps；P604）；REPL `/reload-mcp` 从最新配置重连服务器，带提示词缓存失效确认（once/always/cancel）；stdio 子进程运行于过滤后的环境（仅安全基线 + `XDG_*` + `<home>/.env` 键 + 声明的 `env`——环境中的密钥不会泄漏），`${VAR}`/`${env:VAR}` 占位符优先从密钥作用域解析；网关为 dashboard 中介 MCP OAuth：`POST /api/mcp/servers/<name>/auth` 启动流程并返回待打开的授权 URL，浏览器重定向落到开放的 `GET /api/mcp/oauth/callback/<server>` 路由（state 校验），`GET /api/mcp/oauth/flows/<id>` 报告状态与发现的工具；401 恢复按失败令牌去重，其他进程在磁盘上刷新的令牌于下一请求经 mtime 监视拾取；`/reload-mcp` 亦可在平台聊天中使用——适配器支持时渲染原生按钮，否则以 `/approve`/`/always`/`/cancel` 文本回复
-- **📡 MCP 频道桥** —— `ulnclaw mcp serve [--verbose]` 经 stdio JSON-RPC 向任意 MCP 客户端（Claude Code、Cursor、Codex 等）暴露消息会话：跨全部平台会话的 `conversations_list`/`conversation_get`/`messages_read`/`attachments_fetch`，`events_poll`/`events_wait` 长轮询事件流（200 ms mtime 门控 DB 轮询、启动不重放），经 `send_message` 管道的 `messages_send`（含无存活网关时的 Telegram/Discord/Slack 独立 REST 投递），频道目录目标的 `channels_list`，以及桥会话审批的 `permissions_list_open`/`permissions_respond`
-- **✍️ ACP 适配器** —— `ulnclaw acp [--verbose]` 将 ulnclaw 作为 Agent Client Protocol stdio 服务器运行于 Zed 等编辑器：带历史回放的会话管理、流式 `session/update` 通知（消息/思考块、带 kind 映射的工具调用、`todo` 原生 plan 更新）、多模态提示（图像块走原生视觉通道）、协作式取消，以及经 `session/request_permission` 编辑器弹窗呈现的工具审批
-- **📦 批量运行器** —— `ulnclaw batch --dataset-file data.jsonl --run-name my_run [--batch-size N] [--resume]` 以并行工作池在 JSONL 提示词数据集上运行 agent，支持检查点续跑（内容扫描 + 索引检查点）、每批 hermes from/value 轨迹文件、工具用量/推理统计聚合与最终 `summary.json`
-- **📨 Send CLI** —— `ulnclaw send --to telegram "部署完成"`（或管道 stdin、`--file`、`--subject`、`--list [platform]`、`--json`、`--quiet`）从脚本/cron/CI 投递消息，无 LLM、bot 令牌平台无需运行网关——hermes 退出码契约（0/1/2）
-- **🌍 浏览器自动化** —— CDP WebSocket 客户端 + 内置监督器（自动启动无头 Chrome/Chromium，或用 `ULNCLAW_BROWSER_CDP` 指向自有浏览器）：带元素引用的可访问性快照、点击/输入/滚动/按键/截图/执行 JS/对话框
-- **🌐 浏览器自动化** —— 12 个 `browser_*` 工具，基于 CDP WebSocket 客户端（带元素引用的可访问性快照、点击/输入/滚动/按键、截图 + 视觉、console/eval、原始 CDP、对话框）；托管无头 Chrome（`ULNCLAW_BROWSER_CDP=auto`）、任意已有 DevTools 端点、Camofox 反检测 REST 后端（`CAMOFOX_URL`），或经 Browserbase / Browser Use / Firecrawl 按需云会话（`[browser] cloud_provider`），内置 hermes 级 SSRF 防护（元数据底线、私网地址门控、重定向复检、原始 CDP 白名单）并对浏览器输出强制脱敏
-- **🚪 HTTP 网关** —— `ulnclaw gateway`：OpenAI 兼容 `/v1/chat/completions` + `/v1/responses`（会话续接）、两者均支持 `stream: true` SSE 流式（令牌增量、工具进度/函数调用事件）、带 SSE 事件 + 审批处理的异步 `/v1/runs`、会话 API（含 `PATCH`/fork + 逐轮生效的会话级模型锁，以及 `GET /api/sessions?preview=true` 为列表行附带最近消息摘要——P509，行内另含 `archived` 标志，对应 TUI F8 归档流程写入的 sessions 表列——P519，列表另支持 `?source=` / `?end_reason=` 服务端筛选（`end_reason=none` 选取未结束会话）——P521，另含 `POST /api/sessions/retitle-skills` 经 LLM 标题器重新生成泄漏 `/skill` 脚手架的会话标题——默认演练模式、`apply: true` 实际写入；P530，另含 `GET /api/sessions/:id` 增补 `child_session_ids` 分叉谱系、`total_tokens` 与按角色的 `message_counts` 消息分布——P553、P561，以及 `POST /api/sessions/:id/retitle` 经 LLM 标题器重新生成任意会话标题——默认演练模式、`apply: true` 实际写入，桌面命令面板另有就地重命名当前会话的动作；P559、P560）、`/api/jobs` 定时任务管理（增删查改 + pause/resume/run，另含经 `GET /api/jobs/blueprints` 的精选自动化蓝图目录与经 `POST /api/jobs/blueprints/instantiate` 的槽位表单任务实例化——P655），内置调度器自动执行到期任务，外部投递目标（`deliver`：`origin`/平台名/`platform:chat[:thread]`/`all`，按平台发送器 + home 频道环境变量解析，`[SILENT]` 抑制、包装抬头与失败摘要——`GET /api/jobs/delivery-targets` 列出可用目标）与 Chronos NAS 触发 webhook `POST /api/jobs/fire`（经 `[cron.chronos]` JWT 校验，202 + 后台运行）、`/v1/skills` + `/v1/toolsets` 发现端点、`/api/model/options`（多 provider 选择器清单）、Prometheus `/metrics`、`/health/detailed` 有界就绪探针（state.db/config/model/disk/gateway/后台队列检查与总体 ok|degraded 状态，另含网关 busy/drainable 推导、平台状态映射、pid 与运行时长——对应 hermes readiness；P697）、重启循环断路器（陈旧 pidfile 检测将崩溃重启记入 `gateway/restart_loop.json`——60 秒内三次及以上非正常启动即触发断路并大声告警，`/health/detailed` 同时暴露 `restart_loop_tripped`——对应 hermes restart_loop_guard；P698）、周期性可 grep 的 `[MEMORY] rss=…` 遥测（含基线与关机快照，`[logging] memory_monitor = false` 关闭、`memory_monitor_interval_secs` 设定节奏——对应 hermes memory_monitor；P698）、更丰富的 `GET /api/channels`（逐平台运行时状态阶梯、已配置的 home 频道与已见频道计数，顶层另附按平台分组、按最近活动倒序的已见频道 `directory`——深化 hermes ChannelsPage；P699）、持久投递义务台账（队列回合回复与 cron 投递在发送前记为 `state.db` 中的 `pending` 行、发送后标记 `delivered`——下次启动时认领死亡网关进程遗留的孤立回复并重新投递：`pending` 原样重发，状态不明的 `attempting`/`failed` 行带可见 ♻️ 恢复标记前缀以保证诚实的至少一次投递，最多 3 次尝试、24 小时过期废弃、7 天保留清理——对应 hermes delivery_ledger；P700）、投递台账保护经共享的 `send_with_ledger` 派发器助手扩展至 Telegram/Discord/Slack 回合回复发送路径（P703），继而经失败感知变体扩展至 Signal/Matrix/Mattermost/Feishu/Email/Weixin/QQ/WhatsApp Cloud/BlueBubbles 回复路径（确定性发送拒绝标记为 `failed` 以供下次启动重试；P704），继而完成 Google Chat、Line、WhatsApp、DingTalk（AI 卡片 + webhook 回退）、WeCom、Teams、IRC、ntfy、SimpleX、SMS、Home Assistant、Photon、Buzz 与 Feishu 会议的台账覆盖——分块与多路径发送均纳入保护；raft/a2a 经响应体投递无需台账（P705）、投递台账运维面板（`GET /api/delivery-ledger`——按更新时间倒序的义务行、按状态计数与待投递合计，诊断视图以状态徽章渲染投递台账面板；P706）、死亡目标运维端点（`GET /api/dead-targets`——P707 登记表中确认不可达的目标、按标记时间倒序，任何一次成功发送即自愈清除；诊断视图以死亡目标面板渲染；P713）、会话停顿看门狗（`[gateway] session_stall_timeout_secs`，环境变量 `ULNCLAW_SESSION_STALL_TIMEOUT` 覆盖，默认 300 秒，0 禁用——当忙碌回合后排队的后续消息仍在等待而 agent 进展沉默超过时限时，向该聊天发送一次性 ⚠️ 停顿提示并指引 /new；进展仅来自共享活动契约——回合边界、工具调用与流式增量逐点打戳，绝不使用回合开始或入站时钟——通知一次即闩锁，停顿回合结束后自动解除，发送有时限保护，卡死的传输不会拖住看门狗——对应 hermes session_stall；P714）、运行时元信息脚注（`[display.runtime_footer]`，支持 `[display.platforms.<平台>.runtime_footer]` 按平台覆盖——启用后在消息回合的最终回复末尾追加一行紧凑的 `模型 · 上下文占用% · 工作目录`（默认关闭；`latency` 为可选附加字段，缺数据的字段静默跳过）；`/footer [on|off|status]` 可在任意网关平台切换，写入 config.toml 并即时闩锁当前进程——对应 hermes runtime_footer；P715）、停顿监视运维端点（`GET /api/stall-watch`——P714 排队入站目录与共享活动打戳的联结：解析后的看门狗时限、按停顿优先排序的排队会话（沉默秒数、最后进展描述与停顿标记）；渲染于 Doctor 的停顿监视面板；P716）、二进制代码偏差检测（网关启动时对运行中可执行文件的修改时间+体积指纹做快照，当磁盘上的二进制在进程之下被替换（重新构建或升级）时 `GET /health/detailed` 报告 `code_skew`，让运维者得到明确的重启信号而非疑惑新功能为何缺席——对应 hermes code_skew；P717）、按平台斜杠命令访问控制（`[messaging.slash_access.<平台>]`——`allow_admin_from` / `group_allow_admin_from` 列出可运行全部命令的管理员，`user_allowed_commands` / `group_user_allowed_commands` 列出非管理员可运行的命令，隐含 `/help` + `/whoami` 底线；未设置的平台保持旧有不设防行为，作用域跟随渠道目录记录的聊天类型，普通聊天从不受限，拒绝时回复 ⛔ 仅限管理员文案与可用命令预览——对应 hermes slash_access；P718）、按平台显示/详略解析器（`[display]` + `[display.platforms.<平台>]`，内置按平台能力分层的默认值——工具进度模式/分组、推理可见性与样式、工具预览长度、中间评论、长回合心跳、忙碌回执细节、转向回执、进度清理与实时状态文本，按 平台覆盖 → 全局 → 层级默认 解析；旧式 `[display.tool_progress_overrides]` 继续有效——对应 hermes display_config；P721）、通用状态短语目录（`[display.status_phrases]` + 旧式 `[display.generic_status_phrases]`、按平台小节，以及 ulnclaw 主目录下的约定文件 `status_phrases.yaml` / `status_phrases/*.yaml`——仅接受 profile 相对路径的 YAML，绝对路径与 `..` 逃逸一律忽略，支持 append/replace 合并模式；`long_running_notifications = "generic"` 将 Slack 输入状态行的计时心跳替换为目录短语轮换，每 30 秒窗口一条——对应 hermes status_phrases；P722）、占位符感知的消息网关终端 cwd（`[terminal] cwd` 占位符 `.`、`auto`、`cwd` 按后端解析——local 回退到 `MESSAGING_CWD` 再到 `$HOME`，docker 且开启 `docker_mount_cwd_to_workspace` 时需要显式宿主路径以完成 `/workspace` 映射，docker 未开挂载与其他后端保持沙箱默认；支持 `TERMINAL_ENV`/`ULNCLAW_TERMINAL_CWD`/`TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE` 环境覆盖；启动时应用于网关与 profile 代理上下文——对应 hermes cwd_placeholder；P723）、网关响应静默过滤器（交互回合的精确标记抑制——`NO_REPLY`/`[SILENT]` 等标记，剥离边缘标点但保留方括号结构性，仅提及标记的正常文本照常投递；cron 通道的宽松匹配器改为共享规范标记集，另移植 SSE 流式路径的部分标记前缀检查——对应 hermes response_filters；P724）、外部排空标记契约（`<home>/.drain_request.json`——看板侧的开始/取消排空通过写入或删除标记文件与网关通信，网关后台监视器检测到存在即置位排空标志、拒绝新回合；标记加盖实例纪元（boot id + PID-1 启动时间），机器重启后残留的孤儿标记被忽略，损坏标记安全地倾向静默排空，`suppress_notification` 标志可静默关机广播——对应 hermes drain_control；P725）、环外关机与活性兜底（`/restart` 时武装纯 OS 线程关机看门狗——排空路径卡死超过 排空时限 + 60 秒宽限 即向 `logs/gateway-shutdown-watchdog.log` 落诊断快照、在生命周期台账记入看门狗退出并强制结束进程；`<home>/state/gateway.heartbeat` 每 30 秒重写（pid/启动时刻/内存采样），外部监督可区分 进程存活 与 运行时冻结；环活性看门狗每 30 秒探测运行时，连续 3 次无响应即硬退出，`[gateway] loop_watchdog = false` 可关闭——对应 hermes shutdown_watchdog；P726）、SIGTERM/SIGINT 关机取证（网关安装信号处理器：立即记录快速结构化快照——信号、pid/ppid、父进程与自身 `/proc` 摘要、systemd 上下文、负载均值、附加的调试器——并以分离的 `ps` 巡游诊断追加写入 `logs/gateway-shutdown-diagnostic.log` 而不阻塞拆卸，生命周期台账记入干净的信号关机——对应 hermes shutdown_forensics；P727）、排空控制运维面（`GET /api/drain` 状态——标记载荷、实例纪元、陈旧判定与实时排空标志；`POST /api/drain` 发起（含发起者与关机通知静默）；`DELETE /api/drain` 取消——P725 标记契约的看板半边；P728）、生命周期运维面（`GET /api/lifecycle`——上次退出标签、哨兵载荷、环心跳新鲜度（pid 与年龄）、关机看门狗转储与取证诊断日志的存在性与体积；P729）、显示设置运维面（`GET /api/display`——全部 26 个渠道经 P721 解析链（平台覆盖 → 全局 → 层级默认）解析后的显示设置，附启用状态与显式覆盖标记；P730）、状态短语运维面（`GET /api/status-phrases`——解析后目录的计数与样例、约定的 profile 短语文件、配置小节存在性，以及存在小节时的按平台目录；P731）、终端运维面（`GET /api/terminal`——解析后的终端后端与环境变量覆盖标记、配置工作目录与占位符标记、经 P723 解析的消息目录、docker 挂载/容器/镜像或 ssh 目标详情、命令超时与环境变量透传姿态；P732）、cgroup 孤儿回收运维面（`GET /api/cgroup`——cgroup v2 路径探测与实时 PID 清点，hermes ExecStopPost 安全网的移植版：网关退出时对单元 cgroup 内残留的孤儿助手进程（adb、平台桥等）逐 PID 发送 SIGKILL，确保 Restart=always 不被卡住；P733）、流式 TTS 消费者（`streaming_tts`——hermes gateway/streaming_tts_consumer.py 的移植：LLM 文本增量经句子切块器与有界子句队列，由异步排空任务为语音平台逐句合成 PCM 音频，并按 hermes 的 started/audible/partial/dropped 完成矩阵决定是否抑制整文件 TTS 回退；P734）、关机冲刷（`shutdown_flush`——hermes issue #72680 安全网：网关退出时把从未轮到执行的忙碌队列驻留消息序列化为原子 0600 载荷存入 `pending_messages/`，下次启动时重新分发，另提供会话库持久化失败时的代理历史快照兜底钩子供人工抢救；P735）、事件钩子系统（`event_hooks`——hermes hooks.py 的移植：从 `hooks/` 目录发现钩子（HOOK.yaml 清单 + handler），在 gateway:startup、agent:start/agent:end 与 command:* 通配点上触发，hermes 风格的 Python handler 经子进程兼容引导执行、可执行 handler 从 stdin 接收 JSON 载荷，钩子错误绝不阻塞主管线；P736）、命令与会话钩子触发（hermes `command:<name>` 决策协议——deny/handled/rewrite 在斜杠访问控制之后拦截分发——以及会话首条消息触发 session:start、/new 与 /reset 触发 session:end + session:reset；P737）、显示设置编辑端点（`PUT /api/display`——对 12 个可覆盖显示键持久化或移除全局/按平台覆盖，校验后直接写入配置文件；P738）、终端设置编辑端点（`PUT /api/terminal`——持久化后端、工作目录、docker/ssh 目标、超时与挂载设置，带类型与后端取值校验，null 值移除该键回退默认；P739）、门户认证状态运维面（`GET /api/portal`——为仪表盘提供已存 OAuth 令牌的只读快照：登录状态、到期时间、作用域与刷新令牌存在性，按契约绝不刷新——轮询不会消耗刷新令牌；P742）、状态短语预览运维面（`GET /api/status-phrases/preview`——按平台与类别对解析后的短语目录做时间轮换采样，返回状态行实际会轮播的短语样本，供运维者对照调优短语文件；P743）、审批设置编辑端点（`PUT /api/approvals/settings`——持久化模式开关未覆盖的审批旋钮：决策超时、定时 deny/approve 模式、智能守护策略、连续拒绝熔断阈值、命令拒绝规则列表与 MCP 重载确认开关，逐键类型校验、null 移除回退默认，`GET /api/approvals` 同时返回完整设置快照；P744）、网关设置运维面（`GET /api/gateway-settings`——解析后的监听地址与环境变量覆盖标记、绝不泄露密钥本体只报告是否配置，外加多 profile 复用、消息时间戳、运行时/systemd 看门狗、会话上限与停滞超时；`PUT /api/gateway-settings` 持久化这些行为旋钮并逐键校验，监听身份只读；P745）、代理设置运维面（`GET /api/agent-settings`——迭代预算、审批开关、工具并发、上下文预算、详细日志与环境探测，并标注推理强度/服务等级/人格各自由哪个运维面管理；`PUT /api/agent-settings` 持久化这些旋钮、逐键校验并拒绝其他运维面的键；P746）、网络搜索设置运维面（`GET /api/web-settings`——已配置的搜索/提取后端、允许的取值与各提供商凭据存在性，让运维者看清 `auto` 实际会落到哪个后端；`PUT /api/web-settings` 固定或清除后端选择，搜索侧逐值校验；P747）、委托设置运维面（`GET /api/delegation-settings`——并发子代理上限、子代理迭代预算与最大嵌套深度；`PUT /api/delegation-settings` 持久化这些限额，正整数校验；P748）、记忆限额编辑（`PUT /api/memory`——持久化 MEMORY.md/USER.md 字符上限，正整数校验，原有记忆普查改为报告磁盘上的持久化限额；P749）、模型目录运维面（`GET /api/model-catalog`——被排除的提供商标识与内置/自定义提供商清单；`PUT /api/model-catalog` 持久化排除列表，标识统一小写去空白；P750）、检查点设置运维面（`GET /api/checkpoints/settings`——总开关、每项目快照上限、存储总量上限、单文件跳过阈值、保留期与自动清理周期；`PUT /api/checkpoints/settings` 持久化这些旋钮，逐键类型校验；P751）、安全设置运维面（`GET /api/security-settings`——SSRF 内网地址抓取开关与 tirith 预执行扫描器姿态，带环境变量覆盖标记；`PUT /api/security-settings` 持久化这些旋钮并校验；P752）、工具输出设置运维面（`GET /api/tool-output-settings`——解析后的终端字节上限、文件行数上限与单行长度上限；`PUT /api/tool-output-settings` 持久化这些限额，正整数校验；P753）、日志设置运维面（`GET /api/logging-settings`——周期性内存监控开关与采样周期；`PUT /api/logging-settings` 持久化并校验；P754）、定时投递设置运维面（`GET /api/cron-settings`——投递包装与会话镜像开关；`PUT /api/cron-settings` 持久化，布尔校验；P755）、语音管线设置运维面（`GET /api/voice-settings`——STT 开关/回显/提供商/语言与 TTS 提供商/Edge 音色；`PUT /api/voice-settings` 持久化，提供商取值校验；P756）、看板调度设置运维面（`GET /api/kanban-settings`——网关内调度开关与心跳周期、工作者上限、worktree 工作区、子任务自动晋升、自动分解安全开关与每 tick 扇出数、停滞超时；`PUT /api/kanban-settings` 持久化并校验，多数旋钮每 tick 重读即时生效；P757）、X 搜索设置运维面（`GET /api/x-search-settings`——x_search 服务工具的模型、推理强度固定、请求超时与重试次数；`PUT /api/x-search-settings` 持久化，推理强度与下限超时校验；P758）、视频生成设置运维面（`GET /api/video-gen-settings`——激活后端、默认模型与 FAL 模型族覆盖，均可空以回退自动选择；`PUT /api/video-gen-settings` 持久化或清除（空串即恢复自动）；P759、混合智能体（MoA）设置运维面（`GET /api/moa-settings`——默认预设、轨迹保存与目录、隐私过滤与已配置预设名清单；`PUT /api/moa-settings` 持久化或清除，`default_preset` 按已配置预设校验、`privacy_filter` 仅限 off|display|full，空值恢复默认；P760、Discord 工具设置运维面（`GET /api/discord-settings`——`server_actions` 动作白名单（归一化为列表）与已知动作名清单；`PUT /api/discord-settings` 持久化或清除白名单，未知动作即拒，接受数组或逗号分隔串；P761、宠物图像生成设置运维面（`GET /api/pets-settings`——图像服务地址与模型覆盖、API 密钥配置标志与环境变量回退存在性；`PUT /api/pets-settings` 持久化或清除地址/模型，密钥保密不可编辑；P762、浏览器工具设置运维面（`GET /api/browser-settings`——持久 CDP 端点、云浏览器后端覆盖、托管网关偏好与环境覆盖标志；`PUT /api/browser-settings` 持久化或清除，URL 形态、后端名与布尔校验；P763，`GET /api/dashboard/font` 响应附带可选字体清单（字体 id 与当前覆盖一并返回，供 shell 编辑器渲染选择器；P764、时区设置运维面（`GET /api/timezone-settings`——已配置 IANA 时区、环境变量覆盖标志、生效名称与有效性；`PUT /api/timezone-settings` 按 IANA 数据库校验并在持久化后清空时区解析缓存；P767、监控设置运维面（`GET /api/monitoring-settings`——安装标识、健康导出总开关与各路开关、导出周期、OTLP 开关与端点，均三态呈现；`PUT /api/monitoring-settings` 持久化或清除并强制周期下限——清除安装标识即在下次启动时轮换；P768、Bearer 代理设置运维面（`GET /api/proxy-settings`——监听主机/端口、上游地址、路径白名单、请求上限与 OAuth 凭据存在性；`PUT /api/proxy-settings` 持久化或清除，端口范围、URL 协议、路径前缀与体积下限校验；P769、辅助任务设置运维面（`GET /api/auxiliary-settings`——vision/compression/approval/title_generation 各槽位的 provider/model/base URL 覆盖、密钥环境变量名、标题生成开关与语言固定，API 密钥仅以配置标志呈现；`PUT /api/auxiliary-settings` 按 任务.键 持久化或清除，API 密钥一律拒编；P770、自定义 Provider 设置运维面（`GET /api/providers-settings`——各 slug 的 base URL、默认模型、线路方言与密钥环境变量，字面密钥仅以配置标志呈现；`PUT /api/providers-settings` 对既有 `[providers.*]` 条目按 slug.键 持久化或清除，校验方言并拒编 API 密钥；P771）、密钥保险库同步操作（`POST /api/secrets/sync`——默认试运行汇报各源拉取结果与胜出变量，`{"apply": true}` 将胜出值持久化到 `<home>/.env` 供下次启动加载，响应绝不携带密钥值；P801）、按需技能同步操作（`POST /api/sync/pull` 与 `POST /api/sync/push`——拉取会实体化远端新技能且绝不覆盖本地状态，推送上传已加入集合；闸门未启用与传输错误均在响应内呈现；P802）、Computer Use 设置运维面（`GET /api/computer-use-settings`——遥测开关、截图边长上限、截图时机与覆盖层三态；`PUT /api/computer-use-settings` 持久化或清除，布尔/整数/模式校验；P803）、持久死亡目标登记表（`gateway/dead_targets.json`——当平台判定整个会话永久消失（群已删除、机器人被踢/拉黑、用户注销）时将该目标标记为死亡，后续 cron 投递与启动清扫重投直接短路跳过，不再向平台洪泛控制浪费发送尝试；发送错误文本按 hermes 平台中立规则分类，仅整个会话的死亡（`forbidden` 与会话级 `not_found`——删除的话题不会连累父会话）才会标记目标，任何一次成功发送即清除标记（自愈），台账 `failed` 行现记录平台返回的实际错误文本——对应 hermes dead_targets；P707）、cron 投递镜像（经全局 `cron.mirror_delivery = true` 或任务级 `attach_to_session`（cronjob 工具 / jobs API 可设）选择性开启——每次向任务源会话的成功投递都以带标签的用户回合（`[Cron delivery: <名称>]`）追加进该会话转录，使该聊天的下一条回复能看到 cron 输出的上下文；扇出目标从不镜像、镜像也从不创建新会话——对应 hermes mirror；P708）、分层入站档案路由（`[[gateway.profile_routes]]` 配合 `[gateway] multiplex_profiles = true`——路由将平台会话映射到档案，按最具体优先匹配（线程 > 频道 > 群组，线程帖支持父链匹配）；命中的入站消息在该档案自有的 agent 与会话库（`<home>/profiles/<name>`）下运行，首次路由使用时惰性构建且不重复派生后台循环；未命中的会话与指向未知档案的路由仍走默认档案——对应 hermes profile_routing；P709）、按会话回合租约（busy 守卫以聊天键为粒度，而持久转录归 session_id 所有，`/resume`/`/handoff` 重映射使该映射多对一——租约以所有权校验的幂等释放、卡持超时后放行降级、有界且按空闲逐出的登记表与回合中途会话重绑定，封闭转录交错写入窗口——对应 hermes turn_lease；P710）、消息时间戳时间感知（`[gateway] message_timestamps = true` 时为 LLM 上下文的每条用户消息渲染恰好一个 `[Tue 2026-04-28 13:40:53 CST]` 风格前缀——重放回合取自各行存储的发送时刻，新入站文本按事件时间渲染；无论开关与否都无条件剥离陈旧前缀，持久转录从不累积 `[ts] [ts] …` 污染——对应 hermes message_timestamps；P711）、systemd 服务集成（`[gateway] systemd_watchdog_seconds` 为 `Type=notify` 单元启用 sd_notify——监听器绑定后发送 `READY=1` 与状态，按 `WATCHDOG_USEC` 半周期喂送 `WATCHDOG=1` 并以延迟预算健康检查在运行时无进展时停止喂送交由 systemd 重启，停机前发送 `STOPPING=1`；全程尽力而为、绝不阻塞启动——对应 hermes systemd_notify；P712）、终止原因取证的生命周期台账（`state/gateway.lifecycle.json` 哨兵跟踪每次生命周期——启动时将未抵达任何退出路径的前一生判定为非正常死亡（SIGKILL / OOM / 宿主机死亡），连同最后心跳内存样本与 OOM 嫌疑提示追加至 `logs/gateway-exit-diag.log`；正常停机、`/api/gateway/stop` 与重启抽干记为带退出码与原因的干净退出；30 秒心跳保持内存快照新鲜——对应 hermes lifecycle_ledger；P701）、令牌核算 `/api/usage`、后台委派登记 `/v1/delegations`、浏览器 CDP 实时控制 `/v1/browser/status|connect|disconnect`、无内容 OTLP 健康/诊断导出的网关监控（`[monitoring]`，`ulnclaw monitoring status`）、Bearer 鉴权、网关生命周期管理 `POST /api/gateway/restart`（派生脱离的 `--replace` 接管进程，同主机/端口）与 `POST /api/gateway/stop`（应答后自行终止；诊断视图带确认的相应动作——对应 hermes gateway-lifecycle；P609），以及单实例 pidfile 守卫（`gateway.pid` 含防 PID 复用的启动时刻令牌——二次启动被拒绝，`--replace` 接管运行中的实例，`--force` 并行运行；`ulnclaw dashboard run|status|stop` 以 hermes dashboard 风格管理同一服务——启动、报告 pid + URL 或将其停止；P581）
-- **🖥️ 终端环境** —— `terminal` 可在本地（默认）、docker（自动创建容器）或 ssh 上执行（`[terminal] backend`）
-- **🩺 终端失败提示** —— 失败命令自带可执行提示：良性退出码会被解释（`grep=1` → "无匹配（非错误）"，`exit_code_meaning`），常见失败形态附加一条恢复建议（`hint`）：命令/模块未找到、git 冲突、gh 字段漂移与限流、权限错误、退出码 124/126/137
-- **🔬 环境探针** —— 终端后端为本地时，向系统提示注入一行确定性的 Python 工具链说明（pip/python3 版本错配、缺 pip 模块、PEP 668、缺少裸 `python`）；健康环境保持静默，后台探测 + 超时即放行（`[agent] environment_probe`）
-- **🖥️ 桌面桥接工具** —— 面向 GUI 宿主的 `close_terminal` / `read_terminal` / `focus_pane` / `open_preview` / `react_to_message`（表情回应，`[display] message_reactions`）：`ULNCLAW_DESKTOP=1` 门控，经 `desktop` 桥接层路由（宿主安装的发射器按 UI 会话收到 `terminal.close` / `pane.reveal` / `preview.open` 事件）；已结算的 `/v1/runs` 另会在总线上发布 `run.completed` / `run.failed` 事件，桌面外壳将其呈现为带“查看运行”跳转动作的通知，窗口失焦时另触发 Web Notifications 系统通知——桌面外壳下升级为原生系统通知，窗口隐藏至托盘时依然可达（可在设置中开关；P433、P435；原生通知 P799——另可选 WebAudio 完成提示音，默认关闭，于提交时预热音频上下文以绕过自动播放限制；P786）——运行结算同时驱动会话浏览器实时更新：侧栏列表、浏览器行与打开中的转录就地刷新（P467）；等待危险命令审批的运行同样会发布 `run.approval` 事件，呈现为带“查看运行”跳转动作的警告通知（P437）；会话创建（POST /api/sessions、`/v1/runs` 与 cron 任务运行）会发布 `session.created` 事件，外壳侧边栏与会话浏览器随之实时刷新，并同样发布 `session.updated`（重命名/归档）与 `session.deleted`（P444、P445）——其他客户端创建/删除会话的事件另以外壳 toast 呈现（外壳自身操作静默；P473）；每次消息追加都会发布 `session.message` 事件，会话浏览器据此即时补齐打开中的转录（P493），侧栏与会话浏览器列表的消息数/活动时间以 2 秒防抖跟随刷新（P494），聊天视图在空闲时也会于其他客户端使打开会话增长后自动重载转录（P495）；未打开期间增长的会话在侧栏与会话浏览器中显示未读圆点标记，打开后清除，会话标签页另有实时未读计数徽章，会话浏览器含“仅看未读”快捷开关——未读状态跨重启持久化并在会话消失时自动清理（P496、P497、P499、P500）；从不杀进程，未接入宿主时返回 "desktop only"；桌面外壳经 `/api/desktop/events` SSE 桥接接通（P231），`read_terminal` 走 HTTP 往返
-- **🧹 ANSI 剥离** —— terminal/execute_code 输出在送达模型前清除 ECMA-48 转义序列（颜色、光标移动、OSC 标题、8-bit C1），转义序列不会泄漏进上下文或文件写入
-- **🔒 沙箱凭证清洗** —— terminal/execute_code 子进程的环境中剥离 provider 与工具凭证（hermes GHSA-rhgp-j443-p4rf 语义）；技能 `required_environment_variables` 与 `[terminal] env_passthrough` 允许其余变量通过——provider 凭证永不可被放行
-- **🚫 二进制守卫** —— `read_file` 拒绝约 80 种二进制扩展（图像、压缩包、可执行文件、字体、字节码、数据库），并提示改用 vision_analyze/terminal；`.pdf` 保持可读
-- **📏 可配置输出上限** —— `[tool_output] max_bytes/max_lines/max_line_length` 无需改源码即可调整 terminal 截断、read_file 分页与每行截断上限
-- **🕵️ 密钥脱敏** —— 约 55 种厂商密钥前缀、JWT、私钥、数据库连接串、认证头与 env 转储的 `KEY=value` 在输出送达模型前脱敏；文件内容使用不可复用哨兵，截断密钥永不会被写回
-- **📸 检查点** —— 文件编辑前的透明 git 快照（共享 shadow 存储、按项目快照链），`ulnclaw checkpoints list/restore/diff/prune`
-- **📝 工作区 diff** —— `ulnclaw diff [--staged|--all]` 显示 git 工作区变更（含未跟踪文件），REPL `/gitdiff`
-- **🌐 Provider** —— OpenAI 兼容端点（OpenAI、OpenRouter、DashScope、Ollama、llama.cpp）+ 原生 Anthropic Messages API provider（tool_use/tool_result 块、SSE 流式、OAuth bearer），本地 provider 免密钥；按任务辅助路由（`[auxiliary.compression]`、`[auxiliary.vision]`、`[auxiliary.title_generation]`）可将二次调用发往不同 provider/模型；桌面 Models 视图可展示并固定这些槽位（`GET /api/model/auxiliary` + `POST /api/model/set` `scope=auxiliary`，留空/auto 重置槽位——对应 hermes 辅助槽位；P605）；`GET/PUT /api/reasoning` 持久化 `agent.reasoning_effort` 钉选（`/reasoning` 斜杠命令的 HTTP 孪生），桌面模型徽章旁以可点击的 ⚡ 徽章呈现（P615）；`GET/PUT /api/fast` 为 OpenAI 旗舰模型切换 Priority Processing（`service_tier=priority`）——`/fast [on|off] [--global]` 斜杠命令的 HTTP 孪生，沿用与 hermes 相同的 `gpt-`/`o1`/`o3`/`o4` 模型门，经 `agent.service_tier` 持久化（亦可用全局 `--fast` CLI 标志设置；P625）；`[model] fallbacks` 回退链（按轮恢复主 provider）；用户自定义 `[providers.<slug>]` 条目（base_url/api_key/key_env/model/mode）与 env 密钥认证的规范 provider、配置提示骨架行一同出现在 `/api/model/options` 多 provider 选择器清单中（`[model_catalog] excluded_providers` 隐藏行）
-- **📡 消息平台** —— Telegram/Discord/Slack/Signal 适配器运行于 `ulnclaw gateway` 内（`[messaging.*]`，Signal 经 signal-cli HTTP 守护进程，Slack 输入状态经 `assistant.threads.setStatus`，Telegram clarify 内联键盘 + callback_query 点按路由、Discord clarify 按钮 + INTERACTION_CREATE 路由、Slack Block Kit clarify 按钮 + block_actions 路由），图片附件以原生多模态内容注入回合（P226 —— ≤ 8 MB 的 `image/*` base64 `data:` URL，OpenAI 兼容/Anthropic provider；`[messaging] multimodal_injection = false` 保留路径引用流），网关重启时向每个平台最近活动的频道发送 ♻ 重启通知（`[messaging] gateway_restart_notification = false` 关闭；P684），平台回合忙碌时到达的入站消息按聊天排队，并在回合结束后按 FIFO 排空（排队回执含队列深度，按平台受 `busy_ack_detail` 显示设置门控；对应 hermes busy-policy 队列；P696），WhatsApp Cloud（`[messaging.whatsapp_cloud]` + `ulnclaw whatsapp-cloud` 凭据向导，带字段形状校验；P271）与 Microsoft Graph 接入挂载为网关 webhook 路由（`/webhooks/whatsapp` HMAC 校验、`/webhooks/msgraph` clientState 校验 + 回执去重、资源过滤与提示词模板），另有通用签名 webhook 平台（`[messaging.webhook]` 路由 `/webhooks/hook/<name>` —— Svix/GitHub/GitLab/HMAC-V2 签名方案、每路由限流、投递 id 幂等、`deliver_only` 零 LLM 推送），并支持 CLI 管理的动态订阅：`/webhooks/<name>` 每次请求热加载 `webhook_subscriptions.json`（`ulnclaw webhook subscribe|list|remove|test`，密钥存储 0600 权限；P270）、BlueBubbles iMessage（`[messaging.bluebubbles]` → `/webhooks/bluebubbles` 密码校验 webhook、LRU 缓存的 chat-GUID 解析、REST 文本/附件发送）、微信个人号（`[messaging.weixin]` —— 腾讯 iLink Bot API 长轮询、`ulnclaw weixin login` 扫码登录、双向 AES-128-ECB 加密 CDN 媒体、context_token 回显发送）、QQ（`[messaging.qq]` —— 官方 QQ Bot API v2 WebSocket 网关 + REST、markdown 回复、分块媒体上传、`asr_refer_text` 语音转写、内联键盘执行审批 + INTERACTION_CREATE 路由、QR 扫码配置引导（`ulnclaw qq login`）+ 含 DM 策略与 home 频道选择的完整设置向导（`ulnclaw qq setup`））、元宝（`[messaging.yuanbao]` —— 腾讯元宝 App 机器人 WS 网关 + 手写 protobuf 线格式编解码、HMAC-SHA256 sign-token 认证、markdown 感知分块文本回复、COS 上传出站图片/文件媒体、表情包（`STICKER:` 回复标签发 TIMFaceElem、模糊贴纸查找、入站 `[emoji: <名称>]` 渲染）、入站图片/文件媒体解析下载入媒体缓存、引用/观察媒体回填 + `[Replying to: …]` 引用提示、微信转发聊天记录深解析（elem_type 1009））、邮件（`[messaging.email]` —— IMAP 轮询 + SMTP 回复 `Re:` 线程、SPF/DKIM/DMARC 发件人认证）、Mattermost（`[messaging.mattermost]` —— REST v4 + WebSocket 事件、提及门控、线程回复、文件上传/下载）、Matrix（`[messaging.matrix]` —— 原生 Client-Server API `/sync` 循环、mxc 双向媒体、不支持端到端加密）、钉钉（`[messaging.dingtalk]` —— 手写 Stream Mode WS、sessionWebhook markdown 回复、downloadCode 媒体、🤔Thinking → 🥳Done 表情回应、配置 `card_template_id` 时经 card_1_0 的 AI 流式卡片）、企业微信（`[messaging.wecom]` —— AI Bot WS 网关、respond-msg markdown、分块媒体上传、客户端文本切块批处理）、飞书（`[messaging.feishu]` —— lark_oapi WebSocket 长连接 + 手写 protobuf 帧编解码（hermes 默认 `connection_mode = "websocket"`），或网关 webhook `/webhooks/feishu` 签名校验事件、租户令牌媒体、Typing/CrossMark 处理状态表情 + 入站表情路由、交互式审批/更新确认卡片 + webhook 卡片动作路由（非审批点击转 `/card` 合成命令）、云文档评论 agent + 会议邀请卫星处理器）、Home Assistant（`[messaging.homeassistant]` —— WebSocket state_changed 事件流、默认关闭的 watch 过滤 + 按实体冷却、回复以持久通知送达、仅凭凭证即注册独立 `notify/notify` 发送器）、SMS/Twilio（`[messaging.sms]` —— 网关 webhook `/webhooks/twilio`、X-Twilio-Signature HMAC 校验、去 markdown 1600 字符 REST 回复）、WhatsApp（`[messaging.whatsapp]` —— 网关内置 Baileys 桥（`scripts/whatsapp-bridge/`）并由网关监督：npm 依赖哈希印章、pidfile/端口陈旧清理、`bridge.log` 拉起、两阶段就绪 + `scriptHash` 陈旧握手；`/health`/`/messages` 轮询、`/send` + `/send-media` + `/send-poll` + `/send-location` + `/edit`（原生投票 + 投票式 clarify、位置图钉、消息编辑）、已读回执、self-chat `[owner reply]` 准入与规范化发送者身份——经桥的 `lid-mapping-*.json` 文件折叠 phone-JID/LID 别名，使会话键、白名单与配对就每个用户达成唯一稳定身份，出站裸电话号码归一化为桥安全 JID——对应 hermes whatsapp_identity；P719）、IRC（`[messaging.irc]` —— rustls TCP 客户端、NickServ 支持、频道寻址门控）、ntfy（`[messaging.ntfy]` —— 主题流订阅 + REST 发布、回声标签防循环）、SimpleX（`[messaging.simplex]` —— simplex-chat 守护进程 WS 客户端、自动接受联系人、语音/文档媒体）、Teams（`[messaging.teams]` —— 网关 webhook `/webhooks/teams`，原生 Bot Framework 协议、OAuth2 客户端凭证发送、AdaptiveCard 执行审批按钮 + 默认拒绝点按门控）、LINE（`[messaging.line]` —— 网关 webhook `/webhooks/line`，X-Line-Signature 校验、reply token + push 回退、慢 LLM postback 按钮、令牌门控 `/line/media` HTTPS 出站媒体）、Google Chat（`[messaging.google_chat]` —— 网关 webhook `/webhooks/googlechat` Google ID 令牌校验或 Pub/Sub REST 拉取入站、服务账号 RS256 JWT Chat API 发送、按用户 OAuth 原生附件投递（聊天内 `/setup-files` + `ulnclaw google-chat-oauth`）、打字指示卡片原地改写为回复）、Buzz（`[messaging.buzz]` —— Block Nostr 协作平台：NIP-42 认证 WebSocket 订阅（签名 kind-22242 认证，hermes `nostr_auth` 移植）+ CLI 轮询回退、kind-9 聊天事件、提及门控、自身公钥回声抑制、👀 已读 tapback、启动高水位播种（历史永不重放）+ `dms list`/`channels list` DM 发现、kind-44100 成员事件实时 DM 再发现 + 动态 `hermes-buzz-dm-<n>` 订阅、p 标签 DM 闩锁分类）、Photon（`[messaging.photon]` —— iMessage，经 Photon Spectrum sidecar HTTP API：`/healthz` 门控、类型化 NDJSON 入站流、富链接渲染 + 预览图/回声抑制、群组唤醒词提及门控、`/typing` 输入指示、纯 URL `/send-richlink` 回复、白名单 ∪ 配对门控、可选 `PHOTON_REACTIONS` 生命周期 tapback + 入站 tapback 路由）、Raft（`[messaging.raft]` —— 网关 wake 端点 `/webhooks/raft/wake`：bridge 令牌校验的 `raft-activity.v1` 事件 + 自动拉起 `raft agent bridge` 子进程）与 A2A（`[messaging.a2a]` —— Agent2Agent v1.0 服务端：`/.well-known/agent-card.json` 发现 + JSON-RPC `POST /a2a` message/send + 任务台账）：白名单配对（fail closed）+ hermes 风格交互式配对码（`pairing list/approve/revoke/clear-pending`）、媒体附件缓存于 `media-cache/` 并以路径引用交付（出站 `MEDIA:` 标签在 Telegram/Discord/Slack 原生上传；WhatsApp 媒体双向经 Graph `/media` 端点）、每聊天一条持久会话、hermes 风格回复分块。`clarify` 工具在聊天中可用：WhatsApp 渲染原生按钮/列表、Telegram 渲染内联键盘、Discord/Slack 渲染按钮，其余平台编号文本；点按与后续文本应答待决提问。Slack 支持原生斜杠命令：`ulnclaw slack manifest` 生成应用清单，把每个平台命令注册为一等斜杠（assistant/agent/扁平 DM 三种体验），斜杠信封走常规分发路径并以 `response_url` 回复；所有平台直答命令集（`/help` `/skills` `/tools` `/recap` `/title` `/usage` `/insights`）免 LLM 回合（P265）
-- **🎙️ 语音转写（STT）** —— 入站语音/音频消息在 agent 回合前转写（`[stt]` 配置）：内置 `local_command` / `groq` / `openai` / `mistral` / `xai` / `elevenlabs` / `deepinfra` provider，另支持自定义 `[stt.providers.<name>]` 命令 provider，转写文本以 🎙️ 消息回显并注入回合（复刻 hermes 回退/哨兵语义）；`transcribe_audio` 工具（可选 `stt` 工具集）覆盖任意音频文件。Python 专属的 faster-whisper `local` provider 以 `stt.local.command` / 云后端替代
-- **🐾 宠物（petdex）** —— `ulnclaw pets list|install|select|show|off|scale|remove|doctor|hatch`：领养 petdex 动画吉祥物（数千个的在线画廊、主机锁定的 `<home>/pets/` 安装），在终端以 kitty/iTerm2/sixel 图形协议或真彩半块回退播放动画，`[display.pet]` 单一 scale 旋钮同步缩放所有界面 —— 或用 `hatch` 从文字描述孵化全新宠物：LLM 基础草稿 → 锚定动画行 → 切片/归一化精灵图 → 自动领养（OpenAI 兼容图像端点，`[pets]` 配置）
-- **📋 Kanban 引擎** —— `ulnclaw kanban`：`kanban.db` 中的多看板任务引擎（hermes 状态 todo/ready/running/scheduled/blocked/done/archived，带图标），带 TTL 的认领锁 + 过期接管与心跳、过期 run 完成守卫（worker 携带自身 run id，被回收的 attempt 无法完成/阻塞新 attempt）、类型化阻塞（`kanban block --kind dependency|needs_input|capability|transient` —— dependency 停在 todo 等父任务完成；同因反复阻塞升级进 triage）、父→子任务依赖、评论与事件轨迹、看板增删改查，以及调度器（`kanban dispatch [--max-spawn N] [--dry-run]` + `POST /api/kanban/dispatch`）：回收过期认领、崩溃（pid 已死）与心跳停滞的 worker、晋升父任务已完成的 todo（父任务完成后自动恢复非粘性阻塞任务，达到失败上限者除外）、跳过指派给未配置 profile 的就绪任务（`skipped_nonspawnable` 认领拉取通道）、遵守 `[kanban] max_in_progress_per_profile`（#21582 按 profile 在飞上限）与 `[kanban] max_in_progress` 全局上限（#33488 —— 运行列已满时本轮直接跳过，否则补齐到上限），整个安装内首次物化 scratch 工作区时一次性告警（`tip_scratch_workspace` 事件 + `.scratch_tip_shown` 哨兵），以及 `create --initial-status blocked` 建卡即停入待审、工作流模板钩子（`workflow_template_id`/`current_step_key` 列与 `list --workflow-template-id` 过滤）、按任务 model/provider/reasoning worker 钉选（`create --model M --provider P`、`set-model [--provider P]`、`create --reasoning L`、`set-reasoning [L]` —— spawn 的 worker 携带全局 `-m/--provider/--reasoning` 标志；`L` ∈ none|minimal|low|medium|high|xhigh|max|ultra，`none` 表示关闭思考；网关亦经 `POST /api/kanban/tasks/:id/set-reasoning` 与 `POST /api/kanban/tasks/:id/set-model` 暴露同款钉选，另经 `POST /api/kanban/tasks/:id/edit` 改写标题/正文、`POST /api/kanban/tasks/:id/archive` 停泊任务（在跑运行按回收关闭、子任务解除阻塞）、`DELETE /api/kanban/tasks/:id` 清除已归档任务、`POST /api/kanban/tasks/:id/attach` 添加文件（校验存在、存绝对路径）或链接附件与 `DELETE /api/kanban/attachments/:aid` 移除附件、`POST /api/kanban/tasks/:id/schedule` 将任务停入排期列与 `POST /api/kanban/tasks/:id/reassign` 改派或清空负责人、`POST /api/kanban/tasks/:id/unlink` 解除父任务关联，另新增 `POST /api/kanban/tasks/:id/promote` 将 todo/blocked 任务直接晋升就绪（`force` 跳过依赖检查）、`POST /api/kanban/tasks/:id/reclaim` 释放活动工作者认领回到就绪、`POST /api/kanban/tasks/:id/assign` 仅设置负责人、`GET /api/kanban/tasks/:id/runs` 列出任务运行历史与 `GET /api/kanban/stats`（按状态/按负责人计数 + 最旧就绪时长）——P636、P637、P639、P640、P645、P646、P647、P659），以及 goal 模式 worker（`kanban create --goal [--goal-max-turns N]` —— spawn 的 worker 在同一会话内循环，直到辅助评判模型认可卡片完成或 turn 预算耗尽阻塞；goal 卡片的完成在 `kanban done` / `kanban_complete` 上过评判门）、每个 tick 在非阻塞 `.dispatch.lock` 下进行（#35240 —— 第二个调度器跳过本 tick 而不是竞态写库）、为就绪任务生成分离的 `ulnclaw run` worker —— 每个 worker 的工作区在创建时选定（`kanban create --workspace scratch|worktree|worktree:<path>|dir:<path>` 与 `--branch`，调度器 spawn 前解析并持久化；`[kanban] worktrees` 保留旧版 worktree 默认；`kanban gc` 清理已完成任务的树），以及 swarm 编排器（`kanban swarm <goal> --worker ASSIGNEE:TITLE --verifier X --synthesizer Y`：根黑板任务 + 并行 worker + 验证者 + 综合者，调度器随父任务完成逐级晋升）、triage 流水线（`kanban create --triage` 暂存想法，`kanban specify` / `kanban decompose` 经辅助 LLM 细化或扇出为路由到 profile 的子任务图 —— 网关调度器每 tick 自动分解新 triage 任务，`[kanban] auto_decompose` 实时重读作为安全开关）、只读看板体检（`kanban diagnostics [id] [--min-severity warning|error|critical] [--json]` + `GET /api/kanban/diagnostics` 全板扫描 + `GET /api/kanban/tasks/:id/diagnostics` —— 基于任务/事件/运行历史的无状态规则：重复失败、崩溃循环、长期阻塞、就绪滞留、阻塞/解阻塞循环、幻觉卡片引用；每条诊断附带建议恢复操作，桌面看板以 ⚠ 徽章标记受影响卡片并在任务对话框中列出信号 —— P678）、网关通知订阅（`kanban notify-subscribe / notify-list / notify-unsubscribe` —— 网关通知器循环把终态事件（✔ 完成 / ⏸ 阻塞 / ⏱ 超时……）经消息平台投递到订阅的聊天，并在 agent 建任务时记录 `session_id` 后以 `[kanban] Task …` 回合唤醒创建者会话）、按任务的 worker 日志查看（`kanban log [--tail N]`，按 `[kanban] worker_log_rotate_bytes`（默认 2 MiB）轮转并保留一份备份代）、重生守卫对立即重试无益的就绪任务延后重生（限流冷却、配额/鉴权阻塞、近期已成功、已有 PR —— 每次延后记录 `respawn_guarded` 事件）、按尝试的运行历史（`kanban runs [--json]`，每次 认领→完成/阻塞/回收/超时 尝试一行 `task_runs` 记录）、含历史尝试与父任务交接的完整 worker 简报（`kanban context`，`kanban_show` 工具同步提供）、结构化完成交接（`kanban done --summary … --metadata '{…}'` 写入收尾 run）、完成工件（`kanban done --artifact PATH…` —— scratch 工作区文件在清理前暂存到 `kanban/attachments/<task>/`，25 MiB 上限）、review 列（`kanban review <id> [--reason]` 在开 PR 后把运行中的任务停入 review；调度器 spawn 评审 agent —— 装有 `sdlc-review` 技能时强制加载 —— 认领时不再复查父任务依赖）、批量生命周期命令（`done/block/schedule/unblock/promote/archive` 支持多 id，`archive --rm` 清除已归档任务，`promote --dry-run --json`）、完成态恢复（`kanban edit --result/--summary/--metadata` 改写已 done 任务的交接；block 先写 `BLOCKED: <reason>` 评论再落锁）、完成反幻觉门（`kanban done --created-card ID…` 在任何改动前核验声明的卡片；幻影 id 以 `completion_blocked_hallucination` 事件阻断完成，完成后对无法解析的 `t_<hex>` 文本引用加以标记）、数据库自愈（`kanban repair`）、`kanban assignees`，以及一等项目登记簿（`ulnclaw project create/list/show/add-folder/remove-folder/rename/set-primary/use/archive/restore/bind-board` —— `projects.db` 中的具名多文件夹工作区，带活跃项目指针；`kanban create --project <id|slug>` 把卡片 worktree 锚定到项目主仓库下（`<repo>/.worktrees/<task-id>`）并派生确定性分支 `<slug>/<task-id>[-<title-slug>]`，`project bind-board` 把主仓库镜像为绑定 board 的 `default_workdir`；登记簿经网关 `/api/projects/*` 增删查改与 `scan`/`repos` 发现端点向桌面开放）；生命周期流转触发 `kanban_task_*` 插件钩子。一块看板、四个界面：agent `kanban_*` 工具、桌面看板挂件（网关 `/api/kanban/*`）与 REPL `/kanban` 斜杠命令（list/show/create/done/block/unblock/comment/boards，另加 promote、reclaim、assign、runs、stats，直接在聊天提示符操作；P662）共享同一引擎与数据库
-- **🔌 插件与钩子** —— 目录插件（`~/.ulnclaw/plugins/<name>/plugin.toml`：hooks + 子进程工具）与 `[hooks]` 配置式 shell 钩子，复刻 hermes 首次使用同意机制（`plugins list/install/update/remove/enable/disable/accept-hooks` —— install/update/remove 管理 git 托管插件、`hooks list/test/revoke/doctor`）；核心触发 hermes 运行期实际发出的全部 13 个钩子事件（工具/LLM 前后、API 请求生命周期、会话边界、网关分发门控）
-- **🔑 Secrets 保险库** —— 外部秘密源在启动时、provider 读取 env 之前应用（`secrets status/sync`）：command 助手、Bitwarden Secrets Manager（`bws` —— 固定版本自动安装、AES-GCM 加密 TTL 缓存、`secrets bitwarden setup` 向导）、1Password（`op://` 引用、`secrets onepassword setup/set`），完整复刻 hermes 优先级语义
-- **🛡️ 出站防火墙** —— Docker 沙箱的托管 iron-proxy（`egress install/setup/start/stop/restart/reload/status/disable/config`、`/egress` 状态）：沙箱只见铸造的代理令牌 —— 真实 provider 密钥由守护进程在白名单主机上换入，永不越界；固定 v0.39.0 二进制经 SHA-256 + GPG 验签、openssl CA、失败关闭的令牌规则、管理 API 热重载（hermes `hermes egress`）
-- **🖱️ Computer use** —— `computer_use` 工具经 cua-driver 守护进程（MCP over stdio，完整 hermes schema），与 hermes 相同的审批门控；`computer-use status/doctor/install`
-- **🔄 OAuth + 技能同步** —— `auth login` 对任意 `[oauth]` provider 执行 RFC 8628 设备流；`sync status/pull/push/now` 经 HTTP(S) 或共享目录同步技能；`proxy start` 运行本地 OpenAI 兼容代理（`127.0.0.1:8645/v1`），把存储的 OAuth bearer（自动刷新）附加到配置的 `[proxy] upstream_url`，让外部应用复用订阅
-- **🖥️ 桌面 GUI** —— `desktop-electron/`：**ulnclaw desktop**，hermes Electron 桌面端（v2026.8.3）的忠实移植（取代早前的 Tauri 2 外壳）：React 19 + Vite 渲染层（十六个视图——聊天、会话、任务、用量、模型、技能、看板、项目、运行、Webhooks、插件、配对、配置档案、配置、诊断、设置——加 Ctrl/Cmd+K 命令面板、主题/字体与多语言切换）、xterm.js 终端面板、右侧文件树 + git 审查面板、经 JSON-RPC WebSocket + HTTP/SSE 的实时回合流式；Electron 主进程负责拉起并监管内置的静态链接 `ulnclaw` 网关（`ULNCLAW_DESKTOP=1`、健康探测 + 有上限的自动重生、离线横幅上的启动诊断、托盘 + 原生菜单、`ulnclaw://` 深链、单实例交接、窗口状态持久化）；桌面桥接工具（`close_terminal`/`read_terminal`/`focus_pane`/`open_preview`/`react_to_message`）经 `/api/desktop/events` SSE 桥接送达网页界面
-
-### 桌面应用（预构建安装包）
-
-每个 `v*` tag 都会在 Releases 页面产出安装包，由 `release-desktop` 工作流
-基于 `desktop-electron/` 的 Electron 外壳构建（产品名 **ulnclaw desktop**）：
-
-- **Windows** — `ulnclaw-<ver>-win-x64.exe`（NSIS 按用户安装，安装目录可选）。
-  运行安装程序后从开始菜单启动 **ulnclaw** 即可。安装包完全自包含：静态链接的
-  `ulnclaw` 网关二进制（静态 CRT，无需 Visual C++ 运行库）内置于包内；外壳自动
-  定位它、在 `127.0.0.1:8642` 拉起 `ulnclaw gateway`（`ULNCLAW_DESKTOP=1`）并探测
-  `/health` 直到就绪。若网关启动失败，启动失败卡片的**诊断信息**展开项会给出解析到
-  的二进制、子进程状态与 `%USERPROFILE%\.ulnclaw\gateway.log` 日志尾部。
-- **macOS** — `ulnclaw-<ver>-mac-arm64.dmg`（Apple Silicon）与
-  `ulnclaw-<ver>-mac-x64.dmg`（Intel）。拖入 Applications 即可。包为 ad-hoc 签名
-  （无付费 Apple 开发者证书），首次启动 Gatekeeper 会提示"未验证的开发者"——
-  右键 › 打开，或系统设置 › 隐私与安全性 › 仍要打开。若仍提示"已损坏，无法打开"，
-  执行 `xattr -cr "/Applications/ulnclaw desktop.app"`。
-- **Linux** — `ulnclaw-<ver>-linux-x64.AppImage`（另可构建 deb/rpm）。
-- 每个 release 附 `SHA256SUMS.txt` 供校验。
-
-首次启动无需预先配置 API key：网关支持无 key 启动，首次引导与 Models 视图会指引你
-添加 provider 密钥（持久化到 `config.toml` / 凭据池）；保存 key 后重启网关即可
-（托盘 › 重启网关）。
-
-配置位于 `~/.ulnclaw/config.toml`（Windows：`%USERPROFILE%\.ulnclaw\config.toml`）——
-应用内设置视图可改网关 URL/密钥与外壳行为；provider 密钥与消息平台的配置方式与下面
-的 CLI 流程完全一致。
-
-v0.7.0 起桌面端为 hermes 风格的 Electron 外壳（hermes desktop v2026.8.3 的忠实移植，
-取代早前的 Tauri 2 外壳）：完整视图栈 + 命令面板、主题/字体与多语言切换，经 HTTP/SSE
-加 JSON-RPC WebSocket 与网关通信以获得实时回合流式；`ulnclaw gui` CLI 命令可拉起打包
-应用（`--dev` 运行 `desktop-electron/` 的未打包应用）。
-
-### CLI 快速开始
-
-```bash
-cargo build --release --target x86_64-unknown-linux-musl
-
-# 交互式安装向导（provider、终端、消息平台、工具）
-./ulnclaw setup                 # 或：./ulnclaw setup model|terminal|gateway|tools|agent
-./ulnclaw model                 # 交互式切换 provider/模型
-./ulnclaw gui                   # 启动 Electron 桌面应用 ulnclaw desktop（别名：desktop）
-
-# 生成默认配置 ~/.ulnclaw/config.toml
-./ulnclaw init
-
-# 一次性运行
-./ulnclaw run "总结一下 README.md"
-
-# 交互式聊天（斜杠命令：/new /search /memory /skills /sessions /rollback /diff /recap /goal /subgoal /focus /verbose /stash /kanban /pet /hatch /paste ……）
-./ulnclaw chat
-./ulnclaw chat --resume <session-id>   # 按 id 或唯一前缀恢复会话（-r）
-./ulnclaw chat --continue              # 继续最近一次会话（-c）
-./ulnclaw chat --continue "我的任务"   # ……或按标题/id 匹配的会话
-
-# 管理子命令
-./ulnclaw tools            # 列出工具集（状态 + 工具数）与已启用工具（--json）
-./ulnclaw tools disable X  # 持久禁用工具集（ulnclaw tools enable X 恢复；P580）
-./ulnclaw migrate xai       # 诊断/改写已退役 xAI 模型引用（--apply；P586）
-./ulnclaw sessions list    # state.db 中的最近会话
-./ulnclaw sessions search "认证重构"
-./ulnclaw sessions export <session-id> --out ./exports --format md|html
-./ulnclaw sessions recover ./damaged-state.db   # 离线数据库恢复
-./ulnclaw sessions repair          # 修复受损 state.db 库结构（--check-only）
-./ulnclaw sessions browse          # 交互式会话挑选：过滤并恢复会话（⌂ 项目徽章、行内结束原因标记（✓/∞/⧉/⑂/■；P544）、右侧详情窗格含首轮对话 + 最近消息预览 + 消息数 + 结束原因 + token 总量 + 会话时长（P562）+ 实时上下文占用（对话估算 vs 配置预算；P630）、Tab 来源过滤、F2 排序切换、/ 转录 FTS 搜索、F4 显示/隐藏已归档、F6 重命名、F7 分叉、F8 归档/取消归档切换、F9 删除、F10 模型过滤、F11 导出高亮会话转录为 Markdown（P585）、v 打开高亮会话的全屏可滚动转录查看器（↑/↓/PgUp/PgDn/Home/End，Esc 返回；P651）、查看器内 r 切换 raw ↔ 美化渲染（raw 展示时间戳、工具名/id 与 tool_calls JSON；P741）、Ctrl+U/D 详情窗格滚动（另含 Ctrl+↑/↓ 单行滚动与 Ctrl+Home/End 边缘跳转；P551），预览加深至两轮对话）
-./ulnclaw sessions retitle-skills  # 修复泄漏 /skill 脚手架的会话标题（--apply）
-./ulnclaw sessions retitle <id>    # 经 LLM 重新生成单个会话标题（--apply；P569）
-./ulnclaw sessions import <file>   # 从 JSON 导出文件导入会话（--dry-run 预览；P577）
-./ulnclaw sessions delete|rename|optimize # 单会话删除/重命名；FTS 合并 + VACUUM 回收空间
-./ulnclaw skills list
-./ulnclaw skills blueprints    # 可排程技能（skills schedule <name>）
-./ulnclaw skills scan <name>   # 信任技能前的安全扫描（--json、--source、--force）
-./ulnclaw cron list          # cron jobs (create/show/pause/resume/run + blueprints catalog — P661)
-./ulnclaw suggestions        # suggested automations (accept/dismiss/catalog/clear)
-./ulnclaw moa list           # MoA 预设（运行：./ulnclaw moa run "<prompt>"）
-./ulnclaw models providers   # models.dev 目录（list/info/refresh）
-./ulnclaw checkpoints list   # 文件系统快照（[checkpoints] enabled = true）
-./ulnclaw diff               # git 工作区 diff（--staged / --all）
-./ulnclaw doctor             # 诊断配置与依赖（--fix、--online、--json）
-./ulnclaw insights           # 会话用量分析（--days、--source、--json）
-./ulnclaw pets               # petdex 宠物：list/install/select/show/scale/doctor/hatch
-./ulnclaw status             # 全组件状态总览（--deep）
-./ulnclaw logs               # 查看/过滤日志（-f、-n、--level、--since、--component）
-./ulnclaw update --check   # 检查更新（ulnclaw update 应用：stash -> ff 拉取 -> 重建）
-./ulnclaw config           # 配置 show/get/set/unset（env 风格键写入 .env）
-./ulnclaw secrets status   # 外部秘密源（secrets sync [--apply] 立即拉取）
-./ulnclaw secrets bitwarden setup   # 向导：安装 bws、存令牌、选项目（另有 install/status/token/disable；onepassword setup/status/set/remove/disable）
-./ulnclaw computer-use status # cua-driver 后台桌面控制（doctor/install）
-./ulnclaw plugins list      # 插件与 shell 钩子（enable/disable/accept-hooks）
-./ulnclaw kanban list       # kanban 任务引擎（init/boards/create [--max-runtime 30s|5m|2h|1d --max-retries N --workspace KIND --branch B --goal --initial-status blocked --model M --provider P --project P]/claim/done/review/block/comment/swarm/specify/decompose/diagnostics/schedule/promote/reclaim/reassign/edit/set-model [--provider P]/set-reasoning [L]/attach/tail/log/runs/context/repair/assignees/notify-subscribe/stats/...）
-./ulnclaw project list     # 一等项目登记簿（create/show/add-folder/remove-folder/rename/set-primary/use/archive/restore/bind-board；kanban create --project 锚定 worktree）
-./ulnclaw project scan     # git 仓库发现缓存（scan [--root P --max-depth N]/repos [--clear]）
-./ulnclaw hooks doctor      # 逐个探测已同意的钩子（list/test/revoke）
-./ulnclaw pairing list      # 陌生发送者的 DM 配对码（approve/revoke/clear-pending）
-./ulnclaw profiles          # 命名配置档案：list/show/set/rename/delete `[profiles.*]` 配置覆盖（P597）
-./ulnclaw weixin login      # 微信 iLink 扫码登录（[messaging.weixin]）
-./ulnclaw auth login        # OAuth 设备流登录（status/refresh/logout/open）
-./ulnclaw sync status       # 技能同步（pull/push/now/enable/disable/device）
-./ulnclaw completion bash  # shell 补全脚本（bash/zsh/fish/elvish/powershell）
-./ulnclaw dump             # 可粘贴的装机摘要，用于求助排查（--show-keys）
-./ulnclaw version          # 版本 + 安装信息 + 升级状态
-./ulnclaw uninstall        # 移除代码/PATH 条目/包装脚本（--full 连数据清除、--dry-run、--yes）
-./ulnclaw memory           # 持久记忆状态；`memory reset [all|memory|user]` 清除
-./ulnclaw approvals        # 终端审批模式；`approvals manual|smart|off` 设置
-./ulnclaw prompt-size      # 系统提示词 + 工具 schema 体积（--json）
-./ulnclaw debug report     # 脱敏诊断包，用于求助分享（--no-redact）
-./ulnclaw bundles          # 技能束：一个 /命令 加载一组技能
-./ulnclaw import-agent     # 导入 Claude Code / Codex 配置（--dry-run）
-./ulnclaw security audit   # 固定版本 MCP 包的 OSV.dev 审计（--json）
-./ulnclaw fallback         # 回退链管理（add/remove/clear provider:model 条目）
-./ulnclaw backup           # home 目录 zip 备份（-q 快速快照，backup list/restore/prune）
-./ulnclaw import b.zip     # 恢复备份 zip（跳过运行时状态文件，机密文件 0600）
-
-# 浏览器自动化：auto 模式自动启动托管的无头 Chrome/Chromium；
-# 也可将 browser_* 工具指向已开启远程调试的浏览器
-export ULNCLAW_BROWSER_CDP=http://127.0.0.1:9222     # 或 ws://.../devtools/browser/... 或 "auto"
-# 也可让 browser_* 按需创建云浏览器会话（hermes 云 provider）：
-#   config.toml [browser] cloud_provider = "browserbase" | "browser-use" | "firecrawl" | "local"
-#   + 凭据：BROWSERBASE_API_KEY+BROWSERBASE_PROJECT_ID / BROWSER_USE_API_KEY / FIRECRAWL_API_KEY
-
-# HTTP 网关（OpenAI 兼容 API 服务器，默认 127.0.0.1:8642）
-./ulnclaw gateway --host 127.0.0.1 --port 8642
-./ulnclaw dashboard status        # 仪表盘服务状态（run/stop；P581）
-./ulnclaw console                 # 安全的无 LLM 命令行控制台 REPL（P582）
-# 消息平台随网关运行
-# （[messaging.telegram|discord|slack|signal|weixin|qq|yuanbao|email|mattermost|matrix|dingtalk|wecom|homeassistant|whatsapp|irc|ntfy|simplex|buzz|photon]，
-#  另有 webhook 平台：whatsapp_cloud/msgraph/webhook/bluebubbles/feishu/sms/teams/line/google_chat/raft/a2a）
-# Electron 桌面应用（desktop-electron/）与任意浏览器仪表盘经 HTTP/SSE + WS 连接本网关
-# （内置本地应用 CORS，见 desktop-electron/README.md）
-curl -H "Authorization: Bearer $ULNCLAW_GATEWAY_KEY" \\
-     -H "Content-Type: application/json" \\
-     -d '{"messages":[{"role":"user","content":"你好！"}]}' \\
-     http://127.0.0.1:8642/v1/chat/completions
-```
-
-### 库用法快速开始
-
-```rust
-use ulnclaw::prelude::*;
-use ulnclaw::{register_builtin_tools, ToolRegistry, SqliteSessionStore};
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    let provider = OpenAiProvider::builder()
-        .endpoint("http://localhost:11434/v1")
-        .model("qwen3:32b")
-        .build()?;
-
-    let mut tools = ToolRegistry::new();
-    register_builtin_tools(&mut tools);          // 全部 50+ hermes 风格工具
-
-    let agent = Agent::new(Arc::new(provider), tools)
-        .with_config(AgentConfig { approval: false, ..Default::default() })
-        .with_store(Arc::new(SqliteSessionStore::open_default()?));
-
-    println!("{}", agent.chat("列出当前目录的文件").await?);
-    Ok(())
-}
-```
-
-### 文档
-
-- [Hermes 对标矩阵](docs/zh/hermes-parity.md) —— 与 hermes-agent v2026.8.3 的工具/功能逐项对应，含 HTTP 路由对标附录（每条 hermes 路由均已覆盖或设计性决议；P339）
-- [架构指南](docs/zh/architecture.md) · [API 参考](docs/zh/api-reference.md)
-- [集成指南](docs/zh/integration.md) · [开发指南](docs/zh/development.md)
-- [工具系统](docs/zh/tools.md) · [Provider 系统](docs/zh/providers.md)
-- 设计文档：[多路复用网关](docs/design/multiplexing-gateway.md)（多 profile 路由 + fail-closed 密钥作用域）· [浏览器 CDP 客户端](docs/design/browser-cdp.md)（CDP 会话层 + `/v1/browser/*` 控制面）
-
-### 构建与测试
-
-```bash
-cargo test                     # 990 个测试
-cargo build --release --target x86_64-unknown-linux-musl   # 静态二进制
-```
-
-### 许可证
-
-MIT OR Apache-2.0
+ulnclaw is a Rust port of [hermes-agent](https://github.com/NousResearch/hermes-agent)
+by [Nous Research](https://nousresearch.com). See that project for the
+original design and documentation.
