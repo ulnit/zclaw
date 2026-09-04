@@ -135,9 +135,24 @@ ulnclaw dump                               # 可复制粘贴的支持信息摘�
   `~/.ulnclaw/logs/desktop.log` 的 `[shell-update]`。
 
 首次启动无需 API key：网关支持无 key 启动，首次引导与 Models 视图会指引你
-添加 provider 密钥。配置位于 `~/.ulnclaw/config.toml`，与下面的 CLI 流程
-完全一致。`ulnclaw gui` 启动打包应用（`--dev` 运行 `desktop-electron/`
-的未打包应用）。详见 [desktop-electron/README.md](desktop-electron/README.md)。
+添加 provider 密钥。配置位于 `~/.ulnclaw/config.toml`（Windows：
+`%USERPROFILE%\.ulnclaw\config.toml`），与下面的 CLI 流程完全一致。
+
+### 用 `ulnclaw gui` 启动
+
+```bash
+ulnclaw gui                        # 别名 `ulnclaw desktop`；detached 拉起打包应用
+ulnclaw gui --dev                  # 运行 desktop-electron/ 的未打包应用（npm start）
+ulnclaw gui --binary PATH          # 指定可执行文件
+ULNCLAW_DESKTOP_BINARY=PATH ulnclaw gui
+```
+
+二进制解析顺序：`--binary` → `ULNCLAW_DESKTOP_BINARY` →
+`desktop-electron/release/{linux,win,mac}-unpacked/…`（由 `npm run pack`
+产出）。找不到时命令会打印构建指引（`cd desktop-electron && npm install &&
+npm run dist`）—— 与 `hermes gui` 不同，它**不会**按需构建应用。桌面应用
+与 CLI 共享同一份配置、密钥、会话与技能；外壳详情见
+[desktop-electron/README.md](desktop-electron/README.md)。
 
 ## HTTP 网关
 

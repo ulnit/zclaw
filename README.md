@@ -140,9 +140,25 @@ streaming over a JSON-RPC WebSocket plus HTTP/SSE.
 
 First launch needs no API key: the gateway boots keyless and the onboarding /
 Models view walk you through adding a provider key. Configuration lives in
-`~/.ulnclaw/config.toml`, exactly as in the CLI flow below. `ulnclaw gui`
-launches the packaged app (`--dev` runs the unpackaged app from
-`desktop-electron/`). See [desktop-electron/README.md](desktop-electron/README.md).
+`~/.ulnclaw/config.toml` (Windows: `%USERPROFILE%\.ulnclaw\config.toml`),
+exactly as in the CLI flow below.
+
+### Launching with `ulnclaw gui`
+
+```bash
+ulnclaw gui                        # alias: `ulnclaw desktop`; spawn the packaged app detached
+ulnclaw gui --dev                  # run the unpackaged app from desktop-electron/ (`npm start`)
+ulnclaw gui --binary PATH          # explicit executable
+ULNCLAW_DESKTOP_BINARY=PATH ulnclaw gui
+```
+
+Binary resolution order: `--binary` → `ULNCLAW_DESKTOP_BINARY` →
+`desktop-electron/release/{linux,win,mac}-unpacked/…` (produced by
+`npm run pack`). If nothing is found, the command prints build instructions
+(`cd desktop-electron && npm install && npm run dist`) — unlike `hermes gui`,
+it does **not** build the app on demand. The desktop app shares the CLI's
+config, keys, sessions, and skills; full shell details in
+[desktop-electron/README.md](desktop-electron/README.md).
 
 ## HTTP Gateway
 
