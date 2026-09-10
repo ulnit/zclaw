@@ -1,6 +1,6 @@
-# zclaw — OmniMind 移动端本地 Agent（三端共用）
+# zclaw — Ulnvault 移动端本地 Agent（三端共用）
 
-把鸿蒙版 OmniMind 用到的**移动端可用的 ZClaw** 抽成独立项目，供
+把鸿蒙版 Ulnvault 用到的**移动端可用的 ZClaw** 抽成独立项目，供
 HarmonyOS / Android / iOS 三端集成。底层是 Rust 实现的本地 agent：
 工具调用循环 + 流式输出 + SQLite 长期记忆，走 OpenAI 兼容接口
 （默认 `https://ai.ulnit.com/v1`）。
