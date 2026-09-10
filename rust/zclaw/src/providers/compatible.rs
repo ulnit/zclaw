@@ -91,6 +91,12 @@ pub fn describe_reqwest_error(e: &reqwest::Error, url: &str) -> String {
     } else if low.contains("connection refused") || low.contains("reset")
         || low.contains("unreachable") || low.contains("broken pipe") {
         "连接被拒绝/中断"
+    } else if low.contains("decoding response body") || low.contains("incomplete message")
+        || low.contains("unexpected end of") || low.contains("connection closed")
+        || low.contains("body write aborted") {
+        // 响应体读取中途失败：流式(SSE)长对话被掐断的典型信号。
+        // 常见成因＝客户端用了「总时长超时」而非「读取空闲超时」，或 HTTP/2 流被中间盒 RST。
+        "响应流中途断开"
     } else if low.contains("proxy") {
         "代理错误"
     } else {
@@ -209,9 +215,24 @@ pub struct Client {
 
 impl Client {
     pub fn new() -> Self {
+        // ⚠️ 不要用 .timeout()：reqwest 的 timeout 是「从连接建立到响应体读完」的
+        // 总时长超时。SSE 流式对话的 body 会一直读，所以一次较长的生成（推理模型
+        // 思考、长回答、多轮工具循环）只要超过这个总时长就会被掐断，报
+        // `error decoding response body` —— 表现为对话中途失败，而服务端日志显示
+        // 请求 200 且正常产出了内容。已用慢速 SSE mock 实证复现并验证修复。
+        //
+        // 正确做法：
+        // - connect_timeout：只管建连
+        // - read_timeout：只管「相邻两次收到字节之间的空闲」，只要上游持续吐 token
+        //   就不会触发，无论整轮对话多长
+        // - 不设总超时：对话长度由 agent 的 max_iterations 和上游模型自己决定
         Self {
             http: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(120))
+                .connect_timeout(std::time::Duration::from_secs(30))
+                .read_timeout(std::time::Duration::from_secs(300))
+                // 移动网络切换/中间盒回收空闲连接时，保活能减少流中途被断
+                .tcp_keepalive(std::time::Duration::from_secs(30))
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
                 .build()
                 .unwrap(),
         }
@@ -266,7 +287,7 @@ impl Client {
             let chunk = match chunk {
                 Ok(c) => c,
                 Err(e) => {
-                    on_event(StreamEvent::Error(format!("stream error: {}", e)));
+                    on_event(StreamEvent::Error(format!("stream error: {}", describe_reqwest_error(&e, url))));
                     break;
                 }
             };

@@ -144,7 +144,7 @@ fn main() {
             }
             break;
         }
-        if poll > 1200 {
+        if poll > 20000 {
             println!("TIMEOUT after {} polls", poll);
             break;
         }
