@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-SRC="${1:-$(cd "$(dirname "$0")/../rust/ulnclaw" 2>/dev/null && pwd)}"
+SRC="${1:-$(cd "$(dirname "$0")/../rust/zclaw" 2>/dev/null && pwd)}"
 OUT="$(cd "$(dirname "$0")/.." && pwd)/dist"
 
 if [ ! -f "$SRC/Cargo.toml" ]; then
@@ -48,12 +48,25 @@ case "$platform" in
   harmony)
     # OHOS target with the OHOS NDK sysroot.
     # Requires: rustup target add aarch64-unknown-linux-ohos ; OHOS_NDK_HOME set.
-    export CC_aarch64_unknown_linux_ohos="$OHOS_NDK_HOME/native/llvm/bin/clang"
-    export AR_aarch64_unknown_linux_ohos="$OHOS_NDK_HOME/native/llvm/bin/llvm-ar"
+    #
+    # ⚠️ WINDOWS 注意：DevEco 自带的 aarch64-unknown-linux-ohos-clang 是
+    #   `#!/bin/sh` 脚本，cargo 无法直接执行。必须自建 .cmd 包装，内容等价于该脚本：
+    #     @echo off
+    #     "<OHOS_NDK_HOME>\native\llvm\bin\clang.exe" -target aarch64-linux-ohos ^
+    #       --sysroot="<OHOS_NDK_HOME>\native\sysroot" -D__MUSL__ %*
+    #   然后 CC/AR/LINKER 指向这个 .cmd。AR 包装 llvm-ar.exe 同理。
+    export CC_aarch64_unknown_linux_ohos="${OHOS_CC:-$OHOS_NDK_HOME/native/llvm/bin/clang}"
+    export AR_aarch64_unknown_linux_ohos="${OHOS_AR:-$OHOS_NDK_HOME/native/llvm/bin/llvm-ar}"
     export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER="$CC_aarch64_unknown_linux_ohos"
     cargo build --release --target aarch64-unknown-linux-ohos
     mkdir -p "$OUT/harmony/arm64-v8a"
     cp target/aarch64-unknown-linux-ohos/release/libzclaw.so "$OUT/harmony/arm64-v8a/"
+    echo "产物 -> $OUT/harmony/arm64-v8a/libzclaw.so"
+    echo
+    echo "⚠️ 部署到 HarmonyOS 工程时必须放在 <module>/libs/<abi>/ 下（如 entry/libs/arm64-v8a/），"
+    echo "   hvigor 才会把它打进 HAP。只放在 src/main/cpp/libs/ 并靠 CMake POST_BUILD copy"
+    echo "   是不够的——hvigor 只收集 CMake target 产物，散文件不会进包，导致运行时"
+    echo "   dlopen(\"libzclaw.so\") 失败、isAvailable() 恒 false、静默走 ArkTS fallback。"
     ;;
   *)
     echo "Set PLATFORM=android|ios|harmony"
