@@ -11,7 +11,10 @@ cd "$(dirname "$0")/../rust/zclaw"
 
 NDK="${ANDROID_NDK_HOME:-/opt/android-ndk}"
 export ANDROID_NDK_HOME="$NDK"
-OUT_DIR="$(pwd)/../../dist/android"
+# 注意：MSYS/git-bash 下 `$(pwd)/../..` 会把 /e/... 传给原生 cargo-ndk，
+# 被解析成 E:\e\... 畸形路径。改用仓库根的 Windows 风格路径。
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd -W 2>/dev/null || cd "$(dirname "$0")/.." && pwd)"
+OUT_DIR="$REPO_ROOT/dist/android"
 mkdir -p "$OUT_DIR/arm64-v8a" "$OUT_DIR/armeabi-v7a"
 
 build_one() {

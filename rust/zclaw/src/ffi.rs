@@ -213,6 +213,37 @@ pub extern "C" fn zclaw_version() -> *const c_char {
     to_cstring("0.4.0-mobile")
 }
 
+/// On-device network/TLS diagnostic. Returns a JSON array of Chinese one-line
+/// findings (clock / DNS / TLS+HTTP / chat endpoint), each stage reported
+/// separately so a transport failure can be attributed instead of guessed at.
+///
+/// Synchronous from the caller's perspective: blocks on the state's tokio
+/// runtime. Never call from the Android UI thread — Kotlin side must run it on
+/// Dispatchers.IO.
+#[no_mangle]
+pub extern "C" fn zclaw_network_probe(api_url: *const c_char, api_key: *const c_char) -> *const c_char {
+    let url = if api_url.is_null() { String::new() } else { unsafe { CStr::from_ptr(api_url) }.to_string_lossy().to_string() };
+    let key = if api_key.is_null() { String::new() } else { unsafe { CStr::from_ptr(api_key) }.to_string_lossy().to_string() };
+    let url = if url.is_empty() { "https://ai.ulnit.com/v1".to_string() } else { url };
+
+    // 取 runtime 的 Handle 后立即释放 state 锁——绝不能把 MutexGuard 持有到
+    // block_on 结束（探测最长约 60s），否则会与 zclaw_poll_chunks 争锁卡死。
+    let handle = state().lock().ok()
+        .and_then(|g| g.as_ref().map(|st| st.runtime.handle().clone()));
+
+    let probe = crate::providers::compatible::network_probe(&url, &key);
+    let lines = match handle {
+        Some(h) => h.block_on(probe),
+        // 未 init 也要能诊断：临时建一个 runtime
+        None => match tokio::runtime::Builder::new_multi_thread().enable_all().worker_threads(1).build() {
+            Ok(rt) => rt.block_on(probe),
+            Err(e) => vec![format!("无法创建诊断 runtime: {}", e)],
+        },
+    };
+    let json = serde_json::to_string(&lines).unwrap_or_else(|_| "[\"诊断结果序列化失败\"]".to_string());
+    to_cstring(&json)
+}
+
 // Silence unused-import lint for c_void (kept for ABI clarity).
 #[allow(dead_code)]
 fn _abi_anchor(_: *mut c_void) {}
