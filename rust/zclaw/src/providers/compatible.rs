@@ -311,10 +311,33 @@ impl Client {
                         on_event(StreamEvent::Delta(c.to_string()));
                     }
                 }
-                if let Some(th) = delta["reasoning_content"].as_str() {
-                    if !th.is_empty() {
-                        on_event(StreamEvent::Thinking(th.to_string()));
+                // 思考流字段兼容 —— 不同上游用不同字段名，必须全读：
+                //   · DeepSeek 官方 / 多数 OpenAI 兼容端：reasoning_content
+                //   · OpenRouter（本项目渠道）：reasoning + reasoning_details
+                // reasoning_details 是结构化形式 [{"type":"reasoning.text","text":"…","index":0}]，
+                // 仅在 reasoning 缺席时作为兜底，避免同一份思考被发射两次。
+                //
+                // 🔴 历史 bug：此前只读 reasoning_content，OpenRouter 渠道下永远匹配不到，
+                // 思考流被 100% 丢弃；而思考期 delta.content 全是空字符串（被下方
+                // !c.is_empty() 过滤），于是客户端在整个思考期收不到任何 chunk ——
+                // 实测复杂问题思考期长达 24s~381s，UI 表现为「光标静止、永远等不到结束」。
+                let mut think: Option<String> = None;
+                for key in ["reasoning_content", "reasoning"] {
+                    if let Some(th) = delta[key].as_str() {
+                        if !th.is_empty() { think = Some(th.to_string()); break; }
                     }
+                }
+                if think.is_none() {
+                    if let Some(arr) = delta["reasoning_details"].as_array() {
+                        let mut buf = String::new();
+                        for item in arr {
+                            if let Some(t) = item["text"].as_str() { buf.push_str(t); }
+                        }
+                        if !buf.is_empty() { think = Some(buf); }
+                    }
+                }
+                if let Some(th) = think {
+                    on_event(StreamEvent::Thinking(th));
                 }
                 if let Some(tcs) = delta["tool_calls"].as_array() {
                     for tc in tcs {
