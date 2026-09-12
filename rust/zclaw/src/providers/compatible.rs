@@ -165,6 +165,11 @@ pub async fn network_probe(url: &str, api_key: &str) -> Vec<String> {
     }
 
     // 2. TLS handshake + HTTP status via GET /v1/models (cheap, no tokens spent).
+    //    顺便从这里取一个**该 key 真实可用**的模型名，给第 3 步的 chat 探针用。
+    //    🔴 此前第 3 步硬编码 "model": "probe"，而后端按模型名做渠道分发，
+    //    probe 不存在 → 必然 503「分组 default 下模型 probe 无可用渠道」。
+    //    结果诊断永远报 chat 失败，而真实对话其实是好的（已用后端日志实证：
+    //    同一时刻 aurora-5-mini 请求全部 200 / end_reason=done）。
     let models_url = format!("https://{}/v1/models", host);
     let http = match reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(15))
@@ -175,19 +180,45 @@ pub async fn network_probe(url: &str, api_key: &str) -> Vec<String> {
         Err(e) => { out.push(format!("HTTP 客户端初始化失败: {}", describe_reqwest_error(&e, &models_url))); return out; }
     };
     let started = std::time::Instant::now();
+    let mut probe_model: Option<String> = None;
     match http.get(&models_url)
         .header("Authorization", format!("Bearer {}", api_key))
         .send().await
     {
-        Ok(r) => out.push(format!("TLS+HTTP: GET /v1/models -> {} ({} ms) ✓",
-            r.status(), started.elapsed().as_millis())),
+        Ok(r) => {
+            let st = r.status();
+            let ms = started.elapsed().as_millis();
+            // 按状态码判定，不能无条件打 ✓（否则 401/503 也显示成功，自相矛盾）
+            if st.is_success() {
+                // 解析 data[].id，挑第一个非 probe 的模型给第 3 步用
+                if let Ok(v) = r.json::<serde_json::Value>().await {
+                    probe_model = v["data"].as_array().and_then(|arr| {
+                        arr.iter()
+                            .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                            .find(|id| !id.is_empty())
+                    });
+                }
+                out.push(format!("TLS+HTTP: GET /v1/models -> {} ({} ms) ✓", st, ms));
+            } else {
+                let text = r.text().await.unwrap_or_default();
+                out.push(format!("TLS+HTTP: GET /v1/models -> {} ({} ms) ✗ {}", st, ms,
+                    crate::tools::truncate_utf8(&text.replace('\n', " "), 160).0));
+            }
+        }
         Err(e) => out.push(format!("TLS+HTTP: GET /v1/models ✗ {}", describe_reqwest_error(&e, &models_url))),
     }
 
     // 3. The failing endpoint itself, with a minimal body — distinguishes
     //    "TLS fine but this path broken" from "no connectivity at all".
+    //    模型名用第 2 步取到的真实模型；取不到就跳过这一步并说明原因，
+    //    绝不拿不存在的模型名去探（那只会产出无意义的 503 误导排查）。
+    let Some(model) = probe_model else {
+        out.push("chat/completions: 跳过（未能从 /v1/models 取到可用模型名，无法构造有效探针请求）".into());
+        let _ = dns_target;
+        return out;
+    };
     let body = serde_json::json!({
-        "model": "probe",
+        "model": model,
         "messages": [{"role": "user", "content": "ping"}],
         "stream": true,
         "max_tokens": 1,
@@ -199,9 +230,22 @@ pub async fn network_probe(url: &str, api_key: &str) -> Vec<String> {
         .json(&body)
         .send().await
     {
-        Ok(r) => out.push(format!("chat/completions: -> {} ({} ms) ✓ 通路正常",
-            r.status(), started2.elapsed().as_millis())),
-        Err(e) => out.push(format!("chat/completions: ✗ {}",
+        Ok(r) => {
+            let st = r.status();
+            let ms = started2.elapsed().as_millis();
+            // 🔴 必须按状态码判定。此前无条件打「✓ 通路正常」，导致 503/401
+            //    也显示成功（截图实证：`503 Service Unavailable (71 ms) ✓ 通路正常`），
+            //    自相矛盾且把排查带偏。现在成功才 ✓，失败带上错误体片段。
+            if st.is_success() {
+                out.push(format!("chat/completions: [{}] -> {} ({} ms) ✓ 通路正常",
+                    model, st, ms));
+            } else {
+                let text = r.text().await.unwrap_or_default();
+                out.push(format!("chat/completions: [{}] -> {} ({} ms) ✗ {}",
+                    model, st, ms, crate::tools::truncate_utf8(&text.replace('\n', " "), 200).0));
+            }
+        }
+        Err(e) => out.push(format!("chat/completions: [{}] ✗ {}", model,
             describe_reqwest_error(&e, &format!("https://{}/v1/chat/completions", host)))),
     }
     let _ = dns_target;

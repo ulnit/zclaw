@@ -14,7 +14,12 @@ set -euo pipefail
 # 而 `||` 回退分支同样失败，OUT_DIR 变成空/畸形，cargo ndk -o 写不进去 →
 # dist/ 里仍是上一次的旧 .so（时间戳不变），看起来"构建成功"实则没产出。
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -W 2>/dev/null || cd "$SCRIPT_DIR/.." && pwd)"
+# 🔴 必须用 `{ pwd -W || pwd; }` 花括号成组：裸写 `pwd -W 2>/dev/null || pwd`
+#    再嵌进 `$(cd .. && A || B)` 时，shell 按 `((cd&&A)||(B))` 结合，
+#    `pwd -W` 成功后整个 `&&` 链的右侧仍可能再执行一次 pwd，
+#    命令替换捕获到**两行路径**（"E:/...\n/e/..."），cd 报 No such file。
+#    花括号让「取 Windows 风格路径，失败退回 POSIX 路径」成为单一命令。
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && { pwd -W 2>/dev/null || pwd; })"
 
 cd "$REPO_ROOT/rust/zclaw"
 

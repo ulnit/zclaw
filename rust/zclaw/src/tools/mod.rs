@@ -535,6 +535,10 @@ fn search_via_bing(query: &str) -> Result<String, SearchFail> {
         .map_err(|e| fail(format!("regex: {}", e), SearchStatus::ClientError))?;
     let re_cite = regex::Regex::new(r"(?s)<cite[^>]*>(.*?)</cite>")
         .map_err(|e| fail(format!("regex: {}", e), SearchStatus::ClientError))?;
+    // 摘要：Bing 的结果摘要在块内 <p>（对事实型问题「X 在 Y 对面吗」是主要信息载体，
+    // 只给标题+URL 会迫使模型逐个 web_fetch，进而陷入反复重试）
+    let re_p = regex::Regex::new(r"(?s)<p[^>]*>(.*?)</p>")
+        .map_err(|e| fail(format!("regex: {}", e), SearchStatus::ClientError))?;
     let strip_tags = |s: &str| -> String { re_tag.replace_all(s, "").trim().to_string() };
 
     let mut items: Vec<String> = Vec::new();
@@ -549,19 +553,44 @@ fn search_via_bing(query: &str) -> Result<String, SearchFail> {
             .filter(|u| u.starts_with("http"))
             .or_else(|| re_cite.captures(block).map(|c| strip_tags(&c[1])))
             .unwrap_or_default();
-        items.push(format!("- {}\n  {}", cap_result(&title), url));
+        let snippet = re_p.captures(block)
+            .map(|c| strip_tags(&c[1]))
+            .unwrap_or_default();
+        // 标题 / URL / 摘要三行（摘要封顶，避免撑爆 SEARCH_TOTAL_CAP）
+        items.push(if snippet.is_empty() {
+            format!("- {}\n  {}", cap_result(&title), url)
+        } else {
+            format!("- {}\n  {}\n  摘要: {}", cap_result(&title), url, cap_snippet(&snippet))
+        });
         if items.len() >= 5 { break; }
     }
     if items.is_empty() {
-        // 抓到了 HTML 但没解析出结果 —— 选择器变了或被反爬（Bing 有时返回验证页）
-        let blocked = html.contains("captcha") || html.contains("verify") || html.contains("b_no");
+        // 抓到了 HTML 但没解析出结果 —— 选择器变了或被反爬。
+        // 🔴 别用 "b_no" 当反爬标记：实测降级页与正常页的 b_no 计数都是 1，
+        //    它不是判别信号（此前误判）。只用 captcha/验证页特征。
+        let blocked = html.contains("captcha") || html.contains("g_eeconfig")
+            || html.contains("请验证");
         return Err(fail(
             format!("HTML {} bytes but 0 results parsed{}", html.len(),
                 if blocked { " (anti-bot page suspected)" } else { "" }),
             if blocked { SearchStatus::Blocked } else { SearchStatus::Unavailable },
         ));
     }
+
+    // 注：曾尝试加「相关性自检」（判断 Bing 查无匹配时静默降级返回泛化热门页），
+    // 但原型实验证明指标不可分：降级查询「长沙 唯一新城 小区 二手房」的
+    // 2-gram 命中率 10% / 3-gram 0%，而**相关**查询「杭州 二手房 价格走势」是
+    // 12% / 0%、「长沙 橘子洲 门票 预约」是 25% / 0% —— 两者完全重叠。
+    // 原因：结果语料只有 5 条标题+摘要，查询里跨词 bigram 本就不会逐字出现。
+    // 照此上线会在相关结果上误报「无关，别重试」，比原问题更糟，故不采纳。
+    // 降级问题的治理改在 agent loop 侧（见 dispatcher.rs 的迭代耗尽兜底）。
     Ok(cap_search_total(items.join("\n")))
+}
+
+/// 摘要封顶（比标题宽松，因为摘要承载事实信息）
+fn cap_snippet(s: &str) -> String {
+    let (head, truncated) = truncate_utf8(s, 420);
+    if truncated { format!("{}…", head) } else { head.to_string() }
 }
 
 /// Brave Search API（需 BRAVE_API_KEY；该域名在中国大陆不可达，仅在配了 key 时尝试）

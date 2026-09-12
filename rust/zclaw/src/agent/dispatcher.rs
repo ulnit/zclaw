@@ -105,10 +105,28 @@ impl Dispatcher {
         let tools = tools::tool_schemas();
         let mut final_answer = String::new();
 
-        for _ in 0..max_iter {
+        for iter in 0..max_iter {
             if self.cancelled.load(Ordering::SeqCst) {
                 emit(Chunk::error("cancelled"));
                 return;
+            }
+
+            // 🔴 最后一轮强制收口：不再提供工具，模型只能用已收集到的信息作答。
+            //    没有这一步时，循环耗尽后 final_answer 仍为空 → 只发 done，
+            //    用户看到一个「全是工具重试叙述、没有任何结论」的空气泡
+            //    （实测：思考流 557 字连续 "Let me try more specific searches…"
+            //    直到 10 轮用尽，发送按钮灰着，零答案）。
+            //    典型成因：搜索引擎对冷门本地 POI 静默降级返回泛化结果，
+            //    模型误判「没查到」而无限换措辞重试。
+            let is_last = iter + 1 == max_iter;
+            let tools_arg = if is_last { None } else { Some(tools.clone()) };
+            if is_last {
+                history.push(ChatMessage::user(
+                    "（系统提示：已达到本轮工具调用上限，不能再调用任何工具。\
+                     请立刻基于目前已获得的信息直接回答用户的问题；\
+                     如果信息不足，就如实说明查到了什么、没查到什么，\
+                     并给出你能给的最佳判断或下一步建议。不要再尝试检索。）"
+                ));
             }
 
             let result = self.client.stream_chat(
@@ -117,7 +135,7 @@ impl Dispatcher {
                 &self.config.default_model,
                 self.config.temperature,
                 &history,
-                Some(tools.clone()),
+                tools_arg,
                 &|ev| match ev {
                     // #9007: avoid duplicate streamed narration — suppress
                     // empty and byte-identical consecutive deltas.
@@ -174,6 +192,18 @@ impl Dispatcher {
                 emit(Chunk::tool_result(name, &result_text));
                 history.push(ChatMessage::tool(id, &result_text));
             }
+        }
+
+        // 最终兜底：正常路径下上面的「收口轮」会产出答案。但若模型连收口轮都返回
+        // 空（上游异常/被截断），绝不能只发 done —— 用户会对着空气泡无从判断。
+        // 此时发一条可读的说明文本，并持久化，避免会话里留下一条空 assistant 消息。
+        if final_answer.is_empty() {
+            let fallback = "抱歉，本轮尝试了多次检索仍未拿到足以回答你问题的信息。\
+                            可能是该信息在公开网络上较少，或搜索引擎返回了不相关的结果。\
+                            你可以换个说法（例如只给小区名或加上市/区）再问一次，\
+                            或补充更多线索，我再帮你查。";
+            emit(Chunk::text(fallback));
+            final_answer = fallback.to_string();
         }
 
         if !final_answer.is_empty() {
