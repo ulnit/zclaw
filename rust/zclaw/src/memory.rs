@@ -220,7 +220,7 @@ impl MemoryStore {
             return Vec::new();
         }
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
+        let stmt = conn.prepare(
             "SELECT m.id, m.key, m.content, m.category, m.mem_type, m.created_at, bm25(memories_fts) as score
              FROM memories_fts f JOIN memories m ON m.rowid = f.rowid
              WHERE memories_fts MATCH ?1 ORDER BY score LIMIT ?2",

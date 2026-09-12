@@ -210,7 +210,7 @@ pub extern "C" fn zclaw_free(ptr: *const c_char) {
 
 #[no_mangle]
 pub extern "C" fn zclaw_version() -> *const c_char {
-    to_cstring("0.4.0-mobile")
+    to_cstring("0.5.0-mobile")
 }
 
 /// On-device network/TLS diagnostic. Returns a JSON array of Chinese one-line

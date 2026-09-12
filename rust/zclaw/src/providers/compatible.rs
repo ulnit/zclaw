@@ -159,7 +159,8 @@ pub async fn network_probe(url: &str, api_key: &str) -> Vec<String> {
         Ok(addrs) if addrs.is_empty() => out.push(format!("DNS: {} 解析到 0 个地址 ✗", host)),
         Ok(addrs) => out.push(format!("DNS: {} -> {} ✓", host,
             addrs.iter().take(4).map(|a| a.ip().to_string()).collect::<Vec<_>>().join(", "))),
-        Ok(_) => out.push(format!("DNS: {} 无结果 ✗", host)),
+        // 注意：此处不需要再加 `Ok(_)` 分支——上面两条已穷尽所有 Ok，
+        // 多写一条是死代码（编译器 unreachable pattern），且会让维护者误以为有第三种情况。
         Err(_) => out.push(format!("DNS: {} 超时(15s) ✗", host)),
     }
 
@@ -271,7 +272,9 @@ impl Client {
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            let msg = format!("HTTP {}: {}", status, &text[..text.len().min(300)]);
+            // 必须用安全截断：后端错误体常是中文 JSON，直接 &text[..300]
+            // 落在多字节字符中间会 panic，而本库 panic="abort" → 杀死整个 App
+            let msg = format!("HTTP {}: {}", status, crate::tools::truncate_utf8(&text, 300).0);
             on_event(StreamEvent::Error(msg.clone()));
             return Err(anyhow::anyhow!(msg));
         }
