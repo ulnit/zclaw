@@ -1,0 +1,43 @@
+[package]
+name = "ulnclaw-ffi"
+version = "0.6.0"
+edition = "2021"
+description = "Mobile FFI shim over ulnclaw — exports the zclaw v0.2 C ABI so the App's JNI/NAPI bridges work unchanged"
+license = "MIT OR Apache-2.0"
+
+# 🔴 产出 libzclaw.so：App 端 zclaw_jni.cpp / zclaw_napi.cpp 用 dlopen("libzclaw.so")
+# 加载并解析 zclaw_* 符号。lib 名保持 zclaw 以零改动复用现有桥；package 名体现真身。
+# crate-type:
+#   - cdylib  → Android/HarmonyOS 的 libzclaw.so（dlopen 动态加载）
+#   - staticlib → iOS 的 libzclaw.a（iOS 禁止 dlopen bundle 外的动态库，必须静态链接）
+#   - rlib    → 供本 crate 自己的单元测试（cargo test）链接 ulnclaw
+[lib]
+name = "zclaw"
+crate-type = ["cdylib", "staticlib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+# ulnclaw 作为 path 依赖（rlib）。ulnclaw 树保持上游 pristine，可继续 git pull 同步。
+ulnclaw = { path = "../src" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+# Provider trait 是 #[async_trait]；Stream.tap 需要 futures
+async-trait = "0.1"
+futures = "0.3"
+# Bing 抓取（境内唯一零-key 可达源）：与 ulnclaw 上游一致的 rustls 栈
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+regex = "1"
+urlencoding = "2"
+url = "2"
+
+[profile.release]
+# 移动端 .so 体积优先：ulnclaw 整库 rlib 15MB，靠 LTO+opt-z+strip 把未引用的
+# gateway/26平台/browser/cron 代码裁掉，只留 FFI 实际引用的 agent 核心。
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = true
+# panic 保持 unwind（默认）：FFI 入口用 catch_unwind 把 panic 转成 error chunk，
+# 绝不让 Rust panic 跨过 FFI 边界杀掉 App（zclaw 的 panic=abort 教训）。

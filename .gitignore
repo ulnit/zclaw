@@ -1,0 +1,13 @@
+# 本目录是 ulnclaw 移动端移植的工作区（非单一 git repo）：
+#   src/         = ulnclaw 上游镜像（gitee ushaw/ulnclaw，分支 ulnclaw-mobile 推到 github ulnit/zclaw）
+#                  保持 pristine，可 git pull 同步上游
+#   mobile-ffi/  = 移动端 FFI 层（本仓自研，分支 ulnclaw-mobile-ffi 推到 github ulnit/zclaw）
+#   scripts/     = 三端构建/部署脚本（同 mobile-ffi 分支）
+#   dist/        = 构建产物（不入库）
+# 🔴 必须用 /src/（仅顶层的 ulnclaw 镜像）。裸写 src/ 会匹配任意层级的
+# src 目录，把 mobile-ffi/src/（FFI 源码本体）也排除掉——实测踩过。
+/src/
+dist/
+dist-*/
+*.log
+target/
