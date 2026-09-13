@@ -26,6 +26,8 @@ fn main() {
 static HITS: AtomicUsize = AtomicUsize::new(0);
 /// 记录后端收到的请求体里是否带 "stream":true（根因验证）
 static SAW_STREAM_TRUE: AtomicUsize = AtomicUsize::new(0);
+/// 🔴 记录每个请求用的 model 名（验证辅助任务不退回 ulnclaw 默认 gpt-5.2）
+static MODELS_SEEN: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 async fn run() {
     // 起 mock SSE 服务器
@@ -177,6 +179,22 @@ async fn run() {
         ok = false;
     }
 
+    // 断言7：🔴 辅助任务（标题生成等）不得退回 ulnclaw 默认模型 gpt-5.2。
+    // 真机实证过这个 bug：主对话 200 后紧跟 3 个 `503 模型 gpt-5.2 无可用渠道`，
+    // 因为 build_agent 曾用 UlncLawConfig::default()（model="gpt-5.2"），
+    // 而 resolve_aux_task 的「继承主运行时」分支读的正是 config.model.model。
+    // 修复后所有请求（含标题生成）都该用 mock-model。
+    let models = MODELS_SEEN.lock().unwrap().clone();
+    println!("  mock 收到的 model 名: {:?}", models);
+    if models.iter().any(|m| m == "gpt-5.2") {
+        println!("  ❌ 断言7：出现 gpt-5.2 → 辅助任务仍在用 ulnclaw 默认模型！");
+        ok = false;
+    } else if models.iter().all(|m| m == "mock-model") {
+        println!("  ✅ 断言7：所有请求都用 mock-model（辅助任务未退回默认模型）");
+    } else {
+        println!("  ⚠️ 断言7：出现意外 model 名（非 mock-model 也非 gpt-5.2）");
+    }
+
     println!();
     if ok {
         println!("=== ✅ 全部通过：流式 FFI 通路正常 ===");
@@ -220,6 +238,14 @@ fn mock_server() {
         let is_stream = body_str.contains("\"stream\":true");
         if is_stream {
             SAW_STREAM_TRUE.fetch_add(1, Ordering::SeqCst);
+        }
+        // 🔴 提取请求用的 model 名（辅助任务 bug 验证：不得是 gpt-5.2）
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body_str) {
+            if let Some(m) = v.get("model").and_then(|x| x.as_str()) {
+                if let Ok(mut g) = MODELS_SEEN.lock() {
+                    g.push(m.to_string());
+                }
+            }
         }
         eprintln!("[mock] hit#{} stream={}", n, is_stream);
 

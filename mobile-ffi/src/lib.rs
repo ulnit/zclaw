@@ -147,7 +147,7 @@ fn push_chunk(st: &State, c: Chunk) {
 
 // ─────────────────────────── agent 构造 ───────────────────────────
 
-fn build_agent(st: &Arc<State>, with_tools: bool) -> Agent {
+fn build_agent(st: &Arc<State>, with_tools: bool) -> Result<Agent, String> {
     let provider_inner = ulnclaw::provider::openai::OpenAiProvider::builder()
         .endpoint(&st.cfg.api_url)
         .api_key(&st.cfg.api_key)
@@ -155,7 +155,7 @@ fn build_agent(st: &Arc<State>, with_tools: bool) -> Agent {
         .name("openai-compatible")
         .temperature(st.cfg.temperature)
         .build()
-        .expect("build openai provider");
+        .map_err(|e| format!("build provider failed: {}", e))?;
     let provider: Arc<dyn ulnclaw::provider::Provider> =
         Arc::new(ThinkingCapture::new(provider_inner, st.sink.clone()));
 
@@ -165,7 +165,20 @@ fn build_agent(st: &Arc<State>, with_tools: bool) -> Agent {
     }
 
     let home = std::path::PathBuf::from(&st.cfg.workspace_dir);
-    let uln_cfg = UlncLawConfig::default();
+    // 🔴 不能用 UlncLawConfig::default()：它的 model.model = "gpt-5.2"
+    // （ulnclaw 的 DEFAULT_MODEL），而辅助任务（title_generator / 上下文压缩 /
+    // approval guardian）经 resolve_aux_task 的「未覆盖 → 继承主运行时」分支
+    // 读的正是 config.model.model。真机实证：主对话 200 成功后紧跟 3 个
+    // `503 分组 default 下模型 gpt-5.2 无可用渠道` —— 后端没有这个模型名。
+    // 所以必须把用户实际选的 model/api_key/base_url/temperature 灌进去。
+    let mut uln_cfg = UlncLawConfig::default();
+    uln_cfg.model.model = st.cfg.default_model.clone();
+    uln_cfg.model.base_url = Some(st.cfg.api_url.clone());
+    uln_cfg.model.api_key = Some(st.cfg.api_key.clone());
+    uln_cfg.model.temperature = Some(st.cfg.temperature);
+    let max_iter = st.cfg.agent.max_iterations.unwrap_or(10).clamp(1, 30);
+    uln_cfg.agent.max_iterations = max_iter;
+    uln_cfg.agent.approval = false;
     let context = ToolContext::new()
         .with_home(home.clone())
         .with_workdir(home)
@@ -174,7 +187,6 @@ fn build_agent(st: &Arc<State>, with_tools: bool) -> Agent {
         .with_provider(provider.clone());
     context.set_tool_definitions(registry.definitions());
 
-    let max_iter = st.cfg.agent.max_iterations.unwrap_or(10).clamp(1, 30);
     let agent = Agent::new(provider, registry).with_config(AgentConfig {
         max_iterations: max_iter,
         approval: false, // 移动端无审批 UI；工具面已裁剪到安全子集
@@ -182,9 +194,12 @@ fn build_agent(st: &Arc<State>, with_tools: bool) -> Agent {
         source: "mobile".to_string(),
         environment_probe: false, // 移动端没有 Python 工具链可探测
         system_prompt: Some(prompt::mobile_system_prompt()),
+        // 🔴 显式指定 model：effective_model() 优先取 config.model，
+        // 否则回落到 provider.model()。两者这里一致，但写明避免歧义。
+        model: Some(st.cfg.default_model.clone()),
         ..Default::default()
     });
-    agent.with_tool_context(context).with_store(st.store.clone())
+    Ok(agent.with_tool_context(context).with_store(st.store.clone()))
 }
 
 fn stream_callbacks(st: &Arc<State>, streamed_any: Arc<AtomicBool>) -> AgentCallbacks {
@@ -283,7 +298,15 @@ async fn run_chat(st: Arc<State>, session_id: String, text: String) {
         .collect();
     let history_arg = if history.is_empty() { None } else { Some(history) };
 
-    let agent = Arc::new(build_agent(&st, true));
+    let agent = match build_agent(&st, true) {
+        Ok(a) => Arc::new(a),
+        Err(e) => {
+            push_chunk(&st, Chunk::error(&format!("引擎初始化失败: {}", e)));
+            st.running.store(false, Ordering::SeqCst);
+            push_chunk(&st, Chunk::done());
+            return;
+        }
+    };
     agent.wire_runners();
     // 🔴 streamed_any：标记本轮是否流式吐出过正文。结束后若为 false 而
     // RunResult.content 非空（非流式路径），把 content 一次性补发为 text chunk。
@@ -377,7 +400,15 @@ async fn run_chat(st: Arc<State>, session_id: String, text: String) {
 
     // 🔴 裸问重试（zclaw v0.5.2 同款兜底）：不给道歉文案，丢工具重问一遍。
     if need_bare_retry && transport_error.is_none() {
-        let retry_agent = Arc::new(build_agent(&st, false));
+        let retry_agent = match build_agent(&st, false) {
+            Ok(a) => Arc::new(a),
+            Err(e) => {
+                push_chunk(&st, Chunk::error(&format!("重试引擎初始化失败: {}", e)));
+                st.running.store(false, Ordering::SeqCst);
+                push_chunk(&st, Chunk::done());
+                return;
+            }
+        };
         retry_agent.wire_runners();
         let mut cb = AgentCallbacks::default();
         let streamed2 = Arc::new(AtomicBool::new(false));
