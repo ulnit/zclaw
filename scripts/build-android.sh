@@ -44,11 +44,24 @@ build_one() {
     cp -f "$built" "$out"
     ls -la "$out"
   fi
-  if ! grep -qa "reasoning_details" "$out"; then
-    echo "  ❌ needle 校验失败：$out 不含 reasoning_details（可能是旧库）" >&2
+  # 🔴 needle 必须能**区分版本**。原先只校验 reasoning_details —— 那是 0.5.0 起
+  #    就有的字符串，旧库同样通过，等于没校验（部署过旧库而不自知）。
+  #    改校验当前版本串，并把「新 prompt 独有片段」一起验，确保 prompt 改动真进了库。
+  local ver_needle="0.5.2-mobile"
+  if ! grep -qa "$ver_needle" "$out"; then
+    echo "  ❌ needle 校验失败：$out 不含 $ver_needle（是旧库！）" >&2
     return 1
   fi
-  echo "  ✓ needle 校验通过（含 reasoning_details）"
+  if ! grep -qa "reasoning_details" "$out"; then
+    echo "  ❌ needle 校验失败：$out 不含 reasoning_details" >&2
+    return 1
+  fi
+  # 新增的工具使用策略 prompt（0.5.2 引入）——证明 config.rs 改动已编入库
+  if ! grep -qa "联网搜索只是" "$out"; then
+    echo "  ❌ needle 校验失败：$out 不含新 system prompt（config.rs 未生效）" >&2
+    return 1
+  fi
+  echo "  ✓ needle 校验通过（$ver_needle + reasoning_details + 新 prompt）"
 }
 
 case "${1:-all}" in

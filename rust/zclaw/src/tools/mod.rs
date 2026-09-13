@@ -137,8 +137,14 @@ pub fn tool_schemas() -> Value {
           }), &["url"]));
     list.push(t("web_fetch", "Fetch a web page and return its content as clean plain text. Only GET requests; follows redirects.",
           json!({"url": {"type":"string","description":"The HTTP or HTTPS URL to fetch"}}), &["url"]));
-    list.push(t("web_search_tool", "Search the web for information. Returns relevant search results with titles, URLs, and descriptions.",
-          json!({"query": {"type":"string","description":"The search query. Be specific for better results."}}), &["query"]));
+    // 🔴 工具描述必须如实说明「可能搜不到」，不能过度承诺。
+    // 此前写的是 "Returns relevant search results with titles, URLs, and descriptions."
+    // —— 暗示一定有相关结果，于是模型对冷门本地 POI（小区名/小商户）搜不到时，
+    // 会认为「是我措辞不对」而无限换词重搜（后端实测 prompt_tokens 3.3k→18k、
+    // 9 轮零正文）。改成明确告知：搜索引擎对冷门/本地查询常返回不相关页面，
+    // 结果需要自己判断相关性，搜不到就用自身知识回答。与 system prompt 的策略呼应。
+    list.push(t("web_search_tool", "Search the web. Returns titles, URLs and snippets, but results may be irrelevant: for obscure or highly local queries (a residential compound, a small shop, a street) search engines often return generic city/travel pages instead. Judge relevance yourself — if the results do not mention the specific thing you asked about, treat it as not found; try at most one reworded query, then answer from your own knowledge and state that it is unverified.",
+          json!({"query": {"type":"string","description":"The search query. Prefer short keyword phrases over full questions."}}), &["query"]));
     list.push(t("memory_store", "Store a fact, preference, or note in long-term memory.",
           json!({
             "key": {"type":"string","description":"Unique key for this memory"},

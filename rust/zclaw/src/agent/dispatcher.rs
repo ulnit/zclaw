@@ -49,6 +49,82 @@ pub struct Dispatcher {
     client: Client,
 }
 
+/// 🔴 收口提示词：检测到检索无进展时注入，逼模型**用自身知识作答**。
+///
+/// 设计要点（用户明确要求）：绝不能让用户看到「抱歉，尝试多次检索仍未拿到…」
+/// 这类道歉话术——那是把工具失败的负担转嫁给用户。搜索只是一个工具，搜不到
+/// 就该退回模型自己的知识，并诚实标注不确定性。所以这里明令禁止道歉式开场，
+/// 要求直接给实质回答。
+const COLLAR_PROMPT: &str = "（系统提示：停止调用任何工具。检索没有得到有用信息，\
+现在请直接回答用户的问题。要求：①用你自己已有的知识给出实质性回答，不要只说\
+「没查到」；②在回答中简短说明哪些部分是你已有的了解、未经联网核实，可能不准确；\
+③禁止使用「抱歉，尝试了多次检索仍未…」这类道歉式开场，直接给内容；\
+④如果确实完全不了解该对象，就说明它可能是较小众的本地信息，并给出用户可以\
+如何自行确认的具体建议。）";
+
+/// 裸问重试提示：最后一道防线。若收口轮仍返回空，就把用户原问题原样再问一次
+/// （不带工具、不带道歉模板），让模型正常作答——而不是给用户一段固定道歉文案。
+fn bare_retry_prompt(user_text: &str) -> String {
+    format!("（系统提示：不要用任何工具，直接回答下面这个问题。若不确定就如实说明。）\n\n{}", user_text)
+}
+
+/// 工具调用的「进展」记录，用于检测无效重试。
+/// backport 自上游 zeroclaw loop_detector 的 no_progress / exact_repeat 思路，
+/// 但按移动端单进程库简化（无需 sliding window 的 ping-pong 检测）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct CallSig {
+    args_hash: u64,
+    result_hash: u64,
+}
+
+/// 简易稳定哈希（避免引入新依赖）。FNV-1a。
+fn fnv1a(s: &str) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in s.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
+/// 检索类工具：只有这些的「无进展」才触发收口。
+/// memory_*/datetime/file_* 等本地工具反复调用是正常行为，不该被打断。
+fn is_retrieval_tool(name: &str) -> bool {
+    matches!(name, "web_search_tool" | "web_search" | "web_fetch" | "http_request")
+}
+
+/// 无进展判定阈值：同一检索工具拿到**完全相同结果**达到这个次数就收口。
+///
+/// 为什么是 3（而不是上游 loop_detector 的 5）：移动端一轮对话用户要等几十秒，
+/// 烧到 5 次才干预意味着白等一倍以上时间。且我们的 system prompt 已明令
+/// 「最多换一种措辞再试一次」，3 次正好对应「原措辞 + 换 2 次措辞」的宽容上限。
+/// 注意必须 ≥2 才成立（首次调用谈不上重复），且要求参数至少 2 种，
+/// 避免把「同参数重试」误判（那种由网络抖动引起，重试有意义）。
+const NO_PROGRESS_MIN: usize = 3;
+
+/// 纯函数版「无进展」判定，便于单元测试（不需要网络/mock 服务器）。
+///
+/// 判据（与 iOS ZClawAgent 完全一致）：
+/// - 最近一次调用必须是检索类工具（本地工具反复调用是正常的，不干预）；
+/// - 以它的 result_hash 为基准，统计「同工具 + 同结果」的调用次数 ≥ NO_PROGRESS_MIN
+///   （= 换了措辞却什么都没新查到）；
+/// - 且这些调用的 args_hash 至少 2 种（= 确实在换措辞重试，而非同参数重试；
+///   后者由网络抖动引起，重试有意义，不该收口）。
+fn should_collar_for_no_progress(sigs: &[(String, CallSig)]) -> bool {
+    let Some((last_name, last_sig)) = sigs.last() else { return false };
+    if !is_retrieval_tool(last_name) { return false; }
+
+    let same: Vec<&(String, CallSig)> = sigs.iter()
+        .filter(|(n, s)| n == last_name && s.result_hash == last_sig.result_hash)
+        .collect();
+    if same.len() < NO_PROGRESS_MIN { return false; }
+
+    let mut uniq: Vec<u64> = same.iter().map(|(_, s)| s.args_hash).collect();
+    uniq.sort_unstable();
+    uniq.dedup();
+    uniq.len() >= 2
+}
+
 impl Dispatcher {
     pub fn new(config: Config, memory: Arc<MemoryStore>, cancelled: Arc<AtomicBool>) -> Self {
         Self { config, memory, cancelled, client: Client::new() }
@@ -105,29 +181,32 @@ impl Dispatcher {
         let tools = tools::tool_schemas();
         let mut final_answer = String::new();
 
+        // 检索类调用的签名记录（args_hash + result_hash），用于「无进展」检测。
+        let mut retrieval_sigs: Vec<(String, CallSig)> = Vec::new();
+        // 上一轮检测到无进展 → 本轮强制收口（不给工具 + 注入 COLLAR_PROMPT）。
+        let mut force_collar = false;
+        let mut collar_used = false;
+
         for iter in 0..max_iter {
             if self.cancelled.load(Ordering::SeqCst) {
                 emit(Chunk::error("cancelled"));
                 return;
             }
 
-            // 🔴 最后一轮强制收口：不再提供工具，模型只能用已收集到的信息作答。
-            //    没有这一步时，循环耗尽后 final_answer 仍为空 → 只发 done，
-            //    用户看到一个「全是工具重试叙述、没有任何结论」的空气泡
-            //    （实测：思考流 557 字连续 "Let me try more specific searches…"
-            //    直到 10 轮用尽，发送按钮灰着，零答案）。
-            //    典型成因：搜索引擎对冷门本地 POI 静默降级返回泛化结果，
-            //    模型误判「没查到」而无限换措辞重试。
+            // 🔴 收口轮：两种触发条件
+            //   a) force_collar —— 检索已无进展（同一工具、换了措辞、结果完全相同），
+            //      **提前**收口，不必白烧到第 max_iter 轮。实测该 POI 场景后端
+            //      prompt_tokens 从 3.3k 涨到 18k、9 轮全在重搜、每轮零正文。
+            //   b) is_last —— 兜底，轮次用尽时无论如何都要给用户一个答案。
+            // 收口轮不传 tools，并注入「用自身知识直接作答、禁止道歉式开场」的指令。
             let is_last = iter + 1 == max_iter;
-            let tools_arg = if is_last { None } else { Some(tools.clone()) };
-            if is_last {
-                history.push(ChatMessage::user(
-                    "（系统提示：已达到本轮工具调用上限，不能再调用任何工具。\
-                     请立刻基于目前已获得的信息直接回答用户的问题；\
-                     如果信息不足，就如实说明查到了什么、没查到什么，\
-                     并给出你能给的最佳判断或下一步建议。不要再尝试检索。）"
-                ));
+            let collar = force_collar || is_last;
+            let tools_arg = if collar { None } else { Some(tools.clone()) };
+            if collar && !collar_used {
+                history.push(ChatMessage::user(COLLAR_PROMPT));
+                collar_used = true;
             }
+            force_collar = false;
 
             let result = self.client.stream_chat(
                 &self.config.chat_url(),
@@ -179,6 +258,13 @@ impl Dispatcher {
                 break;
             }
 
+            // 收口轮已不提供 tools；若上游仍硬塞 tool_calls，不再执行工具，
+            // 直接以已产出的 content 收尾（可能为空，交由下面的裸问重试兜底）。
+            if collar {
+                final_answer = content;
+                break;
+            }
+
             // Record assistant message with tool_calls, then execute each tool
             history.push(ChatMessage::assistant_with_tools(&content, tool_calls.unwrap()));
 
@@ -191,24 +277,194 @@ impl Dispatcher {
                 let result_text = tools::execute(&ctx, name, &args);
                 emit(Chunk::tool_result(name, &result_text));
                 history.push(ChatMessage::tool(id, &result_text));
+
+                if is_retrieval_tool(name) {
+                    retrieval_sigs.push((name.clone(), CallSig {
+                        args_hash: fnv1a(arguments),
+                        result_hash: fnv1a(&result_text),
+                    }));
+                }
+            }
+
+            // ── 无进展检测（backport 上游 loop_detector 的 detect_no_progress）──
+            // 实测 Bing 对冷门 POI 的不同措辞返回**逐字节相同**的泛化结果
+            // （已用 search_probe 实证：4 种措辞 → 1 个唯一 sha256），必命中。
+            // 判定逻辑抽成纯函数 should_collar_for_no_progress，带单元测试。
+            if should_collar_for_no_progress(&retrieval_sigs) {
+                // 换着措辞重搜却拿到完全一样的结果 → 立刻收口，别再烧轮次
+                force_collar = true;
             }
         }
 
-        // 最终兜底：正常路径下上面的「收口轮」会产出答案。但若模型连收口轮都返回
-        // 空（上游异常/被截断），绝不能只发 done —— 用户会对着空气泡无从判断。
-        // 此时发一条可读的说明文本，并持久化，避免会话里留下一条空 assistant 消息。
-        if final_answer.is_empty() {
-            let fallback = "抱歉，本轮尝试了多次检索仍未拿到足以回答你问题的信息。\
-                            可能是该信息在公开网络上较少，或搜索引擎返回了不相关的结果。\
-                            你可以换个说法（例如只给小区名或加上市/区）再问一次，\
-                            或补充更多线索，我再帮你查。";
-            emit(Chunk::text(fallback));
-            final_answer = fallback.to_string();
+        // 🔴 最终兜底：**裸问重试**，而不是给用户一段固定道歉文案。
+        //   用户明确要求：搜不到时模型应当自己思考回答，绝不能看到
+        //   「抱歉，本轮尝试了多次检索仍未拿到…」这类把工具失败转嫁给用户的话术。
+        //   做法：丢弃被工具往返污染的 history（实测可涨到 18k tokens），
+        //   用 system + 用户原问题重新问一次、且不提供工具，让模型正常作答。
+        if final_answer.trim().is_empty() {
+            let retry_history = vec![
+                ChatMessage::system(&self.config.agent.system_prompt),
+                ChatMessage::user(&bare_retry_prompt(user_text)),
+            ];
+            let retry = self.client.stream_chat(
+                &self.config.chat_url(),
+                &self.config.api_key,
+                &self.config.default_model,
+                self.config.temperature,
+                &retry_history,
+                None,   // 不给工具：这一轮必须出正文
+                &|ev| match ev {
+                    StreamEvent::Delta(t) => emit(Chunk::text(&t)),
+                    StreamEvent::Thinking(t) => emit(Chunk::thinking(&t)),
+                    StreamEvent::Error(e) => emit(Chunk::error(&e)),
+                    _ => {}
+                },
+            ).await;
+            match retry {
+                Ok((c, _)) => {
+                    final_answer = c;
+                    // 裸问重试也不带工具，模型几乎没有理由返回空；若仍空说明
+                    // 上游/网络彻底异常 → 报错（客户端显示为错误条），
+                    // 绝不留空气泡，也不用道歉话术糊弄。
+                    if final_answer.trim().is_empty() {
+                        emit(Chunk::error("模型未返回内容（上游异常），请重试或更换模型"));
+                    }
+                }
+                Err(e) => emit(Chunk::error(&e.to_string())),
+            }
         }
 
-        if !final_answer.is_empty() {
+        if !final_answer.trim().is_empty() {
             self.memory.save_message(session_id, "assistant", &final_answer);
         }
         emit(Chunk::done());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造一条检索调用记录（模拟 dispatcher 主循环里 push 的形态）
+    fn sig(name: &str, args: &str, result: &str) -> (String, CallSig) {
+        (name.to_string(), CallSig { args_hash: fnv1a(args), result_hash: fnv1a(result) })
+    }
+
+    /// 🔴 真实生产场景回归测试：用户问「长沙市唯一星城小区是位于省图书馆对面吗」，
+    /// 模型换着措辞重搜 4 次，Bing 每次返回**逐字节相同**的泛化结果。
+    /// 修复前：跑满 10 轮、每轮 finish=tool_calls、零正文 → 空气泡
+    ///        （后端实测 prompt_tokens 3.3k→18k，用户 client_gone 放弃）。
+    /// 修复后：第 3 次同结果即判定无进展，下一轮强制收口出答案。
+    #[test]
+    fn no_progress_fires_on_real_poi_research_loop() {
+        // search_probe.exe 实测：这 4 种措辞的结果体 sha256 完全一致（805B）
+        let identical = "[1] 长沙 - 维基百科\n[2] 长沙旅游攻略 - 携程\n[3] 湖南省图书馆";
+
+        let two = vec![
+            sig("web_search_tool", r#"{"query":"长沙 唯一星城"}"#, identical),
+            sig("web_search_tool", r#"{"query":"长沙 维一星城 小区"}"#, identical),
+        ];
+        assert!(!should_collar_for_no_progress(&two), "2 次同结果还不足以判定（阈值 {}）", NO_PROGRESS_MIN);
+
+        let three = {
+            let mut v = two.clone();
+            v.push(sig("web_search_tool", r#"{"query":"长沙 唯一新城 小区 二手房"}"#, identical));
+            v
+        };
+        assert!(should_collar_for_no_progress(&three),
+            "3 次不同措辞拿到完全相同结果 → 必须提前收口，不能烧满 max_iterations");
+    }
+
+    /// 同参数重试不该收口：那是网络抖动/超时，重试有意义。
+    #[test]
+    fn same_args_retry_does_not_collar() {
+        let r = "[1] 无结果";
+        let v = vec![
+            sig("web_search_tool", r#"{"query":"长沙 唯一星城"}"#, r),
+            sig("web_search_tool", r#"{"query":"长沙 唯一星城"}"#, r),
+            sig("web_search_tool", r#"{"query":"长沙 唯一星城"}"#, r),
+        ];
+        assert!(!should_collar_for_no_progress(&v),
+            "参数完全相同 = 网络重试，不是换措辞重搜，不该打断");
+    }
+
+    /// 每次结果都不同 = 检索有进展，即使换了 4 种措辞也不该收口。
+    #[test]
+    fn differing_results_do_not_collar() {
+        let v = vec![
+            sig("web_search_tool", r#"{"query":"杭州 二手房 价格"}"#, "[1] 杭州二手房均价 3.2万"),
+            sig("web_search_tool", r#"{"query":"杭州 拱墅区 二手房"}"#, "[1] 拱墅区均价 2.8万"),
+            sig("web_search_tool", r#"{"query":"杭州 西湖区 二手房"}"#, "[1] 西湖区均价 4.1万"),
+            sig("web_search_tool", r#"{"query":"杭州 滨江区 二手房"}"#, "[1] 滨江区均价 3.9万"),
+        ];
+        assert!(!should_collar_for_no_progress(&v), "结果各异 = 有进展，不该收口");
+    }
+
+    /// 本地工具反复调用是正常行为（如连查 3 次时间、3 次记忆写入），绝不能被打断。
+    /// 用的是 tools/mod.rs 里**真实注册**的工具名（datetime / memory_* / file_* / shell）。
+    #[test]
+    fn local_tools_never_collar() {
+        let r = "2026-09-13 21:53";
+        for name in ["datetime", "memory_store", "memory_recall", "memory_forget",
+                     "file_read", "file_write", "file_edit", "glob_search",
+                     "content_search", "shell"] {
+            let v = vec![
+                sig(name, r#"{"a":1}"#, r),
+                sig(name, r#"{"a":2}"#, r),
+                sig(name, r#"{"a":3}"#, r),
+            ];
+            assert!(!should_collar_for_no_progress(&v),
+                "{} 是本地工具，反复调用正常，不该触发收口", name);
+        }
+    }
+
+    /// 边界：最后一次调用是本地工具时，即便前面检索已无进展也不收口
+    /// （判据以最后一次为准 —— 那种情况模型已转向别的工作）。
+    #[test]
+    fn last_call_must_be_retrieval() {
+        let r = "[1] 泛化结果";
+        let v = vec![
+            sig("web_search_tool", r#"{"query":"a"}"#, r),
+            sig("web_search_tool", r#"{"query":"b"}"#, r),
+            sig("web_search_tool", r#"{"query":"c"}"#, r),
+            sig("datetime", r#"{"expression":"1+1"}"#, "2"),
+        ];
+        assert!(!should_collar_for_no_progress(&v), "最后一次是本地工具 → 不收口");
+    }
+
+    /// 空记录不 panic。
+    #[test]
+    fn empty_sigs_no_collar() {
+        assert!(!should_collar_for_no_progress(&[]));
+    }
+
+    /// 收口提示必须**明令禁止**道歉式开场 —— 这是用户的核心诉求，
+    /// 用测试锁死，防止将来改文案时又把「抱歉，尝试了多次检索…」放回去。
+    #[test]
+    fn collar_prompt_forbids_apology_and_demands_own_knowledge() {
+        assert!(COLLAR_PROMPT.contains("禁止"), "收口提示必须含禁止道歉的指令");
+        assert!(COLLAR_PROMPT.contains("抱歉"), "必须点名禁止的正是那句道歉文案");
+        assert!(COLLAR_PROMPT.contains("你自己已有的知识"), "必须要求用自身知识作答");
+        assert!(COLLAR_PROMPT.contains("停止调用任何工具"), "必须停止工具调用");
+    }
+
+    /// system prompt 必须承载「搜索只是工具之一、搜不到就自己答」的策略。
+    /// 历史根因：prompt 只有一句自我介绍，模型没有任何工具使用指引。
+    #[test]
+    fn system_prompt_carries_search_policy() {
+        let p = crate::config::Config::default().agent.system_prompt;
+        assert!(p.contains("联网搜索只是"), "必须说明搜索只是工具之一");
+        assert!(p.contains("不要把它当成答案"), "必须教模型判断相关性");
+        assert!(p.contains("用你自己已有的知识回答"), "必须给出搜不到时的出路");
+        assert!(p.contains("不要编造"), "必须强调诚实优先");
+        assert!(p.len() > 200, "策略 prompt 不该再是一句话（实测 {} 字节）", p.len());
+    }
+
+    /// 裸问重试提示必须带上用户原问题（否则重试等于问空气）。
+    #[test]
+    fn bare_retry_preserves_user_question() {
+        let p = bare_retry_prompt("长沙市唯一星城小区是位于省图书馆对面吗");
+        assert!(p.contains("长沙市唯一星城小区是位于省图书馆对面吗"));
+        assert!(p.contains("不要用任何工具"));
     }
 }
