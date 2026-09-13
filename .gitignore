@@ -1,3 +1,6 @@
 /target
 # CI-staged core binary for the desktop bundle (P805)
 desktop/src-tauri/binaries/
+
+# 本地构建产物（cargo ndk 输出的 .so）
+dist-cdylib/
