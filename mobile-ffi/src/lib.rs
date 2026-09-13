@@ -32,7 +32,7 @@ use ulnclaw::session::sqlite::SqliteSessionStore;
 use ulnclaw::tools::context::ToolContext;
 use ulnclaw::tools::ToolRegistry;
 
-const VERSION: &str = "0.6.0-ulnclaw-mobile";
+const VERSION: &str = "0.6.1-ulnclaw-mobile";
 
 // ─────────────────────────── state ───────────────────────────
 

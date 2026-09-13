@@ -31,7 +31,7 @@ echo
 echo "=== 2. needle 校验 .a 是 ulnclaw 引擎 ==="
 ssh -o ConnectTimeout=30 "$MAC" bash -s <<'EOF'
 A=~/Projects/app/omnimind-ios/OmniMind/ZClaw/Libs/libzclaw-device.a
-for n in "0.6.0-ulnclaw-mobile" "联网搜索只是"; do
+for n in "0.6.1-ulnclaw-mobile" "联网搜索只是"; do
   if grep -qa "$n" "$A" 2>/dev/null; then echo "  ✓ 含 $n"; else echo "  ❌ 缺 $n"; fi
 done
 EOF

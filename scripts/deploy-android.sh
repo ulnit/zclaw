@@ -12,7 +12,7 @@ for abi in arm64-v8a armeabi-v7a; do
   cp -f "$SRC/$abi/libzclaw.so" "$APP/$abi/libzclaw.so"
   echo "  旧=$before 新=$(stat -c %s "$APP/$abi/libzclaw.so")"
   ok=1
-  for n in "0.6.0-ulnclaw-mobile" "cn.bing.com" "联网搜索只是"; do
+  for n in "0.6.1-ulnclaw-mobile" "cn.bing.com" "联网搜索只是"; do
     if grep -qa "$n" "$APP/$abi/libzclaw.so"; then echo "  ✓ $n"; else echo "  ❌ 缺 $n"; ok=0; fi
   done
   if grep -qa "0.5.2-mobile" "$APP/$abi/libzclaw.so"; then echo "  ❌ 仍含旧版串"; ok=0; else echo "  ✓ 无旧版串"; fi

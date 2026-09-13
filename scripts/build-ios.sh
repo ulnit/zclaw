@@ -32,7 +32,7 @@ echo
 echo "==> needle 校验（确认是 ulnclaw 引擎，非旧 zclaw）"
 ok=1
 for lib in libzclaw-device.a libzclaw-sim.a; do
-  for n in "0.6.0-ulnclaw-mobile" "联网搜索只是"; do
+  for n in "0.6.1-ulnclaw-mobile" "联网搜索只是"; do
     if grep -qa "$n" "$OUT_DIR/$lib"; then echo "  ✓ $lib 含 $n"; else echo "  ❌ $lib 缺 $n"; ok=0; fi
   done
 done
