@@ -407,8 +407,26 @@ struct ApiStreamDelta {
     content: Option<String>,
     #[serde(default)]
     reasoning_content: Option<String>,
+    // 🔴 mobile-ffi 必需的上游补丁（与 zclaw 0.5.x 同款修复）：
+    // reasoning 字段名跨 provider 不稳定。DeepSeek 原生用 `reasoning_content`，
+    // 但经 OpenRouter/部分渠道（实测 deepseek-v4.1-flash）发的是 `reasoning`
+    // + `reasoning_details`（数组 [{type,text,format,index}]），**从不发**
+    // reasoning_content。只读 reasoning_content 会 100% 丢弃思考流——
+    // 推理模型思考期（实测 16s、1930 字）正文为空、reasoning 又被丢，
+    // 客户端整轮收不到任何增量 → 空气泡 / 触发回退。
+    #[serde(default)]
+    reasoning: Option<String>,
+    #[serde(default)]
+    reasoning_details: Option<Vec<ApiReasoningDetail>>,
     #[serde(default)]
     tool_calls: Option<Vec<ApiStreamToolCall>>,
+}
+
+/// reasoning_details[] 元素（OpenRouter 形态）：只取 text。
+#[derive(Deserialize, Debug, Default)]
+struct ApiReasoningDetail {
+    #[serde(default)]
+    text: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -444,7 +462,20 @@ pub fn parse_stream_chunk(data: &str) -> crate::error::Result<crate::provider::S
     };
     if let Some(choice) = chunk.choices.into_iter().next() {
         out.delta_content = choice.delta.content;
-        out.delta_reasoning = choice.delta.reasoning_content;
+        // 🔴 reasoning 三来源合并（优先级 reasoning_content > reasoning >
+        // reasoning_details[].text）：跨 provider 字段名不稳定，实测
+        // deepseek-v4.1-flash 走 reasoning+reasoning_details、从不发
+        // reasoning_content。只读单一字段 = 思考流 100% 丢弃（真机空气泡根因）。
+        out.delta_reasoning = choice
+            .delta
+            .reasoning_content
+            .or(choice.delta.reasoning)
+            .or_else(|| {
+                choice
+                    .delta
+                    .reasoning_details
+                    .map(|details| details.into_iter().filter_map(|d| d.text).collect::<String>())
+            });
         out.finish_reason = choice.finish_reason;
         for tc in choice.delta.tool_calls.unwrap_or_default() {
             out.tool_call_deltas.push(crate::provider::ToolCallDelta {
