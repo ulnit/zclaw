@@ -25,7 +25,7 @@ use std::ffi::{c_char, CStr, CString};
 use std::panic;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use ulnclaw::agent::{Agent, AgentCallbacks, AgentConfig};
+use ulnclaw::agent::{stream_scope, Agent, AgentCallbacks, AgentConfig, StreamEvent};
 use ulnclaw::config::UlncLawConfig;
 use ulnclaw::provider::{Message, Role};
 use ulnclaw::session::sqlite::SqliteSessionStore;
@@ -187,20 +187,25 @@ fn build_agent(st: &Arc<State>, with_tools: bool) -> Agent {
     agent.with_tool_context(context).with_store(st.store.clone())
 }
 
-fn stream_callbacks(st: &Arc<State>) -> AgentCallbacks {
+fn stream_callbacks(st: &Arc<State>, streamed_any: Arc<AtomicBool>) -> AgentCallbacks {
     // no_progress 跟踪状态（每次 chat 一份，随 callbacks 闭包捕获）
     let sigs: Arc<Mutex<Vec<(String, u64, u64)>>> = Arc::new(Mutex::new(Vec::new()));
     let last_args: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
 
     let mut cb = AgentCallbacks::default();
 
-    // 正文增量 → text chunk（App 流式渲染）
+    // 🔴 **不要**在这里设 on_stream_delta 推 text chunk！
+    // ulnclaw 在每个 delta 处**同时**调两个通道（agent/mod.rs:1311-1316）：
+    //   emit_stream_event(StreamEvent::Delta(visible))  ← stream_scope emitter
+    //   callbacks.on_stream_delta(&visible)             ← 本回调
+    // 两处都 push_chunk 会让正文**逐段翻倍**（端到端测试实测：
+    // 「我是我是爻荚（爻荚（UlnClaw）UlnClaw），mock-answer，mock-answer」）。
+    // 正文统一由 stream_scope 的 emitter 推送——那条通道同时是
+    // `stream: STREAM_EMITTER.try_with(...).is_ok()` 的开关，必须在。
+    // on_stream_delta 仅用于置 streamed_any 标志（供 content 兜底判断），不推数据。
     {
-        let st = st.clone();
-        cb.on_stream_delta = Some(Box::new(move |t: &str| {
-            if !t.is_empty() {
-                push_chunk(&st, Chunk::text(t));
-            }
+        cb.on_stream_delta = Some(Box::new(move |_t: &str| {
+            streamed_any.store(true, Ordering::SeqCst);
         }));
     }
 
@@ -280,16 +285,45 @@ async fn run_chat(st: Arc<State>, session_id: String, text: String) {
 
     let agent = Arc::new(build_agent(&st, true));
     agent.wire_runners();
-    let _ = agent.set_callbacks(stream_callbacks(&st)).await;
+    // 🔴 streamed_any：标记本轮是否流式吐出过正文。结束后若为 false 而
+    // RunResult.content 非空（非流式路径），把 content 一次性补发为 text chunk。
+    let streamed_any = Arc::new(AtomicBool::new(false));
+    let _ = agent
+        .set_callbacks(stream_callbacks(&st, streamed_any.clone()))
+        .await;
+
+    // 🔴 根因修复：ulnclaw 的流式开关是 task-local STREAM_EMITTER ——
+    //    `stream: STREAM_EMITTER.try_with(|_| ()).is_ok()`（agent/mod.rs:1270）。
+    //    不包 stream_scope 时 provider 走**非流式**（后端日志实证 is_stream:false），
+    //    on_stream_delta 永不触发，正文只存在于 RunResult.content ——
+    //    此前 content 又被 `let _ = final_text` 丢弃 → App 收不到一个字，
+    //    卡在「…」空气泡（真机实测 Who are you 无响应，后端 200 + 178 tokens）。
+    //    修复：emitter 把 StreamEvent::Delta 推进 chunk 队列（与 on_stream_delta
+    //    双通道，任一到达即算 streamed_any），整个 run 包进 scope。
+    let sink_for_scope = st.sink.clone();
+    let streamed_for_scope = streamed_any.clone();
+    let emitter = Arc::new(move |ev: StreamEvent| {
+        if let StreamEvent::Delta(t) = ev {
+            if !t.is_empty() {
+                streamed_for_scope.store(true, Ordering::SeqCst);
+                if let Ok(mut q) = sink_for_scope.lock() {
+                    q.push(Chunk::text(&t));
+                }
+            }
+        }
+    });
 
     // 内层任务可被 abort（用户取消 / no_progress 收口），外层负责收尾。
     let agent2 = agent.clone();
     let sid = session_id.clone();
     let msg = text.clone();
     let inner = tokio::spawn(async move {
-        agent2
-            .run_with_session(&msg, history_arg, Some(&sid))
-            .await
+        // stream_scope 必须在 run 所在 task 内包裹（task-local 语义）
+        stream_scope(
+            emitter,
+            agent2.run_with_session(&msg, history_arg, Some(&sid)),
+        )
+        .await
     });
     if let Ok(mut slot) = st.abort_slot.lock() {
         *slot = Some(inner.abort_handle());
@@ -307,6 +341,13 @@ async fn run_chat(st: Arc<State>, session_id: String, text: String) {
     match outcome {
         Ok(Ok(result)) => {
             final_text = result.content.clone();
+            // 🔴 content 兜底：若整轮一个字都没流式吐出（如非流式降级路径、
+            // 或 provider 不支持 stream）而 RunResult 有正文，一次性补发。
+            // streamed_any=true 时绝不补发（delta 已经推过，补发=重复渲染）。
+            if !streamed_any.load(Ordering::SeqCst) && !final_text.trim().is_empty() {
+                push_chunk(&st, Chunk::text(&final_text));
+                streamed_any.store(true, Ordering::SeqCst);
+            }
             // ulnclaw 烧满迭代时返回这句固定文本 —— 视同没收口，裸问重试
             if final_text.trim().is_empty() || final_text.starts_with("Reached the iteration budget")
             {
@@ -339,22 +380,39 @@ async fn run_chat(st: Arc<State>, session_id: String, text: String) {
         let retry_agent = Arc::new(build_agent(&st, false));
         retry_agent.wire_runners();
         let mut cb = AgentCallbacks::default();
-        let sink = st.sink.clone();
-        cb.on_stream_delta = Some(Box::new(move |t: &str| {
-            if t.is_empty() {
-                return;
-            }
-            if let Ok(mut q) = sink.lock() {
-                q.push(Chunk::text(t));
-            }
+        let streamed2 = Arc::new(AtomicBool::new(false));
+        let streamed2_cb = streamed2.clone();
+        // 🔴 同主路径：on_stream_delta 不推数据（emitter2 已推），仅置标志，
+        // 否则正文逐段翻倍。
+        cb.on_stream_delta = Some(Box::new(move |_t: &str| {
+            streamed2_cb.store(true, Ordering::SeqCst);
         }));
         let _ = retry_agent.set_callbacks(cb).await;
-        match retry_agent
-            .run(&prompt::bare_retry_prompt(&text), None)
-            .await
-        {
+        // 同样包 stream_scope（否则又走非流式、delta 回调不触发）
+        let sink2 = st.sink.clone();
+        let streamed2_scope = streamed2.clone();
+        let emitter2 = Arc::new(move |ev: StreamEvent| {
+            if let StreamEvent::Delta(t) = ev {
+                if !t.is_empty() {
+                    streamed2_scope.store(true, Ordering::SeqCst);
+                    if let Ok(mut q) = sink2.lock() {
+                        q.push(Chunk::text(&t));
+                    }
+                }
+            }
+        });
+        // 🔴 E0716：bare_retry_prompt 的临时 String 必须先 let 绑定，
+        // 否则在 retry_fut（借用它）存活期间就被释放。
+        let retry_prompt = prompt::bare_retry_prompt(&text);
+        let retry_fut = retry_agent.run(&retry_prompt, None);
+        let outcome2 = stream_scope(emitter2, retry_fut).await;
+        match outcome2 {
             Ok(r) => final_text = r.content,
             Err(e) => push_chunk(&st, Chunk::error(&format!("重试失败: {}", e))),
+        }
+        // content 兜底（与主路径同理：非流式时 delta 回调不触发）
+        if !streamed2.load(Ordering::SeqCst) && !final_text.trim().is_empty() {
+            push_chunk(&st, Chunk::text(&final_text));
         }
         if final_text.trim().is_empty() {
             push_chunk(&st, Chunk::error("模型未返回内容（上游异常），请重试或更换模型"));
