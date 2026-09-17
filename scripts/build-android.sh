@@ -14,7 +14,7 @@ OUT_DIR="$REPO_ROOT/dist/android"
 mkdir -p "$OUT_DIR/arm64-v8a" "$OUT_DIR/armeabi-v7a"
 
 # needle：版本串（区分旧 zclaw 库）+ 引擎标识 + Bing 源 + 移动端 prompt
-NEEDLES=("0.6.1-ulnclaw-mobile" "cn.bing.com" "联网搜索只是" "ulnclaw")
+NEEDLES=("0.6.2-ulnclaw-mobile" "cn.bing.com" "联网搜索只是" "ulnclaw")
 
 verify() {
   local out="$1"

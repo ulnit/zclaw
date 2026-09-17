@@ -32,7 +32,7 @@ use ulnclaw::session::sqlite::SqliteSessionStore;
 use ulnclaw::tools::context::ToolContext;
 use ulnclaw::tools::ToolRegistry;
 
-const VERSION: &str = "0.6.1-ulnclaw-mobile";
+const VERSION: &str = "0.6.2-ulnclaw-mobile";
 
 // ─────────────────────────── state ───────────────────────────
 
@@ -282,7 +282,40 @@ fn truncate_chars(s: &str, max: usize) -> String {
 
 // ─────────────────────────── chat 主流程 ───────────────────────────
 
+/// 解析多模态 envelope（App 发图片时经 FFI 传 JSON 封装）：
+///   `{"__zclaw_multimodal":true,"text":"...","image_data_url":"data:image/...;base64,..."}`
+/// 返回 (喂给模型的真实文本, 图片列表)。
+/// - 非 envelope（普通文本）→ 原样返回，images 空。
+/// - envelope 且 image 是 data:image/ → 文本（纯图时占位「[图片]」）+ 1 张 MessageImage。
+/// - envelope 但 image 非 data:image/（异常）→ 返回 text 字段，images 空（不喂 JSON）。
+/// 🔴 旧版把整段 JSON 当纯文本喂给模型 → 模型只看到 base64 字符串，图片失效。
+fn parse_multimodal_envelope(text: &str) -> (String, Vec<ulnclaw::provider::MessageImage>) {
+    match serde_json::from_str::<serde_json::Value>(text) {
+        Ok(v) if v.get("__zclaw_multimodal").and_then(|b| b.as_bool()) == Some(true) => {
+            let t = v.get("text").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let img = v.get("image_data_url").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            if img.starts_with("data:image/") {
+                // 引擎 run_with_session_images 内部会把 user_text 落库（persist=true）；
+                // 纯图无文字时给个「[图片]」占位，保证历史轮次非空、上下文连续。
+                let model_text = if t.trim().is_empty() { "[图片]".to_string() } else { t };
+                (model_text, vec![ulnclaw::provider::MessageImage { url: img, media_type: None }])
+            } else {
+                (t, Vec::new())
+            }
+        }
+        _ => (text.to_string(), Vec::new()),
+    }
+}
+
 async fn run_chat(st: Arc<State>, session_id: String, text: String) {
+    // 🔴 多模态 envelope 解析（见 parse_multimodal_envelope）：拆出真实文本 + 图片，
+    //    images 非空时走 run_with_session_images（引擎把图注入本轮 user 消息 content parts）。
+    let (user_text, images): (String, Vec<ulnclaw::provider::MessageImage>) =
+        parse_multimodal_envelope(&text);
+    // 🔴 裸问重试基准用解析后的真实文本（多模态时 user_text 已剥离 envelope JSON），
+    //    保留一份供下方 bare_retry_prompt 使用（user_text 本身要 move 进 spawn）。
+    let retry_base = user_text.clone();
+
     // 会话建档（zclaw touch_session 等价物）：标题取首条消息前 30 字。
     st.store
         .ensure_session(&session_id, "mobile", Some(&st.cfg.default_model), Some(&st.cfg.workspace_dir))
@@ -339,14 +372,26 @@ async fn run_chat(st: Arc<State>, session_id: String, text: String) {
     // 内层任务可被 abort（用户取消 / no_progress 收口），外层负责收尾。
     let agent2 = agent.clone();
     let sid = session_id.clone();
-    let msg = text.clone();
+    // 🔴 msg=解析后的真实文本（多模态时不再是整段 envelope JSON）；
+    //    images 非空走 run_with_session_images（引擎把图注入本轮 user 消息 content parts）。
+    let msg = user_text;
     let inner = tokio::spawn(async move {
-        // stream_scope 必须在 run 所在 task 内包裹（task-local 语义）
-        stream_scope(
-            emitter,
-            agent2.run_with_session(&msg, history_arg, Some(&sid)),
-        )
-        .await
+        // stream_scope 必须在 run 所在 task 内包裹（task-local 语义）。
+        // 🔴 两个 async fn 的 opaque Future 类型不同，不能先选 future 再统一 await，
+        //    必须分支内各自 await（返回类型同为 Result<RunResult, AgentError>）。
+        if images.is_empty() {
+            stream_scope(
+                emitter,
+                agent2.run_with_session(&msg, history_arg, Some(&sid)),
+            )
+            .await
+        } else {
+            stream_scope(
+                emitter,
+                agent2.run_with_session_images(&msg, images, history_arg, Some(&sid)),
+            )
+            .await
+        }
     });
     if let Ok(mut slot) = st.abort_slot.lock() {
         *slot = Some(inner.abort_handle());
@@ -434,7 +479,7 @@ async fn run_chat(st: Arc<State>, session_id: String, text: String) {
         });
         // 🔴 E0716：bare_retry_prompt 的临时 String 必须先 let 绑定，
         // 否则在 retry_fut（借用它）存活期间就被释放。
-        let retry_prompt = prompt::bare_retry_prompt(&text);
+        let retry_prompt = prompt::bare_retry_prompt(&retry_base);
         let retry_fut = retry_agent.run(&retry_prompt, None);
         let outcome2 = stream_scope(emitter2, retry_fut).await;
         match outcome2 {
@@ -910,5 +955,60 @@ mod tests {
         assert!(classify_error("connection refused").contains("连接"));
         // 非传输错误原样保留（401/quota 不该触发回退）
         assert_eq!(classify_error("http 401 unauthorized"), "http 401 unauthorized");
+    }
+
+    // ── 多模态 envelope 解析（用户报障：图片被当 JSON 文本喂给模型）──
+    #[test]
+    fn envelope_plain_text_passthrough() {
+        // 普通文本原样返回、无图
+        let (t, imgs) = parse_multimodal_envelope("你好，帮我看看");
+        assert_eq!(t, "你好，帮我看看");
+        assert!(imgs.is_empty());
+    }
+
+    #[test]
+    fn envelope_json_lookalike_text_not_misparsed() {
+        // 用户真的发一段 JSON 文本（无 __zclaw_multimodal 标记）→ 原样透传，不当 envelope
+        let raw = r#"{"foo":"bar"}"#;
+        let (t, imgs) = parse_multimodal_envelope(raw);
+        assert_eq!(t, raw);
+        assert!(imgs.is_empty());
+    }
+
+    #[test]
+    fn envelope_with_image_extracts_text_and_image() {
+        // 图文并存：文本=真实文字，图=data URL
+        let raw = r#"{"__zclaw_multimodal":true,"text":"这是什么","image_data_url":"data:image/jpeg;base64,/9j/4AAQ"}"#;
+        let (t, imgs) = parse_multimodal_envelope(raw);
+        assert_eq!(t, "这是什么");
+        assert_eq!(imgs.len(), 1);
+        assert_eq!(imgs[0].url, "data:image/jpeg;base64,/9j/4AAQ");
+    }
+
+    #[test]
+    fn envelope_image_only_gets_placeholder_text() {
+        // 纯图无文字：占位「[图片]」，保证历史轮次非空
+        let raw = r#"{"__zclaw_multimodal":true,"text":"","image_data_url":"data:image/png;base64,iVBOR"}"#;
+        let (t, imgs) = parse_multimodal_envelope(raw);
+        assert_eq!(t, "[图片]");
+        assert_eq!(imgs.len(), 1);
+    }
+
+    #[test]
+    fn envelope_bad_image_url_falls_back_to_text_only() {
+        // image_data_url 不是 data:image/ 前缀（异常客户端）→ 取 text、不喂 JSON、无图
+        let raw = r#"{"__zclaw_multimodal":true,"text":"看看","image_data_url":"http://x/y.jpg"}"#;
+        let (t, imgs) = parse_multimodal_envelope(raw);
+        assert_eq!(t, "看看");
+        assert!(imgs.is_empty());
+    }
+
+    #[test]
+    fn envelope_flag_false_is_plain_text() {
+        // __zclaw_multimodal=false → 整段当普通文本（不误解析）
+        let raw = r#"{"__zclaw_multimodal":false,"text":"a","image_data_url":"data:image/png;base64,x"}"#;
+        let (t, imgs) = parse_multimodal_envelope(raw);
+        assert_eq!(t, raw);
+        assert!(imgs.is_empty());
     }
 }

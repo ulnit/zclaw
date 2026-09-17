@@ -46,7 +46,7 @@ ls -la "$OUT/libzclaw.so"
 echo
 echo "==> needle 校验"
 ok=1
-for n in "0.6.1-ulnclaw-mobile" "cn.bing.com" "联网搜索只是"; do
+for n in "0.6.2-ulnclaw-mobile" "cn.bing.com" "联网搜索只是"; do
   if grep -qa "$n" "$OUT/libzclaw.so"; then
     echo "  ✓ 含: $n"
   else

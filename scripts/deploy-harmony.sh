@@ -15,7 +15,7 @@ for dst in "$HARM/entry/src/main/cpp/libs/arm64-v8a" "$HARM/entry/libs/arm64-v8a
   cp -f "$SRC" "$dst/libzclaw.so"
   echo "  旧=$before 新=$(stat -c %s "$dst/libzclaw.so")"
   ok=1
-  for n in "0.6.1-ulnclaw-mobile" "cn.bing.com" "联网搜索只是"; do
+  for n in "0.6.2-ulnclaw-mobile" "cn.bing.com" "联网搜索只是"; do
     if grep -qa "$n" "$dst/libzclaw.so"; then echo "  ✓ $n"; else echo "  ❌ 缺 $n"; ok=0; fi
   done
   if grep -qa "0.5.2-mobile" "$dst/libzclaw.so"; then echo "  ❌ 仍含旧版串"; ok=0; else echo "  ✓ 无旧版串"; fi
