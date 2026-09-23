@@ -1,4 +1,4 @@
-//! `ulnclaw setup` — onboarding wizard (lean port of hermes `setup.py`).
+//! `ulnclaw setup` — onboarding wizard (lean aligned with hermes `setup.py`).
 //!
 //! Hermes ships a 3.6k-line interactive wizard (model/tts/terminal/gateway/
 //! tools/telemetry/agent sections, quick + blank-slate modes, config backup,

@@ -1,4 +1,4 @@
-//! Slack app manifest generator — port of hermes `hermes_cli/slack_cli.py`.
+//! Slack app manifest generator — aligned with hermes `hermes_cli/slack_cli.py`.
 //!
 //! `ulnclaw slack manifest` emits the Slack app manifest JSON registering
 //! every platform command as a native Slack slash (`/help`, `/skills`, …)

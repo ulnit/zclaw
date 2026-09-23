@@ -151,11 +151,11 @@ Conversation persistence with lineage tracking for compression scenarios.
 - `Session` - Conversation state with metadata
 - `SessionMetadata` - User ID, platform, model info
 - `export` - verifiable Markdown session export (hermes
-  `session_export_md.py` / `session_export_html.py` port): frontmatter +
+  `session_export_md.py` / `session_export_html.py` implementation): frontmatter +
   message headings + tool-call blocks + SHA256 verification footer, or a
   standalone styled HTML document — both with `manifest.jsonl` entries
 - `recap` - instant local-only session recap (hermes `session_recap.py`
-  port): recent-window turn counts, tool-usage top list, files touched,
+  implementation): recent-window turn counts, tool-usage top list, files touched,
   last ask/reply previews; ANSI/control-char sanitized
 
 **Session Lifecycle:**
@@ -235,7 +235,7 @@ Chrome DevTools Protocol client backing the `browser_*` tools.
 - Browser supervisor: `ULNCLAW_BROWSER_CDP=auto` (the default) launches a
   managed headless Chrome/Chromium (`find_browser_binary`,
   `launch_managed_browser`, `stop_managed_browser`) and waits for the
-  DevTools port before connecting
+  DevTools implementation before connecting
 - SSRF/private-page guard (`browser/guard.rs`, hermes browser-tool guards):
   sensitive-query and cloud-metadata floors fire unconditionally; the
   private-address guard activates for non-loopback endpoints or
@@ -245,7 +245,7 @@ Chrome DevTools Protocol client backing the `browser_*` tools.
   `browser_cdp` calls are allowlisted while the page is private; browser
   outputs are force-redacted before reaching the model
 - Local CDP attach layer (`browser/connect.rs`, hermes `browser_connect.py`
-  port): Chromium-family candidate discovery across macOS/Windows/Linux
+  implementation): Chromium-family candidate discovery across macOS/Windows/Linux
   (incl. WSL `/mnt/c` installs), dual-stack loopback probes
   (`discover_local_cdp_url` checks `127.0.0.1` then `[::1]`), port
   arbitration (`local_port_in_use` → `find_free_debug_port`), and a
@@ -256,7 +256,7 @@ Chrome DevTools Protocol client backing the `browser_*` tools.
   `POST /v1/browser/connect` (verified against `/json/version` before it
   sticks) set a process-lifetime override ahead of `ULNCLAW_BROWSER_CDP`;
   bare `/browser connect` runs the hermes default flow — probe both
-  loopbacks on port 9222, arbitrate a squatted port, auto-launch the debug
+  loopbacks on implementation 9222, arbitrate a squatted implementation, auto-launch the debug
   browser — and injects a system note so the model knows browser tools are
   live; `/browser disconnect` + `POST /v1/browser/disconnect` clear it;
   `GET /v1/browser/status` reports source/mode
@@ -277,7 +277,7 @@ browser_navigate → with_session → resolve_endpoint → CDP connect
 ### 8. Gateway Module (`gateway/mod.rs`)
 
 HTTP surface (axum) exposing the agent to OpenAI-compatible clients —
-a port of hermes' `gateway/platforms/api_server.py` core.
+an implementation matching hermes' `gateway/platforms/api_server.py` core.
 
 **Key Types:**
 - `GatewayState` - agent + store + model identity + optional bearer key +
@@ -350,7 +350,7 @@ auto-deny confirm-tier commands.
 
 ### 9. Models.dev Catalog (`models_dev.rs`)
 
-Multi-provider model inventory ported from hermes `agent/models_dev.py`.
+Multi-provider model inventory aligned with hermes `agent/models_dev.py`.
 Fetches the community models.dev registry with a three-tier cache:
 
 1. **In-memory** — 1h TTL; stale data is served immediately while a single

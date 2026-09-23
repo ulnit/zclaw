@@ -1,4 +1,4 @@
-//! `ulnclaw model` — interactive provider + model picker (lean port of
+//! `ulnclaw model` — interactive provider + model picker (lean aligned with
 //! hermes `cmd_model` / `select_provider_and_model`).
 //!
 //! Hermes' flow: require a TTY, pick a provider, prompt credentials,

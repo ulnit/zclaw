@@ -1,5 +1,5 @@
 //! `ulnclaw import-agent` — import Claude Code / Codex CLI setups into
-//! ulnclaw (hermes `hermes_cli/agent_import.py` port).
+//! ulnclaw (hermes `hermes_cli/agent_import.py` parity).
 //!
 //! detect → parse → map → apply, with a mandatory preview phase
 //! (`--dry-run` writes nothing), per-item imported/skipped/conflict/error

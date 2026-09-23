@@ -1,6 +1,6 @@
 //! Automation blueprints — parameterized automations with typed slots.
 //!
-//! Port of hermes `cron/blueprint_catalog.py` (v2026.8.3): a blueprint
+//! Aligned with hermes `cron/blueprint_catalog.py` (v2026.8.3): a blueprint
 //! is a one-place definition of an automation that every surface can
 //! render natively — the desktop renders a form (one field per slot),
 //! chat surfaces a pre-filled `/blueprint` slash command, and the
@@ -877,7 +877,7 @@ pub fn fill_blueprint(
 }
 
 // ---------------------------------------------------------------------------
-// Chat-side `/blueprint` command support (hermes blueprint_cmd.py port)
+// Chat-side `/blueprint` command support (hermes blueprint_cmd.py parity)
 // ---------------------------------------------------------------------------
 
 /// Levenshtein distance for typo-tolerant blueprint matching (the

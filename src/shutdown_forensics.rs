@@ -1,5 +1,5 @@
 //! Shutdown forensics — capture context when the gateway receives
-//! SIGTERM/SIGINT. Port of hermes `gateway/shutdown_forensics.py`.
+//! SIGTERM/SIGINT. Aligned with hermes `gateway/shutdown_forensics.py`.
 //!
 //! The gateway's shutdown path wants a durable record of who/what
 //! triggered the shutdown so that "the gateway keeps dying" incidents

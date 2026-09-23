@@ -1,4 +1,4 @@
-//! Computer-use backend — port of hermes `tools/computer_use/` (cua-driver).
+//! Computer-use backend — aligned with hermes `tools/computer_use/` (cua-driver).
 //!
 //! Drives the desktop in the background through the `cua-driver` daemon,
 //! speaking MCP over stdio (hermes `cua_backend.py`). Unlike foreground

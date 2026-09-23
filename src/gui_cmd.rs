@@ -1,4 +1,4 @@
-//! `ulnclaw gui` — desktop GUI launcher (lean port of hermes `cmd_gui` /
+//! `ulnclaw gui` — desktop GUI launcher (lean aligned with hermes `cmd_gui` /
 //! `hermes desktop`).
 //!
 //! The desktop is the hermes-style Electron shell in `desktop-electron/`

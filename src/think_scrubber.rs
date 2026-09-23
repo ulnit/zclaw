@@ -1,5 +1,5 @@
 //! Stateful scrubber for reasoning/thinking blocks in streamed assistant
-//! text — port of hermes `agent/think_scrubber.py` (v2026.8.3).
+//! text — aligned with hermes `agent/think_scrubber.py` (v2026.8.3).
 //!
 //! A per-delta regex strip destroys the state downstream consumers rely on:
 //! when a model streams `<think>` / prose / `</think>` across three deltas,

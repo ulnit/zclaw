@@ -1,4 +1,4 @@
-//! Yuanbao platform adapter — port of hermes
+//! Yuanbao platform adapter — aligned with hermes
 //! `gateway/platforms/yuanbao.py` (functional core) @ v2026.8.3.
 //!
 //! Connects to the Yuanbao WebSocket gateway: sign-token HTTP auth
@@ -8,18 +8,18 @@
 //! decode → ulnclaw dispatch, and `send_c2c_message` /
 //! `send_group_message` text replies with 4000-char chunking.
 //!
-//! Outbound media is ported (hermes `yuanbao_media.py` +
+//! Outbound media is implemented (hermes `yuanbao_media.py` +
 //! MediaSendHandler): `MEDIA:` reply paths upload through
 //! `genUploadInfo` temporary COS credentials + a signed
 //! global-accelerate PUT, then dispatch as TIMImageElem (parsed
 //! PNG/JPEG/GIF/WebP dimensions, md5 uuid, TIM `image_format`) or
 //! TIMFileElem, caption appended as a TIMTextElem.
 //!
-//! Stickers are ported (hermes `yuanbao_sticker.py`): inbound
+//! Stickers are implemented (hermes `yuanbao_sticker.py`): inbound
 //! TIMFaceElem renders as `[emoji: <name>]` and `STICKER:<name>`
 //! reply tags send catalog stickers as TIMFaceElem (fuzzy lookup).
 //!
-//! Inbound media is ported (hermes ExtractContentMiddleware +
+//! Inbound media is implemented (hermes ExtractContentMiddleware +
 //! MediaResolveMiddleware): image/file refs resolve through
 //! `/api/resource/v1/download` (resourceId exchange, one 401 token
 //! refresh retry), download into the media cache as attachments, and
@@ -27,7 +27,7 @@
 //!
 //! Known differences: the inbound middleware pipeline collapses into a
 //! direct decode→gate→dispatch path (recall guard and owner commands
-//! not ported; forwarded WeChat chat records — elem_type 1009 — ARE
+//! not implemented; forwarded WeChat chat records — elem_type 1009 — ARE
 //! deep-parsed into the prompt, minus the WS RUNNING loading
 //! heartbeat); anchor patching matches
 //! by resourceId instead of zipping; quote/observed-media backfill
@@ -37,7 +37,7 @@
 //! "own message" variant; the resolve-concurrency config knob is fixed
 //! at the hermes default
 //! (6); the slow-response notifier and reply heartbeats are not
-//! ported.
+//! implemented.
 
 use crate::messaging::{Dispatcher, MessageEvent};
 use crate::pairing::PairingStore;
@@ -1052,7 +1052,7 @@ const MEDIA_DOWNLOAD_TIMEOUT_SECS: u64 = 60;
 const RESOURCE_CACHE_TTL_SECS: u64 = 24 * 60 * 60;
 /// hermes `_RESOURCE_CACHE_MAX_SIZE`.
 const RESOURCE_CACHE_MAX_SIZE: usize = 256;
-/// hermes `_DEFAULT_RESOLVE_CONCURRENCY` (config knob not ported).
+/// hermes `_DEFAULT_RESOLVE_CONCURRENCY` (config knob not implemented).
 const DEFAULT_RESOLVE_CONCURRENCY: usize = 6;
 
 /// hermes `PlaceholderFilterMiddleware.SKIPPABLE_PLACEHOLDERS`.
@@ -1807,7 +1807,7 @@ async fn resolve_backfill_refs(
 /// hermes run.py reply-to pointer injection: `[Replying to: "..."]`
 /// prefix (snippet capped at 500 chars) when both the quote id and
 /// text are present. The "replying to your own message" variant is not
-/// ported (ulnclaw does not track the bot's platform message ids).
+/// implemented (ulnclaw does not track the bot's platform message ids).
 pub fn render_reply_to_prefix(
     text: &str,
     quote_id: Option<&str>,

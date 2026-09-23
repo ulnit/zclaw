@@ -1,4 +1,4 @@
-//! x_search — port of hermes' tools/x_search_tool.py
+//! x_search — aligned with hermes' tools/x_search_tool.py
 //!
 //! Search X (Twitter) posts via xAI's built-in `x_search` Responses-API
 //! server tool. Registered only when `XAI_API_KEY` is available (hermes

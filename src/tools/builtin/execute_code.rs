@@ -1,4 +1,4 @@
-//! execute_code — port of hermes' tools/code_execution_tool.py
+//! execute_code — aligned with hermes' tools/code_execution_tool.py
 //!
 //! Runs Python code in a subprocess sandbox. The script gets stdout capture;
 //! the final result must be printed. A `hermes_tools`-style shim module is

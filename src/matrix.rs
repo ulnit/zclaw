@@ -1,4 +1,4 @@
-//! Matrix platform adapter — port of hermes `plugins/platforms/matrix`
+//! Matrix platform adapter — aligned with hermes `plugins/platforms/matrix`
 //! @ v2026.8.3 (adapter.py core behaviors).
 //!
 //! Talks directly to the Matrix Client-Server API (no SDK): password
@@ -20,7 +20,7 @@
 //! `m.room.encrypted` events and skipped with a warning), thread
 //! bookkeeping/session-scoping policies, reactions lifecycle, presence,
 //! read receipts, and the interactive approval/model picker UX are not
-//! ported; display names resolve to the sender's MXID localpart.
+//! implemented; display names resolve to the sender's MXID localpart.
 
 use crate::messaging::{Dispatcher, MediaAttachment, MessageEvent};
 use serde::{Deserialize, Serialize};

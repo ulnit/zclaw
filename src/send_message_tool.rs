@@ -1,4 +1,4 @@
-//! send_message tool (P259) — port of hermes `tools/send_message_tool.py`:
+//! send_message tool (P259) — aligned with hermes `tools/send_message_tool.py`:
 //! cross-channel messaging through the live platform adapters. Actions:
 //! `send` (default), `list`, `react`, `unreact`. Targets accept
 //! `platform` (home channel), `platform:chat_id`, `platform:#channel-name`,

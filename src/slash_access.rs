@@ -1,4 +1,4 @@
-//! Per-platform slash command access control — port of hermes
+//! Per-platform slash command access control — aligned with hermes
 //! `gateway/slash_access.py`.
 //!
 //! This sits beside the existing per-platform allowlists and adds a

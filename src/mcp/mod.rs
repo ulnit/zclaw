@@ -1,4 +1,4 @@
-//! MCP client — port of the core of hermes' tools/mcp_tool.py
+//! MCP client — aligned with the core of hermes' tools/mcp_tool.py
 //!
 //! Model Context Protocol (stdio transport) client: spawns the server
 //! process, performs `initialize`, discovers tools via `tools/list`, and

@@ -1,4 +1,4 @@
-//! IRC platform adapter — port of hermes `plugins/platforms/irc`
+//! IRC platform adapter — aligned with hermes `plugins/platforms/irc`
 //! @ v2026.8.3 (adapter.py).
 //!
 //! Zero-dependency IRC client over tokio TCP (rustls for TLS): the

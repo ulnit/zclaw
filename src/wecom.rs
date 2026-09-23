@@ -1,4 +1,4 @@
-//! WeCom (Enterprise WeChat) platform adapter — port of hermes
+//! WeCom (Enterprise WeChat) platform adapter — aligned with hermes
 //! `plugins/platforms/wecom` @ v2026.8.3 (adapter.py).
 //!
 //! Uses the WeCom **AI Bot WebSocket gateway**: `aibot_subscribe`

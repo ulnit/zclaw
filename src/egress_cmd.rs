@@ -1,4 +1,4 @@
-//! `ulnclaw egress` handlers — port of hermes `hermes_cli/proxy_cli.py`
+//! `ulnclaw egress` handlers — aligned with hermes `hermes_cli/proxy_cli.py`
 //! @ v2026.8.3 (top-level command `hermes egress`; core module
 //! `src/iron_proxy.rs`). The inbound OAuth reverse-proxy command
 //! (`ulnclaw proxy`) lives in `src/proxy_cmd.rs` — different direction,

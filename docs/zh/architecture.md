@@ -176,11 +176,11 @@ registry.register(tool);
   回退；父子谱系；面向网关 API 的会话行查询）
 - `Session` - 带元数据的对话状态
 - `SessionMetadata` - 用户 ID、平台、模型信息
-- `export` - 可校验的 Markdown 会话导出（移植 hermes
+- `export` - 可校验的 Markdown 会话导出（实现 hermes
   `session_export_md.py` / `session_export_html.py`）：frontmatter +
   消息标题 + 工具调用块 + SHA256 校验页脚，或带内联样式的独立 HTML
   文档 —— 两者均写入 `manifest.jsonl`
-- `recap` - 即时的纯本地会话回顾（移植 hermes `session_recap.py`）：
+- `recap` - 即时的纯本地会话回顾（实现 hermes `session_recap.py`）：
   近期窗口轮次统计、工具使用排行、触碰过的文件、最近提问/回复预览；
   过滤 ANSI/控制字符
 
@@ -259,14 +259,14 @@ registry.register(tool);
 - 浏览器监督器：`ULNCLAW_BROWSER_CDP=auto`（默认）启动托管的无头
   Chrome/Chromium（`find_browser_binary`、`launch_managed_browser`、
   `stop_managed_browser`），等待 DevTools 端口就绪后再连接
-- SSRF/私有页面防护（`browser/guard.rs`，hermes 浏览器工具防护移植）：
+- SSRF/私有页面防护（`browser/guard.rs`，hermes 浏览器工具防护实现）：
   敏感查询参数与云元数据底线无条件拦截；非回环端点或容器化终端启用
   私网地址防护（`[security] allow_private_urls` 可退出）；重定向落地复检，
   落入受限地址即清空页面；console/eval 表达式预筛私网 URL 字面量；页面
   处于私网时原始 `browser_cdp` 仅放行白名单方法；浏览器输出进入模型前
   强制脱敏
 - 本地 CDP 接入层（`browser/connect.rs`，hermes `browser_connect.py`
-  移植）：Chromium 系候选二进制发现（macOS/Windows/Linux，含 WSL
+  实现）：Chromium 系候选二进制发现（macOS/Windows/Linux，含 WSL
   `/mnt/c` 安装位）、双栈回环探测（`discover_local_cdp_url` 先
   `127.0.0.1` 后 `[::1]`）、端口仲裁（`local_port_in_use` →
   `find_free_debug_port`）、带诊断的可视调试浏览器启动
@@ -295,7 +295,7 @@ browser_navigate → with_session → resolve_endpoint → CDP 连接
 ### 8. Gateway 模块 (`gateway/mod.rs`)
 
 将 Agent 暴露给 OpenAI 兼容客户端的 HTTP 层（axum）——
-hermes `gateway/platforms/api_server.py` 核心的移植。
+hermes `gateway/platforms/api_server.py` 核心的实现。
 
 **关键类型：**
 - `GatewayState` - agent + store + 模型标识 + 可选 bearer 密钥 +
@@ -362,7 +362,7 @@ fail-closed 自动拒绝（并清理 run 状态）。`always` 授权持久化到
 
 ### 9. Models.dev 目录 (`models_dev.rs`)
 
-移植自 hermes `agent/models_dev.py` 的多 provider 模型清单。拉取社区
+对齐 hermes `agent/models_dev.py` 的多 provider 模型清单。拉取社区
 models.dev 注册表，三级缓存：
 
 1. **内存** —— 1 小时 TTL；过期数据立即返回，由单个后台线程刷新

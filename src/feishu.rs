@@ -1,4 +1,4 @@
-//! Feishu/Lark platform adapter — port of hermes `plugins/platforms/feishu`
+//! Feishu/Lark platform adapter — aligned with hermes `plugins/platforms/feishu`
 //! @ v2026.8.3 (adapter.py, webhook transport).
 //!
 //! Hermes ships two transports: the lark_oapi WebSocket long connection
@@ -31,7 +31,7 @@
 //! `_do_without_validation`), acknowledging each frame with a
 //! `{"code":200}` payload + `biz_rt` header.
 //!
-//! Reactions are ported (hermes processing-status reactions +
+//! Reactions are implemented (hermes processing-status reactions +
 //! reaction-event routing): a `Typing` badge lands on the inbound
 //! message while the agent works and is removed on completion
 //! (`CrossMark` replaces it when the turn fails; `FEISHU_REACTIONS`,
@@ -40,7 +40,7 @@
 //! (`im.message.reaction.created_v1` / `deleted_v1`, bot/app-origin
 //! reactions dropped to break the lifecycle feedback loop).
 //!
-//! Interactive cards are ported (hermes `send_exec_approval` /
+//! Interactive cards are implemented (hermes `send_exec_approval` /
 //! `send_update_prompt` + `_on_card_action_trigger`): approval cards
 //! with Allow Once / Session / Always / Deny buttons ride the
 //! `send_exec_approval` contract, webhook card callbacks resolve them
@@ -51,7 +51,7 @@
 //! (`im.message.message_read_v1`) are explicitly ignored (hermes
 //! `_on_message_read_event`). Known differences: post/card
 //! deep-normalization, per-chat serial queues, and the webhook anomaly
-//! tracker are not ported (non-approval card actions ARE ported: they
+//! tracker are not implemented (non-approval card actions ARE implemented: they
 //! route as `/card <tag> <json>` synthetic COMMAND events) —
 //! text/image/file/audio messages flow through the same
 //! allowlist∪pairing gate as the other adapters.
@@ -1501,7 +1501,7 @@ fn card_action_authorized(
         .unwrap_or(false)
 }
 
-/// hermes `_write_update_prompt_response` (shared with the qqbot port):
+/// hermes `_write_update_prompt_response` (shared with the qqbot parity):
 /// atomically persist the update-prompt answer for the detached update
 /// watcher via tmp + rename.
 fn write_update_response(answer: &str, operator: &str) {

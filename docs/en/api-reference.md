@@ -1224,7 +1224,7 @@ configured model clears the override.  Forks inherit the lock.  Missing
 `{providers, model, provider}` shape.  ulnclaw runs one configured
 provider, so the inventory is that single row (`slug`, `models`,
 `is_user_defined`, `authenticated`, `current`); live catalog probing,
-pricing, and capability enrichment are not ported.
+pricing, and capability enrichment are not implemented.
 
 **Session recap** (`GET /api/sessions/:id/recap`): returns
 `{"object":"ulnclaw.session.recap","session_id":...,"recap":"..."}` —

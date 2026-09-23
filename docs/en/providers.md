@@ -158,7 +158,7 @@ let provider = OpenAiProvider::builder()
 ### Anthropic (Claude)
 
 Native Messages API (`POST /v1/messages`, `x-api-key` auth,
-`anthropic-version: 2023-06-01`) — port of hermes' `anthropic_messages`
+`anthropic-version: 2023-06-01`) — aligned with hermes' `anthropic_messages`
 transport:
 
 ```rust
@@ -686,7 +686,7 @@ let request = ProviderRequest {
 
 Secondary LLM calls — context-compression summaries and vision analysis —
 can run on a different provider/model than the main conversation. This is a
-port of hermes' `agent/auxiliary_client.py` task layer: each task checks
+aligned with hermes' `agent/auxiliary_client.py` task layer: each task checks
 `[auxiliary.<task>]` config first and inherits the main runtime when the
 entry is blank or `"auto"`.
 
@@ -726,7 +726,7 @@ Wired tasks: `compression` (context compressor summary call) and `vision`
 ## Mixture of Agents (MoA)
 
 MoA fans a prompt out to several *reference* models in parallel, then asks an
-*aggregator* model to synthesize their answers into concise guidance — a port
+*aggregator* model to synthesize their answers into concise guidance — a implementation
 of hermes' `moa_loop.py` synthesis path (`aggregate_moa_context`).
 
 Configure presets in `config.toml`:
@@ -775,13 +775,13 @@ Behavior (mirrors hermes):
 - If the aggregator itself fails, the joined reference outputs are returned
   as the synthesis.
 
-Not ported: the persistent `provider: moa` client facade (MoA as the acting
+Not implemented: the persistent `provider: moa` client facade (MoA as the acting
 model for whole sessions), MoA traces, and the privacy filter.
 
 ## Provider Fallback Chain
 
 `[model] fallbacks` lists backup `"provider:model"` entries tried in order
-when a model call fails — a port of hermes' `fallback_providers` chain
+when a model call fails — an implementation matching hermes' `fallback_providers` chain
 (`try_activate_fallback` + `restore_primary_runtime`):
 
 ```toml

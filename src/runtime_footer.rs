@@ -1,4 +1,4 @@
-//! Gateway runtime-metadata footer — port of hermes
+//! Gateway runtime-metadata footer — aligned with hermes
 //! `gateway/runtime_footer.py`.
 //!
 //! Renders a compact footer showing runtime state (model, context %,

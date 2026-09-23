@@ -1,4 +1,4 @@
-//! delegate_task — port of hermes' tools/delegate_tool.py
+//! delegate_task — aligned with hermes' tools/delegate_tool.py
 //!
 //! Spawns one or more sub-agents in isolated contexts. The actual agent
 //! execution is provided by the `SubAgentRunner` installed on the context

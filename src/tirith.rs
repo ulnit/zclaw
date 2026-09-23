@@ -1,4 +1,4 @@
-//! Tirith pre-exec security scanning — port of hermes' `tools/tirith_security.py`.
+//! Tirith pre-exec security scanning — aligned with hermes' `tools/tirith_security.py`.
 //!
 //! Runs the external `tirith` binary to scan commands for content-level
 //! threats (homograph URLs, pipe-to-interpreter, terminal injection, ...).

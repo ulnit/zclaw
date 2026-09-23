@@ -1,4 +1,4 @@
-//! cronjob — port of hermes' tools/cronjob_tools.py
+//! cronjob — aligned with hermes' tools/cronjob_tools.py
 //!
 //! One compressed tool managing scheduled jobs: create/list/update/pause/
 //! resume/remove/run. Jobs run in fresh sessions; the final response is

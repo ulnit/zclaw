@@ -1,4 +1,4 @@
-//! Out-of-loop shutdown and runtime liveness backstops — port of
+//! Out-of-loop shutdown and runtime liveness backstops — aligned with
 //! hermes `gateway/shutdown_watchdog.py` (#66892, #69089).
 //!
 //! When the async runtime freezes mid-drain, every runtime-based

@@ -1,4 +1,4 @@
-//! LINE Messaging API platform adapter — port of hermes
+//! LINE Messaging API platform adapter — aligned with hermes
 //! `plugins/platforms/line` @ v2026.8.3 (adapter.py).
 //!
 //! Webhook ingress (gateway-mounted `/webhooks/line`; hermes runs a

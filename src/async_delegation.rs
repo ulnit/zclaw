@@ -1,4 +1,4 @@
-//! Background (fire-and-forget) delegation — port of hermes
+//! Background (fire-and-forget) delegation — aligned with hermes
 //! `tools/async_delegation.py` core semantics.
 //!
 //! `delegate_task` with `background: true` dispatches the fan-out as a

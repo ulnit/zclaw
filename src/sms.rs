@@ -1,4 +1,4 @@
-//! SMS (Twilio) platform adapter — port of hermes `plugins/platforms/sms`
+//! SMS (Twilio) platform adapter — aligned with hermes `plugins/platforms/sms`
 //! @ v2026.8.3 (adapter.py).
 //!
 //! Outbound SMS goes through the Twilio REST API

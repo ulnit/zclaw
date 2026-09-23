@@ -1,4 +1,4 @@
-//! Event hook system — port of hermes `gateway/hooks.py`.
+//! Event hook system — aligned with hermes `gateway/hooks.py`.
 //!
 //! A lightweight event-driven system that fires handlers at key
 //! lifecycle points. Hooks are discovered from `<home>/hooks/`

@@ -1,4 +1,4 @@
-//! ANSI escape-sequence stripping — port of hermes' `tools/ansi_strip.py`.
+//! ANSI escape-sequence stripping — aligned with hermes' `tools/ansi_strip.py`.
 //!
 //! Used by the terminal and execute_code tools to clean command output
 //! before returning it to the model. This prevents ANSI codes from

@@ -1,6 +1,6 @@
 //! Agent — the core conversation loop
 //!
-//! Port of hermes' AIAgent (run_agent.py): provider calls, tool dispatch with
+//! Aligned with hermes' AIAgent (run_agent.py): provider calls, tool dispatch with
 //! approval gating, session persistence, context compression, delegation
 //! (SubAgentRunner), cron execution (CronRunner), memory injection, and
 //! callbacks.
@@ -1292,7 +1292,7 @@ impl Agent {
         let mut finish_reason: Option<String> = None;
         let mut usage: Option<Usage> = None;
         let mut model: Option<String> = None;
-        // Stateful reasoning/thinking scrubber for streamed deltas — port of
+        // Stateful reasoning/thinking scrubber for streamed deltas — aligned with
         // hermes `_fire_stream_delta` wiring: a per-delta strip loses tag
         // state across chunk boundaries (an open tag in one delta and the
         // reasoning prose in the next), so every delta is fed through the
@@ -1374,7 +1374,7 @@ impl Agent {
         })
     }
 
-    /// Approval gate for terminal commands (port of hermes approval flow).
+    /// Approval gate for terminal commands (aligned with hermes approval flow).
     async fn approval_check(
         &self,
         tool_name: &str,

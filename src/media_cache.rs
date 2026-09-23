@@ -1,5 +1,5 @@
 //! Media cache — content-addressed storage for platform downloads
-//! (hermes `gateway/platforms/media_cache.py` port).
+//! (hermes `gateway/platforms/media_cache.py` parity).
 //!
 //! Downloaded attachments land under `<home>/media-cache/` named by the
 //! SHA-256 of their bytes, so identical files dedupe across platforms and

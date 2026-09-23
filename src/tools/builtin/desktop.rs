@@ -1,4 +1,4 @@
-//! Desktop GUI tools — port of hermes' `close_terminal_tool.py`,
+//! Desktop GUI tools — aligned with hermes' `close_terminal_tool.py`,
 //! `read_terminal_tool.py`, `focus_pane_tool.py`, `open_preview_tool.py`.
 //!
 //! Each `terminal(background=true)` process can be mirrored as a

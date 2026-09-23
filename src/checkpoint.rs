@@ -1,6 +1,6 @@
 //! Transparent filesystem checkpoints via a single shared shadow git store.
 //!
-//! Port of hermes-agent `tools/checkpoint_manager.py` (v2 shared-store
+//! Aligned with hermes-agent `tools/checkpoint_manager.py` (v2 shared-store
 //! layout).  Automatic snapshots of working directories are taken before
 //! file-mutating operations (`write_file`, `patch`), at most once per
 //! directory per conversation turn.  This is transparent infrastructure —

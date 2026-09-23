@@ -1,4 +1,4 @@
-//! Blueprints — schedulable skills. Port of hermes' `tools/blueprints.py`.
+//! Blueprints — schedulable skills. Aligned with hermes' `tools/blueprints.py`.
 //!
 //! A blueprint is NOT a new object type: it is an ordinary skill whose
 //! SKILL.md frontmatter declares an automation schedule under

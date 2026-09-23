@@ -1,4 +1,4 @@
-//! Self-updater — port of `hermes update` (`hermes_cli/update_cmd.py`,
+//! Self-updater — aligned with `hermes update` (`hermes_cli/update_cmd.py`,
 //! `hermes_cli/subcommands/update.py`), adapted to a Rust git checkout:
 //! fetch/compare for `--check`, stash → fast-forward pull → stash restore
 //! → `cargo build --release` for the apply path.
@@ -6,7 +6,7 @@
 //! Hermes-specific machinery that has no ulnclaw counterpart (venv/pip
 //! refresh, npm lockfiles, Windows exe locking, desktop (Electron) hand-off,
 //! docker/nix install methods, systemd gateway restarts) is intentionally
-//! out of scope; the git core is ported faithfully:
+//! out of scope; the git core is implemented faithfully:
 //! - upstream-preferred fetch for the default branch, origin otherwise
 //! - shallow-checkout awareness (`--depth 1` fetch, presence-only report)
 //! - fetch error classification (network / auth / generic)

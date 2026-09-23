@@ -1,4 +1,4 @@
-//! Provider credential pool — lean port of hermes `agent/credential_pool.py`.
+//! Provider credential pool — lean aligned with hermes `agent/credential_pool.py`.
 //!
 //! Multiple API keys per provider live in `<home>/credentials-pool.json`.
 //! Resolution (`UlncLawConfig::resolve_api_key`) prefers an explicit config

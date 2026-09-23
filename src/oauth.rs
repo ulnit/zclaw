@@ -1,5 +1,5 @@
 //! OAuth 2.0 Device Authorization Grant (RFC 8628) — service-agnostic
-//! port of the hermes portal login flow (`hermes_cli/portal_cli.py`,
+//! aligned with the hermes portal login flow (`hermes_cli/portal_cli.py`,
 //! `hermes_cli/auth.py` are Nous-Portal-specific; ulnclaw targets any
 //! provider that implements the standard device flow).
 //!

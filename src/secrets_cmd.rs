@@ -1,4 +1,4 @@
-//! Secrets backend CLI — port of hermes `hermes_cli/secrets_cli.py`
+//! Secrets backend CLI — aligned with hermes `hermes_cli/secrets_cli.py`
 //! (Bitwarden) and `hermes_cli/onepassword_secrets_cli.py` (1Password):
 //! interactive setup wizards, pinned-binary install, per-backend status,
 //! mapping management, and disable.

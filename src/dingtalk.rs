@@ -1,4 +1,4 @@
-//! DingTalk platform adapter — port of hermes `plugins/platforms/dingtalk`
+//! DingTalk platform adapter — aligned with hermes `plugins/platforms/dingtalk`
 //! @ v2026.8.3 (adapter.py).
 //!
 //! Uses DingTalk **Stream Mode** without the Python SDK: the gateway
@@ -16,12 +16,12 @@
 //! `/v1.0/robot/messageFiles/download` with an OAuth2 access token and
 //! cached into the media cache.
 //!
-//! Emoji reactions are ported (hermes `_send_emotion` /
+//! Emoji reactions are implemented (hermes `_send_emotion` /
 //! `_fire_done_reaction`): a 🤔Thinking text-emoji lands on the inbound
 //! message fire-and-forget via `POST /v1.0/robot/emotion/reply`, then
 //! swaps to 🥳Done (`/recall` + `/reply`) once after the final markdown
 //! reply — idempotent per chat. Known differences: AI streaming cards
-//! (`card_1_0` SDK) and message editing are not ported — replies are
+//! (`card_1_0` SDK) and message editing are not implemented — replies are
 //! plain webhook markdown.
 
 use crate::messaging::{Dispatcher, MediaAttachment, MessageEvent};

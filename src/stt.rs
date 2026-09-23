@@ -1,4 +1,4 @@
-//! Audio speech-to-text pipeline — port of hermes `tools/transcription_tools.py`
+//! Audio speech-to-text pipeline — aligned with hermes `tools/transcription_tools.py`
 //! (provider dispatch) + `gateway/run.py::_enrich_message_with_transcription`
 //! (voice-note enrichment semantics) @ v2026.8.3.
 //!

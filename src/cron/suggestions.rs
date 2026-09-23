@@ -1,6 +1,6 @@
 //! Suggested automations — pending cron-job proposals with accept/dismiss.
 //!
-//! Port of hermes `cron/suggestions.py` + `cron/suggestion_catalog.py` +
+//! Aligned with hermes `cron/suggestions.py` + `cron/suggestion_catalog.py` +
 //! `hermes_cli/suggestions_cmd.py` (v2026.8.3): a JSON-backed suggestion
 //! store under `<home>/cron/suggestions.json` (pending/accepted/dismissed,
 //! dedup latching, MAX_PENDING cap), a curated starter catalog, and the

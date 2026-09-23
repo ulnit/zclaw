@@ -1,4 +1,4 @@
-//! Toolsets — port of hermes' toolsets.py
+//! Toolsets — aligned with hermes' toolsets.py
 //!
 //! Toolsets group tools for specific scenarios and can compose other
 //! toolsets. `resolve_toolset` expands a name into the full tool list.

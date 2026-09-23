@@ -1,12 +1,12 @@
 # ulnclaw desktop 🦞
 
-**The desktop app for [ulnclaw](../README.md)** — a faithful, vendored port of
-the hermes-agent Electron desktop (v2026.8.3, MIT), backed by the ulnclaw Rust
-gateway instead of the hermes Python backend. Same views, same styles, same
-interaction logic as hermes desktop: the shell is upstream code renamed, and
-the only intentional differences are ~70 lines of backend plumbing across 7
-files (see [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md)). Available for **Windows,
-macOS, and Linux**.
+**The desktop app for [ulnclaw](../README.md)** — the Electron/React desktop
+client, backed by the ulnclaw Rust gateway: sixteen views, command palette,
+live turn streaming, native approvals, terminal panes and a git review pane.
+The vendored Electron shell is MIT-licensed and carries hermes-agent code
+(attribution in [NOTICE](../NOTICE)); the backend plumbing and packaging layout
+are ulnclaw's own, catalogued in [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md). Available
+for **Windows, macOS, and Linux**.
 
 <table>
 <tr><td><b>Sixteen views</b></td><td>Chat, sessions, jobs, usage, models, skills, kanban, projects, runs, webhooks, plugins, pairing, profiles, config, doctor, settings — plus a Ctrl/Cmd+K command palette, dashboard themes/fonts and a language picker.</td></tr>

@@ -1,4 +1,4 @@
-//! Feishu/Lark Drive document-comment agent — port of hermes
+//! Feishu/Lark Drive document-comment agent — aligned with hermes
 //! `plugins/platforms/feishu/feishu_comment.py` +
 //! `feishu_comment_rules.py` @ v2026.8.3.
 //!

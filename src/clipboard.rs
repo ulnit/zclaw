@@ -1,4 +1,4 @@
-//! Clipboard image extraction + text write — port of hermes
+//! Clipboard image extraction + text write — aligned with hermes
 //! `hermes_cli/clipboard.py`.
 //!
 //! `save_clipboard_image(dest)` checks the system clipboard for image
@@ -560,7 +560,7 @@ fn wayland_save(dest: &Path) -> bool {
 }
 
 /// Convert an image file to PNG in-place via ImageMagick `convert`
-/// (hermes tries Pillow first; the Rust port has no in-process decoder).
+/// (hermes tries Pillow first; the Rust implementation has no in-process decoder).
 fn convert_to_png(path: &Path) -> bool {
     let tmp = path.with_extension("imgconvert.tmp");
     if std::fs::rename(path, &tmp).is_err() {

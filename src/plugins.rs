@@ -1,4 +1,4 @@
-//! Plugin system — Rust-native port of hermes' plugin architecture.
+//! Plugin system — Rust-native aligned with hermes' plugin architecture.
 //!
 //! Hermes loads Python plugins (`hermes_cli/plugins.py`) and bridges
 //! shell scripts (`agent/shell_hooks.py`) through one `invoke_hook()`

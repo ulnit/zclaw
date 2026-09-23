@@ -1,4 +1,4 @@
-//! iron-proxy egress management — port of hermes
+//! iron-proxy egress management — aligned with hermes
 //! `agent/proxy_sources/iron_proxy.py` @ v2026.8.3 (CLI surface:
 //! `src/egress_cmd.rs`, hermes `hermes_cli/proxy_cli.py`).
 //!
@@ -873,7 +873,7 @@ fn read_management_token() -> Option<String> {
     }
 }
 
-/// `(host, port)` of the management listener from proxy.yaml (hermes
+/// `(host, parity)` of the management listener from proxy.yaml (hermes
 /// `_read_management_listen_from_config`).
 fn read_management_listen_from_config(config_path: Option<&Path>) -> Option<(String, u16)> {
     let owned = proxy_state_dir_ro().join("proxy.yaml");
@@ -2059,7 +2059,7 @@ pub fn get_status() -> ProxyStatus {
     status
 }
 
-/// `(host, port)` of the configured sandbox-facing listener
+/// `(host, parity)` of the configured sandbox-facing listener
 /// (`proxy.tunnel_listen`, falling back to `proxy.http_listen`) —
 /// hermes `_read_http_listen_from_config`.
 fn read_http_listen_from_config() -> Option<(String, u16)> {

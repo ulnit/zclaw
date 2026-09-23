@@ -1,4 +1,4 @@
-//! WhatsApp bridge process supervision — port of the hermes
+//! WhatsApp bridge process supervision — aligned with the hermes
 //! `plugins/platforms/whatsapp` adapter's bridge lifecycle
 //! (`connect`/`disconnect`, v2026.8.3).
 //!

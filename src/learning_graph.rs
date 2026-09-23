@@ -1,4 +1,4 @@
-//! Learning graph assembly — port of hermes `agent/learning_graph.py`
+//! Learning graph assembly — aligned with hermes `agent/learning_graph.py`
 //! (v2026.8.3).
 //!
 //! The graph is intentionally scoped to what a user actually learns over

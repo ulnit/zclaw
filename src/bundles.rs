@@ -1,5 +1,5 @@
 //! Skill bundles — aliases that load multiple skills under one slash
-//! command (hermes `agent/skill_bundles.py` + `hermes_cli/bundles.py` port).
+//! command (hermes `agent/skill_bundles.py` + `hermes_cli/bundles.py` parity).
 //!
 //! A bundle is a small YAML file in `<home>/skill-bundles/` naming a set of
 //! skills to load together. Invoking `/<bundle>` loads every referenced

@@ -1,4 +1,4 @@
-//! Desktop UI bridge — port of hermes' `tools/desktop_ui.py`.
+//! Desktop UI bridge — aligned with hermes' `tools/desktop_ui.py`.
 //!
 //! The desktop affordances (`close_terminal`, `read_terminal`,
 //! `focus_pane`, `open_preview`) live in a renderer process, so the
@@ -114,7 +114,7 @@ pub fn read_terminal_window(
 }
 
 /// Coax a bare host/domain into a fetchable URL; leave paths + schemes
-/// alone (port of hermes `open_preview_tool._normalize_target`).
+/// alone (aligned with hermes `open_preview_tool._normalize_target`).
 ///
 /// `www.cnn.com` → `https://www.cnn.com`; `localhost:3000` →
 /// `http://localhost:3000`. File paths and explicit schemes pass through

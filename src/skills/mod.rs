@@ -1,4 +1,4 @@
-//! Skills — port of hermes' skills system (tools/skills_tool.py)
+//! Skills — aligned with hermes' skills system (tools/skills_tool.py)
 //!
 //! A skill is a directory `<home>/skills/<name>/SKILL.md` with YAML-ish
 //! frontmatter (name, description) plus optional linked files under

@@ -1,4 +1,4 @@
-//! tool_search — port of hermes' tools/tool_search.py
+//! tool_search — aligned with hermes' tools/tool_search.py
 //!
 //! Keyword search over the registered tool catalog (names + descriptions).
 //! Becomes important when MCP servers add many tools to the schema.

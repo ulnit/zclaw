@@ -4,8 +4,9 @@
 
 This document tracks how ulnclaw maps to
 [hermes-agent v2026.8.3](https://github.com/NousResearch/hermes-agent/tree/v2026.8.3).
-ulnclaw is a Rust re-implementation of the hermes agent engine: same tool
-surface, same storage layout, same configuration semantics — native
+ulnclaw is an independent, self-designed Rust agent engine; its tool
+surface, storage layout and configuration semantics are compatible with the
+hermes agent — native
 performance and a single static binary.
 
 <a id="tool-parity"></a>
@@ -42,20 +43,20 @@ performance and a single static binary.
 | `browser_*` (12 tools) | ✅ full | CDP WebSocket client (`browser` module): endpoint discovery, page session, accessibility snapshots with element refs, click/type/scroll/press/screenshot/evaluate/dialogs … [details](#browser-12-tools) |
 | `close_terminal`, `read_terminal`, `focus_pane`, `open_preview` | ✅ core | desktop GUI affordances (hermes `close_terminal_tool.py` / `read_terminal_tool.py` / `focus_pane_tool.py` / `open_preview_tool.py`): registered only under `ULNCLAW_DESKTOP=1` … [details](#close-terminal-read-terminal-focus-pane-open-preview) |
 | `computer_use` | ✅ core | cua-driver MCP backend (`src/computer_use.rs`) — full hermes tool schema + approval semantics, see the Computer Use row below; registers once the driver is reachable (`ulnclaw computer-use doctor`) |
-| `discord`, `discord_admin` | ✅ core | P245 full port of hermes `tools/discord_tool.py` (`src/discord_tool.rs`): 15 REST-API actions split into `discord` core (fetch_messages / search_members / create_thread) and … [details](#discord-discord-admin) |
-| `feishu_doc_read`, `feishu_drive_*` | ✅ core | P246 full port of hermes `tools/feishu_doc_tool.py` + `tools/feishu_drive_tool.py` (`src/feishu_doc_tool.rs`): `feishu_doc_read` (toolset `feishu_doc`) reads a document's raw … [details](#feishu-doc-read-feishu-drive) |
-| `spotify_*` (7 tools) | ✅ core | P247 full port of hermes `plugins/spotify` (`src/spotify_tool.rs` + `src/spotify_auth.rs`): `spotify_playback` (get_state/currently-playing/play/pause/next/previous/seek/set_repeat … [details](#spotify-7-tools) |
-| `yb_*` (5 yuanbao tools) | ✅ core | P248 full port of hermes `tools/yuanbao_tools.py` (`src/yuanbao_tool.rs`): `yb_query_group_info` / `yb_query_group_members` (find/list_bots/list_all + mention hint, role labels … [details](#yb-5-yuanbao-tools) |
-| `send_message` | ✅ core | P259 full port of hermes `tools/send_message_tool.py` + `gateway/channel_directory.py` (`src/send_message_tool.rs` + `src/channel_directory.rs`): actions … [details](#send-message) |
-| `x_search` | 🟡 gated | full port of hermes `x_search_tool.py`: xAI Responses-API `x_search` server tool with handle allow/exclude filters (max 10, `@` stripped), strict client-side date-range validation (YYYY-MM-DD, no inverted/pure-future windows), `enable_image_understanding` / `enable_video_understanding`, retry-with-backoff on 5xx/transient failures, `degraded`/`degraded_reason` markers when filters yield no citations, `[x_search]` config (model / reasoning_effort / timeout_seconds / retries); registered only with `XAI_API_KEY` **and** the opt-in `x_search` toolset enabled (hermes parity — SuperGrok OAuth path not ported) |
-| `video_analyze` | ✅ core | full port of hermes `vision_tools.video_analyze_tool`: local file / `file://` / HTTP(S) sources (remote downloads gated by the SSRF guard, cached under `cache/video/temp_video_files/` and cleaned up), extension→mime table (mp4/webm/mov/avi/mkv/mpeg/mpg), 20 MB warn + 50 MB base64 hard cap, inline `video_url` data-URL payload, `[auxiliary.vision]` routing with main-provider fallback, one retry on empty responses; opt-in `video` toolset (hermes parity) — requires a provider that accepts video |
+| `discord`, `discord_admin` | ✅ core | P245 full parity with hermes `tools/discord_tool.py` (`src/discord_tool.rs`): 15 REST-API actions split into `discord` core (fetch_messages / search_members / create_thread) and … [details](#discord-discord-admin) |
+| `feishu_doc_read`, `feishu_drive_*` | ✅ core | P246 full parity with hermes `tools/feishu_doc_tool.py` + `tools/feishu_drive_tool.py` (`src/feishu_doc_tool.rs`): `feishu_doc_read` (toolset `feishu_doc`) reads a document's raw … [details](#feishu-doc-read-feishu-drive) |
+| `spotify_*` (7 tools) | ✅ core | P247 full parity with hermes `plugins/spotify` (`src/spotify_tool.rs` + `src/spotify_auth.rs`): `spotify_playback` (get_state/currently-playing/play/pause/next/previous/seek/set_repeat … [details](#spotify-7-tools) |
+| `yb_*` (5 yuanbao tools) | ✅ core | P248 full parity with hermes `tools/yuanbao_tools.py` (`src/yuanbao_tool.rs`): `yb_query_group_info` / `yb_query_group_members` (find/list_bots/list_all + mention hint, role labels … [details](#yb-5-yuanbao-tools) |
+| `send_message` | ✅ core | P259 full parity with hermes `tools/send_message_tool.py` + `gateway/channel_directory.py` (`src/send_message_tool.rs` + `src/channel_directory.rs`): actions … [details](#send-message) |
+| `x_search` | 🟡 gated | full parity with hermes `x_search_tool.py`: xAI Responses-API `x_search` server tool with handle allow/exclude filters (max 10, `@` stripped), strict client-side date-range validation (YYYY-MM-DD, no inverted/pure-future windows), `enable_image_understanding` / `enable_video_understanding`, retry-with-backoff on 5xx/transient failures, `degraded`/`degraded_reason` markers when filters yield no citations, `[x_search]` config (model / reasoning_effort / timeout_seconds / retries); registered only with `XAI_API_KEY` **and** the opt-in `x_search` toolset enabled (hermes parity — SuperGrok OAuth path not implemented) |
+| `video_analyze` | ✅ core | full parity with hermes `vision_tools.video_analyze_tool`: local file / `file://` / HTTP(S) sources (remote downloads gated by the SSRF guard, cached under `cache/video/temp_video_files/` and cleaned up), extension→mime table (mp4/webm/mov/avi/mkv/mpeg/mpg), 20 MB warn + 50 MB base64 hard cap, inline `video_url` data-URL payload, `[auxiliary.vision]` routing with main-provider fallback, one retry on empty responses; opt-in `video` toolset (hermes parity) — requires a provider that accepts video |
 | `video_generate`, `bfl_flux3_*` | ✅ core | `video_gen.rs` provider registry (hermes plugin design: single-available auto-select, configured-name fail-closed, `success_response`/`error_response` contract) + unified … [details](#video-generate-bfl-flux3) |
-| `project_list`, `project_create`, `project_switch` | ✅ core | full port of hermes `tools/project_tools.py` + `hermes_cli/projects_db.py`: per-profile `projects.db` (projects / project_folders / project_meta / discovered_repos, WAL with … [details](#project-list-project-create-project-switch) |
-| Skill usage telemetry + learning graph (`skill_usage`, `learning_graph`, `learning_mutations`) | ✅ core | hermes `tools/skill_usage.py` + `agent/learning_graph.py` + `agent/learning_mutations.py` ports: `<home>/skills/.usage.json` sidecar (view/use/patch counters, lifecycle state … [details](#skill-usage-telemetry-learning-graph-skill-usage-learning-graph-learning-mutations) |
-| Learning timeline / `journey` CLI (`learning_graph_render`, `journey`) | ✅ core | hermes `agent/learning_graph_render.py` + `hermes_cli/journey.py` ports: `learning_graph_render.rs` — desktop-ported color math (palette derivation, complementary memory ink … [details](#learning-timeline-journey-cli-learning-graph-render-journey) |
+| `project_list`, `project_create`, `project_switch` | ✅ core | full parity with hermes `tools/project_tools.py` + `hermes_cli/projects_db.py`: per-profile `projects.db` (projects / project_folders / project_meta / discovered_repos, WAL with … [details](#project-list-project-create-project-switch) |
+| Skill usage telemetry + learning graph (`skill_usage`, `learning_graph`, `learning_mutations`) | ✅ core | hermes `tools/skill_usage.py` + `agent/learning_graph.py` + `agent/learning_mutations.py` implements: `<home>/skills/.usage.json` sidecar (view/use/patch counters, lifecycle state … [details](#skill-usage-telemetry-learning-graph-skill-usage-learning-graph-learning-mutations) |
+| Learning timeline / `journey` CLI (`learning_graph_render`, `journey`) | ✅ core | hermes `agent/learning_graph_render.py` + `hermes_cli/journey.py` implements: `learning_graph_render.rs` — desktop-implemented color math (palette derivation, complementary memory ink … [details](#learning-timeline-journey-cli-learning-graph-render-journey) |
 | Skill curator CLI (`curator`) | ✅ core | hermes `hermes_cli/curator.py` local half (the LLM consolidation run stays desktop-side): `curator.rs` — idle-days computation (activity with created_at fallback), prune candidate … [details](#skill-curator-cli-curator) |
-| Persistent goals / Ralph loop (`goals`) | ✅ core | hermes `hermes_cli/goals.py` port: `goals.rs` — `GoalContract` (outcome/verification/constraints/boundaries/stop_when, alias-table `parse_contract` so an incidental colon isn't … [details](#persistent-goals-ralph-loop-goals) |
-| Gateway profile multiplexing (`/p/<profile>`) + CDP session liveness | ✅ core | hermes api_server profile-prefix middleware port: every gateway route is mirrored under `/p/<profile>/...`; `[gateway] multiplex_profiles = true` backs each mirror with its own … [details](#gateway-profile-multiplexing-p-profile-cdp-session-liveness) |
+| Persistent goals / Ralph loop (`goals`) | ✅ core | hermes `hermes_cli/goals.py` implementation: `goals.rs` — `GoalContract` (outcome/verification/constraints/boundaries/stop_when, alias-table `parse_contract` so an incidental colon isn't … [details](#persistent-goals-ralph-loop-goals) |
+| Gateway profile multiplexing (`/p/<profile>`) + CDP session liveness | ✅ core | hermes api_server profile-prefix middleware implementation: every gateway route is mirrored under `/p/<profile>/...`; `[gateway] multiplex_profiles = true` backs each mirror with its own … [details](#gateway-profile-multiplexing-p-profile-cdp-session-liveness) |
 | Startup tips (`tips.py`) | ✅ core | `tips.rs`: feature-discovery one-liner corpus rewritten for ulnclaw's surface (slash commands, goals, CLI subcommands, config knobs, tools, gateway, hidden gems) + dependency-free xorshift64* `get_random_tip`; the chat REPL prints a `✦ Tip:` line at startup and on `/new` (hermes welcome/new-session tip parity) |
 | REPL display & composer UX (`hermes_cli/focus_view.py`, `prompt_stash.py`, `clipboard.py`) | ✅ core | `src/focus_view.rs`, `src/prompt_stash.rs`, `src/clipboard.rs` — three hermes CLI-UX modules. **Focus view** (`/focus [on\\|off\\|status]`): display-only reduced-output mode — snaps … [details](#repl-display-composer-ux-hermes-cli-focus-view-py-prompt-stash-py-clipboard-py) |
 | Sessions prune/archive/stats (`session_filters.py`) | ✅ core | `session/filters.rs` — duration parsing (`5h`/`30m`/`2d`/`1w`, bare number = days), point-in-time parsing (durations = that long ago; ISO timestamps naive=local), epoch … [details](#sessions-prune-archive-stats-session-filters-py) |
@@ -66,9 +67,9 @@ performance and a single static binary.
 | Session insights (`agent/insights.py`) | ✅ core | `insights.rs` + `ulnclaw insights [--days N] [--source S] [--json]` CLI + REPL `/insights [days]` + gateway chat `/insights [N] [--days N] [--source S]` slash command: … [details](#session-insights-agent-insights-py) |
 | Pets (`agent/pet/` + `hermes_cli/pets.py`) | ✅ core | `src/pets.rs` + `ulnclaw pets list\|install\|select\|show\|off\|scale\|remove\|doctor\|hatch`: petdex mascot engine — public manifest fetch (petdex.dev, 300 s in-process cache + … [details](#pets-agent-pet-hermes-cli-pets-py) |
 | Suggested automations (`cron/suggestions.py` + `suggestions_cmd.py`) | ✅ core | `cron/suggestions.rs`: JSON store at `<home>/cron/suggestions.json` (owner-only writes via tmp+rename) with hermes semantics — pending/accepted/dismissed statuses, dedup-key … [details](#suggested-automations-cron-suggestions-py-suggestions-cmd-py) |
-| Status report (`hermes_cli/status.py` + `hermes_cli/subcommands/status.py` + `timefmt.py`) | ✅ core | `status.rs`: port of `show_status` — panel header + Environment (version / home / config.toml / .env), Model+Provider+Base URL, API Keys (config.toml `model.api_key` row + … [details](#status-report-hermes-cli-status-py-hermes-cli-subcommands-status-py-timefmt-py) |
-| Log viewer + file logging (`hermes_cli/logs.py` + `hermes_cli/subcommands/logs.py` + `hermes_logging.py` rotating handlers) | ✅ core | `logs.rs`: viewer port — `LOG_FILES` registry (agent/errors/gateway), `_parse_since` (Ns/m/h/d cutoffs), timestamp/level/logger-name regexes (logger regex extended for Rust `::` … [details](#log-viewer-file-logging-hermes-cli-logs-py-hermes-cli-subcommands-logs-py-hermes-logging-py-rotating-handlers) |
-| Self-updater (`hermes_cli/subcommands/update.py` + `update_cmd.py` git core) | ✅ core | `update.rs`: `--check` port of `_cmd_update_check` — branch resolution (`--branch` > current branch > master, hermes `_resolve_update_branch`), shallow-repo awareness (`--depth 1` … [details](#self-updater-hermes-cli-subcommands-update-py-update-cmd-py-git-core) |
+| Status report (`hermes_cli/status.py` + `hermes_cli/subcommands/status.py` + `timefmt.py`) | ✅ core | `status.rs`: implementation of `show_status` — panel header + Environment (version / home / config.toml / .env), Model+Provider+Base URL, API Keys (config.toml `model.api_key` row + … [details](#status-report-hermes-cli-status-py-hermes-cli-subcommands-status-py-timefmt-py) |
+| Log viewer + file logging (`hermes_cli/logs.py` + `hermes_cli/subcommands/logs.py` + `hermes_logging.py` rotating handlers) | ✅ core | `logs.rs`: viewer implementation — `LOG_FILES` registry (agent/errors/gateway), `_parse_since` (Ns/m/h/d cutoffs), timestamp/level/logger-name regexes (logger regex extended for Rust `::` … [details](#log-viewer-file-logging-hermes-cli-logs-py-hermes-cli-subcommands-logs-py-hermes-logging-py-rotating-handlers) |
+| Self-updater (`hermes_cli/subcommands/update.py` + `update_cmd.py` git core) | ✅ core | `update.rs`: `--check` implementation of `_cmd_update_check` — branch resolution (`--branch` > current branch > master, hermes `_resolve_update_branch`), shallow-repo awareness (`--depth 1` … [details](#self-updater-hermes-cli-subcommands-update-py-update-cmd-py-git-core) |
 | Backup & restore (`hermes_cli/backup.py` + `hermes_cli/subcommands/backup.py`) | ✅ core | `backup.rs`: full zip backup (hermes `run_backup` — exclusion sets `_EXCLUDED_DIRS/_SUFFIXES/_NAMES` adapted, self-exclusion of the output zip, progress/errors summary … [details](#backup-restore-hermes-cli-backup-py-hermes-cli-subcommands-backup-py) |
 | Fallback chain CLI (`hermes_cli/fallback_cmd.py` + `fallback_config.py`) | ✅ core | `fallback.rs`: runtime chain already existed (`[model] fallbacks` specs + `agent::with_fallback_specs` / `parse_fallback_spec`); this adds the management CLI — `list` (primary + … [details](#fallback-chain-cli-hermes-cli-fallback-cmd-py-fallback-config-py) |
 | Active session leases (`hermes_cli/active_sessions.py`) | ✅ core | `active_sessions.rs`: cross-process lease registry at `<home>/runtime/active_sessions.json` guarded by flock on `active_sessions.lock` (hermes `_FileLock`); entries carry … [details](#active-session-leases-hermes-cli-active-sessions-py) |
@@ -83,17 +84,17 @@ performance and a single static binary.
 | Import agent setups (`hermes_cli/agent_import.py`) | ✅ core | `ulnclaw import-agent [claude-code\|codex] [--source DIR] [--dry-run] [--overwrite]`: detect→parse→map→apply with per-item imported/skipped/conflict/error records; claude-code: … [details](#import-agent-setups-hermes-cli-agent-import-py) |
 | Sessions retitle-skills (`hermes_cli/sessions_cmd.py retitle-skills`) | ✅ core | `ulnclaw sessions retitle-skills [--limit N] [--apply]` (dry run by default): `list_skill_scaffolded_sessions` (titled sessions whose first user turn matches the … [details](#sessions-retitle-skills-hermes-cli-sessions-cmd-py-retitle-skills) |
 | Secrets vaults (`agent/secret_sources/`) | ✅ core | `src/secrets.rs` + `ulnclaw secrets status\|sync [--apply]`: external secret sources applied at startup before any provider reads env (hermes env-loader hook). Three sources with … [details](#secrets-vaults-agent-secret-sources) |
-| Credential pool (`agent/credential_pool.py` + `hermes_cli/auth.py` + dashboard `/api/credentials/pool`) | ✅ core | P330 lean port: `src/credential_pool.rs` — `<home>/credentials-pool.json` store of manual per-provider API-key entries. Gateway `GET /api/credentials/pool` (per-provider rows with … [details](#credential-pool-agent-credential-pool-py-hermes-cli-auth-py-dashboard-api-credentials-pool) |
+| Credential pool (`agent/credential_pool.py` + `hermes_cli/auth.py` + dashboard `/api/credentials/pool`) | ✅ core | P330 lean implementation: `src/credential_pool.rs` — `<home>/credentials-pool.json` store of manual per-provider API-key entries. Gateway `GET /api/credentials/pool` (per-provider rows with … [details](#credential-pool-agent-credential-pool-py-hermes-cli-auth-py-dashboard-api-credentials-pool) |
 | iron-proxy egress firewall (`hermes egress`, `agent/proxy_sources/iron_proxy.py`) | ✅ core | `src/iron_proxy.rs` + `src/egress_cmd.rs` + `ulnclaw egress install\\|setup\\|start\\|stop\\|restart\\|reload\\|status\\|disable\\|config` + `/egress` slash: managed iron-proxy v0.39.0 … [details](#iron-proxy-egress-firewall-hermes-egress-agent-proxy-sources-iron-proxy-py) |
 | Computer Use (`tools/computer_use/`) | ✅ core | `src/computer_use.rs` + `ulnclaw computer-use status\|doctor\|install`: background desktop control via the cua-driver daemon (MCP over stdio, hermes `cua_backend.py`). Full hermes … [details](#computer-use-tools-computer-use) |
-| Plugins (`hermes_cli/plugins.py`, `agent/shell_hooks.py`) | ✅ core | `src/plugins.rs` + `ulnclaw plugins list\|install\|update\|remove\|enable\|disable\|accept-hooks`: Rust-native port of the hermes plugin architecture via the shell-hook wire protocol (a … [details](#plugins-hermes-cli-plugins-py-agent-shell-hooks-py) |
+| Plugins (`hermes_cli/plugins.py`, `agent/shell_hooks.py`) | ✅ core | `src/plugins.rs` + `ulnclaw plugins list\|install\|update\|remove\|enable\|disable\|accept-hooks`: Rust-native implementation of the hermes plugin architecture via the shell-hook wire protocol (a … [details](#plugins-hermes-cli-plugins-py-agent-shell-hooks-py) |
 | Messaging platforms (`gateway/platforms/`) | ✅ core | `src/messaging.rs` — the hermes platform-gateway architecture runs inside `ulnclaw gateway`: adapters normalize incoming chat messages into a `MessageEvent`, a per-chat session … [details](#messaging-platforms-gateway-platforms) |
 | Interactive clarify (`tools/clarify_gateway.py` + WhatsApp interactive) | ✅ core | `src/clarify_gateway.rs` + messaging integration — the `clarify` tool works in messaging sessions: prompts register in a bounded gateway registry (hermes state cap), render on the … [details](#interactive-clarify-tools-clarify-gateway-py-whatsapp-interactive) |
 | Speech-to-text (`tools/transcription_tools.py` + gateway STT pipeline) | ✅ core | `src/stt.rs` — hermes' audio STT pipeline: `[stt]` config (enabled/echo_transcripts/provider/language + per-provider blocks with hermes defaults), built-in providers … [details](#speech-to-text-tools-transcription-tools-py-gateway-stt-pipeline) |
-| OAuth login + skill sync (`hermes_cli/portal_cli.py`, `tools/skills_sync_client.py`) | ✅ core | `src/oauth.rs` + `src/skills_sync.rs`: service-agnostic port of hermes' portal auth + Skill Sync. `ulnclaw auth login` runs the RFC 8628 Device Authorization Grant against any … [details](#oauth-login-skill-sync-hermes-cli-portal-cli-py-tools-skills-sync-client-py) |
+| OAuth login + skill sync (`hermes_cli/portal_cli.py`, `tools/skills_sync_client.py`) | ✅ core | `src/oauth.rs` + `src/skills_sync.rs`: service-agnostic implementation aligned with hermes' portal auth + Skill Sync. `ulnclaw auth login` runs the RFC 8628 Device Authorization Grant against any … [details](#oauth-login-skill-sync-hermes-cli-portal-cli-py-tools-skills-sync-client-py) |
 | OAuth upstream proxy (`hermes_cli/proxy/`) | ✅ core | `src/proxy_cmd.rs` + `ulnclaw proxy start\|status\|providers` (P179): local OpenAI-compatible proxy that lets external apps ride the user's stored OAuth subscription instead of a … [details](#oauth-upstream-proxy-hermes-cli-proxy) |
-| Desktop GUI (`apps/desktop` Electron) | ✅ core | `desktop-electron/` — **ulnclaw desktop**: since v0.7.0 ulnclaw ships a faithful port of hermes' Electron desktop (v2026.8.3) itself, retiring the earlier Tauri 2 shell: React 19 … [details](#desktop-gui-apps-desktop-electron) |
-| Sessions browse (`hermes_cli/sessions_cmd.py browse` + curses picker) | ✅ core | `ulnclaw sessions browse [--source S] [--limit N]`: raw-mode TUI on a TTY (crossterm port of the curses picker — alternate screen, ↑/↓/PgUp/PgDn/Home/End navigation with … [details](#sessions-browse-hermes-cli-sessions-cmd-py-browse-curses-picker) |
+| Desktop GUI (`apps/desktop` Electron) | ✅ core | `desktop-electron/` — **ulnclaw desktop**: since v0.7.0 ulnclaw ships a faithful aligned with hermes' Electron desktop (v2026.8.3) itself, retiring the earlier Tauri 2 shell: React 19 … [details](#desktop-gui-apps-desktop-electron) |
+| Sessions browse (`hermes_cli/sessions_cmd.py browse` + curses picker) | ✅ core | `ulnclaw sessions browse [--source S] [--limit N]`: raw-mode TUI on a TTY (crossterm-based implementation of the curses picker — alternate screen, ↑/↓/PgUp/PgDn/Home/End navigation with … [details](#sessions-browse-hermes-cli-sessions-cmd-py-browse-curses-picker) |
 | Session resume & live-session continuity (`cli.py --resume/--continue`) | ✅ core | Global `-r/--resume <id-or-prefix>` + `-c/--continue` flags on `chat` and `run`: the whole REPL conversation lives in ONE session row (previously every turn created a fresh row) … [details](#session-resume-live-session-continuity-cli-py-resume-continue) |
 | Sessions repair (`hermes_state.py repair_state_db_schema`) | ✅ core | `ulnclaw sessions repair [--check-only] [--no-backup]`: health probe (`db_opens_cleanly` — `PRAGMA journal_mode` first-statement trip, `integrity_check`, sessions read, FTS MATCH read probe, rolled-back FTS write probe) then escalating strategies — FTS5 `'rebuild'` in place, `REINDEX` for stale B-tree indexes, `sqlite_master` de-duplication via `writable_schema` (keeps the FTS index), drop-FTS-schema + `VACUUM` with rebuild on next store open (`initialize_schema` backfills a lagging external-content index); timestamped raw backup + WAL/SHM sidecars first; failure points at offline `sessions recover`; runs before the store opens since a malformed schema is exactly the case where open fails |
 | Sessions delete/rename/optimize (`hermes_cli/sessions_cmd.py`) | ✅ core | `ulnclaw sessions delete <id> [--yes]` (id or unique prefix via `resolve_session_id` — LIKE-escaped prefix match, exact id wins, ambiguous → not found; y/N confirm unless `--yes`; messages + FTS rows removed first), `sessions rename <id> <title...>` (hermes `sanitize_title`: ASCII/Unicode control-char stripping, whitespace collapsing, empty → title cleared, 100-char limit, cross-session title uniqueness; reports the stored title), `sessions optimize` (FTS5 `'optimize'` segment merge + best-effort WAL checkpoint + `VACUUM`; reports merged-index count and before/after size using `logical_size_bytes` page accounting so WAL lag can't understate the win) |
@@ -111,10 +112,10 @@ performance and a single static binary.
 - file-read content gets non-reusable `«redacted:prefix…»` sentinels so agents can't write truncated
   keys back (hermes #35519)
 - web-URL query-param redaction stays opt-in
-- the Smart-DENY owner-override flow IS fully ported — `smart_denied` flag, once/deny-only choices,
+- the Smart-DENY owner-override flow IS fully implemented — `smart_denied` flag, once/deny-only choices,
   one-operation scope, no persistence under smart-DENY, human-approval reset of the denial breaker
   (see the smart-approval row)
-- profile secret scopes ARE ported — see the multiplexing row
+- profile secret scopes ARE implemented — see the multiplexing row
 
 <a id="blueprints-tools-blueprints-py"></a>
 
@@ -129,7 +130,7 @@ performance and a single static binary.
   blueprint (hermes `register_blueprint_suggestion` parity — dedup-latched, MAX_PENDING-capped
 - accepting produces the same `blueprint:<skill>` job as `skills schedule`). The unified suggestion
   surface is `cron/suggestions.rs` + REPL/CLI `/suggestions` (accept/dismiss/catalog/clear, curated
-  starter catalog). `export_blueprint` (the `skills publish` share path) remains not ported — ulnclaw
+  starter catalog). `export_blueprint` (the `skills publish` share path) remains not implemented — ulnclaw
   has no skills hub/publish surface
 
 <a id="delegate-task"></a>
@@ -157,9 +158,9 @@ performance and a single static binary.
 
 - CDP WebSocket client (`browser` module): endpoint discovery, page session, accessibility snapshots
   with element refs, click/type/scroll/press/screenshot/evaluate/dialogs
-- `ULNCLAW_BROWSER_CDP` accepts ws://, http://host:port, or `auto` (supervisor launches a managed
+- `ULNCLAW_BROWSER_CDP` accepts ws://, http://host:implementation, or `auto` (supervisor launches a managed
   headless Chrome/Chromium)
-- hermes SSRF guards ported (`browser/guard.rs`): sensitive-query + cloud-metadata floor
+- hermes SSRF guards implemented (`browser/guard.rs`): sensitive-query + cloud-metadata floor
   unconditional, private-address guard for non-local endpoints or containerized terminals,
   post-redirect recheck, JS URL-literal screening for console/eval, raw-CDP allowlist on private pages
 - browser outputs force-redacted
@@ -180,7 +181,7 @@ performance and a single static binary.
   plus a blocking `read_terminal` callback
 - without a wired host they report "desktop only", never kill processes, and normalize bare domains
   (`www.cnn.com` → https, `localhost:3000` → http)
-- `react_to_message` (hermes `react_to_message_tool.py` port): agent emoji tapbacks — one reaction
+- `react_to_message` (hermes `react_to_message_tool.py` implementation): agent emoji tapbacks — one reaction
   per author, same-emoji toggles off, defaults to the latest user message (`messages_back` steps
   earlier, `message_row_id` targets exactly), persisted in `messages.display_metadata` and painted
   live via the `message.reaction` bridge event
@@ -192,7 +193,7 @@ performance and a single static binary.
 
 #### `discord`, `discord_admin` — ✅ core
 
-- P245 full port of hermes `tools/discord_tool.py` (`src/discord_tool.rs`): 15 REST-API actions
+- P245 full parity with hermes `tools/discord_tool.py` (`src/discord_tool.rs`): 15 REST-API actions
   split into `discord` core (fetch_messages / search_members / create_thread) and `discord_admin`
   (guild/channel/role/member/pin/thread management)
 - token resolved under the profile secret scope
@@ -208,7 +209,7 @@ performance and a single static binary.
 
 #### `feishu_doc_read`, `feishu_drive_*` — ✅ core
 
-- P246 full port of hermes `tools/feishu_doc_tool.py` + `tools/feishu_drive_tool.py`
+- P246 full parity with hermes `tools/feishu_doc_tool.py` + `tools/feishu_drive_tool.py`
   (`src/feishu_doc_tool.rs`): `feishu_doc_read` (toolset `feishu_doc`) reads a document's raw content
   via `/open-apis/docx/v1/documents/:id/raw_content`
 - `feishu_drive_list_comments` / `feishu_drive_list_comment_replies` / `feishu_drive_reply_comment`
@@ -224,7 +225,7 @@ performance and a single static binary.
 
 #### `spotify_*` (7 tools) — ✅ core
 
-- P247 full port of hermes `plugins/spotify` (`src/spotify_tool.rs` + `src/spotify_auth.rs`):
+- P247 full parity with hermes `plugins/spotify` (`src/spotify_tool.rs` + `src/spotify_auth.rs`):
   `spotify_playback`
   (get_state/currently-playing/play/pause/next/previous/seek/set_repeat/set_shuffle/set_volume/recently_played
   incl. 204 empty-state descriptions), `spotify_devices` (list/transfer), `spotify_queue` (get/add),
@@ -244,7 +245,7 @@ performance and a single static binary.
 
 #### `yb_*` (5 yuanbao tools) — ✅ core
 
-- P248 full port of hermes `tools/yuanbao_tools.py` (`src/yuanbao_tool.rs`): `yb_query_group_info` /
+- P248 full parity with hermes `tools/yuanbao_tools.py` (`src/yuanbao_tool.rs`): `yb_query_group_info` /
   `yb_query_group_members` (find/list_bots/list_all + mention hint, role labels user/yuanbao_ai/bot)
   run as WS biz RPCs over the live adapter (`src/yuanbao.rs` `YuanbaoHandle` — hermes
   `get_active_adapter` parity, re-registered per session) with new proto encoders/decoders
@@ -253,7 +254,7 @@ performance and a single static binary.
 - `yb_send_dm` resolves recipients by partial-name member lookup, sends chunked C2C text with group
   context plus media via the COS upload path (`MEDIA:` tags in the message are extracted like hermes
   `extract_media`)
-- `yb_search_sticker` / `yb_send_sticker` use the ported sticker catalog (id/name/random lookup,
+- `yb_search_sticker` / `yb_send_sticker` use the implemented sticker catalog (id/name/random lookup,
   TIMFaceElem, optional group quote-reply ref)
 - tools gate on adapter liveness (hermes `_check_yuanbao`)
 - divergence: ulnclaw has no per-turn session env, so `chat_id`/`group_code` are explicit arguments
@@ -262,7 +263,7 @@ performance and a single static binary.
 
 #### `send_message` — ✅ core
 
-- P259 full port of hermes `tools/send_message_tool.py` + `gateway/channel_directory.py`
+- P259 full parity with hermes `tools/send_message_tool.py` + `gateway/channel_directory.py`
   (`src/send_message_tool.rs` + `src/channel_directory.rs`): actions `send`/`list`/`react`/`unreact`
   with the faithful target grammar (bare platform → `<PLATFORM>_HOME_CHANNEL` / `EMAIL_HOME_ADDRESS`
   home channel, `platform:chat_id`, `platform:chat_id:thread_id` Telegram topics / Discord threads,
@@ -307,7 +308,7 @@ performance and a single static binary.
 
 #### `project_list`, `project_create`, `project_switch` — ✅ core
 
-- full port of hermes `tools/project_tools.py` + `hermes_cli/projects_db.py`: per-profile
+- full parity with hermes `tools/project_tools.py` + `hermes_cli/projects_db.py`: per-profile
   `projects.db` (projects / project_folders / project_meta / discovered_repos, WAL with DELETE
   fallback + additive column migrations), slug validation + `-2` collision suffixes, multi-folder
   workspaces with primary pointer (implicit first-folder primary, demote/repoint on removal),
@@ -322,7 +323,7 @@ performance and a single static binary.
 
 #### Skill usage telemetry + learning graph (`skill_usage`, `learning_graph`, `learning_mutations`) — ✅ core
 
-- hermes `tools/skill_usage.py` + `agent/learning_graph.py` + `agent/learning_mutations.py` ports:
+- hermes `tools/skill_usage.py` + `agent/learning_graph.py` + `agent/learning_mutations.py` implements:
   `<home>/skills/.usage.json` sidecar (view/use/patch counters, lifecycle state, pinning,
   agent-created provenance, atomic writes), telemetry wired into `skill_view`/`skill_manage` (bump
   view/patch, mark agent-created, forget on delete), skill archive/restore via `skills/.archive`
@@ -336,8 +337,8 @@ performance and a single static binary.
 
 #### Learning timeline / `journey` CLI (`learning_graph_render`, `journey`) — ✅ core
 
-- hermes `agent/learning_graph_render.py` + `hermes_cli/journey.py` ports:
-  `learning_graph_render.rs` — desktop-ported color math (palette derivation, complementary memory
+- hermes `agent/learning_graph_render.py` + `hermes_cli/journey.py` implements:
+  `learning_graph_render.rs` — desktop-implemented color math (palette derivation, complementary memory
   ink, smoothstep age gradient), recency computation (timed + ordinal fallback), day/month/year
   bucketed timeline with proportional skill/memory bars colored by dominant category (learning
   heatmap), numbered charted-signal markers, cumulative trajectory sparkline, legend/axis/summary
@@ -370,7 +371,7 @@ performance and a single static binary.
 
 #### Persistent goals / Ralph loop (`goals`) — ✅ core
 
-- hermes `hermes_cli/goals.py` port: `goals.rs` — `GoalContract`
+- hermes `hermes_cli/goals.py` implementation: `goals.rs` — `GoalContract`
   (outcome/verification/constraints/boundaries/stop_when, alias-table `parse_contract` so an
   incidental colon isn't mangled, empty-field omission, labelled `render_block`), `GoalState` serde
   round-trip (status, turn budget, subgoals, parse/transport failure counters, pid/session/time wait
@@ -398,7 +399,7 @@ performance and a single static binary.
 
 #### Gateway profile multiplexing (`/p/<profile>`) + CDP session liveness — ✅ core
 
-- hermes api_server profile-prefix middleware port: every gateway route is mirrored under `/p/<profile>/...`
+- hermes api_server profile-prefix middleware implementation: every gateway route is mirrored under `/p/<profile>/...`
 - `[gateway] multiplex_profiles = true` backs each mirror with its own stack (agent from
   `[profiles.<name>]` override, profile-scoped home `<home>/profiles/<name>` —
   state.db/approvals.json/cron/skills), lazily built + cached (`ProfileHub`), unknown profile → 404
@@ -407,7 +408,7 @@ performance and a single static binary.
 - mirrors enforce the same bearer auth. CDP client hardening: `CdpClient.is_connected` (read/write
   loops flip a closed flag on socket loss and fail in-flight calls fast — no 30s timeout wedge),
   `with_session` drops dead cached sessions and reopens transparently. Profile secret scopes (P222,
-  hermes `agent/secret_scope.py` port): with multiplexing on, every `/p/<profile>/...` request runs
+  hermes `agent/secret_scope.py` implementation): with multiplexing on, every `/p/<profile>/...` request runs
   inside that profile's fail-closed secret scope (`<home>/profiles/<name>/.env` + hydrated external
   sources, genuinely-global vars excluded)
 - scoped reads resolve against the scope only — no cross-profile process-env fallthrough — and
@@ -566,7 +567,7 @@ performance and a single static binary.
   `--base <path>` hatch-from-image
 - REPL `/pet` (toggle/list/scale/off/<slug> adopt) + `/hatch <description>` slash commands (hermes
   cli_commands_mixin semantics, progress printing included)
-- P126 ported the desktop generate overlay: the desktop shell's hatch dialog (prompt + style + draft
+- P126 implemented the desktop generate overlay: the desktop shell's hatch dialog (prompt + style + draft
   count → base-draft grid pick → live row progress → spritesheet preview + auto-adopt) rides new
   gateway hatch jobs (`POST /api/pets/hatch`, `GET /api/pets/hatch/:id`, `POST
   /api/pets/hatch/:id/pick|cancel`, `GET /api/pets/hatch/:id/draft/:index`). Known diffs: one
@@ -594,7 +595,7 @@ performance and a single static binary.
 
 #### Status report (`hermes_cli/status.py` + `hermes_cli/subcommands/status.py` + `timefmt.py`) — ✅ core
 
-- `status.rs`: port of `show_status` — panel header + Environment (version / home / config.toml /
+- `status.rs`: implementation of `show_status` — panel header + Environment (version / home / config.toml /
   .env), Model+Provider+Base URL, API Keys (config.toml `model.api_key` row + 20-entry vendor env
   table with alternate fallback, every value passed through `redact_key`), Terminal Backend, Browser
   (endpoint + binary discovery), Gateway (listen / auth key / multiplex
@@ -608,7 +609,7 @@ performance and a single static binary.
 
 #### Log viewer + file logging (`hermes_cli/logs.py` + `hermes_cli/subcommands/logs.py` + `hermes_logging.py` rotating handlers) — ✅ core
 
-- `logs.rs`: viewer port — `LOG_FILES` registry (agent/errors/gateway), `_parse_since` (Ns/m/h/d
+- `logs.rs`: viewer implementation — `LOG_FILES` registry (agent/errors/gateway), `_parse_since` (Ns/m/h/d
   cutoffs), timestamp/level/logger-name regexes (logger regex extended for Rust `::` targets),
   `_matches_filters` (level>= / session substring / since / component prefixes), `_read_last_n_lines`
   (whole-file <=1MiB, growing backward chunks beyond), `_read_tail` (20x window when filtered),
@@ -626,12 +627,12 @@ performance and a single static binary.
 
 #### Self-updater (`hermes_cli/subcommands/update.py` + `update_cmd.py` git core) — ✅ core
 
-- `update.rs`: `--check` port of `_cmd_update_check` — branch resolution (`--branch` > current
+- `update.rs`: `--check` implementation of `_cmd_update_check` — branch resolution (`--branch` > current
   branch > master, hermes `_resolve_update_branch`), shallow-repo awareness (`--depth 1` fetch +
   presence-only SHA compare), upstream-preferred fetch for the default branch with origin fallback,
   fetch-error classification (network / auth / generic), compare-ref verification, behind-count via
   rev-list
-- apply path port of `_cmd_update_impl` git core — auto-stash (`--include-untracked`, unmerged-index
+- apply path implementation of `_cmd_update_impl` git core — auto-stash (`--include-untracked`, unmerged-index
   cleanup, `ulnclaw-update-autostash-<ts>` names), fork detection via origin URL + auto-added
   `upstream` remote (`_is_fork` / `_add_upstream_remote`, skipped for local-path origins), `git merge
   --ff-only` (diverged history reported, never force-touched), stash restore with conflict guidance,
@@ -776,7 +777,7 @@ performance and a single static binary.
   staged 0755 install). `onepassword`: mapped `op://vault/item/field` bindings resolved via `op read
   -- <ref>` with a minimal allowlisted child env, empty values refused, per-reference failures degrade
   to warnings. Fetch errors are one-line warnings, never fatal. TTL fetch caches
-  (`src/secrets_cache.rs` port of `agent/secret_sources/_cache.py`): atomic 0600 writes under
+  (`src/secrets_cache.rs` implementation of `agent/secret_sources/_cache.py`): atomic 0600 writes under
   `<home>/cache/` (0700 dir), TTL 0 disables both cache layers symmetrically, only complete error-free
   pulls are cached
 - the Bitwarden cache is AES-256-GCM **encrypted** at rest (HKDF-SHA256 key derived from the
@@ -787,14 +788,14 @@ performance and a single static binary.
   onepassword setup|status|set|remove|disable`. `secrets bitwarden token` rotates the access token
   without re-running the wizard (hermes `cmd_token`: masked prompt or `--access-token`, `0.` shape
   warning, probe-before-store via `bws project list` with the NEW credential unless `--no-verify`,
-  configured-project visibility warning, .env persist + both cache layers dropped). Not ported: the
+  configured-project visibility warning, .env persist + both cache layers dropped). Not implemented: the
   Windows bws asset path stays untested
 
 <a id="credential-pool-agent-credential-pool-py-hermes-cli-auth-py-dashboard-api-credentials-pool"></a>
 
 #### Credential pool (`agent/credential_pool.py` + `hermes_cli/auth.py` + dashboard `/api/credentials/pool`) — ✅ core
 
-- P330 lean port: `src/credential_pool.rs` — `<home>/credentials-pool.json` store of manual
+- P330 lean implementation: `src/credential_pool.rs` — `<home>/credentials-pool.json` store of manual
   per-provider API-key entries. Gateway `GET /api/credentials/pool` (per-provider rows with 1-based
   indexes, redacted token previews, request counts), `POST /api/credentials/pool` (provider
   normalization + default `key #N` labels), `DELETE /api/credentials/pool/:provider/:index` (sticky by
@@ -862,7 +863,7 @@ performance and a single static binary.
   bounded even with drivers that ignore it. The desktop TCC surface is wired too: `GET
   /api/tools/computer-use/status` reports `can_grant` and `POST
   /api/tools/computer-use/permissions/grant` spawns `cua-driver permissions grant` as a polled
-  background action (macOS-only, 400 elsewhere — hermes semantics). Not ported: embedded-daemon/socket
+  background action (macOS-only, 400 elsewhere — hermes semantics). Not implemented: embedded-daemon/socket
   mode and context-level screenshot eviction (no reference implementation ships in the v2026.8.3
   checkout — the `tools/` tree is absent
 - not inventing semantics without one)
@@ -872,7 +873,7 @@ performance and a single static binary.
 #### Plugins (`hermes_cli/plugins.py`, `agent/shell_hooks.py`) — ✅ core
 
 - `src/plugins.rs` + `ulnclaw plugins list|install|update|remove|enable|disable|accept-hooks`:
-  Rust-native port of the hermes plugin architecture via the shell-hook wire protocol (a static binary
+  Rust-native implementation of the hermes plugin architecture via the shell-hook wire protocol (a static binary
   can't import Python plugins). Directory plugins at `<home>/plugins/<name>/plugin.toml` (manifest:
   hooks + `[[tools]]`)
 - tools register as `plugin__<name>__<tool>` and run as subprocesses with `{"tool", "arguments"}`
@@ -895,7 +896,7 @@ performance and a single static binary.
   with a 60 s cap, GitHub browser-URL/`#subdir`/`.git/`-boundary identifier resolution, subdir
   traversal guard, manifest-name discovery from plugin.toml or plugin.yaml, sanitized target under
   `<home>/plugins/`, interactive enable prompt), `plugins update <name>` (git pull inside the
-  installed clone), and `plugins remove <name>` (directory removal). P234 ported the hook output-spill
+  installed clone), and `plugins remove <name>` (directory removal). P234 implemented the hook output-spill
   guard (`tools/hook_output_spill.py`): hook-injected `context` is appended to every subsequent API
   call, so any blob over `[hooks.output_spill] max_chars` (default 10K) is spilled to
   `<home>/hook_outputs/<session>/<uuid>.txt` and the prompt carries a head/tail preview + path
@@ -907,7 +908,7 @@ performance and a single static binary.
   local-directory candidates with install/update/remove, memory/context provider selection persisted
   to `[plugins]`, and `dashboard.hidden_plugins` visibility toggles — hermes plugin-hub parity)
 - per-plugin static asset hosting (`/dashboard-plugins/*`) stays unported. Hermes Python plugin
-  imports, entry-point packages, and provider registrations are not ported
+  imports, entry-point packages, and provider registrations are not implemented
 
 <a id="messaging-platforms-gateway-platforms"></a>
 
@@ -960,13 +961,13 @@ long-running loops:
   contract, button clicks route back through the approval gateway with operator authorization — c2c
   must match the chat user, group/guild clicks must pass the allowlist ∪ pairing intake gate
 - update-prompt ✓/✗ keyboards persist `y`/`n` answers to the `.update_response` file
-- QR scan-to-configure onboarding ported (`ulnclaw qq login` — hermes `qr_register`:
+- QR scan-to-configure onboarding implemented (`ulnclaw qq login` — hermes `qr_register`:
   `create_bind_task` / `poll_bind_result` portal APIs on `q.qq.com` (`QQ_PORTAL_HOST` override),
   terminal QR + URL display, 2 s polling under a 600 s default deadline with up to 3 expired-QR
   refreshes, `client_secret` decrypted locally with AES-256-GCM (IV ‖ ciphertext ‖ tag layout, key
   never leaves the CLI)
 - credentials persist to `<home>/qq/credentials.json` and back the config resolvers as a last fallback
-- P220 ported the full setup wizard (`ulnclaw qq setup` — hermes `_setup_qqbot`): scan-or-manual
+- P220 implemented the full setup wizard (`ulnclaw qq setup` — hermes `_setup_qqbot`): scan-or-manual
   credential choice, DM security-policy selection (pairing / open / allowlist with self-add and
   comma-list prompts) persisted into `[messaging.qq]` (`dm_policy` + `allow_from`, merge-safe TOML
   edits), and home-channel selection persisted as `QQBOT_HOME_CHANNEL` in `<home>/.env`
@@ -982,20 +983,20 @@ long-running loops:
   heartbeats), inbound push decoding with a 1.5 s per-sender debounce, DM/group intake policies
   (pairing/allowlist/open/disabled) mapped onto the allowlist∪pairing gate, markdown-aware 4000-char
   chunked replies sent over the WS (send-c2c/send-group), hermes no-reconnect close codes
-  (4012/4013/4014/4018/4019/4021), outbound media ported (`MEDIA:` reply paths upload via
+  (4012/4013/4014/4018/4019/4021), outbound media implemented (`MEDIA:` reply paths upload via
   `genUploadInfo` temporary COS credentials + a signed global-accelerate PUT — hermes
   `yuanbao_media.py` — then dispatch as TIMImageElem with parsed PNG/JPEG/GIF/WebP dimensions, md5
   uuid and TIM `image_format`, or TIMFileElem, caption appended as a TIMTextElem)
-- stickers ported (hermes `yuanbao_sticker.py`: 59-entry builtin catalog with
+- stickers implemented (hermes `yuanbao_sticker.py`: 59-entry builtin catalog with
   exact/containment/description/fuzzy lookup, inbound TIMFaceElem rendered as `[emoji: <name>]`,
   `STICKER:<name>` reply tags send catalog stickers as TIMFaceElem with the `data` JSON payload, proto
   `index` field 9)
-- inbound media resolution/download ported (hermes ExtractContentMiddleware +
+- inbound media resolution/download implemented (hermes ExtractContentMiddleware +
   MediaResolveMiddleware: image/file refs render as `[image|ybres:RID]` / `[file:name|ybres:RID]`
   anchors, resourceId exchange via `/api/resource/v1/download` with one 401 token-refresh retry,
   size-capped download into the media cache as attachments, anchors patched to local paths, 24 h
   resourceId cache with oldest-25% eviction, hermes placeholder filter
-- quote/observed-media backfill ported (an adapter-side message-content cache + per-group observed
+- quote/observed-media backfill implemented (an adapter-side message-content cache + per-group observed
   buffer stand in for the hermes transcript store — ulnclaw transcripts carry no platform message ids:
   quoted already-local anchors inject as-is, leftover `[kind|ybres:RID]` anchors re-resolve,
   quote-free group turns backfill up to 12 refs from the last 50 messages newest-first with rid dedup,
@@ -1078,7 +1079,7 @@ long-running loops:
   dispatched on the synthetic `ha_events` channel, replies delivered as persistent notifications via
   the REST API (`persistent_notification/create`, 4096-char chunks, REST-only sends to avoid racing
   the event listener)
-- the `notify/notify` standalone out-of-process sender is ported: a credential-only sender registers
+- the `notify/notify` standalone out-of-process sender is implemented: a credential-only sender registers
   whenever HASS_URL + HASS_TOKEN are set (even with the live adapter disabled) and posts to
   `/api/services/notify/notify` with `{message, target}` (hermes `_standalone_send`)
 - a live adapter overwrites the slot with its persistent-notification sender
@@ -1148,12 +1149,12 @@ long-running loops:
   notifications, the generic webhook platform, BlueBubbles, Feishu, Twilio SMS, Microsoft Teams, LINE,
   Google Chat, the Raft wake endpoint, and the A2A agent server — detailed below). Hermes pairing
   semantics: every platform is allowlist-gated, empty allowlist fails closed and logs the ids to add.
-  Interactive pairing codes (hermes `gateway/pairing.py` port, `src/pairing.rs`): unauthorized senders
+  Interactive pairing codes (hermes `gateway/pairing.py` implementation, `src/pairing.rs`): unauthorized senders
   receive an 8-char CSPRNG code (salted-SHA-256 at rest, 1-hour expiry, 3 pending per platform, one
   request per user per 10 minutes, 5 failed approvals lock the platform out for an hour)
 - `ulnclaw pairing list|approve|revoke|clear-pending` manages grants, and approved users join the
   allowlist as a union at the auth gate (`[messaging] pairing = true` default). Media attachments
-  (hermes media-cache pipeline port, `src/media_cache.rs`): inbound Telegram
+  (hermes media-cache pipeline implementation, `src/media_cache.rs`): inbound Telegram
   photo/document/video/audio/voice (getFile download, largest photo size), Discord `attachments`, and
   Slack `files` (bot-bearer downloads) are cached content-addressed under `<home>/media-cache/`
   (SHA-256 names, hermes mime→ext table, 25 MB cap) and handed to the agent as path references with
@@ -1163,7 +1164,7 @@ long-running loops:
   `files.completeUploadExternal` flow)
 - media-only inbound messages flow without text.
 
-**WhatsApp Cloud** — hermes `whatsapp_cloud.py` port, `src/webhook_platforms.rs`
+**WhatsApp Cloud** — hermes `whatsapp_cloud.py` implementation, `src/webhook_platforms.rs`
 
 : gateway-mounted `/webhooks/whatsapp` with the Meta verify handshake (hub.challenge echo),
 `X-Hub-Signature-256` HMAC verification over the raw body, text + image/document/audio/video/sticker
@@ -1172,7 +1173,7 @@ ingress through the same allowlist∪pairing + plugin gates (inbound media downl
 message text), and Graph-API chunked text replies plus two-step native media sends (`/media`
 multipart upload → media-id message). Microsoft
 
-**Graph change-notification ingress** — hermes `msgraph_webhook.py` port
+**Graph change-notification ingress** — hermes `msgraph_webhook.py` implementation
 
 - : `/webhooks/msgraph` validationToken echo + required clientState verification, notifications
   surface as internal events with hermes semantics — receipt dedup (`id:<notification id>` ledger,
@@ -1181,11 +1182,11 @@ multipart upload → media-id message). Microsoft
   truncated at 4000 chars), `msgraph:<subscriptionId>` chat scope with receipt-key-or-sha1 message
   ids, hermes status codes (202 accepted/duplicate, 403 whole-batch auth failure, 400
   malformed/resource-not-accepted, 413 oversize)
-- not ported: the `notification_scheduler` hook (no consumer exists in hermes either), source-CIDR
+- not implemented: the `notification_scheduler` hook (no consumer exists in hermes either), source-CIDR
   allowlist + standalone health endpoint (hermes runs a standalone aiohttp server
 - ulnclaw mounts the shared gateway).
 
-**Generic webhook platform** — hermes `webhook.py` port
+**Generic webhook platform** — hermes `webhook.py` implementation
 
 : `[messaging.webhook]` routes mounted at `/webhooks/hook/<name>` with multi-scheme signature
 verification (Svix `svix-*` headers with base64 `whsec_` keys, GitHub `X-Hub-Signature-256`, GitLab
@@ -1196,7 +1197,7 @@ header event filtering (`X-Webhook-Event`/`X-GitHub-Event`/`X-Gitlab-Event`), `{
 prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp_cloud`), and
 `deliver_only` zero-LLM push notifications.
 
-**BlueBubbles iMessage bridge** — hermes `bluebubbles.py` port
+**BlueBubbles iMessage bridge** — hermes `bluebubbles.py` implementation
 
 - : `[messaging.bluebubbles]` mounts `/webhooks/bluebubbles` on the gateway with password auth
   (query param — BlueBubbles webhooks cannot send custom headers — or
@@ -1227,7 +1228,7 @@ prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp
   `/open-apis/im/v1/messages` (chat_id/open_id receive-id resolution) and image/file uploads for
   `MEDIA:` tags
 - satellite handlers: `drive.notice.comment_add_v1` document-comment agent (hermes
-  `feishu_comment.py` port — event parse + self/recipient/notice-type filters,
+  `feishu_comment.py` implementation — event parse + self/recipient/notice-type filters,
   `feishu_comment_rules.json` 3-tier access rules (exact `docType:token`/`wiki:token` key > wildcard
   `*` > top-level, field-by-field enabled/policy/allow_from fallback, allowlist∪pairing policies with
   `feishu_comment_pairing.json` approvals, mtime hot reload), OK reaction while the agent works,
@@ -1235,14 +1236,14 @@ prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp
   hermes' windowed selection + referenced-doc link extraction and wiki node resolution, hermes prompt
   builders, per-document agent session (`comment-doc:<file_type>:<file_token>`), 4000-char chunked
   reply into the comment thread with whole-comment fallback on error 1069302) and
-  `vc.bot.meeting_invited_v1` meeting invites (hermes `feishu_meeting_invite.py` port — parsed into a
+  `vc.bot.meeting_invited_v1` meeting invites (hermes `feishu_meeting_invite.py` implementation — parsed into a
   join-the-meeting prompt dispatched as a DM to the inviter through the normal pipeline)
-- reactions ported (Typing processing badge via `/open-apis/im/v1/messages/<id>/reactions` while the
+- reactions implemented (Typing processing badge via `/open-apis/im/v1/messages/<id>/reactions` while the
   agent works — removed on completion, swapped for CrossMark on failure, `FEISHU_REACTIONS` default on
 - user reactions on the bot's own messages route as `reaction:<added|removed>:<emoji>` synthetic
   events after a bot-authorship check, bot/app-origin reactions dropped to break the lifecycle loop —
   hermes `on_processing_start`/`on_processing_complete`/`_handle_reaction_event`)
-- interactive card actions ported (hermes `send_exec_approval` / `send_update_prompt` +
+- interactive card actions implemented (hermes `send_exec_approval` / `send_update_prompt` +
   `_on_card_action_trigger`): exec-approval cards (orange header, fenced 3000-char command preview, ✅
   Allow Once / ✅ Session / ✅ Always / ❌ Deny with session tiers hidden under smart deny) via the
   `send_exec_approval` contract, update-prompt cards (✓ Yes / ✗ No), webhook-mode card callbacks
@@ -1268,7 +1269,7 @@ prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp
   KiB body cap, own-number echo suppression, allowlist∪pairing intake
   (`SMS_ALLOWED_USERS`/`SMS_ALLOW_ALL_USERS`, pairing codes delivered by SMS), and markdown-stripped
   1600-char chunked replies via the Twilio Messages REST API (HTTP Basic auth)
-- MMS media handling not ported
+- MMS media handling not implemented
 - `[messaging.sms]` or TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_PHONE_NUMBER/SMS_WEBHOOK_URL.
 
 **Microsoft Teams** — hermes `platforms.teams` plugin — the `microsoft-teams-apps` Python SDK is
@@ -1289,7 +1290,7 @@ prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp
   approval under a default-deny allowlist gate (empty `TEAMS_ALLOWED_USERS` rejects every click) and
   reply with a replacement card echoing the decision, and `/approve [all] [session|always]` / `/deny
   [all]` chat commands work on every platform (hermes slash-command semantics)
-- the summary-writer paths are not ported
+- the summary-writer paths are not implemented
 - `[messaging.teams]` or TEAMS_CLIENT_ID/TEAMS_CLIENT_SECRET/TEAMS_TENANT_ID/TEAMS_ALLOWED_USERS.
 
 **LINE** — hermes `platforms.line` plugin — the dedicated aiohttp server is replaced by a
@@ -1337,7 +1338,7 @@ prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp
   `messages.create` with the returned `attachmentDataRef`, both user-token-authed,
   `messageReplyOption` for threads), 401/403 invalidates the cached token and falls back to a
   setup-instructions text notice carrying the host path
-- typing-card patching ported: a "ulnclaw is thinking…" marker card posts before the turn
+- typing-card patching implemented: a "ulnclaw is thinking…" marker card posts before the turn
   (`typing_status_text` override, hermes `send_typing`) and the reply PATCHes it in-place via
   `messages.patch?updateMask=text` — first chunk patches, overflow chunks create, patch failure falls
   back to creating, empty replies patch "(interrupted)", the consumed-sentinel slot guards against
@@ -1361,7 +1362,7 @@ prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp
   NIP-42-authenticated WebSocket subscription and falls back to CLI polling when it cannot
   authenticate within 20 s, `websocket` requires it, `poll` keeps the CLI loop. The WS path answers
   the relay's `AUTH` challenge with a signed kind-22242 event (`src/nostr_auth.rs` — dependency-light
-  BIP-340 schnorr + nsec bech32 decode, hermes `nostr_auth.py` port
+  BIP-340 schnorr + nsec bech32 decode, hermes `nostr_auth.py` implementation
 - key from `BUZZ_PRIVATE_KEY` or a `~/.config/buzz/*credentials*.json` file, optional
   `BUZZ_AUTH_TAG` NIP-OA attestation), subscribes per channel (`kinds=[9]`, `#h`, `since` resume) plus
   the kind-44100 membership feed, routes events through the same dedup/mention/allowlist machinery as
@@ -1387,7 +1388,7 @@ prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp
 - conversations leaked in via `channels list` named "DM" with an empty description start as groups
   and latch to chat_type=dm on the first structural p-tagged un-mentioned message (`_maybe_latch_dm`
 - explicitly configured channels and real named/described channels never reclassify)
-- group management is not ported
+- group management is not implemented
 - `[messaging.buzz]` or
   BUZZ_CHANNELS/BUZZ_CLI/BUZZ_PUBKEY/BUZZ_POLL_INTERVAL_MS/BUZZ_RELAY_URL/BUZZ_PRIVATE_KEY/BUZZ_CREDENTIALS_FILE/BUZZ_TRANSPORT/BUZZ_AUTH_TAG.
 
@@ -1406,13 +1407,13 @@ prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp
   `/typing` indicators (5 s per-chat cooldown), and posts 8000-char capped replies to `/send`
   (`{spaceId, text}` + markdown `format` hint, `PHOTON_MARKDOWN` kill-switch) — URL-only replies ride
   `/send-richlink` with plain-text fallback
-- reactions (iMessage tapbacks) are ported: opt-in lifecycle tapbacks via `PHOTON_REACTIONS` (👀
+- reactions (iMessage tapbacks) are implemented: opt-in lifecycle tapbacks via `PHOTON_REACTIONS` (👀
   while processing, swapped remove-then-add for 👍 on success / 👎 on agent error), sidecar `/react` +
   `/unreact`, and inbound tapbacks route to the agent as `reaction:added:<emoji>` synthetic text only
   when they target a bot-sent message (`targetDirection: outbound` or the target is in the own-send
   ledger) — tapbacks never trigger the mention gate (hermes
   `on_processing_start`/`_add_reaction`/reaction routing)
-- the agent-facing `send_message action="react"` surface is ported in P259 (the `send_message`
+- the agent-facing `send_message action="react"` surface is implemented in P259 (the `send_message`
   tool's react/unreact actions reach Telegram via `setMessageReaction`, with the most-recent-message
   fallback recalled from the channel directory)
 - `[messaging.photon]` or
@@ -1455,7 +1456,7 @@ prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp
   `hermes_clarify_choice_<idx>` action ids packing `<id>|<idx>` values plus a ✏️ Other… row,
   block_actions routing over `interactive` envelopes with the double-click ledger, chat.update outcome
   rewrites — hermes `_handle_clarify_action`)
-- Yuanbao media/sticker channels are ported (see the Yuanbao clause)
+- Yuanbao media/sticker channels are implemented (see the Yuanbao clause)
 - P225: Telegram exec approvals render as inline keyboards — ✅ Allow Once / Session / Always + ❌
   Deny paired into 2-per-row buttons, `ea:<choice>:<id>` callback data mapped to the session through
   an approval-id registry (hermes `_approval_state`), resolve-first-render-after so stale taps say ⌛
@@ -1518,7 +1519,7 @@ prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp
   the pipeline to the desktop as `POST /api/audio/transcribe` (base64 data-URL voice note in,
   transcript out
 - 25 MiB cap, mime validation, provider-readiness gate — hermes `/api/audio/transcribe` parity
-- TTS is ported as `POST /api/audio/speak` over the `[tts]` openai/elevenlabs providers — P344) with
+- TTS is implemented as `POST /api/audio/speak` over the `[tts]` openai/elevenlabs providers — P344) with
   a composer mic button and a 🔊 read-aloud action on assistant replies. Known difference: hermes'
   default `local` provider (faster-whisper, Python) cannot embed in the static binary —
   `stt.local.command` or a cloud provider takes its place
@@ -1527,7 +1528,7 @@ prompt templates, delivery targets (`log`/`telegram`/`discord`/`slack`/`whatsapp
 
 #### OAuth login + skill sync (`hermes_cli/portal_cli.py`, `tools/skills_sync_client.py`) — ✅ core
 
-`src/oauth.rs` + `src/skills_sync.rs`: service-agnostic port of hermes' portal auth + Skill Sync.
+`src/oauth.rs` + `src/skills_sync.rs`: service-agnostic implementation aligned with hermes' portal auth + Skill Sync.
 `ulnclaw auth login` runs the RFC 8628 Device Authorization Grant against any configured `[oauth]`
 provider (device_authorization_url/token_url/client_id/scopes) with authorization_pending/slow_down
 handling, token storage at `oauth_tokens.json` (0600), refresh-token grant,
@@ -1535,7 +1536,7 @@ handling, token storage at `oauth_tokens.json` (0600), refresh-token grant,
 hermes' exact UX: opt-in skill sync with stable device id + device label, INERT gate reporting when
 no `[sync] base_url` is set, pull never clobbers local skills. Transport is generic: HTTP(S) REST
 with bearer auth (OAuth token or `[sync] api_key`) or a shared directory for offline/NAS sync.
-Nous-Portal-specific subscription features and org proposal approval flows are not ported
+Nous-Portal-specific subscription features and org proposal approval flows are not implemented
 
 <a id="oauth-upstream-proxy-hermes-cli-proxy"></a>
 
@@ -1549,16 +1550,15 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
   one-shot force-refresh retry on upstream 401/429, 10 MB request cap (hermes `MAX_REQUEST_BYTES`),
   hop-by-hop header stripping, identity-preserving byte stream (SSE preserved), `/health` probe.
   Divergence: the adapter is provider-agnostic (`[proxy] upstream_url`) instead of hermes' Nous-Portal
-  subscription resolver and xAI credential-pool adapter (the pool store itself is now ported lean —
+  subscription resolver and xAI credential-pool adapter (the pool store itself is now implemented lean —
   see the credential-pool row)
-- the iron-proxy egress firewall IS ported — see the dedicated iron-proxy row
+- the iron-proxy egress firewall IS implemented — see the dedicated iron-proxy row
 
 <a id="desktop-gui-apps-desktop-electron"></a>
 
 #### Desktop GUI (`apps/desktop` Electron) — ✅ core
 
-- `desktop-electron/` — **ulnclaw desktop**: since v0.7.0 ulnclaw ships a faithful port of hermes'
-  Electron desktop (v2026.8.3) itself, retiring the earlier Tauri 2 shell: React 19 + Vite renderer
+- `desktop-electron/` — **ulnclaw desktop**: since v0.7.0 ulnclaw ships its own Electron desktop client — an MIT-derived Electron shell (see NOTICE) aligned with hermes' Electron desktop v2026.8.3 — retiring the earlier Tauri 2 shell: React 19 + Vite renderer
   (sixteen views + command palette + themes/fonts + language picker), xterm.js terminal panes, file
   tree + git-review sidebar, sessions browser, live turn streaming over a JSON-RPC WebSocket +
   HTTP/SSE against the ulnclaw gateway, and an Electron main process that spawns/supervises the
@@ -1589,7 +1589,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
 
 #### Sessions browse (`hermes_cli/sessions_cmd.py browse` + curses picker) — ✅ core
 
-- `ulnclaw sessions browse [--source S] [--limit N]`: raw-mode TUI on a TTY (crossterm port of the
+- `ulnclaw sessions browse [--source S] [--limit N]`: raw-mode TUI on a TTY (crossterm-based implementation of the
   curses picker — alternate screen, ↑/↓/PgUp/PgDn/Home/End navigation with scrolling, live
   type-to-filter with backspace, green `▶` selection highlight, Enter selects, bare `q` quits while no
   filter is active, Esc clears the filter first and quits on the second press, single-step ↑/↓ wrap
@@ -1635,7 +1635,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
 - `latest_session_id` picks the `--continue` target by last activity (archived skipped)
 - all id-taking `sessions` actions (`show`/`export`/`recap`/`delete`/`rename`) accept unique
   prefixes via `resolve_session_id`
-- P232 ported hermes' `-c <session-name>` title lookup: `-c/--continue` now takes an optional value
+- P232 implemented hermes' `-c <session-name>` title lookup: `-c/--continue` now takes an optional value
   — bare `-c` keeps the most-recent-session behavior, while `-c NAME` resolves by exact id / unique
   prefix first, then title (`resolve_session_by_title` — numbered `title #N` lineage variants prefer
   the newest, archived skipped, LIKE wildcards escaped), and projects the result forward through
@@ -1655,7 +1655,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
 | Environment probe (`tools/env_probe.py`) | ✅ | one deterministic Python-toolchain line in the system prompt when the terminal backend is local: python3/python versions, pip-module availability, `pip`↔`python3` version mismatch, PEP 668 externally-managed marker (uv neutralizes it); silent on healthy machines; process-wide cache built by a single background worker, callers wait ≤10s then fail open; remote backends (docker/ssh) skip the probe; `[agent] environment_probe` toggle (default true) |
 | Context compression (`conversation_compression.py`) | ✅ | budget-triggered, middle-turn summarization via secondary model call, keeps system prompt + first user message + recent tail; summary call honors `[auxiliary.compression]` … [details](#context-compression-conversation-compression-py) |
 | Streaming think-block scrubber (`agent/think_scrubber.py`) | ✅ | `think_scrubber.rs`: stateful suppression of `<think>`/`<thinking>`/`<reasoning>`/`<thought>`/`<REASONING_SCRATCHPAD>` blocks in streamed deltas — every content delta is fed through the state machine in `call_with()` (open tags survive chunk boundaries; unterminated opens are boundary-gated), the held-back partial-tag tail is flushed at stream end, and the non-stream path runs the complete-string `strip_think_blocks`; closed pairs are always suppressed, opens only at block boundaries, so prose that merely mentions a tag is never over-stripped |
-| Session title generator (`agent/title_generator.py`) | ✅ | `title_generator.rs`: fire-and-forget auto-titling after the first exchange (background task, never adds latency to the reply) — first-2-user-turns guard, existing-title guard, `[auxiliary.title_generation]` routing (`language` pin, `enabled` kill switch with `is_truthy_value` semantics, default true); 500-char snippets, reasoning-block scrub on the answer, quote/"Title:"-prefix/first-line/80-char cleanup; atomic `set_auto_title_if_empty` persistence so a manual title set while generation was in flight wins; the optional title callback and portal/accounting tags are not ported (no live UI surface) |
+| Session title generator (`agent/title_generator.py`) | ✅ | `title_generator.rs`: fire-and-forget auto-titling after the first exchange (background task, never adds latency to the reply) — first-2-user-turns guard, existing-title guard, `[auxiliary.title_generation]` routing (`language` pin, `enabled` kill switch with `is_truthy_value` semantics, default true); 500-char snippets, reasoning-block scrub on the answer, quote/"Title:"-prefix/first-line/80-char cleanup; atomic `set_auto_title_if_empty` persistence so a manual title set while generation was in flight wins; the optional title callback and portal/accounting tags are not implemented (no live UI surface) |
 | Persistent goals — the Ralph loop (`hermes_cli/goals.py`) | ✅ core | `goals.rs`: standing goals that survive across turns — after every assistant turn a `goal_judge` auxiliary model decides done/continue/wait; continuation prompts are fed back as … [details](#persistent-goals-the-ralph-loop-hermes-cli-goals-py) |
 | Timezone-aware clock (`hermes_time.py`) | ✅ | `hermes_time.rs`: IANA timezone resolution `ULNCLAW_TIMEZONE` → `HERMES_TIMEZONE` → config `timezone` → server-local (invalid names warn + fall back, cached with `reset_cache()`); system prompt gets a date-only "Conversation started" line + Model/Provider (byte-stable all day for prefix-cache, hermes PR #20451); compression summaries carry a `Current date` anchor |
 | Approval system (`approval.py`) | ✅ | command normalization (backslash-joins, `${IFS}`, comment strip), hardline floor (block), recoverable-costly (confirm); REPL y/N prompt; gateway run approvals ( … [details](#approval-system-approval-py) |
@@ -1667,21 +1667,21 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
 | Auxiliary model routing (`auxiliary_client.py`) | ✅ core | `[auxiliary.<task>]` per-task provider/model/base_url/api_key/key_env overrides (`compression`, `vision`, `title_generation`); `"auto"`/blank inherits the main runtime; main client reused when nothing is overridden |
 | models.dev catalog (`agent/models_dev.py`) | ✅ core | `models_dev.rs`: fetches `https://models.dev/api.json` with a three-tier cache — in-memory (1h TTL, stale served immediately while a background thread refreshes) → disk … [details](#models-dev-catalog-agent-models-dev-py) |
 | Config (`config.yaml`) | ✅ | `config.toml` + `.env` file, profiles, env precedence |
-| Skills system | ✅ | discovery, frontmatter, linked files, `/skill-name` invocation scaffolding (hermes `build_skill_invocation_message` port: activation note + skill body + skill-directory/supporting-file hints + user-instruction marker, `skill_usage` bump; recognized by `sessions retitle-skills`) |
+| Skills system | ✅ | discovery, frontmatter, linked files, `/skill-name` invocation scaffolding (hermes `build_skill_invocation_message` implementation: activation note + skill body + skill-directory/supporting-file hints + user-instruction marker, `skill_usage` bump; recognized by `sessions retitle-skills`) |
 | Memory system | ✅ | MEMORY.md/USER.md with prompt injection |
 | Cron scheduler | ✅ | job store + schedule parsing + poll loop (`cron::run_scheduler`) |
 | MCP client (`mcp_tool.py`) | ✅ core | stdio JSON-RPC: initialize/tools/list/tools/call; `[[mcp.servers]]` config; tools registered as `mcp__<server>__<tool>`; OSV malware preflight for npx/uvx/pipx launches … [details](#mcp-client-mcp-tool-py) |
-| MCP channel bridge (`mcp_serve.py`) | ✅ core | P260 full port of hermes `mcp_serve.py` (`src/mcp_serve.rs`, `ulnclaw mcp serve [--verbose]`): stdio JSON-RPC 2.0 MCP server exposing messaging conversations to any MCP client … [details](#mcp-channel-bridge-mcp-serve-py) |
-| ACP adapter (`acp_adapter/`) | ✅ core | P261 port of hermes `acp_adapter/` (`src/acp_adapter.rs`, `ulnclaw acp [--verbose]`): Agent Client Protocol stdio server for editors (Zed). Bidirectional newline-delimited … [details](#acp-adapter-acp-adapter) |
-| Batch runner (`batch_runner.py`) | ✅ core | P262 full port of hermes `batch_runner.py` (`src/batch_runner.rs` … [details](#batch-runner-batch-runner-py) |
-| Send CLI (`hermes_cli/send_cmd.py`) | ✅ core | P263 full port of hermes `hermes send` (`ulnclaw send`): script/cron/CI message delivery with no LLM and no agent loop — `--to platform[:chat[:thread]]` target grammar, message body from positional / `--file PATH` / `-` / piped stdin (TTY-aware), `--subject` header prepend, `--list [platform]` channel-directory rendering merged with configured-but-undiscovered platforms, `--json` raw result, `--quiet` exit-code-only mode, hermes exit-code contract (0 ok / 1 delivery failure / 2 usage error). Rides the P259 `send_message` pipeline including the standalone Telegram/Discord/Slack REST path (bot-token platforms need no running gateway) |
-| Slack native slashes + app manifest (`hermes_cli/slack_cli.py` + slack adapter slash flow) | ✅ core | P265 port of hermes `hermes slack manifest` + the Slack socket-mode slash path: … [details](#slack-native-slashes-app-manifest-hermes-cli-slack-cli-py-slack-adapter-slash-flow) |
-| Gateway monitoring + OTLP export (`agent/monitoring/*`) | ✅ core | P266 full port of the hermes gateway monitoring plane (`src/monitoring.rs`): content-free `GatewayHealthEvent`/`GatewayDiagnosticEvent`/`CronExecutionEvent` projections with a … [details](#gateway-monitoring-otlp-export-agent-monitoring) |
-| Setup wizard (`hermes_cli/setup.py`) | ✅ core | P267 lean port of the hermes interactive setup wizard (`src/setup_cmd.rs`): `ulnclaw setup [model\|terminal\|gateway\|tools\|agent] [--quick] [--reset] [--non-interactive]` — … [details](#setup-wizard-hermes-cli-setup-py) |
-| Model picker (`cmd_model` / `select_provider_and_model`) | ✅ core | P268 port of hermes `hermes model`: `ulnclaw model [--refresh]` — TTY-gated interactive provider + model switcher. Provider roster (built-ins + user `[providers.<slug>]` entries, current marked/default), credential prompt into `.env` when missing, models.dev catalog model list (agentic models, 40-row cap, `Type a model name manually…` fallback when the catalog is offline/unknown), config persistence, post-switch summary (provider/model/endpoint/key state). `--refresh` clears the models.dev picker cache first. Also hardened `models_dev::fetch_from_network` to build/drop the reqwest blocking client on a scoped OS thread so catalog fetches never panic inside the async gateway/dispatch context |
-| Desktop launcher + command aliases (`cmd_gui` / `cmd_login` / `cmd_logout` / journey aliases) | ✅ core | P269 port of the remaining small hermes surfaces: `ulnclaw gui [--binary PATH] [--dev]` (alias `desktop`) resolves the packaged `ulnclaw desktop` executable (`--binary` → `ULNCLAW_DESKTOP_BINARY` → `desktop-electron/release/{linux,win,mac}-unpacked`) and spawns it detached, `--dev` runs the unpackaged app via `npm start` in `desktop-electron/`, missing binaries print build instructions; top-level `ulnclaw login` / `ulnclaw logout` aliases for `auth login` / `auth logout` (hermes `cmd_login`/`cmd_logout`); `ulnclaw learning` / `ulnclaw memory-graph` visible aliases for `journey` (hermes journey parser aliases) |
-| Dynamic webhook subscriptions (`hermes_cli/webhook.py`) | ✅ core | P270 port of hermes `hermes webhook`: … [details](#dynamic-webhook-subscriptions-hermes-cli-webhook-py) |
-| WhatsApp Cloud setup wizard (`hermes_cli/setup_whatsapp_cloud.py`) | ✅ core | P271 lean port of hermes `hermes whatsapp-cloud`: `ulnclaw whatsapp-cloud` — TTY-gated interactive wizard with hermes' field-shape validators (Phone Number ID vs … [details](#whatsapp-cloud-setup-wizard-hermes-cli-setup-whatsapp-cloud-py) |
+| MCP channel bridge (`mcp_serve.py`) | ✅ core | P260 full parity with hermes `mcp_serve.py` (`src/mcp_serve.rs`, `ulnclaw mcp serve [--verbose]`): stdio JSON-RPC 2.0 MCP server exposing messaging conversations to any MCP client … [details](#mcp-channel-bridge-mcp-serve-py) |
+| ACP adapter (`acp_adapter/`) | ✅ core | P261 parity with hermes `acp_adapter/` (`src/acp_adapter.rs`, `ulnclaw acp [--verbose]`): Agent Client Protocol stdio server for editors (Zed). Bidirectional newline-delimited … [details](#acp-adapter-acp-adapter) |
+| Batch runner (`batch_runner.py`) | ✅ core | P262 full parity with hermes `batch_runner.py` (`src/batch_runner.rs` … [details](#batch-runner-batch-runner-py) |
+| Send CLI (`hermes_cli/send_cmd.py`) | ✅ core | P263 full parity with hermes `hermes send` (`ulnclaw send`): script/cron/CI message delivery with no LLM and no agent loop — `--to platform[:chat[:thread]]` target grammar, message body from positional / `--file PATH` / `-` / piped stdin (TTY-aware), `--subject` header prepend, `--list [platform]` channel-directory rendering merged with configured-but-undiscovered platforms, `--json` raw result, `--quiet` exit-code-only mode, hermes exit-code contract (0 ok / 1 delivery failure / 2 usage error). Rides the P259 `send_message` pipeline including the standalone Telegram/Discord/Slack REST path (bot-token platforms need no running gateway) |
+| Slack native slashes + app manifest (`hermes_cli/slack_cli.py` + slack adapter slash flow) | ✅ core | P265 parity with hermes `hermes slack manifest` + the Slack socket-mode slash path: … [details](#slack-native-slashes-app-manifest-hermes-cli-slack-cli-py-slack-adapter-slash-flow) |
+| Gateway monitoring + OTLP export (`agent/monitoring/*`) | ✅ core | P266 full implementation of the hermes gateway monitoring plane (`src/monitoring.rs`): content-free `GatewayHealthEvent`/`GatewayDiagnosticEvent`/`CronExecutionEvent` projections with a … [details](#gateway-monitoring-otlp-export-agent-monitoring) |
+| Setup wizard (`hermes_cli/setup.py`) | ✅ core | P267 lean implementation aligned with the hermes interactive setup wizard (`src/setup_cmd.rs`): `ulnclaw setup [model\|terminal\|gateway\|tools\|agent] [--quick] [--reset] [--non-interactive]` — … [details](#setup-wizard-hermes-cli-setup-py) |
+| Model picker (`cmd_model` / `select_provider_and_model`) | ✅ core | P268 parity with hermes `hermes model`: `ulnclaw model [--refresh]` — TTY-gated interactive provider + model switcher. Provider roster (built-ins + user `[providers.<slug>]` entries, current marked/default), credential prompt into `.env` when missing, models.dev catalog model list (agentic models, 40-row cap, `Type a model name manually…` fallback when the catalog is offline/unknown), config persistence, post-switch summary (provider/model/endpoint/key state). `--refresh` clears the models.dev picker cache first. Also hardened `models_dev::fetch_from_network` to build/drop the reqwest blocking client on a scoped OS thread so catalog fetches never panic inside the async gateway/dispatch context |
+| Desktop launcher + command aliases (`cmd_gui` / `cmd_login` / `cmd_logout` / journey aliases) | ✅ core | P269 implementation of the remaining small hermes surfaces: `ulnclaw gui [--binary PATH] [--dev]` (alias `desktop`) resolves the packaged `ulnclaw desktop` executable (`--binary` → `ULNCLAW_DESKTOP_BINARY` → `desktop-electron/release/{linux,win,mac}-unpacked`) and spawns it detached, `--dev` runs the unpackaged app via `npm start` in `desktop-electron/`, missing binaries print build instructions; top-level `ulnclaw login` / `ulnclaw logout` aliases for `auth login` / `auth logout` (hermes `cmd_login`/`cmd_logout`); `ulnclaw learning` / `ulnclaw memory-graph` visible aliases for `journey` (hermes journey parser aliases) |
+| Dynamic webhook subscriptions (`hermes_cli/webhook.py`) | ✅ core | P270 parity with hermes `hermes webhook`: … [details](#dynamic-webhook-subscriptions-hermes-cli-webhook-py) |
+| WhatsApp Cloud setup wizard (`hermes_cli/setup_whatsapp_cloud.py`) | ✅ core | P271 lean implementation aligned with hermes `hermes whatsapp-cloud`: `ulnclaw whatsapp-cloud` — TTY-gated interactive wizard with hermes' field-shape validators (Phone Number ID vs … [details](#whatsapp-cloud-setup-wizard-hermes-cli-setup-whatsapp-cloud-py) |
 | WhatsApp bridge status (`hermes whatsapp` surface) | ✅ core | P272 read-only diagnostics replacing hermes' Baileys wizard: `ulnclaw whatsapp [status]` — platform/mode state, resolved bridge URL (bundled auto-spawn vs external), Node.js detection, script-directory install/deps freshness (inspected without side effects), pidfile process state (running/stale/foreign), live `/health` probe with connected-as-JID / QR-pairing summaries, and next-step hints. The wizard's install+pair role is filled by the gateway-supervised bridge (deps install on first start, QR on startup in bridge.log) — documented difference |
 | CLI (`hermes_cli/`) | ✅ core | chat REPL with slash commands (incl. `/rollback [N\|hash] [file]`, `/rollback diff <N>`, `/diff` checkpoint commands, `/recap`, `/goal` + `/subgoal` standing-goal loop, `/kanban` … [details](#cli-hermes-cli) |
 | Git working diff (`working_diff.py`) | ✅ | `ulnclaw diff [--staged\|--all] [--dir PATH] [paths...]` + REPL `/gitdiff [staged\|all]`: working/staged/all modes, untracked files folded in via `git diff --no-index` (50-file cap), timeouts; the checkpoint-based REPL `/diff` remains separate |
@@ -1704,7 +1704,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
 
 - budget-triggered, middle-turn summarization via secondary model call, keeps system prompt + first
   user message + recent tail
-- summary call honors `[auxiliary.compression]` routing. P233 ported the three-layer tool-result
+- summary call honors `[auxiliary.compression]` routing. P233 implemented the three-layer tool-result
   persistence (`tools/tool_result_storage.py` + `budget_config.py`): layer 2 persists any tool result
   over its threshold (default 100K chars
 - `read_file` pinned to infinity against persist→read→persist loops) to
@@ -1742,7 +1742,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
 - gateway run approvals (`POST /v1/runs/:id/approval`, once/session/always/deny, SSE
   `approval.request`), fail-closed `[approvals] timeout` (default 300s), `always` grants persisted
   across restarts
-- messaging sessions approve in-chat (hermes `tools/approval.py` gateway registry port,
+- messaging sessions approve in-chat (hermes `tools/approval.py` gateway registry implementation,
   `src/approval_gateway.rs`): the approve callback registers a blocking per-session entry, renders the
   prompt on the platform (Teams AdaptiveCard buttons, `/approve` text fallback elsewhere, credentials
   redacted first), and `/approve [all] [session|always]` / `/deny [all]` chat commands or card taps
@@ -1755,7 +1755,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
   consecutive guardian DENY verdicts the unattended deny message escalates from "do not retry" to a
   hard-stop instruction (report to the user / ask for a manual run), any approval resets the streak —
   and `deny` fnmatch globs that block matching commands unconditionally BEFORE the mode=off/yolo
-  bypass (case-insensitive `*`/`?`/`[...]` semantics). P237 ported the tirith pre-exec content scanner
+  bypass (case-insensitive `*`/`?`/`[...]` semantics). P237 implemented the tirith pre-exec content scanner
   (`tools/tirith_security.py`): every gated terminal command is additionally scanned by the external
   `tirith` binary (homograph URLs, pipe-to-interpreter, terminal injection)
 - the exit code is the verdict (0 allow / 1 block / 2 warn) and JSON stdout only enriches findings
@@ -1796,12 +1796,12 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
 - `[[mcp.servers]]` config
 - tools registered as `mcp__<server>__<tool>`
 - OSV malware preflight for npx/uvx/pipx launches (`osv_check.py` port: MAL-* advisories block,
-  fail-open, 1h verdict cache, `OSV_ENDPOINT`/`OSV_CHECK_CACHE_TTL` overrides). P235 ported the stdio
+  fail-open, 1h verdict cache, `OSV_ENDPOINT`/`OSV_CHECK_CACHE_TTL` overrides). P235 implemented the stdio
   watchdog (`mcp_stdio_watchdog.py`) as a kernel primitive: on Linux each MCP child is spawned with
   `prctl(PR_SET_PDEATHSIG, SIGKILL)` so a hard ulnclaw death (kill -9 / crash) reaps the server
   instead of orphaning it to race the next startup's upstream session (hermes spawns a supervisor
   process for the same effect
-- macOS/Windows keep graceful-exit reaping). P236 ported the schema cache + lazy startup
+- macOS/Windows keep graceful-exit reaping). P236 implemented the schema cache + lazy startup
   (`mcp_schema_cache.py` + `mcp_tool.py` `_register_from_cache_sync`): per-server tool manifests
   persist to `<home>/cache/mcp_schema_cache.json` (0600 file in a 0700 `cache/` dir, atomic staged
   rename) keyed by server name + SHA-256 fingerprint of the connection config (same payload shape as
@@ -1813,7 +1813,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
   the stale manifest (cache refreshed
 - phantom tools fail fast with a stale-schema error instead of being deregistered, since ulnclaw
   handlers hold no registry handle
-- identical cache entries skip the rewrite). P238 ported `/reload-mcp` + the slash-confirm primitive
+- identical cache entries skip the rewrite). P238 implemented `/reload-mcp` + the slash-confirm primitive
   (`tools/slash_confirm.py` + `cli.py _confirm_and_reload_mcp/_reload_mcp`): REPL `/reload-mcp` warns
   that rebuilding the tool surface invalidates the provider prompt cache and prompts Approve Once /
   Always Approve / Cancel (gated by `approvals.mcp_reload_confirm`, default on
@@ -1823,14 +1823,14 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
   the model sees the new surface while the prompt-cache prefix survives
 - the gateway-side confirm primitive (`src/slash_confirm.rs`: session-keyed pending registry,
   confirm_id supersede semantics, pop-before-run double-callback guard, 300 s staleness timeout,
-  once/always/cancel choices) backs platform button / `/approve`-text resolution paths. P239 ported
+  once/always/cancel choices) backs platform button / `/approve`-text resolution paths. P239 implemented
   the remote MCP transports (hermes `mcp_tool.py` Streamable HTTP + SSE paths, hand-rolled
   JSON-RPC-over-HTTP in place of the Python MCP SDK): `[[mcp.servers]]` entries with a `url` connect
   over Streamable HTTP (POST with `Accept: application/json, text/event-stream`, JSON or SSE reply
   bodies, `Mcp-Session-Id` capture/echo, protocol version 2025-03-26), `transport = "sse"` selects the
   pre-2025-03-26 SSE protocol (GET stream → `endpoint` event → POST + `message`-event replies
   correlated by id), and static `headers` (e.g. `Authorization`) ride on every request
-- the schema-cache fingerprint now carries the real url/transport. P240 ported MCP OAuth 2.1 + PKCE
+- the schema-cache fingerprint now carries the real url/transport. P240 implemented MCP OAuth 2.1 + PKCE
   (`tools/mcp_oauth.py` + `tools/mcp_oauth_manager.py` core, hand-rolled in place of the MCP SDK's
   `OAuthClientProvider`): `[[mcp.servers]] auth = "oauth"` (+ optional `[mcp_servers.<name>.oauth]`
   client_id/client_secret/scope/redirect_port/redirect_uri/redirect_host/client_name) runs
@@ -1841,7 +1841,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
   `<home>/mcp-tokens/<server>.{json,client.json,meta.json}` (hermes layout)
 - unattended sessions (cron) use cached/refreshable tokens or fail fast
 - 401s on remote requests trigger one recovery (refresh → re-auth, per-server dedupe) and a single
-  request replay. P241 ported stdio environment filtering (hermes `_build_safe_env` +
+  request replay. P241 implemented stdio environment filtering (hermes `_build_safe_env` +
   `_interpolate_env_vars`): stdio MCP children spawn with a cleared environment plus a filtered copy —
   only safe baseline vars (PATH/HOME/USER/LANG/LC_ALL/TERM/SHELL/TMPDIR plus the case-insensitive
   Windows process/location set), `XDG_*` vars, secret-source-tagged vars (keys present in
@@ -1849,7 +1849,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
   `env` block pass through, so ambient API keys/tokens/credentials never leak to MCP servers
 - `${VAR}` and Cursor-style `${env:VAR}` placeholders in `command`/`args`/`env` values resolve
   against the secret scope first, then the process environment, and unset references keep the literal
-  placeholder. P242 ported the dashboard-mediated OAuth bridge (hermes `tools/mcp_dashboard_oauth.py`
+  placeholder. P242 implemented the dashboard-mediated OAuth bridge (hermes `tools/mcp_dashboard_oauth.py`
   + `web_server.py` flow registry/routes): the gateway serves `POST /api/mcp/servers/<name>/auth`
   (validates the server is remote and OAuth-bound — stdio servers authenticate via env keys,
   header-auth servers via headers
@@ -1865,7 +1865,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
   failure, then probes the authorized server for its tool list (shown in the flow snapshot).
   Divergence: the ulnclaw gateway is a standalone daemon without the agent's tool registry, so hermes'
   live in-process reconnect is skipped — new tokens take effect on the next session / lazy spawn. P243
-  ported the OAuth manager hardening (hermes `tools/mcp_oauth_manager.py`): a process-wide
+  implemented the OAuth manager hardening (hermes `tools/mcp_oauth_manager.py`): a process-wide
   `OAuthManager` (`src/mcp/oauth_manager.rs`) keeps a per-server tokens-file mtime watermark — a
   pre-request disk watch (one `stat()` per POST, hermes `HermesMCPOAuthProvider` pre-flow reload)
   picks up tokens another process refreshed on disk (cron job, dashboard bridge, other profile)
@@ -1893,7 +1893,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
 
 #### MCP channel bridge (`mcp_serve.py`) — ✅ core
 
-- P260 full port of hermes `mcp_serve.py` (`src/mcp_serve.rs`, `ulnclaw mcp serve [--verbose]`):
+- P260 full parity with hermes `mcp_serve.py` (`src/mcp_serve.rs`, `ulnclaw mcp serve [--verbose]`):
   stdio JSON-RPC 2.0 MCP server exposing messaging conversations to any MCP client (Claude Code,
   Cursor, Codex, …). OpenClaw's 9-tool bridge surface plus the hermes `channels_list` extra:
   `conversations_list` (platform/search filters, limit clamp 1–200), `conversation_get`,
@@ -1912,7 +1912,7 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
 
 #### ACP adapter (`acp_adapter/`) — ✅ core
 
-P261 port of hermes `acp_adapter/` (`src/acp_adapter.rs`, `ulnclaw acp [--verbose]`): Agent Client
+P261 parity with hermes `acp_adapter/` (`src/acp_adapter.rs`, `ulnclaw acp [--verbose]`): Agent Client
 Protocol stdio server for editors (Zed). Bidirectional newline-delimited JSON-RPC 2.0 with outbound
 request/response matching. Surface: `initialize` (protocol v1, loadSession + image/embeddedContext
 prompt capabilities), `authenticate` (no methods advertised), `session/new` / `session/load`
@@ -1929,7 +1929,7 @@ hermes edit_approval parity)
 
 #### Batch runner (`batch_runner.py`) — ✅ core
 
-P262 full port of hermes `batch_runner.py` (`src/batch_runner.rs`, `ulnclaw batch --dataset-file X
+P262 full parity with hermes `batch_runner.py` (`src/batch_runner.rs`, `ulnclaw batch --dataset-file X
 --run-name R [--batch-size N] [--num-workers N] [--resume] [--verbose] [--max-iterations N] [--model
 M]`): JSONL dataset loading with per-line validation, parallel batch processing (tokio
 `buffer_unordered` worker pool — batches parallel, prompts sequential inside each worker, hermes
@@ -1945,7 +1945,7 @@ terminal's nested `content.error` + `success:false` patterns), reasoning coverag
 
 #### Slack native slashes + app manifest (`hermes_cli/slack_cli.py` + slack adapter slash flow) — ✅ core
 
-- P265 port of hermes `hermes slack manifest` + the Slack socket-mode slash path: `ulnclaw slack
+- P265 parity with hermes `hermes slack manifest` + the Slack socket-mode slash path: `ulnclaw slack
   manifest [--write [PATH]] [--name N] [--description D] [--long-description T |
   --long-description-file F] [--slashes-only] [--no-assistant | --agent-view]` emits the Slack app
   manifest registering every platform command as a native slash (`/ulnclaw` catch-all reserved first,
@@ -1962,10 +1962,10 @@ terminal's nested `content.error` + `success:false` patterns), reasoning coverag
 
 #### Gateway monitoring + OTLP export (`agent/monitoring/*`) — ✅ core
 
-P266 full port of the hermes gateway monitoring plane (`src/monitoring.rs`): content-free
+P266 full implementation of the hermes gateway monitoring plane (`src/monitoring.rs`): content-free
 `GatewayHealthEvent`/`GatewayDiagnosticEvent`/`CronExecutionEvent` projections with a global bounded
 emitter (fire-and-forget, drop-on-full at 1024), unconditional egress redaction (secrets→PII:
-bearer/token/`***`/email/uuid/phone scrub — lookbehind-free port of hermes `_PHONE_RE` semantics),
+bearer/token/`***`/email/uuid/phone scrub — lookbehind-free aligned with hermes `_PHONE_RE` semantics),
 persistent install-id minting, `[monitoring]` config with hermes defaults + interval floors (health
 60s / diagnostics 5s, floors 5/1), built-in OTLP/HTTP JSON trace exporter (resourceSpans/scopeSpans,
 `ulnclaw.*` attribute whitelist per span kind + 500-char clamp, `headers_env` resolved at export
@@ -1978,7 +1978,7 @@ diagnostics only — no prompts, messages, tool args/results, or usage analytics
 
 #### Setup wizard (`hermes_cli/setup.py`) — ✅ core
 
-P267 lean port of the hermes interactive setup wizard (`src/setup_cmd.rs`): `ulnclaw setup
+P267 lean implementation aligned with the hermes interactive setup wizard (`src/setup_cmd.rs`): `ulnclaw setup
 [model|terminal|gateway|tools|agent] [--quick] [--reset] [--non-interactive]` — first-time mode
 choice (Full / Blank Slate), reconfigure flow with current-value defaults on existing installs,
 per-section runs, timestamped config backup before modification (#3522), non-interactive guidance on
@@ -1994,7 +1994,7 @@ differences): Nous Portal quick-setup, OpenClaw migration offer, curses space-to
 
 #### Dynamic webhook subscriptions (`hermes_cli/webhook.py`) — ✅ core
 
-- P270 port of hermes `hermes webhook`: `ulnclaw webhook subscribe <name> [--description D]
+- P270 parity with hermes `hermes webhook`: `ulnclaw webhook subscribe <name> [--description D]
   [--events e1,e2] [--secret S] [--prompt P] [--skills s1,s2] [--deliver target] [--deliver-chat-id C]
   [--deliver-only] [--script CMD]`, `webhook list`, `webhook remove <name>`, `webhook test <name>
   [--payload JSON]` (signed HMAC-SHA256 POST). Subscriptions persist to `webhook_subscriptions.json`
@@ -2009,7 +2009,7 @@ differences): Nous Portal quick-setup, OpenClaw migration offer, curses space-to
 
 #### WhatsApp Cloud setup wizard (`hermes_cli/setup_whatsapp_cloud.py`) — ✅ core
 
-- P271 lean port of hermes `hermes whatsapp-cloud`: `ulnclaw whatsapp-cloud` — TTY-gated interactive
+- P271 lean implementation aligned with hermes `hermes whatsapp-cloud`: `ulnclaw whatsapp-cloud` — TTY-gated interactive
   wizard with hermes' field-shape validators (Phone Number ID vs pasted-phone-number trap, `EAA`
   access-token prefix with OpenAI/Slack/GitHub mispaste diagnosis, 32-hex App Secret), auto-minted
   verify token with regen prompt, recipient-allowlist normalization, and the SETUP COMPLETE follow-up
@@ -2056,7 +2056,7 @@ differences): Nous Portal quick-setup, OpenClaw migration offer, curses space-to
   [status]` (Baileys bridge diagnostics), `sync status/pull/push/now/enable/disable/device`,
   `uninstall --full/--dry-run/--yes` (code checkout + shell PATH entries + wrapper symlinks + optional
   home wipe
-- hermes `uninstall.py` port — Windows registry/env steps not ported)), `moa run/list/delete`,
+- hermes `uninstall.py` implementation — Windows registry/env steps not implemented)), `moa run/list/delete`,
   `models providers/list/info/refresh` (models.dev catalog), `skills blueprints/schedule/unschedule`,
   `diff`, `init`
 
@@ -2066,7 +2066,7 @@ differences): Nous Portal quick-setup, OpenClaw migration offer, curses space-to
 
 - `[moa.presets.<name>]` reference fan-out + aggregator synthesis (`ulnclaw moa run/list/delete`, REPL `/moa <prompt>`)
 - parallel references, loud/silent degraded policy, all-failed early return, joined-fallback on aggregator failure
-- P169 ported the persistent facade + traces + privacy filter: `[model] provider = "moa"` runs the
+- P169 implemented the persistent facade + traces + privacy filter: `[model] provider = "moa"` runs the
   whole agent loop on a preset (`model` selects the preset — hermes `build_moa_facade`): per-turn
   reference fan-out cached across tool-loop iterations (hermes reference cache), guidance attached at
   the END of the aggregator prompt (`_attach_reference_guidance`, prompt-cache stable), the caller's
@@ -2085,7 +2085,7 @@ differences): Nous Portal quick-setup, OpenClaw migration offer, curses space-to
   `X-Ulnclaw-Session-Id`, `stream: true` SSE token streaming with `hermes.tool.progress` events),
   `/v1/responses` (stateful via `previous_response_id`, `stream: true` Responses-API SSE events),
   `/v1/models`, `/api/model/options` multi-provider picker inventory (P168, hermes `inventory.py`
-  port: current-provider row enriched from models.dev with capability/cost maps, `[providers.<slug>]`
+  implementation: current-provider row enriched from models.dev with capability/cost maps, `[providers.<slug>]`
   config rows with bounded live `/models` probes, env-authenticated canonical rows,
   `include_unconfigured` skeleton rows with `auth_type`/`key_env`/`warning` setup hints,
   `explicit_only` filter, canonical declaration order, per-lab featured models + formatted pricing,
@@ -2094,7 +2094,7 @@ differences): Nous Portal quick-setup, OpenClaw migration offer, curses space-to
   + SSE events + stop + approval), `/api/sessions` CRUD + chat + chat/stream (slash passthrough:
   `/help`/`/skills`/`/tools`/`/recap`/`/title`/`/usage` execute without an LLM turn
 - `/skill-name` + `/<bundle>` invocations expand into hermes skill-scaffold user turns — the hermes
-  gateway/run.py skill-command-sharing port) + `PATCH` (title/end_reason) + `fork` + per-session model
+  gateway/run.py skill-command-sharing implementation) + `PATCH` (title/end_reason) + `fork` + per-session model
   lock (enforced on every turn) + `recap` + `POST /api/sessions/prune|archive` bulk cleanup
   (filterable, dry-run preview — mirrors `sessions prune/archive`), `/api/jobs` cron HTTP API (CRUD +
   pause/resume/run + `GET /api/jobs/delivery-targets` + `POST /api/jobs/fire` Chronos NAS fire webhook
@@ -2194,37 +2194,37 @@ session, retires expired endpoints, and `main` releases the session at exit (her
   platform-specific flows); the gateway exposes run approvals over HTTP with
   once/session/always/deny semantics.  Chat-completions requests have no run
   context and auto-deny confirm-tier commands by design.  Smart-approval
-  (LLM guardian) and cron approval modes are ported; unattended runs fail
+  (LLM guardian) and cron approval modes are implemented; unattended runs fail
   closed unless `cron_mode = "approve"`.
 - Browser supervisor launches a local Chrome/Chromium directly; hermes drives
-  an external `agent-browser` daemon. The Camofox REST backend is ported
+  an external `agent-browser` daemon. The Camofox REST backend is implemented
   (incl. managed persistence, via `CAMOFOX_MANAGED_PERSISTENCE` instead of
   hermes' config.yaml knob); cloud browser providers (Browserbase,
-  Browser Use, Firecrawl) are ported in `browser/cloud.rs`.
+  Browser Use, Firecrawl) are implemented in `browser/cloud.rs`.
 - The gateway implements the api_server platform subset (profile
-  multiplexing under `/p/<profile>/...` IS ported — see the feature table).
+  multiplexing under `/p/<profile>/...` IS implemented — see the feature table).
 - `/api/model/options` inventory: hermes' credential-pool rows and Nous
-  free-tier gating are not ported (the pool store itself IS ported lean
+  free-tier gating are not implemented (the pool store itself IS implemented lean
   — see the credential-pool row — but the picker keeps one row per
   provider); the multi-provider row set, picker hints, featured models
-  and pricing are ported (P168, see the HTTP gateway row).
+  and pricing are implemented (P168, see the HTTP gateway row).
 - Compression uses a char/4 token estimate instead of a tokenizer.
 - `patch` fuzzy chain implements all 9 hermes strategies; similarity is an
   LCS-based ratio (difflib.SequenceMatcher stand-in), so edge-case thresholds
   can differ slightly from CPython's matcher.
 - Environments cover local/docker/ssh; hermes' modal/daytona/vercel backends
-  and their credential flows are not ported.
+  and their credential flows are not implemented.
 - Checkpoints skip hermes' legacy pre-v2 store migration (fresh stores only)
   and the volume-identity orphan heuristic (workdir existence is used).
 - Secrets: `secrets sync` dry-runs compare against the env the startup hook
   already applied (hermes behaves the same); the Bitwarden `token` rotation
-  subcommand IS ported (`secrets bitwarden token [--access-token] [--no-verify]`
+  subcommand IS implemented (`secrets bitwarden token [--access-token] [--no-verify]`
   — validates the new token against Bitwarden before storing, so a bad paste
   never bricks the working token, and drops the old token-fingerprint caches);
   the bws auto-install Windows asset path is untested.
 - Computer-use: driver payloads (SOM screenshot b64, AX trees) pass through
   without the hermes PNG post-processing / multimodal eviction layer; the macOS TCC grant flow is exposed to the desktop (`/api/tools/computer-use/permissions/grant` spawns `cua-driver permissions grant` as a polled background action, macOS-only); the embedded-daemon socket mode is not
-  ported; `install` shells out to the upstream trycua installer script.
+  implemented; `install` shells out to the upstream trycua installer script.
 - Plugins: ulnclaw plugins are subprocesses speaking the hermes shell-hook JSON protocol
   (directory plugins + `[hooks]` config), not Python imports
   - the core fires every hook event hermes v2026.8.3 emits at runtime (13 of 23 — the other 10 are
@@ -2233,7 +2233,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
   - the `ulnclaw kanban` engine now fires the kanban_task_claimed/completed/blocked hooks on
     claim/done/block, but the agent-side kanban_* tools now ride the same KanbanStore engine (P119
     unified the previously separate tables):
-    - P122 ported the dispatcher tick (`kanban dispatch` CLI + `POST /api/kanban/dispatch`:
+    - P122 implemented the dispatcher tick (`kanban dispatch` CLI + `POST /api/kanban/dispatch`:
         stale-claim reclaim with live-pid extension, parent-done todo→ready promotion, ready-task worker
         spawn via detached `ulnclaw run` with ULNCLAW_KANBAN_TASK, live concurrency cap, spawn-failure
         auto-block after 2 tries)
@@ -2243,7 +2243,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
     - P124 added per-task git-worktree isolation (`[kanban] worktrees`, default on: each dispatched
         worker runs in `<repo>/.worktrees/<task-id>` on branch `kanban/<task-id>`, reused across
         respawns; `ulnclaw kanban gc` removes trees of done/archived tasks, branches kept)
-    - P125 ported the hermes kanban swarm (`hermes_cli/kanban_swarm.py`): `ulnclaw kanban swarm <goal>
+    - P125 implemented the hermes kanban swarm (`hermes_cli/kanban_swarm.py`): `ulnclaw kanban swarm <goal>
         --worker ASSIGNEE:TITLE [--worker ...] --verifier ASSIGNEE --synthesizer ASSIGNEE [--json]`
         builds a workers→verifier→synthesizer graph — a root blackboard/audit task (created done), N
         ready workers briefed with the swarm protocol, a verifier linked to every worker, and a
@@ -2258,7 +2258,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
         from the root blackboard, no duplicate graph), dispatcher `reap_timed_out` (SIGTERM + 5 s grace
         + SIGKILL, task back to ready with a `timed_out` event) and force-loaded skills inlined into the
         spawned worker's founding prompt (hermes passes `--skills` pairs)
-    - P128 ported the triage pipeline (`hermes_cli/kanban_specify.py` + `kanban_decompose.py`):
+    - P128 implemented the triage pipeline (`hermes_cli/kanban_specify.py` + `kanban_decompose.py`):
         `kanban create --triage` parks an idea in a new `triage` column, `kanban specify` fleshes it
         into a Goal/Approach/ Acceptance-criteria spec via `auxiliary.triage_specifier` and promotes
         triage→todo, `kanban decompose` fans it into a 2-6 child dependency graph routed over the
@@ -2275,7 +2275,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
     - P130 added the board-wide `kanban watch` live event stream (assignee/kind filters, hermes watch
         backend), hermes `board_stats` semantics on `kanban stats` (per-assignee counts + oldest-ready
         age + `--json`) and `kanban dispatch --json`
-    - P131 ported the gateway notification substrate: the `kanban_notify_subs` table (task × platform
+    - P131 implemented the gateway notification substrate: the `kanban_notify_subs` table (task × platform
         × chat × thread primary key, caught-up cursor snapshot on subscribe, chat_type/profile/metadata
         self-heal), the `kanban notify-subscribe / notify-list / notify-unsubscribe` CLI surface,
         `unseen_events_for_sub` + `advance_notify_cursor` building blocks for the gateway notifier, and
@@ -2295,7 +2295,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
         decomposes up to N triage tasks via the auxiliary LLM before the dispatch fan-out, logging
         successes at info and no-op skips at debug
     - P134 completed the remaining hermes kanban CLI surface: `kanban context` (full
-        `build_worker_context` port — capped body/attachments, prior-attempt run summaries with
+        `build_worker_context` implementation — capped body/attachments, prior-attempt run summaries with
         metadata, done-parent handoffs with relative-age staleness hints, assignee cross-task role
         history, capped comment thread; the `kanban_show` tool now returns the same `worker_context` so
         spawned workers read it without extra round-trips), `kanban repair` (integrity_check +
@@ -2313,7 +2313,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
         task reaches done/archived (cursor handles dedup). Scoped vs hermes: no per-profile adapter
         ownership (single shared store), no thread routing or dead-chat drop (PlatformSender exposes no
         failure channel), sends assumed delivered
-    - P136 ported the unified failure accounting + circuit breaker (hermes `_record_task_failure`):
+    - P136 implemented the unified failure accounting + circuit breaker (hermes `_record_task_failure`):
         tasks grow `consecutive_failures` / `last_failure_error` / `max_retries` columns, every spawn
         failure and timed-out attempt consumes the retry budget, hitting the threshold (per-task
         `max_retries` > dispatcher limit > default 2) flips ready→blocked with a `gave_up` event
@@ -2333,7 +2333,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
         second gateway logs the contention and keeps serving HTTP without dispatching — plus
         stuck-dispatcher telemetry (warn when the ready queue stays non-empty for 6 consecutive ticks
         with zero spawns, throttled to 300 s)
-    - P139 ported hermes' per-task workspaces: tasks gain `workspace_kind` (`scratch` default /
+    - P139 implemented hermes' per-task workspaces: tasks gain `workspace_kind` (`scratch` default /
         `worktree` / `dir`), `workspace_path` and `branch_name` columns; `kanban create --workspace
         scratch|worktree|worktree:<path>|dir:<path>` and `--branch <name>` (worktree-only, hermes
         validation text) with the gateway create API accepting the same fields; the dispatcher resolves
@@ -2357,7 +2357,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
         deliberate re-queue) and `active_pr` (GitHub PR URL in a 24 h comment window); guarded tasks
         stay ready, each deferral emits a `respawn_guarded` event, and the gateway dispatch API reports
         them
-    - P141 ported wake routing: tasks gain a `session_id` column stamped by the agent `kanban_create`
+    - P141 implemented wake routing: tasks gain a `session_id` column stamped by the agent `kanban_create`
         tool (and accepted by the gateway create API), and when a subscribed task reaches a
         wake-eligible terminal event (`completed` / `gave_up` / `crashed` / `timed_out` / `blocked` —
         hermes `_WAKE_KINDS`) the notifier resumes the creator session by self-POSTing the hermes-format
@@ -2366,7 +2366,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
         key when configured, 600 s turn ceiling, 2/5/10 s backoff on 429 / transient errors, fail-fast
         on other HTTP errors); the wake runs best-effort and detached after the text ping so it cannot
         stall other subscriptions
-    - P142 ported typed block kinds (hermes `block_task(kind=…)`): `kanban block --kind dependency`
+    - P142 implemented typed block kinds (hermes `block_task(kind=…)`): `kanban block --kind dependency`
         parks the task in `todo` (`dependency_wait` event) where parent gating + `recompute_ready`
         promote it automatically once the parents finish — no human, no cron; `needs_input` /
         `capability` / `transient` / untyped land in `blocked` with `block_kind` + `block_recurrences`
@@ -2402,7 +2402,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
         #kanban-dispatcher-crash-loop), and the gateway dispatcher's stuck warning now consults
         `has_spawnable_ready` so a ready queue full of lanes reads as "correctly idle", firing only when
         spawnable work (unassigned or known-profile tasks) actually waits.
-    - P147 ported completion artifacts: `kanban done --artifact <path>` (repeatable), the agent
+    - P147 implemented completion artifacts: `kanban done --artifact <path>` (repeatable), the agent
         `kanban_done` tool (`artifacts` array) and the gateway complete API stage files living inside a
         managed scratch workspace into `<home>/kanban/attachments/<task>/` before any cleanup can erase
         them (25 MiB cap, missing/oversized declarations fail the completion with rollback), record them
@@ -2410,7 +2410,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
         summary/result prose, and carry the final paths on the `completed` event + run metadata (hermes
         `kanban_complete( artifacts=[...])`, `_persist_scratch_completion_artifacts`,
         `_merge_completion_prose_artifacts`).
-    - P148 ported the review column: `review` joins the status set (🔍); workers call `kanban review
+    - P148 implemented the review column: `review` joins the status set (🔍); workers call `kanban review
         <id> [--reason]` / the `kanban_review` tool after opening a PR (running → review, worker run
         closed, `review_requested` event); `dispatch_once` grows a review loop sharing the max_spawn cap
         — unassigned review tasks land in `skipped_unassigned`, unknown assignees in
@@ -2421,7 +2421,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
         #21582) refuses to spawn for an assignee already at its in-flight limit even with global
         headroom — counts seed from the running column each tick and count would-be spawns in dry runs;
         skipped tasks land in `skipped_per_profile_capped` (CLI line + dispatch JSON).
-    - P150 ported the anti-hallucination completion gate: `kanban done --created-card <id>`
+    - P150 implemented the anti-hallucination completion gate: `kanban done --created-card <id>`
         (repeatable; also the agent `created_cards` array and the gateway complete API) verifies each
         claimed card — it must exist AND be created by the worker's profile, created under the worker's
         task id, or linked as the worker's child. Phantom ids emit `completion_blocked_hallucination`
@@ -2449,7 +2449,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
         otherwise the effective spawn cap clamps to the tighter of `max_spawn` and `max_in_progress` so
         the running column fills exactly to the cap — slow workers (local LLMs, resource-constrained
         hosts) drain before piled-up tasks time out.
-    - P154 also ported the one-time scratch-workspace tip (hermes `_maybe_emit_scratch_tip`): the
+    - P154 also implemented the one-time scratch-workspace tip (hermes `_maybe_emit_scratch_tip`): the
         first scratch workspace materialized across the whole install logs a warning that scratch output
         is ephemeral (deleted when the task completes), records a `tip_scratch_workspace` event on the
         task, and touches the `.scratch_tip_shown` sentinel so the tip never repeats; worktree/dir
@@ -2478,7 +2478,7 @@ session, retires expired endpoints, and `main` releases the session at exit (her
         provider-without-model is rejected — hermes contract), global `-m/--model` + `--provider` CLI
         flags that win over config and profile (the flags the spawned `ulnclaw run` worker carries), and
         `dispatch_spawn` now passes `--model` / `--provider` from the card.
-    - P160 ported hermes' first-class project registry (`projects_db` + `project` CLI): a per-profile
+    - P160 implemented hermes' first-class project registry (`projects_db` + `project` CLI): a per-profile
         `projects.db` with named multi-folder workspaces (`ulnclaw project
         create/list/show/add-folder/remove-folder/rename/set-primary/use/ archive/restore/bind-board` —
         slug uniqueness, primary-folder repointing, active-project pointer; `bind-board` also mirrors
@@ -2514,8 +2514,8 @@ session, retires expired endpoints, and `main` releases the session at exit (her
   the text turn). Voice notes ARE transcribed via the
   `[stt]` pipeline, but the built-in `local` faster-whisper provider needs
   `stt.local.command` or a cloud provider in the static binary; Telegram
-  clarify + exec-approval inline keyboards ARE ported (P225); all twenty-two of hermes' platform adapters
-  are ported (WhatsApp Cloud + MS-Graph ingress, the generic webhook
+  clarify + exec-approval inline keyboards ARE implemented (P225); all twenty-two of hermes' platform adapters
+  are implemented (WhatsApp Cloud + MS-Graph ingress, the generic webhook
   platform, Twilio SMS, Microsoft Teams, LINE, Google Chat, Raft, and
   A2A ride gateway webhook routes); the pairing
   flow pairs per sender id like hermes, but the configured allowlist stays
@@ -2575,7 +2575,7 @@ design; nothing is silently missing.
   guard (`{ok,est_tokens,complexity,rationale,model}` contract, never an HTTP error), profiles roster
   (config assignees ∪ stored descriptions) + PATCH, projects, orchestration GET/PUT over `[kanban.*]`
   config, dispatch delegation, assignees. Hermes mounts Python plugin routers
-- ulnclaw serves the identical contract from the engine. The achievements plugin is not ported —
+- ulnclaw serves the identical contract from the engine. The achievements plugin is not implemented —
   only the kanban plugin ships in the vendored desktop)
 
 
@@ -2603,7 +2603,7 @@ design; nothing is silently missing.
   flow, inspected by `ulnclaw whatsapp status` (P272).
 - **Plugin static assets** (`/dashboard-plugins/{name}/{path}`) —
   per-plugin JS/CSS hosting for third-party dashboard extensions is not
-  ported; the ulnclaw desktop Plugins view is native, and hub plugins
+  implemented; the ulnclaw desktop Plugins view is native, and hub plugins
   contribute hooks/tools rather than browser assets. The marketplace/install
   pipeline itself is covered at the hermes paths (P351).
 - **Provider OAuth** (`/api/providers/oauth*`) — covered at the same
@@ -2612,10 +2612,10 @@ design; nothing is silently missing.
   Vendor-specific marketplace handshakes (Anthropic redirect, Codex,
   Nous portal) stay out of scope.
 - **Model ensembles** (`/api/model/moa`) — Mixture-of-Agents ensemble
-  routing is not ported; the single-gateway-model plus per-session model
+  routing is not implemented; the single-gateway-model plus per-session model
   lock design supersedes it.
 - **TTS providers** — the wire surface is covered (see table; P344)
-  and edge/openai/elevenlabs are all ported; P349 implemented the free
+  and edge/openai/elevenlabs are all implemented; P349 implemented the free
   `edge` provider (Microsoft read-aloud websocket with the Sec-MS-GEC
   7.x DRM token exchange — no API key). Local models
   (piper/neutts/kittentts) stay out of scope.
@@ -2635,7 +2635,7 @@ design; nothing is silently missing.
 ## Completion status
 
 The agent core is at parity with hermes-agent v2026.8.3 — the following
-surfaces are all ported, completing the v2026.8.3 parity surface:
+surfaces are all implemented, completing the v2026.8.3 parity surface:
 
 - every core tool;
 - the full `sessions` surface (`list/show/search/export/recap/recover/prune/archive/stats/delete/rename/optimize/repair/browse`);
@@ -2661,23 +2661,23 @@ surfaces are all ported, completing the v2026.8.3 parity surface:
 - dynamic webhook subscriptions `ulnclaw webhook` (P270);
 - the WhatsApp Cloud setup wizard `ulnclaw whatsapp-cloud` (P271);
 - the WhatsApp bridge diagnostics `ulnclaw whatsapp status` (P272);
-- the desktop GUI (`desktop-electron/`, a faithful port of hermes' Electron desktop) and the rest of the CLI.
+- the desktop GUI (`desktop-electron/`, a faithful aligned with hermes' Electron desktop) and the rest of the CLI.
 
 The `sessions` surface intentionally omits only `optimize-storage`
 (ulnclaw was built on the compact external-content FTS layout from day
 one — there is no legacy layout to migrate); the `-c <session-name>`
-title lookup was ported with P232.
+title lookup was implemented with P232.
 
-Deliberately not ported (hermes surfaces outside the local-agent scope):
+Deliberately not implemented (hermes surfaces outside the local-agent scope):
 
-- the Electron desktop app itself — retracted in v0.7.0: ulnclaw now ships it directly (`desktop-electron/` is a faithful port of hermes desktop v2026.8.3, backed by the ulnclaw gateway; the earlier Tauri shell, its scoped-twin surface list and the desktop cosmetic/Electron-only exclusions are retired with it — the faithful port includes them all);
+- the Electron desktop app itself — retracted in v0.7.0: ulnclaw now ships it directly (`desktop-electron/` — the desktop client bundled since v0.7.0 — is an MIT-derived Electron shell (see NOTICE) backed by the ulnclaw Rust gateway; the earlier Tauri shell, its scoped-twin surface list and the desktop cosmetic/Electron-only exclusions are retired with it);
 - Python plugin imports/entry-point packages and the provider registrations they carry (ulnclaw's plugin system uses the shell-hook wire protocol + directory plugins with the git install/update/remove lifecycle instead);
 - Nous-Portal-specific subscription gating and org proposal approval workflows (OAuth/sync are provider-agnostic);
-- the xAI credential-pool proxy adapter (the pool store is now ported lean — see the credential-pool row — but the xAI adapter itself stays unported);
+- the xAI credential-pool proxy adapter (the pool store is now implemented lean — see the credential-pool row — but the xAI adapter itself stays unported);
 - the SWE-bench-style datagen scripts (`mini_swe_runner.py`, `trajectory_compressor.py` — `ulnclaw batch` covers the parallel-run + trajectory pipeline they feed);
-- the cua-driver embedded-daemon/socket mode and context-level screenshot eviction (P228 ported the vision post-processing half — client-side longest-edge enforcement of `max_image_dimension` on returned screenshots; the eviction half has no reference implementation in the v2026.8.3 checkout).
+- the cua-driver embedded-daemon/socket mode and context-level screenshot eviction (P228 implemented the vision post-processing half — client-side longest-edge enforcement of `max_image_dimension` on returned screenshots; the eviction half has no reference implementation in the v2026.8.3 checkout).
 
-Additional CLI surfaces deliberately not ported (documented as
+Additional CLI surfaces deliberately not implemented (documented as
 differences, audited against v2026.8.3):
 
 - `hermes console` — the "safe" command console overlaps ulnclaw's chat REPL slash-command surface (`/help` `/tools` `/skills` `/sessions` …), which already answers without an LLM turn where hermes' console engine would;

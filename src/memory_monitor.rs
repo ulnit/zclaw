@@ -1,5 +1,5 @@
 //! Periodic process memory logging for the gateway (hermes
-//! `gateway/memory_monitor.py` parity, itself a cline port).
+//! `gateway/memory_monitor.py` parity, itself a cline parity).
 //!
 //! The gateway is long-lived and caches agent state, transcripts, tool
 //! schemas and MCP connections; a slow leak is only visible as RSS

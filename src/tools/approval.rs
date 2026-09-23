@@ -1,4 +1,4 @@
-//! Approval system — port of the core of hermes' tools/approval.py
+//! Approval system — aligned with the core of hermes' tools/approval.py
 //!
 //! Classifies shell commands into Allow / Confirm / Block:
 //! - Block: the "hardline floor" — commands with no recovery path
@@ -187,7 +187,7 @@ pub fn classify_command(command: &str) -> ApprovalDecision {
     }
 }
 
-/// Scan text for prompt-injection markers (port of the "all"-scope subset of
+/// Scan text for prompt-injection markers (aligned with the "all"-scope subset of
 /// hermes' tools/threat_patterns.py) — advisory, used on tool results that
 /// will re-enter the context.
 pub fn scan_for_injection(text: &str) -> Vec<&'static str> {

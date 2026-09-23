@@ -1,4 +1,4 @@
-//! Feishu/Lark WebSocket long-connection transport — port of the
+//! Feishu/Lark WebSocket long-connection transport — aligned with the
 //! lark_oapi WS client protocol used by hermes `platforms.feishu` @
 //! v2026.8.3 (`connection_mode = "websocket"`, the SDK default).
 //!

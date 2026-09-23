@@ -1,4 +1,4 @@
-//! Pet generation — base-draft → hatch pipeline. Port of hermes
+//! Pet generation — base-draft → hatch pipeline. Aligned with hermes
 //! `agent/pet/generate/` (prompts/imagegen/orchestrate, v2026.8.3).
 //!
 //! Two steps, mirroring hermes' UX across every surface:

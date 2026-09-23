@@ -1,4 +1,4 @@
-//! Shutdown flush — port of hermes `gateway/shutdown_flush.py`
+//! Shutdown flush — aligned with hermes `gateway/shutdown_flush.py`
 //! (hermes issue #72680).
 //!
 //! Flushes data that would otherwise be lost on shutdown:

@@ -1,4 +1,4 @@
-//! Gateway session stall notification policy — port of hermes
+//! Gateway session stall notification policy — aligned with hermes
 //! `gateway/session_stall.py` (#72016 item 2).
 //!
 //! Consumes the shared activity observation contract

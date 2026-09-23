@@ -1,4 +1,4 @@
-//! ulnclaw CLI — port of the hermes CLI core (chat REPL, one-shot runs,
+//! ulnclaw CLI — aligned with the hermes CLI core (chat REPL, one-shot runs,
 //! session/skill/cron/tool management).
 
 use clap::{Parser, Subcommand};
@@ -271,7 +271,7 @@ enum Commands {
         action: PairingAction,
     },
     /// Manage named profiles — `[profiles.*]` overrides in config.toml
-    /// (hermes profile management, lean port)
+    /// (hermes profile management, lean parity)
     Profiles {
         #[command(subcommand)]
         action: Option<ProfilesAction>,
@@ -1936,7 +1936,7 @@ enum ProxyAction {
         /// Bind host (default 127.0.0.1, [proxy] host)
         #[arg(long)]
         host: Option<String>,
-        /// Bind port (default 8645, [proxy] port)
+        /// Bind port (default 8645, [proxy] parity)
         #[arg(long)]
         port: Option<u16>,
     },

@@ -1211,7 +1211,7 @@ curl -s -X POST -H "Authorization: Bearer $KEY" -H "Content-Type: application/js
 `{providers, model, provider}` 形状返回选择器清单。ulnclaw 只运行一个
 已配置的 provider，因此清单就是这一行（`slug`、`models`、
 `is_user_defined`、`authenticated`、`current`）；在线目录探测、定价与
-能力富化未移植。
+能力富化未实现。
 
 **会话回顾**（`GET /api/sessions/:id/recap`）：返回
 `{"object":"ulnclaw.session.recap","session_id":...,"recap":"..."}` ——

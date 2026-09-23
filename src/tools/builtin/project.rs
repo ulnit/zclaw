@@ -1,4 +1,4 @@
-//! Desktop Project tools — port of hermes `tools/project_tools.py`
+//! Desktop Project tools — aligned with hermes `tools/project_tools.py`
 //! (v2026.8.3).
 //!
 //! Projects (per-profile `projects.db`) are the named workspaces the

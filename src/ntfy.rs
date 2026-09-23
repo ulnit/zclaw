@@ -1,4 +1,4 @@
-//! ntfy platform adapter — port of hermes `plugins/platforms/ntfy`
+//! ntfy platform adapter — aligned with hermes `plugins/platforms/ntfy`
 //! @ v2026.8.3 (adapter.py).
 //!
 //! Subscribes to a topic on ntfy.sh (or any self-hosted ntfy server)
@@ -8,7 +8,7 @@
 //! echo-loop prevention, optional `X-Markdown`). Auth tokens are
 //! Bearer unless they contain `:`, which becomes HTTP Basic.
 //!
-//! hermes identity model (ported verbatim): ntfy has no authenticated
+//! hermes identity model (implemented verbatim): ntfy has no authenticated
 //! user identity — the `title` field is publisher-controlled and never
 //! used for authorization; each topic is a single trusted channel and
 //! `user_id` is fixed to the topic name. Real trust boundaries need a

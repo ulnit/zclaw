@@ -158,7 +158,7 @@ let provider = OpenAiProvider::builder()
 ### Anthropic (Claude)
 
 原生 Messages API（`POST /v1/messages`、`x-api-key` 鉴权、
-`anthropic-version: 2023-06-01`）—— 移植自 hermes 的 `anthropic_messages`
+`anthropic-version: 2023-06-01`）—— 对齐 hermes 的 `anthropic_messages`
 传输层：
 
 ```rust
@@ -684,7 +684,7 @@ let request = ProviderRequest {
 ## 辅助模型路由
 
 二次 LLM 调用——上下文压缩摘要与视觉分析——可以运行在与主对话不同的
-provider/模型上。这是 hermes `agent/auxiliary_client.py` 任务层的移植：
+provider/模型上。这是 hermes `agent/auxiliary_client.py` 任务层的对应实现：
 每个任务先查 `[auxiliary.<task>]` 配置，留空或 `"auto"` 时继承主运行时。
 
 ```toml
@@ -720,7 +720,7 @@ model = "gpt-5.2-mini"
 ## 混合智能体（MoA）
 
 MoA 将提示词并行扇出给多个*参考*模型，再由*聚合器*模型把它们的回答
-综合成简明指引——移植自 hermes `moa_loop.py` 的综合路径
+综合成简明指引——对齐 hermes `moa_loop.py` 的综合路径
 （`aggregate_moa_context`）。
 
 在 `config.toml` 中配置预设：
@@ -766,13 +766,13 @@ ulnclaw moa delete other              # 删除预设（回写配置）
 - 所有参考都失败时跳过聚合器调用，直接返回告知文本。
 - 聚合器自身失败时，回退返回拼接后的参考输出。
 
-未移植：持久 `provider: moa` 客户端门面（整会话以 MoA 为执行模型）、
+未实现：持久 `provider: moa` 客户端门面（整会话以 MoA 为执行模型）、
 MoA trace 与隐私过滤。
 
 ## Provider 回退链
 
 `[model] fallbacks` 列出模型调用失败时按序尝试的备用 `"provider:model"`
-条目——移植自 hermes 的 `fallback_providers` 链
+条目——对齐 hermes 的 `fallback_providers` 链
 （`try_activate_fallback` + `restore_primary_runtime`）：
 
 ```toml

@@ -1,4 +1,4 @@
-//! Configuration management CLI — port of `hermes config` (show / edit /
+//! Configuration management CLI — aligned with `hermes config` (show / edit /
 //! get / set / unset / path / env-path) from `hermes_cli/config.py`,
 //! adapted to TOML storage.
 //!

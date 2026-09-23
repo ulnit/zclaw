@@ -1,4 +1,4 @@
-//! Mixture-of-Agents (MoA) — port of hermes' `agent/moa_loop.py` synthesis
+//! Mixture-of-Agents (MoA) — aligned with hermes' `agent/moa_loop.py` synthesis
 //! path (`aggregate_moa_context`) plus the preset model of
 //! `hermes_cli/moa_config.py`.
 //!
@@ -191,7 +191,7 @@ pub fn degraded_notice(references: &[MoaReferenceOutcome], policy: &str) -> Stri
     format!("[Reference models unavailable: {}]", failed.join(", "))
 }
 
-/// Aggregator synthesis prompt (port of hermes `aggregate_moa_context`).
+/// Aggregator synthesis prompt (aligned with hermes `aggregate_moa_context`).
 pub fn aggregator_prompt(user_prompt: &str, joined_references: &str) -> String {
     format!(
         "You are the aggregator in a Mixture of Agents process. Synthesize the \
@@ -534,7 +534,7 @@ pub fn save_moa_turn(
 const REFERENCE_TOOL_RESULT_BUDGET: usize = 2000;
 
 /// Render the conversation into one prompt for the reference fan-out
-/// (port of hermes `_reference_messages` + `_truncate_tool_result`):
+/// (aligned with hermes `_reference_messages` + `_truncate_tool_result`):
 /// role-tagged lines, tool results truncated to the budget.
 pub fn render_conversation_for_references(messages: &[Message]) -> String {
     let mut lines = Vec::new();

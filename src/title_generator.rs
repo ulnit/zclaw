@@ -1,5 +1,5 @@
 //! Auto-generate short session titles from the first user/assistant
-//! exchange — port of hermes `agent/title_generator.py` (v2026.8.3).
+//! exchange — aligned with hermes `agent/title_generator.py` (v2026.8.3).
 //!
 //! Runs asynchronously after the first response is delivered so it never
 //! adds latency to the user-facing reply. The LLM call routes through the

@@ -1,4 +1,4 @@
-//! Native Anthropic Messages API provider — port of hermes'
+//! Native Anthropic Messages API provider — aligned with hermes'
 //! `anthropic_messages` transport (agent/anthropic_adapter.py).
 //!
 //! Speaks `POST /v1/messages` with `x-api-key` auth and

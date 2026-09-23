@@ -1,6 +1,6 @@
 //! Camofox browser backend — anti-detection browser via REST API.
 //!
-//! Port of hermes `tools/browser_camofox.py` (v2026.8.3). Camofox-browser is
+//! Aligned with hermes `tools/browser_camofox.py` (v2026.8.3). Camofox-browser is
 //! a self-hosted Node.js server wrapping Camoufox (Firefox fork with C++
 //! fingerprint spoofing) that exposes a REST API mapping 1:1 to the browser
 //! tool interface: accessibility snapshots with element refs, click/type/

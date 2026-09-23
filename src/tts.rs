@@ -1,4 +1,4 @@
-//! Text-to-speech pipeline — lean port of hermes `tts:` config +
+//! Text-to-speech pipeline — lean aligned with hermes `tts:` config +
 //! `/api/audio/speak` @ v2026.8.3.
 //!
 //! Hermes ships a wide provider chain (edge, openai, elevenlabs,

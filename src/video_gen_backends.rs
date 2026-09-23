@@ -284,7 +284,7 @@ fn fal_build_payload(
 /// FAL credentials: direct `FAL_KEY` preferred; otherwise the Nous managed
 /// `fal-queue` gateway when a Nous token is present (hermes
 /// `_resolve_managed_fal_video_gateway` — the prefers-gateway knob is not
-/// ported).
+/// implemented).
 enum FalRoute {
     Direct(String),
     Managed(String),

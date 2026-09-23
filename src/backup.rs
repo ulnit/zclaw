@@ -1,4 +1,4 @@
-//! Backup & restore — port of `hermes_cli/backup.py`.
+//! Backup & restore — aligned with `hermes_cli/backup.py`.
 //!
 //! Subsystems:
 //! - Full zip backup of `<home>` with hermes exclusion rules and WAL-safe

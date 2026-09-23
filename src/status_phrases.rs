@@ -1,4 +1,4 @@
-//! Human-friendly generic gateway status phrases — port of hermes
+//! Human-friendly generic gateway status phrases — aligned with hermes
 //! `gateway/status_phrases.py`.
 //!
 //! These helpers deliberately avoid relaying raw model scratch text.

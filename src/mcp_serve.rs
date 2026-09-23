@@ -1,4 +1,4 @@
-//! MCP channel bridge (P260) — port of hermes `mcp_serve.py`: a stdio
+//! MCP channel bridge (P260) — aligned with hermes `mcp_serve.py`: a stdio
 //! JSON-RPC 2.0 MCP server that exposes messaging conversations to any
 //! MCP client (Claude Code, Cursor, Codex, …). Matches OpenClaw's
 //! 9-tool channel-bridge surface plus the hermes-specific

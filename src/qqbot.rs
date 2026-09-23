@@ -1,4 +1,4 @@
-//! QQ Bot platform adapter — port of hermes
+//! QQ Bot platform adapter — aligned with hermes
 //! `gateway/platforms/qqbot/` @ v2026.8.3 (adapter.py, constants.py,
 //! utils.py, chunked_upload.py essentials).
 //!
@@ -8,15 +8,15 @@
 //! Voice notes prefer QQ's built-in `asr_refer_text` transcript, then
 //! fall back to the central `[stt]` pipeline via the cached audio.
 //!
-//! Inline keyboards are ported (`keyboards.py`): exec-approval prompts
+//! Inline keyboards are implemented (`keyboards.py`): exec-approval prompts
 //! render as ✅ 允许一次 / ⭐ 始终允许 / ❌ 拒绝 callback buttons via the
 //! `send_exec_approval` contract, and INTERACTION_CREATE clicks route
 //! back through `approval_gateway` with operator authorization (hermes
 //! `_default_interaction_dispatch`). Update-prompt ✓/✗ keyboards and the
-//! atomic `.update_response` answer file are ported as well. Known
+//! atomic `.update_response` answer file are implemented as well. Known
 //! difference: the DM-policy wizard half of the hermes onboarding flow
-//! is not ported (QR scan-to-configure — `onboard.py`, AES-256-GCM
-//! bound secrets — IS ported via `ulnclaw qq login`). Guild-DM replies
+//! is not implemented (QR scan-to-configure — `onboard.py`, AES-256-GCM
+//! bound secrets — IS implemented via `ulnclaw qq login`). Guild-DM replies
 //! route
 //! through `/dms/<guild_id>/messages` (hermes' send path left the `dm`
 //! chat type unrouted).

@@ -1,4 +1,4 @@
-//! Secret-source fetch caches — port of hermes
+//! Secret-source fetch caches — aligned with hermes
 //! `agent/secret_sources/_cache.py` plus the Bitwarden encrypted cache
 //! (`bitwarden.py` _write/_read_encrypted_disk_cache).
 //!

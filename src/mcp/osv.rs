@@ -1,4 +1,4 @@
-//! OSV malware preflight for MCP servers — port of hermes'
+//! OSV malware preflight for MCP servers — aligned with hermes'
 //! `tools/osv_check.py`.
 //!
 //! Before launching an MCP server via `npx`/`uvx`/`pipx`, the package is

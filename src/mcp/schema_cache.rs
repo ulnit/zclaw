@@ -1,4 +1,4 @@
-//! Persistent MCP tool-schema cache for lazy server startup — port of
+//! Persistent MCP tool-schema cache for lazy server startup — aligned with
 //! hermes' `tools/mcp_schema_cache.py` (+ the lazy-registration wiring in
 //! `tools/mcp_tool.py`).
 //!

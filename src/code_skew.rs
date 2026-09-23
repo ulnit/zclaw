@@ -1,5 +1,5 @@
 //! Detect when the gateway is running a stale binary after an
-//! in-place update — port of hermes `gateway/code_skew.py`.
+//! in-place update — aligned with hermes `gateway/code_skew.py`.
 //!
 //! The gateway is a single long-lived process. If the binary on disk
 //! is replaced underneath it (a rebuild, a package upgrade, or the

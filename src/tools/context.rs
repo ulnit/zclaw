@@ -1,6 +1,6 @@
 //! ToolContext — runtime state passed to every tool handler.
 //!
-//! Port of the `**kw` context hermes passes to handlers (task_id,
+//! Aligned with the `**kw` context hermes passes to handlers (task_id,
 //! session_id, config, stores) plus the interactive callbacks (clarify,
 //! approval) and the sub-agent runner used by delegation/cron.
 

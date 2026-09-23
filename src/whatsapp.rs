@@ -1,4 +1,4 @@
-//! WhatsApp (Baileys bridge) platform adapter — port of hermes
+//! WhatsApp (Baileys bridge) platform adapter — aligned with hermes
 //! `plugins/platforms/whatsapp` @ v2026.8.3 (adapter.py).
 //!
 //! The hermes adapter supervises a Node.js Baileys bridge subprocess

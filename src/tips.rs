@@ -1,5 +1,5 @@
 //! Random startup tips shown at CLI session start to help users discover
-//! features — port of hermes `hermes_cli/tips.py` (v2026.8.3), with the
+//! features — aligned with hermes `hermes_cli/tips.py` (v2026.8.3), with the
 //! corpus rewritten for ulnclaw's actual surface.
 
 use std::sync::atomic::{AtomicU64, Ordering};

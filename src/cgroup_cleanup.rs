@@ -1,4 +1,4 @@
-//! Cgroup orphan reaper — port of hermes `gateway/cgroup_cleanup.py`.
+//! Cgroup orphan reaper — aligned with hermes `gateway/cgroup_cleanup.py`.
 //!
 //! SIGKILL any process left in this systemd unit's cgroup. hermes runs
 //! the Python original as `ExecStopPost=` so it only fires after the

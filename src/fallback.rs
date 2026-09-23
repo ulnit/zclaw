@@ -1,4 +1,4 @@
-//! Fallback provider chain management — port of `hermes_cli/fallback_cmd.py`
+//! Fallback provider chain management — aligned with `hermes_cli/fallback_cmd.py`
 //! (+ `fallback_config.get_fallback_chain`).
 //!
 //! Storage: `[model] fallbacks` in `config.toml` (a list of

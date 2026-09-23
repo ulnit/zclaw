@@ -1,6 +1,6 @@
 //! URL safety — SSRF protection for model/user-provided URLs.
 //!
-//! Port of hermes `tools/url_safety.py` (v2026.8.3). Blocks requests to
+//! Aligned with hermes `tools/url_safety.py` (v2026.8.3). Blocks requests to
 //! private/internal network addresses so a malicious prompt or skill cannot
 //! trick the agent into fetching internal resources (cloud metadata
 //! endpoints like 169.254.169.254, localhost services, private hosts).

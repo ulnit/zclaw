@@ -1,4 +1,4 @@
-//! xAI Grok-Imagine video generation backend — port of hermes
+//! xAI Grok-Imagine video generation backend — aligned with hermes
 //! `plugins/video_gen/xai/__init__.py` (v2026.8.3).
 //!
 //! Surface: text-to-video, image-to-video, and reference-to-video through
@@ -324,7 +324,7 @@ async fn xai_poll(
 }
 
 /// Submit + poll + shape the response (hermes `_submit_xai_video_payload`;
-/// xAI storage options are not ported — no Portal storage config).
+/// xAI storage options are not implemented — no Portal storage config).
 async fn submit_xai_video_payload(
     api_key: &str,
     base_url: &str,

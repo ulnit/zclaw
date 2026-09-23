@@ -1,4 +1,4 @@
-//! Microsoft Teams platform adapter — port of hermes
+//! Microsoft Teams platform adapter — aligned with hermes
 //! `plugins/platforms/teams` @ v2026.8.3 (adapter.py).
 //!
 //! hermes rides the `microsoft-teams-apps` Python SDK; this port speaks
@@ -25,7 +25,7 @@
 //! button taps arrive as `adaptiveCard/action` invoke activities and
 //! resolve the session's blocking approval with a default-deny
 //! allowlist gate (hermes `_on_card_action`). Known differences: the
-//! summary-writer incoming-webhook/Graph paths are not ported; typing
+//! summary-writer incoming-webhook/Graph paths are not implemented; typing
 //! indicators are best-effort activity posts.
 
 use crate::messaging::{Dispatcher, MediaAttachment, MessageEvent};
@@ -710,7 +710,7 @@ fn invoke_card_response(card: Value) -> Value {
     })
 }
 
-/** Handle an `adaptiveCard/action` invoke — port of hermes
+/** Handle an `adaptiveCard/action` invoke — aligned with hermes
 `_on_card_action`: default-deny allowlist gate, choice mapping,
 blocking-approval check, resolution, replacement card. */
 pub fn card_action_response(cfg: &ResolvedTeams, activity: &Value) -> Value {

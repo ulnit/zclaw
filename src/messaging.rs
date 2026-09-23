@@ -1,4 +1,4 @@
-//! Messaging platform gateways — port of hermes `gateway/platforms/`.
+//! Messaging platform gateways — aligned with hermes `gateway/platforms/`.
 //!
 //! Hermes runs chat platforms (Telegram/Discord/Slack/…) inside the
 //! gateway process: each adapter normalizes incoming messages into a

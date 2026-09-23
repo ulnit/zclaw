@@ -1,4 +1,4 @@
-//! Terminal failure intelligence — port of hermes' `tools/terminal_hints.py`
+//! Terminal failure intelligence — aligned with hermes' `tools/terminal_hints.py`
 //! plus the `_interpret_exit_code` semantics table from `terminal_tool.py`.
 //!
 //! Two complementary layers keep the model from burning turns on

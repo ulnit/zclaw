@@ -1,4 +1,4 @@
-//! Auxiliary (per-task) provider routing — port of the task-resolution layer
+//! Auxiliary (per-task) provider routing — aligned with the task-resolution layer
 //! of hermes' `agent/auxiliary_client.py` (`_resolve_task_provider_model` +
 //! `get_text_auxiliary_client`).
 //!

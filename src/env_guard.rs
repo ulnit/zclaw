@@ -1,4 +1,4 @@
-//! Sandbox environment scrubbing + passthrough — port of the credential
+//! Sandbox environment scrubbing + passthrough — aligned with the credential
 //! scrubbing in hermes' `tools/environments/local.py` and the allowlist
 //! registry in `tools/env_passthrough.py`.
 //!
@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use std::sync::OnceLock;
 
 /// Provider/tool credentials and platform settings that never enter a
-/// sandboxed child environment (port of hermes
+/// sandboxed child environment (aligned with hermes
 /// `_HERMES_PROVIDER_ENV_BLOCKLIST`, adapted for ulnclaw).
 pub fn provider_env_blocklist() -> &'static HashSet<&'static str> {
     static LIST: OnceLock<HashSet<&'static str>> = OnceLock::new();
@@ -112,7 +112,7 @@ pub fn provider_env_blocklist() -> &'static HashSet<&'static str> {
 }
 
 /// True for internal secrets injected under *dynamic* names no static
-/// blocklist can enumerate (port of hermes `_is_hermes_internal_secret`):
+/// blocklist can enumerate (aligned with hermes `_is_hermes_internal_secret`):
 /// `AUXILIARY_<TASK>_API_KEY` / `AUXILIARY_<TASK>_BASE_URL` side-LLM
 /// credentials and `GATEWAY_RELAY_*` relay auth.
 pub fn is_internal_secret(name: &str) -> bool {

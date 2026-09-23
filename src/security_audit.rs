@@ -1,5 +1,5 @@
 //! `ulnclaw security audit` — on-demand supply-chain audit (hermes
-//! `hermes_cli/security_audit.py` port).
+//! `hermes_cli/security_audit.py` parity).
 //!
 //! Hermes scans three surfaces (venv, plugins, MCP servers); ulnclaw is a
 //! static Rust binary with no venv or plugin surface, so the audit covers

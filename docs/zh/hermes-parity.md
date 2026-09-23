@@ -4,8 +4,8 @@
 
 本文档跟踪 ulnclaw 与
 [hermes-agent v2026.8.3](https://github.com/NousResearch/hermes-agent/tree/v2026.8.3)
-的对应关系。ulnclaw 是 hermes agent 引擎的 Rust 重实现：相同的工具面、
-相同的存储布局、相同的配置语义 —— 原生性能，单一静态二进制。
+的对应关系。ulnclaw 是自研的 Rust Agent 引擎：工具面、存储布局与配置语义均与
+hermes-agent v2026.8.3 对标兼容 —— 原生性能，单一静态二进制。
 
 <a id="工具对标"></a>
 
@@ -41,20 +41,20 @@
 | `browser_*`（12 个工具） | ✅ 完整 | CDP WebSocket 客户端（`browser` 模块）：端点发现、页面会话、带元素引用的可访问性快照、点击/输入/滚动/按键/截图/执行 JS/对话框 … [详情](#browser-12-个工具) |
 | `close_terminal`、`read_terminal`、`focus_pane`、`open_preview` | ✅ 核心 | 桌面 GUI 工具（hermes `close_terminal_tool.py` / `read_terminal_tool.py` / … [详情](#close-terminal-read-terminal-focus-pane-open-preview) |
 | `computer_use` | ✅ 核心 | cua-driver MCP 后端（`src/computer_use.rs`）—— 完整 hermes 工具 schema + 审批语义，见下方 Computer Use 行；驱动可达即注册（`ulnclaw computer-use doctor`） |
-| `discord`, `discord_admin` | ✅ 核心 | P245 完整移植 hermes `tools/discord_tool.py`（`src/discord_tool.rs`）：15 个 REST API 动作 … [详情](#discord-discord-admin) |
-| `feishu_doc_read`, `feishu_drive_*` | ✅ 核心 | P246 完整移植 hermes `tools/feishu_doc_tool.py` + `tools/feishu_drive_tool.py`（ … [详情](#feishu-doc-read-feishu-drive) |
-| `spotify_*`（7 工具） | ✅ 核心 | P247 完整移植 hermes `plugins/spotify`（`src/spotify_tool.rs` + `src/spotify_auth.rs` … [详情](#spotify-7-工具) |
-| `yb_*`（5 个元宝工具） | ✅ 核心 | P248 完整移植 hermes `tools/yuanbao_tools.py`（`src/yuanbao_tool.rs`）： … [详情](#yb-5-个元宝工具) |
-| `send_message` | ✅ 核心 | P259 完整移植 hermes `tools/send_message_tool.py` + `gateway/channel_directory.py`（ … [详情](#send-message) |
-| `x_search` | 🟡 门控 | hermes `x_search_tool.py` 完整移植：xAI Responses-API `x_search` 服务端工具，支持账号白/黑名单（最多 1 … [详情](#x-search) |
-| `video_analyze` | ✅ 核心 | hermes `vision_tools.video_analyze_tool` 完整移植：本地文件 / `file://` / HTTP(S) 来源（远程下载经 SSRF 防护，缓存于 `cache/video/temp_video_files/` 并自动清理）、扩展名→mime 映射（mp4/webm/mov/avi/mkv/mpeg/mpg）、20 MB 警告 + 50 MB base64 硬上限、内联 `video_url` data-URL 载荷、`[auxiliary.vision]` 路由失败回落主 provider、空响应重试一次；可选 `video` 工具集（hermes 对齐）——需要支持视频的 provider |
+| `discord`, `discord_admin` | ✅ 核心 | P245 完整实现 hermes `tools/discord_tool.py`（`src/discord_tool.rs`）：15 个 REST API 动作 … [详情](#discord-discord-admin) |
+| `feishu_doc_read`, `feishu_drive_*` | ✅ 核心 | P246 完整实现 hermes `tools/feishu_doc_tool.py` + `tools/feishu_drive_tool.py`（ … [详情](#feishu-doc-read-feishu-drive) |
+| `spotify_*`（7 工具） | ✅ 核心 | P247 完整实现 hermes `plugins/spotify`（`src/spotify_tool.rs` + `src/spotify_auth.rs` … [详情](#spotify-7-工具) |
+| `yb_*`（5 个元宝工具） | ✅ 核心 | P248 完整实现 hermes `tools/yuanbao_tools.py`（`src/yuanbao_tool.rs`）： … [详情](#yb-5-个元宝工具) |
+| `send_message` | ✅ 核心 | P259 完整实现 hermes `tools/send_message_tool.py` + `gateway/channel_directory.py`（ … [详情](#send-message) |
+| `x_search` | 🟡 门控 | hermes `x_search_tool.py` 完整实现：xAI Responses-API `x_search` 服务端工具，支持账号白/黑名单（最多 1 … [详情](#x-search) |
+| `video_analyze` | ✅ 核心 | hermes `vision_tools.video_analyze_tool` 完整实现：本地文件 / `file://` / HTTP(S) 来源（远程下载经 SSRF 防护，缓存于 `cache/video/temp_video_files/` 并自动清理）、扩展名→mime 映射（mp4/webm/mov/avi/mkv/mpeg/mpg）、20 MB 警告 + 50 MB base64 硬上限、内联 `video_url` data-URL 载荷、`[auxiliary.vision]` 路由失败回落主 provider、空响应重试一次；可选 `video` 工具集（hermes 对齐）——需要支持视频的 provider |
 | `video_generate`、`bfl_flux3_*` | ✅ 核心 | `video_gen.rs` provider 注册表（hermes 插件设计：单一可用后端自动选中、配置名 fail-closed … [详情](#video-generate-bfl-flux3) |
-| `project_list`、`project_create`、`project_switch` | ✅ 核心 | hermes `tools/project_tools.py` + `hermes_cli/projects_db.py` 完整移植：每 profile … [详情](#project-list-project-create-project-switch) |
+| `project_list`、`project_create`、`project_switch` | ✅ 核心 | hermes `tools/project_tools.py` + `hermes_cli/projects_db.py` 完整实现：每 profile … [详情](#project-list-project-create-project-switch) |
 | 技能使用遥测 + 学习图谱（`skill_usage`、`learning_graph`、`learning_mutations`） | ✅ 核心 | hermes `tools/skill_usage.py` + `agent/learning_graph.py` + … [详情](#技能使用遥测-学习图谱-skill-usage-learning-graph-learning-mutations) |
-| 学习时间线 / `journey` CLI（`learning_graph_render`、`journey`） | ✅ 核心 | hermes `agent/learning_graph_render.py` + `hermes_cli/journey.py` 移植： … [详情](#学习时间线-journey-cli-learning-graph-render-journey) |
+| 学习时间线 / `journey` CLI（`learning_graph_render`、`journey`） | ✅ 核心 | hermes `agent/learning_graph_render.py` + `hermes_cli/journey.py` 对应实现： … [详情](#学习时间线-journey-cli-learning-graph-render-journey) |
 | 技能策展 CLI（`curator`） | ✅ 核心 | hermes `hermes_cli/curator.py` 本地半区（LLM 整合运行留在桌面侧）：`curator.rs` —— 空闲天数计算（活动优先、c … [详情](#技能策展-cli-curator) |
-| 持久化目标 / Ralph 循环（`goals`） | ✅ 核心 | hermes `hermes_cli/goals.py` 移植：`goals.rs` —— `GoalContract`（outcome/verificatio … [详情](#持久化目标-ralph-循环-goals) |
-| 网关 profile 多路复用（`/p/<profile>`）+ CDP 会话存活 | ✅ 核心 | hermes api_server profile 前缀中间件移植：所有网关路由镜像到 `/p/<profile>/...` … [详情](#网关-profile-多路复用-p-profile-cdp-会话存活) |
+| 持久化目标 / Ralph 循环（`goals`） | ✅ 核心 | hermes `hermes_cli/goals.py` 对应实现：`goals.rs` —— `GoalContract`（outcome/verificatio … [详情](#持久化目标-ralph-循环-goals) |
+| 网关 profile 多路复用（`/p/<profile>`）+ CDP 会话存活 | ✅ 核心 | hermes api_server profile 前缀中间件对应实现：所有网关路由镜像到 `/p/<profile>/...` … [详情](#网关-profile-多路复用-p-profile-cdp-会话存活) |
 | 启动提示（`tips.py`） | ✅ 核心 | `tips.rs`：面向 ulnclaw 自身功能面重写的特性发现一句话语料（斜杠命令、目标、CLI 子命令、配置项、工具、网关、隐藏技巧）+ 无依赖 xorshift64* `get_random_tip`；聊天 REPL 在启动与 `/new` 时打印 `✦ Tip:` 行（对齐 hermes 欢迎/新会话提示） |
 | REPL 显示与输入体验（`hermes_cli/focus_view.py`、`prompt_stash.py`、`clipboard.py`） | ✅ 核心 | `src/focus_view.rs`、`src/prompt_stash.rs`、`src/clipboard.rs` —— 三个 hermes CLI 体验 … [详情](#repl-显示与输入体验-hermes-cli-focus-view-py-prompt-stash-py-clipboard-py) |
 | 会话裁剪/归档/统计（`session_filters.py`） | ✅ 核心 | `session/filters.rs` —— 时长解析（`5h`/`30m`/`2d`/`1w`，裸数字 = 天）、时间点解析（时长 = 距今多久前；ISO … [详情](#会话裁剪-归档-统计-session-filters-py) |
@@ -65,9 +65,9 @@
 | 会话洞察（`agent/insights.py`） | ✅ 核心 | `insights.rs` + `ulnclaw insights [--days N] [--source S] [--json]` CLI + REPL … [详情](#会话洞察-agent-insights-py) |
 | 宠物（`agent/pet/` + `hermes_cli/pets.py`） | ✅ 核心 | `src/pets.rs` + … [详情](#宠物-agent-pet-hermes-cli-pets-py) |
 | 建议自动化（`cron/suggestions.py` + `suggestions_cmd.py`） | ✅ 核心 | `cron/suggestions.rs`：`<home>/cron/suggestions.json` JSON 存储（tmp+rename 属主权限写入）， … [详情](#建议自动化-cron-suggestions-py-suggestions-cmd-py) |
-| 状态报告（`hermes_cli/status.py` + `hermes_cli/subcommands/status.py` + `timefmt.py`） | ✅ 核心 | `status.rs`：`show_status` 移植 —— 面板头 + Environment（版本 / home / config.toml / .env … [详情](#状态报告-hermes-cli-status-py-hermes-cli-subcommands-status-py-timefmt-py) |
-| 日志查看 + 文件日志（`hermes_cli/logs.py` + `hermes_cli/subcommands/logs.py` + `hermes_logging.py` 滚动手柄） | ✅ 核心 | `logs.rs`：查看器移植 —— `LOG_FILES` 注册表（agent/errors/gateway）、`_parse_since`（Ns/m/h/d … [详情](#日志查看-文件日志-hermes-cli-logs-py-hermes-cli-subcommands-logs-py-hermes-logging-py-滚动手柄) |
-| 自更新器（`hermes_cli/subcommands/update.py` + `update_cmd.py` git 核心） | ✅ 核心 | `update.rs`：`--check` 为 `_cmd_update_check` 移植 —— 分支解析（`--branch` > 当前分支 > maste … [详情](#自更新器-hermes-cli-subcommands-update-py-update-cmd-py-git-核心) |
+| 状态报告（`hermes_cli/status.py` + `hermes_cli/subcommands/status.py` + `timefmt.py`） | ✅ 核心 | `status.rs`：`show_status` 实现 —— 面板头 + Environment（版本 / home / config.toml / .env … [详情](#状态报告-hermes-cli-status-py-hermes-cli-subcommands-status-py-timefmt-py) |
+| 日志查看 + 文件日志（`hermes_cli/logs.py` + `hermes_cli/subcommands/logs.py` + `hermes_logging.py` 滚动手柄） | ✅ 核心 | `logs.rs`：查看器实现 —— `LOG_FILES` 注册表（agent/errors/gateway）、`_parse_since`（Ns/m/h/d … [详情](#日志查看-文件日志-hermes-cli-logs-py-hermes-cli-subcommands-logs-py-hermes-logging-py-滚动手柄) |
+| 自更新器（`hermes_cli/subcommands/update.py` + `update_cmd.py` git 核心） | ✅ 核心 | `update.rs`：`--check` 为 `_cmd_update_check` 实现 —— 分支解析（`--branch` > 当前分支 > maste … [详情](#自更新器-hermes-cli-subcommands-update-py-update-cmd-py-git-核心) |
 | 备份与恢复（`hermes_cli/backup.py` + `hermes_cli/subcommands/backup.py`） | ✅ 核心 | `backup.rs`：完整 zip 备份（hermes `run_backup` —— 适配后的 … [详情](#备份与恢复-hermes-cli-backup-py-hermes-cli-subcommands-backup-py) |
 | 回退链 CLI（`hermes_cli/fallback_cmd.py` + `fallback_config.py`） | ✅ 核心 | `fallback.rs`：运行时链已存在（`[model] fallbacks` 规格 + `agent::with_fallback_specs` / … [详情](#回退链-cli-hermes-cli-fallback-cmd-py-fallback-config-py) |
 | 活跃会话租约（`hermes_cli/active_sessions.py`） | ✅ 核心 | `active_sessions.rs`：跨进程租约注册表 `<home>/runtime/active_sessions.json`，由 … [详情](#活跃会话租约-hermes-cli-active-sessions-py) |
@@ -82,17 +82,17 @@
 | 导入其他 Agent 配置（`hermes_cli/agent_import.py`） | ✅ 核心 |  … [详情](#导入其他-agent-配置-hermes-cli-agent-import-py) |
 | 会话技能标题修复（`hermes_cli/sessions_cmd.py retitle-skills`） | ✅ 核心 | `ulnclaw sessions retitle-skills [--limit N] [--apply]`（默认干跑）： … [详情](#会话技能标题修复-hermes-cli-sessions-cmd-py-retitle-skills) |
 | Secrets 保险库（`agent/secret_sources/`） | ✅ 核心 | `src/secrets.rs` + `ulnclaw secrets status\|sync [--apply]`：外部秘密源在启动时、任何 provider … [详情](#secrets-保险库-agent-secret-sources) |
-| 凭证池（`agent/credential_pool.py` + `hermes_cli/auth.py` + 仪表盘 `/api/credentials/pool`） | ✅ 核心 | P330 精简移植：`src/credential_pool.rs` —— `<home>/credentials-pool.json` 存储手工登记的按 pr … [详情](#凭证池-agent-credential-pool-py-hermes-cli-auth-py-仪表盘-api-credentials-pool) |
+| 凭证池（`agent/credential_pool.py` + `hermes_cli/auth.py` + 仪表盘 `/api/credentials/pool`） | ✅ 核心 | P330 精简实现：`src/credential_pool.rs` —— `<home>/credentials-pool.json` 存储手工登记的按 pr … [详情](#凭证池-agent-credential-pool-py-hermes-cli-auth-py-仪表盘-api-credentials-pool) |
 | iron-proxy 出站防火墙（`hermes egress`、`agent/proxy_sources/iron_proxy.py`） | ✅ 核心 | `src/iron_proxy.rs` + `src/egress_cmd.rs` + … [详情](#iron-proxy-出站防火墙-hermes-egress-agent-proxy-sources-iron-proxy-py) |
 | Computer Use（`tools/computer_use/`） | ✅ 核心 | `src/computer_use.rs` + `ulnclaw computer-use status\|doctor\|install`：经 cua-drive … [详情](#computer-use-tools-computer-use) |
 | 插件系统（`hermes_cli/plugins.py`、`agent/shell_hooks.py`） | ✅ 核心 | `src/plugins.rs` + … [详情](#插件系统-hermes-cli-plugins-py-agent-shell-hooks-py) |
 | 消息平台网关（`gateway/platforms/`） | ✅ 核心 | `src/messaging.rs` —— hermes 平台网关架构运行于 `ulnclaw gateway` 内：适配器将入站聊天消息归一化为 … [详情](#消息平台网关-gateway-platforms) |
 | 交互式 clarify（`tools/clarify_gateway.py` + WhatsApp interactive） | ✅ 核心 | `src/clarify_gateway.rs` + 消息层集成 —— `clarify` 工具在消息会话中可用：提问登记于有上限的网关注册表（hermes s … [详情](#交互式-clarify-tools-clarify-gateway-py-whatsapp-interactive) |
 | 语音转写（`tools/transcription_tools.py` + gateway STT 管道） | ✅ 核心 | `src/stt.rs` —— hermes 音频 STT 管道：`[stt]` 配置（enabled/echo_transcripts/provider/la … [详情](#语音转写-tools-transcription-tools-py-gateway-stt-管道) |
-| OAuth 登录 + 技能同步（`hermes_cli/portal_cli.py`、`tools/skills_sync_client.py`） | ✅ 核心 | `src/oauth.rs` + `src/skills_sync.rs`：hermes 门户认证 + Skill Sync 的服务无关移植。 … [详情](#oauth-登录-技能同步-hermes-cli-portal-cli-py-tools-skills-sync-client-py) |
+| OAuth 登录 + 技能同步（`hermes_cli/portal_cli.py`、`tools/skills_sync_client.py`） | ✅ 核心 | `src/oauth.rs` + `src/skills_sync.rs`：hermes 门户认证 + Skill Sync 的服务无关实现。 … [详情](#oauth-登录-技能同步-hermes-cli-portal-cli-py-tools-skills-sync-client-py) |
 | OAuth 上游代理（`hermes_cli/proxy/`） | ✅ 核心 | `src/proxy_cmd.rs` + `ulnclaw proxy start\|status\|providers`（P179）：本地 OpenAI 兼容代理 … [详情](#oauth-上游代理-hermes-cli-proxy) |
 | 桌面 GUI（`apps/desktop` Electron） | ✅ 核心 | `desktop-electron/` —— **ulnclaw desktop**：v0.7.0 起 ulnclaw 直接交付 hermes Electron … [详情](#桌面-gui-apps-desktop-electron) |
-| 会话浏览（`hermes_cli/sessions_cmd.py browse` + curses 挑选器） | ✅ 核心 | `ulnclaw sessions browse [--source S] [--limit N]`：TTY 上启用原始模式 TUI（crossterm 移植 … [详情](#会话浏览-hermes-cli-sessions-cmd-py-browse-curses-挑选器) |
+| 会话浏览（`hermes_cli/sessions_cmd.py browse` + curses 挑选器） | ✅ 核心 | `ulnclaw sessions browse [--source S] [--limit N]`：TTY 上启用原始模式 TUI（crossterm 实现 … [详情](#会话浏览-hermes-cli-sessions-cmd-py-browse-curses-挑选器) |
 | 会话恢复与单会话连续性（`cli.py --resume/--continue`） | ✅ 核心 | 全局 `-r/--resume <id或前缀>` 与 `-c/--continue` 标志，适用于 `chat` 与 `run`：整个 REPL 会话存于同一条 … [详情](#会话恢复与单会话连续性-cli-py-resume-continue) |
 | 会话库修复（`hermes_state.py repair_state_db_schema`） | ✅ 核心 | `ulnclaw sessions repair [--check-only] [--no-backup]`：健康探测（`db_opens_cleanly` — … [详情](#会话库修复-hermes-state-py-repair-state-db-schema) |
 | 会话删除/重命名/优化（`hermes_cli/sessions_cmd.py`） | ✅ 核心 | `ulnclaw sessions delete <id> [--yes]`（id 或唯一前缀，`resolve_session_id` —— LIKE 转义前 … [详情](#会话删除-重命名-优化-hermes-cli-sessions-cmd-py) |
@@ -109,8 +109,8 @@
   脱敏、其余场景的 JSON/YAML 密钥字段
 - 文件读取内容使用不可复用哨兵 `«redacted:prefix…»`，避免代理把截断密钥写回（hermes #35519）
 - web URL 查询参数脱敏保持可选
-- Smart-DENY 业主覆盖流已完整移植 —— `smart_denied` 标志、仅 once/deny 选项、单操作范围、smart-DENY 下不持久化、人工批准重置断路器（见智能审批行）
-- profile 密钥作用域已移植 —— 见多路复用行
+- Smart-DENY 业主覆盖流已完整实现 —— `smart_denied` 标志、仅 once/deny 选项、单操作范围、smart-DENY 下不持久化、人工批准重置断路器（见智能审批行）
+- profile 密钥作用域已实现 —— 见多路复用行
 
 <a id="蓝图-blueprints-tools-blueprints-py"></a>
 
@@ -122,7 +122,7 @@
 - `skills list` 以日程标注蓝图。P229 接入 hermes 蓝图建议流：`skills blueprints` 为每个未排程蓝图惰性登记一条待处理 `blueprint`
   源建议（对标 hermes `register_blueprint_suggestion` —— 去重闩锁、MAX_PENDING 上限
 - 接受后产生与 `skills schedule` 相同的 `blueprint:<skill>` 任务）。统一建议面为 `cron/suggestions.rs` + REPL/CLI
-  `/suggestions`（accept/dismiss/catalog/clear，含精选起始目录）。`export_blueprint`（`skills publish` 分享路径）仍未移植
+  `/suggestions`（accept/dismiss/catalog/clear，含精选起始目录）。`export_blueprint`（`skills publish` 分享路径）仍未实现
   —— ulnclaw 无 skills hub/发布面
 
 <a id="技能守卫-tools-skills-guard-py"></a>
@@ -144,7 +144,7 @@
   background`、delegation_id、`cache/delegation/live/<id>/task-N.log`
   实时记录），全部子任务完成后以**单条**汇总结果重新进入会话（REPL 与网关会话聊天前置排队消费）
 - 编排子代理（深度 > 0）保持同步
-- 一次性/无状态会话强制同步执行并附说明（`tools/async_delegation.py` 移植，含持久 sqlite 登记：派发与汇总结果持久化于
+- 一次性/无状态会话强制同步执行并附说明（`tools/async_delegation.py` 实现，含持久 sqlite 登记：派发与汇总结果持久化于
   `async_delegations`，启动恢复将崩溃后仍 `running` 的行转为终态 `unknown` 结果，drain 经持久投递认领生命周期认领未投递行——每次认领累计
   `delivery_attempts`、300 秒过期认领可接管、源会话已消失的完成结果在 8 次尝试后收敛为终态 `dropped`、成功注入在认领令牌下标记 `delivered`）
 - `GET /v1/delegations` + `/v1/delegations/:id` 登记端点（ulnclaw 运维扩展）
@@ -176,13 +176,13 @@
 #### `browser_*`（12 个工具） — ✅ 完整
 
 - CDP WebSocket 客户端（`browser` 模块）：端点发现、页面会话、带元素引用的可访问性快照、点击/输入/滚动/按键/截图/执行 JS/对话框
-- `ULNCLAW_BROWSER_CDP` 支持 ws://、http://host:port 或 `auto`（监督器启动托管的无头 Chrome/Chromium）
-- 已移植 hermes SSRF 防护（`browser/guard.rs`）：敏感查询参数 +
+- `ULNCLAW_BROWSER_CDP` 支持 ws://、http://host:implementation 或 `auto`（监督器启动托管的无头 Chrome/Chromium）
+- 已实现 hermes SSRF 防护（`browser/guard.rs`）：敏感查询参数 +
   云元数据底线无条件拦截，非本地端点或容器化终端启用私网地址防护，重定向落地复检，console/eval 表达式内 URL 字面量预筛，私有页面下原始 CDP 方法白名单
 - 浏览器输出强制脱敏
 - REPL `/browser connect` 与网关 `/v1/browser/connect|disconnect|status` 实时切换端点
 - `CAMOFOX_URL` 接入 Camofox REST 后端
-- 云浏览器 provider（Browserbase / Browser Use / Firecrawl）经 `browser/cloud.rs` 提供——复刻 hermes provider
+- 云浏览器 provider（Browserbase / Browser Use / Firecrawl）经 `browser/cloud.rs` 提供——对齐 hermes provider
   注册表语义，含 `[browser] cloud_provider` 选择、传统可用性遍历、会话过期退役与退出时释放（见「云浏览器 provider」行）
 
 <a id="close-terminal-read-terminal-focus-pane-open-preview"></a>
@@ -195,7 +195,7 @@
   事件（`terminal.close`、`pane.reveal`、`preview.open`）及阻塞式 `read_terminal` 回调
 - 未接入宿主时返回 "desktop only"，从不杀进程，并规范化裸域名（`www.cnn.com` → https、`localhost:3000` → http）
 - `react_to_message`（hermes `react_to_message_tool.py`
-  移植）：代理表情回应——每作者一个、重发相同表情即撤回，默认最新用户消息（`messages_back` 回溯、`message_row_id` 精确指定），持久于
+  实现）：代理表情回应——每作者一个、重发相同表情即撤回，默认最新用户消息（`messages_back` 回溯、`message_row_id` 精确指定），持久于
   `messages.display_metadata` 并经 `message.reaction` 桥接事件实时渲染
 - 门控于 `ULNCLAW_DESKTOP=1` **与** `[display] message_reactions`。P231 起，当网关是桌面外壳的子进程时，桥接事件经 `GET
   /api/desktop/events` SSE 传输，桌面 webview 成为一等 emitter 宿主
@@ -204,7 +204,7 @@
 
 #### `discord`, `discord_admin` — ✅ 核心
 
-- P245 完整移植 hermes `tools/discord_tool.py`（`src/discord_tool.rs`）：15 个 REST API 动作拆分为 `discord`
+- P245 完整实现 hermes `tools/discord_tool.py`（`src/discord_tool.rs`）：15 个 REST API 动作拆分为 `discord`
   核心（fetch_messages / search_members / create_thread）与 `discord_admin`（服务器/频道/角色/成员/置顶/线程管理）
 - 令牌经 profile 密钥作用域解析
 - schema 双重门控——特权意图经 `GET /applications/@me` 非阻塞探测（内存缓存 → 24 小时磁盘缓存，以 sha256(token)[:16] 为键 → 宽松默认 +
@@ -217,7 +217,7 @@
 
 #### `feishu_doc_read`, `feishu_drive_*` — ✅ 核心
 
-- P246 完整移植 hermes `tools/feishu_doc_tool.py` +
+- P246 完整实现 hermes `tools/feishu_doc_tool.py` +
   `tools/feishu_drive_tool.py`（`src/feishu_doc_tool.rs`）：`feishu_doc_read`（工具集 `feishu_doc`）经
   `/open-apis/docx/v1/documents/:id/raw_content` 读取文档纯文本全文
 - `feishu_drive_list_comments` / `feishu_drive_list_comment_replies` / `feishu_drive_reply_comment`
@@ -230,7 +230,7 @@
 
 #### `spotify_*`（7 工具） — ✅ 核心
 
-- P247 完整移植 hermes `plugins/spotify`（`src/spotify_tool.rs` +
+- P247 完整实现 hermes `plugins/spotify`（`src/spotify_tool.rs` +
   `src/spotify_auth.rs`）：`spotify_playback`（get_state/currently-playing/play/pause/next/previous/seek/set_repeat/set_shuffle/set_volume/recently_played，含
   204 空态描述）、`spotify_devices`（list/transfer）、`spotify_queue`（get/add）、`spotify_search`（7
   种条目类型）、`spotify_playlists`（list/get/create/add_items/remove_items/update_details）、`spotify_albums`（get/tracks）、`spotify_library`（tracks/albums
@@ -246,13 +246,13 @@
 
 #### `yb_*`（5 个元宝工具） — ✅ 核心
 
-- P248 完整移植 hermes `tools/yuanbao_tools.py`（`src/yuanbao_tool.rs`）：`yb_query_group_info` /
+- P248 完整实现 hermes `tools/yuanbao_tools.py`（`src/yuanbao_tool.rs`）：`yb_query_group_info` /
   `yb_query_group_members`（find/list_bots/list_all + @提及提示，角色标签 user/yuanbao_ai/bot）经存活适配器的 WS 业务 RPC
   执行（`src/yuanbao.rs` `YuanbaoHandle` —— 与 hermes `get_active_adapter` 一致，每会话重新注册），新增 proto
   编解码（`encode_query_group_info` / `encode_get_group_member_list` + 嵌套 GroupInfo / repeated MemberInfo
   响应解码）
 - `yb_send_dm` 按昵称模糊匹配解析收件人，发送分块 C2C 文本（携带群上下文）并经 COS 上传路径发送媒体（消息中的 `MEDIA:` 标签与 hermes `extract_media` 一致地被提取）
-- `yb_search_sticker` / `yb_send_sticker` 使用已移植的贴纸目录（id/名称/随机查找、TIMFaceElem、可选群引用回复 ref）
+- `yb_search_sticker` / `yb_send_sticker` 使用已实现的贴纸目录（id/名称/随机查找、TIMFaceElem、可选群引用回复 ref）
 - 工具按适配器存活状态门控（hermes `_check_yuanbao`）
 - 差异：ulnclaw 无逐轮会话环境变量，`chat_id`/`group_code` 为显式参数
 
@@ -260,7 +260,7 @@
 
 #### `send_message` — ✅ 核心
 
-- P259 完整移植 hermes `tools/send_message_tool.py` +
+- P259 完整实现 hermes `tools/send_message_tool.py` +
   `gateway/channel_directory.py`（`src/send_message_tool.rs` +
   `src/channel_directory.rs`）：`send`/`list`/`react`/`unreact` 四个动作，忠实的 target 语法（裸平台名 →
   `<PLATFORM>_HOME_CHANNEL` / `EMAIL_HOME_ADDRESS` 主频道，`platform:chat_id`、`platform:chat_id:thread_id`
@@ -278,11 +278,11 @@
 
 #### `x_search` — 🟡 门控
 
-- hermes `x_search_tool.py` 完整移植：xAI Responses-API `x_search` 服务端工具，支持账号白/黑名单（最多 10 个、去
+- hermes `x_search_tool.py` 完整实现：xAI Responses-API `x_search` 服务端工具，支持账号白/黑名单（最多 10 个、去
   `@`）、严格客户端日期范围校验（YYYY-MM-DD、禁止倒置/纯未来窗口）、`enable_image_understanding` /
   `enable_video_understanding`、5xx/瞬时错误退避重试、过滤无引文时的 `degraded`/`degraded_reason` 标记、`[x_search]`
   配置（model / reasoning_effort / timeout_seconds / retries）
-- 仅在 `XAI_API_KEY` 存在**且**启用可选 `x_search` 工具集时注册（hermes 对齐——SuperGrok OAuth 路径未移植）
+- 仅在 `XAI_API_KEY` 存在**且**启用可选 `x_search` 工具集时注册（hermes 对齐——SuperGrok OAuth 路径未实现）
 
 <a id="video-generate-bfl-flux3"></a>
 
@@ -306,7 +306,7 @@
 
 #### `project_list`、`project_create`、`project_switch` — ✅ 核心
 
-- hermes `tools/project_tools.py` + `hermes_cli/projects_db.py` 完整移植：每 profile
+- hermes `tools/project_tools.py` + `hermes_cli/projects_db.py` 完整实现：每 profile
   `projects.db`（projects / project_folders / project_meta / discovered_repos，WAL + DELETE 回退 +
   增量列迁移）、slug 校验 + `-2` 冲突后缀、多文件夹工作区与主目录指针（首个文件夹隐式为主、删除时降级/重指）、归档/恢复/硬删除（文件夹级联）、活动项目指针、最长前缀
   `project_for_path` 解析、确定性 kanban 分支名（`<slug>/<task-id>[-<title-slug>]`）、带策略协调的仓库发现缓存
@@ -317,7 +317,7 @@
 #### 技能使用遥测 + 学习图谱（`skill_usage`、`learning_graph`、`learning_mutations`） — ✅ 核心
 
 - hermes `tools/skill_usage.py` + `agent/learning_graph.py` + `agent/learning_mutations.py`
-  移植：`<home>/skills/.usage.json` 旁路记录（view/use/patch 计数、生命周期状态、固定、agent 创建溯源、原子写入），遥测接入
+  对应实现：`<home>/skills/.usage.json` 旁路记录（view/use/patch 计数、生命周期状态、固定、agent 创建溯源、原子写入），遥测接入
   `skill_view`/`skill_manage`（bump view/patch、标记 agent 创建、删除时 forget），经 `skills/.archive`
   的技能归档/恢复（冲突时间戳后缀、固定技能拒绝）
 - 学习图谱载荷 —— 已学技能过滤（agent 创建或使用过）、`related_skills` 边、`MEMORY.md`/`USER.md` 条目记忆卡片、词法 记忆→技能 边（每卡 top-4）、聚类 + 密度统计
@@ -327,7 +327,7 @@
 
 #### 学习时间线 / `journey` CLI（`learning_graph_render`、`journey`） — ✅ 核心
 
-- hermes `agent/learning_graph_render.py` + `hermes_cli/journey.py` 移植：`learning_graph_render.rs` ——
+- hermes `agent/learning_graph_render.py` + `hermes_cli/journey.py` 对应实现：`learning_graph_render.rs` ——
   桌面同源色彩数学（调色板推导、互补记忆色、smoothstep 年龄渐变）、新旧度计算（带时间 + 序号回退）、日/月/年分桶时间线（按主导类别着色的技能/记忆比例条 —— 学习热图）、编号
   charted-signal 标记、累计轨迹 sparkline、图例/坐标轴/摘要装饰
 - `ulnclaw journey` CLI —— 时间线帧（`--reveal`、`--width/--height`、`--no-color`）、`--play` 动画、`--json`
@@ -353,7 +353,7 @@
 
 #### 持久化目标 / Ralph 循环（`goals`） — ✅ 核心
 
-- hermes `hermes_cli/goals.py` 移植：`goals.rs` ——
+- hermes `hermes_cli/goals.py` 对应实现：`goals.rs` ——
   `GoalContract`（outcome/verification/constraints/boundaries/stop_when，别名表 `parse_contract`
   使无关冒号不被误解析，空字段省略，带标签 `render_block`）、`GoalState` serde
   往返（状态、轮次预算、子目标、解析/传输失败计数、pid/会话/时间等待屏障）、`parse_judge_response`（verdict + 旧式 `done` 布尔、去代码围栏、内嵌 JSON
@@ -374,13 +374,13 @@
 
 #### 网关 profile 多路复用（`/p/<profile>`）+ CDP 会话存活 — ✅ 核心
 
-- hermes api_server profile 前缀中间件移植：所有网关路由镜像到 `/p/<profile>/...`
+- hermes api_server profile 前缀中间件对应实现：所有网关路由镜像到 `/p/<profile>/...`
 - `[gateway] multiplex_profiles = true` 时每个镜像由独立栈支撑（agent 取自 `[profiles.<name>]` 覆盖，home 按 profile
   隔离 `<home>/profiles/<name>` —— state.db/approvals.json/cron/skills），惰性构建并缓存（`ProfileHub`），未知 profile
   → 404 `Unknown or unconfigured profile`
 - 多路复用关闭时前缀被接受但由默认 profile 服务（对齐 hermes `_resolve_request_profile`）
 - 镜像同样经 bearer 鉴权。CDP 客户端加固：`CdpClient.is_connected`（读/写循环在套接字断开时翻转 closed 标志并让在途调用快速失败 —— 不再空等 30
-  秒超时），`with_session` 透明丢弃已死的缓存会话并重建。Profile 密钥作用域（P222，hermes `agent/secret_scope.py` 移植）：多路复用开启时，每个
+  秒超时），`with_session` 透明丢弃已死的缓存会话并重建。Profile 密钥作用域（P222，hermes `agent/secret_scope.py` 实现）：多路复用开启时，每个
   `/p/<profile>/...` 请求都运行在该 profile 的失败关闭（fail-closed）密钥作用域内（`<home>/profiles/<name>/.env` +
   按需水合的外部秘密源，剔除真正的全局变量）
 - 作用域内读取只解析作用域本身——不再回退到可能残留其他 profile 值的进程环境——无作用域的凭据读取会以 `UnscopedSecretError` 大声失败，而不是泄漏其他 profile 的值
@@ -416,7 +416,7 @@
   FTS）、`archive_sessions`（软隐藏、幂等）、`set_session_archived`、`session_count_by_source`
 - CLI `ulnclaw sessions prune|archive`（hermes 语义：裸 prune = 90 天以上，任一过滤器抑制隐式截断，裸 archive 拒绝执行，预览 +
   y/N 确认 + `--dry-run`、`--include-archived`）与 `sessions stats`（总量、按源计数、库大小）
-- hermes 的计费/聊天/分支/成本过滤器对应 ulnclaw 未跟踪的列，不移植
+- hermes 的计费/聊天/分支/成本过滤器对应 ulnclaw 未跟踪的列，不实现
 
 <a id="皮肤-主题引擎-skin-engine-py"></a>
 
@@ -511,7 +511,7 @@
   风格提示（pixel/plush/clay/sticker/flat-vector/3d-toy/painterly/auto）、`--drafts N` 仅出草稿模式与 `--base
   <path>` 从图片孵化
 - REPL `/pet`（toggle/list/scale/off/<slug> 领养）+ `/hatch <description>` 斜杠命令（hermes cli_commands_mixin 语义，含进度打印）
-- P126 移植了桌面生成悬浮层：桌面外壳的孵化对话框（提示词 + 风格 + 草稿数 → 基础草稿网格挑选 → 实时行进度 → 精灵图预览 + 自动领养）基于新的网关孵化任务 API（`POST
+- P126 实现了桌面生成悬浮层：桌面外壳的孵化对话框（提示词 + 风格 + 草稿数 → 基础草稿网格挑选 → 实时行进度 → 精灵图预览 + 自动领养）基于新的网关孵化任务 API（`POST
   /api/pets/hatch`、`GET /api/pets/hatch/:id`、`POST /api/pets/hatch/:id/pick|cancel`、`GET
   /api/pets/hatch/:id/draft/:index`）。已知差异：单一 OpenAI 兼容端点取代 hermes 的 Nous/OpenRouter/Krea 供应商注册表
 - 精灵图以 PNG 编码（`image` crate 无 WebP 编码器），解码两种格式均可
@@ -533,23 +533,23 @@
 
 #### 状态报告（`hermes_cli/status.py` + `hermes_cli/subcommands/status.py` + `timefmt.py`） — ✅ 核心
 
-- `status.rs`：`show_status` 移植 —— 面板头 + Environment（版本 / home / config.toml /
+- `status.rs`：`show_status` 实现 —— 面板头 + Environment（版本 / home / config.toml /
   .env）、Model+Provider+Base URL、API Keys（config.toml `model.api_key` 行 + 20 项供应商环境变量表，备选变量依次回退，所有值经
   `redact_key` 脱敏）、Terminal Backend、Browser（endpoint + 浏览器发现）、Gateway（监听 / 鉴权密钥 / multiplex
 - `--deep` 追加网关端口 TCP 探测）、Scheduled Jobs（启用/总数 + 下次运行）、Sessions（总数 + 最近会话）、Skills（已安装 +
   待处理建议）、Updates（git 上游检查，6h 缓存）、页脚指向 doctor/init
-- `relative_time()` 为 timefmt.py 移植（just now / Nm / Nh / yesterday / Nd / 日期）
+- `relative_time()` 为 timefmt.py 实现（just now / Nm / Nh / yesterday / Nd / 日期）
 - CLI `ulnclaw status [--all] [--deep]`（`--all` 与默认渲染同为脱敏输出）
 
 <a id="日志查看-文件日志-hermes-cli-logs-py-hermes-cli-subcommands-logs-py-hermes-logging-py-滚动手柄"></a>
 
 #### 日志查看 + 文件日志（`hermes_cli/logs.py` + `hermes_cli/subcommands/logs.py` + `hermes_logging.py` 滚动手柄） — ✅ 核心
 
-- `logs.rs`：查看器移植 —— `LOG_FILES` 注册表（agent/errors/gateway）、`_parse_since`（Ns/m/h/d
+- `logs.rs`：查看器实现 —— `LOG_FILES` 注册表（agent/errors/gateway）、`_parse_since`（Ns/m/h/d
   截止时刻）、时间戳/级别/记录器名正则（记录器正则扩展以支持 Rust `::` 目标）、`_matches_filters`（level>= / session 子串 / since /
   组件前缀）、`_read_last_n_lines`（<=1MiB 整读、大文件自尾部倍增分块）、`_read_tail`（带过滤时 20 倍窗口）、`list_logs`（大小 +
   时龄表）、`tail_log` 头部/过滤描述对齐、`_follow_log` 300ms 轮询
-- 写入端移植 —— `RotatingFile`（max_bytes x backup_count 移位轮转：agent.log 5MBx3 INFO+、errors.log 2MBx2
+- 写入端实现 —— `RotatingFile`（max_bytes x backup_count 移位轮转：agent.log 5MBx3 INFO+、errors.log 2MBx2
   WARNING+、gateway.log 5MBx3 目标过滤）+ `HermesLogFormat`（`YYYY-MM-DD HH:MM:SS,mmm LEVEL [session] target:
   message`）经按文件 layer 接入 tracing
 - `COMPONENT_PREFIXES` 适配 ulnclaw 模块路径
@@ -561,10 +561,10 @@
 
 #### 自更新器（`hermes_cli/subcommands/update.py` + `update_cmd.py` git 核心） — ✅ 核心
 
-- `update.rs`：`--check` 为 `_cmd_update_check` 移植 —— 分支解析（`--branch` > 当前分支 > master，hermes
+- `update.rs`：`--check` 为 `_cmd_update_check` 实现 —— 分支解析（`--branch` > 当前分支 > master，hermes
   `_resolve_update_branch`）、浅克隆感知（`--depth 1` fetch + 仅比对 SHA 存在性）、默认分支优先 upstream fetch 并回退
   origin、fetch 错误分类（网络 / 认证 / 通用）、比较引用校验、rev-list 落后计数
-- 应用路径为 `_cmd_update_impl` git 核心移植 —— 自动
+- 应用路径为 `_cmd_update_impl` git 核心实现 —— 自动
   stash（`--include-untracked`、清理未合并索引、`ulnclaw-update-autostash-<ts>` 命名）、按 origin URL 检测 fork 并自动添加
   `upstream` 远端（`_is_fork` / `_add_upstream_remote`，本地路径 origin 跳过）、`git merge
   --ff-only`（历史分叉只报告不强推）、stash 恢复与冲突指引、old..new 提交日志，随后 `cargo build --release` 作为 Rust 的依赖刷新等价物
@@ -682,14 +682,14 @@
 #### Secrets 保险库（`agent/secret_sources/`） — ✅ 核心
 
 - `src/secrets.rs` + `ulnclaw secrets status|sync [--apply]`：外部秘密源在启动时、任何 provider 读取 env
-  之前应用（hermes env-loader 钩子）。三个来源，完整复刻 hermes 优先级语义 —— mapped 优先于 bulk、首个声明者胜出、`preserve_existing`
+  之前应用（hermes env-loader 钩子）。三个来源，完整对齐 hermes 优先级语义 —— mapped 优先于 bulk、首个声明者胜出、`preserve_existing`
   胜过一切、`override_existing` 可覆盖已有 `.env`/shell 值但绝不覆盖其他来源、引导令牌变量写入保护。`command`：经 `/bin/sh -c` 的任意
   KEY=VALUE 助手（keepassxc-cli / secret-tool / tmpfs cat），硬超时降级为“无值”，stderr 丢弃，1 MiB
   输出上限，支持引号/注释解析。`bitwarden`：Bitwarden Secrets Manager，经 `bws secret list <project> --output json`（托管
   `<home>/bin/bws` 优先于 PATH、`BWS_SERVER_URL` 透传、固定 v2.0.0 自动安装 —— 来自 bitwarden/sdk-sm releases 的
   sha256 校验 zip、zip-slip 防护解包、0755 分阶段安装）。`onepassword`：映射式 `op://vault/item/field` 绑定，经 `op read --
   <ref>` 解析，子进程仅继承最小允许清单 env，空值拒绝写入，单引用失败降级为警告。拉取错误只产生单行警告、绝不致命。TTL
-  拉取缓存（`agent/secret_sources/_cache.py` 移植，`src/secrets_cache.rs`）：`<home>/cache/` 下原子 0600 写入（目录
+  拉取缓存（`agent/secret_sources/_cache.py` 实现，`src/secrets_cache.rs`）：`<home>/cache/` 下原子 0600 写入（目录
   0700），TTL 为 0 时两层缓存对称关闭，仅完整无错拉取入缓存
 - Bitwarden 缓存落盘即 AES-256-GCM **加密**（HKDF-SHA256 密钥由引导令牌派生、缓存键绑定为 AAD、迁移成功后删除旧明文缓存）。交互式安装向导：`secrets
   bitwarden setup|install|status|token|disable`（hermes 五步流程 —— 安装二进制 → 令牌 → 区域 → `bws project list`
@@ -697,18 +697,18 @@
 - 非 TTY 快速路径要求 `--access-token`/`--server-url`/`--project-id`）与 `secrets onepassword
   setup|status|set|remove|disable`。`secrets bitwarden token` 无需重跑向导即可轮换访问令牌（hermes `cmd_token`：掩码提示或
   `--access-token`、`0.` 形状警告、以新凭据 `bws project list` 先验证后落盘（除非 `--no-verify`）、已配置项目可见性警告、写入 .env
-  并清除两层缓存）。未移植：Windows bws 资产路径未测试
+  并清除两层缓存）。未实现：Windows bws 资产路径未测试
 
 <a id="凭证池-agent-credential-pool-py-hermes-cli-auth-py-仪表盘-api-credentials-pool"></a>
 
 #### 凭证池（`agent/credential_pool.py` + `hermes_cli/auth.py` + 仪表盘 `/api/credentials/pool`） — ✅ 核心
 
-- P330 精简移植：`src/credential_pool.rs` —— `<home>/credentials-pool.json` 存储手工登记的按 provider API 密钥条目。网关
+- P330 精简实现：`src/credential_pool.rs` —— `<home>/credentials-pool.json` 存储手工登记的按 provider API 密钥条目。网关
   `GET /api/credentials/pool`（按 provider 行，1 基序号、脱敏令牌预览、请求计数）、`POST /api/credentials/pool`（provider
   归一化 + 默认 `key #N` 标签）、`DELETE
   /api/credentials/pool/:provider/:index`（手工条目无再播种源，删除即彻底）。轮换：优先级最高档优先，同档取使用最少者
 - 请求计数尽力持久化（原子写盘，无跨进程锁）。`UlncLawConfig::resolve_api_key` 按 配置字面值 > 池条目 > 环境变量 解析，池成员身份即精选信号
-- 桌面 Config 视图新增凭证池区块（条目行 + 添加/移除）。已知差异：不从 env/OAuth/配置源自动播种、无抑制/移除步骤注册表、无 OAuth 单例条目、无 `hermes auth` CLI 面，xAI 池代理适配器仍未移植
+- 桌面 Config 视图新增凭证池区块（条目行 + 添加/移除）。已知差异：不从 env/OAuth/配置源自动播种、无抑制/移除步骤注册表、无 OAuth 单例条目、无 `hermes auth` CLI 面，xAI 池代理适配器仍未实现
 
 <a id="iron-proxy-出站防火墙-hermes-egress-agent-proxy-sources-iron-proxy-py"></a>
 
@@ -742,13 +742,13 @@
 #### Computer Use（`tools/computer_use/`） — ✅ 核心
 
 - `src/computer_use.rs` + `ulnclaw computer-use status|doctor|install`：经 cua-driver 守护进程的后台桌面控制（MCP
-  over stdio，hermes `cua_backend.py`）。完整复刻 hermes 工具 schema（capture som/vision/ax、按 SOM 元素索引或坐标的 click
-  族、drag、scroll、type、组合键、set_value、wait、list_apps/list_windows/focus_app、cua_browser_* 类型化浏览器透传）。复刻
+  over stdio，hermes `cua_backend.py`）。完整对齐 hermes 工具 schema（capture som/vision/ax、按 SOM 元素索引或坐标的 click
+  族、drag、scroll、type、组合键、set_value、wait、list_apps/list_windows/focus_app、cua_browser_* 类型化浏览器透传）。对齐
   hermes 审批语义：capture 与列表类免费，其余动作一律走审批回调，无人值守时失败关闭。惰性共享 MCP
   会话（`start_session`/`end_session`、`set_config` max_image_dimension、光标覆盖层策略含 `--no-overlay` 自动探测 + 默认
   `CUA_DRIVER_RS_TELEMETRY_ENABLED=0`）。`doctor` 驱动 cua-driver 的 `health_report`。P228
   补齐客户端视觉后处理层：每个动作结果的 `screenshot_png_b64` 都会被解码，最长边超过 `[computer_use] max_image_dimension`
-  时在客户端降采样（保持宽高比、刷新 `width`/`height`、失败开放）——作为驱动侧 `set_config` 上限的双保险，即使驱动忽略该配置，SOM/视觉载荷也有界。未移植：macOS
+  时在客户端降采样（保持宽高比、刷新 `width`/`height`、失败开放）——作为驱动侧 `set_config` 上限的双保险，即使驱动忽略该配置，SOM/视觉载荷也有界。未实现：macOS
   TCC `permissions` 授权流程、嵌入式守护进程/socket 模式、上下文级截图驱逐（v2026.8.3 检出中无参考实现——`tools/` 目录缺失
 - 不凭空发明语义）
 
@@ -757,11 +757,11 @@
 #### 插件系统（`hermes_cli/plugins.py`、`agent/shell_hooks.py`） — ✅ 核心
 
 - `src/plugins.rs` + `ulnclaw plugins list|install|update|remove|enable|disable|accept-hooks`：以
-  shell-hook 线协议实现的 hermes 插件架构 Rust 原生化移植（静态二进制无法导入 Python 插件）。目录插件位于
+  shell-hook 线协议实现的 hermes 插件架构 Rust 原生化实现（静态二进制无法导入 Python 插件）。目录插件位于
   `<home>/plugins/<name>/plugin.toml`（manifest：hooks + `[[tools]]`）
 - 工具以 `plugin__<name>__<tool>` 注册，作为子进程运行、stdin 收 `{"tool", "arguments"}` JSON。配置式 shell 钩子 `[hooks]
-  <event> = ["cmd"]`，复刻 hermes 首次使用同意机制（`shell-hooks-allowlist.json`、`auto_accept` /
-  `ULNCLAW_ACCEPT_HOOKS`）。完整复刻 hermes `VALID_HOOKS` 目录（23 个事件）
+  <event> = ["cmd"]`，对齐 hermes 首次使用同意机制（`shell-hooks-allowlist.json`、`auto_accept` /
+  `ULNCLAW_ACCEPT_HOOKS`）。完整对齐 hermes `VALID_HOOKS` 目录（23 个事件）
 - 核心触发 hermes 运行期实际发出的全部 13 个：`pre_tool_call`（block
   决定在审批前否决）、`post_tool_call`、`transform_llm_output`、`on_session_start`/`on_session_end`/`on_session_reset`（`/new`）/`on_session_finalize`（REPL
   退出）、`pre_llm_call`（context 响应追加进当轮用户消息，hermes turn-context
@@ -774,14 +774,14 @@
   [--force] [--enable|--no-enable]`（非交互 git 浅克隆 + 60 秒上限，GitHub 浏览器 URL/`#subdir`/`.git/`
   边界标识符解析，子目录防穿越，从 plugin.toml 或 plugin.yaml 发现名称，目标净化后落 `<home>/plugins/`，交互式启用提问）、`plugins update
   <name>`（在已安装克隆内 git pull）与 `plugins remove <name>`（删除目录）。P234
-  移植钩子输出溢出防护（`tools/hook_output_spill.py`）：钩子注入的 `context` 会附加到后续每次 API 调用，超过 `[hooks.output_spill]
+  实现钩子输出溢出防护（`tools/hook_output_spill.py`）：钩子注入的 `context` 会附加到后续每次 API 调用，超过 `[hooks.output_spill]
   max_chars`（默认 1 万字符）的块会溢出落盘到 `<home>/hook_outputs/<session>/<uuid>.txt`，提示词内只留头/尾预览 + 路径
 - I/O 失败降级为带 "spill write failed" 的有界预览，绝不拖垮本轮（enabled/max_chars/preview_head/preview_tail/directory
   可配，会话 id 做路径净化）。P351 将市场管线暴露为 `/api/dashboard/plugins*` + `/api/dashboard/agent-plugins*` +
   `/api/dashboard/plugin-providers`（活动仪表盘插件清单 + 重新扫描、基于精选 `plugin-hub/index.json` +
   本地目录候选的合并市场载荷（安装/更新/移除）、持久化到 `[plugins]` 的记忆/上下文 provider 选择、`dashboard.hidden_plugins` 可见性开关——对应
   hermes 插件市场）
-- 逐插件静态资源托管（`/dashboard-plugins/*`）仍未移植。hermes 的 Python 插件导入、entry-point 包与 provider 注册未移植
+- 逐插件静态资源托管（`/dashboard-plugins/*`）仍未实现。hermes 的 Python 插件导入、entry-point 包与 provider 注册未实现
 
 <a id="消息平台网关-gateway-platforms"></a>
 
@@ -820,11 +820,11 @@
   管道，引用消息（message_type 103）上下文合并，INTERACTION_CREATE 确认 + 内联键盘（执行审批 ✅ 允许一次 / ⭐ 始终允许 / ❌ 拒绝 回调按钮，走
   `send_exec_approval` 契约，按钮点按经操作者授权后回流审批网关——私聊须与聊天用户一致、群/频道点按须通过白名单 ∪ 配对准入门控
 - 更新确认 ✓/✗ 键盘将 `y`/`n` 应答原子写入 `.update_response` 文件
-- 扫码配置引导已移植（`ulnclaw qq login` —— hermes `qr_register`：`q.qq.com` 门户 `create_bind_task` /
+- 扫码配置引导已实现（`ulnclaw qq login` —— hermes `qr_register`：`q.qq.com` 门户 `create_bind_task` /
   `poll_bind_result` API（`QQ_PORTAL_HOST` 可覆盖）、终端二维码 + 链接展示、600 秒默认时限内 2 秒轮询、二维码过期最多刷新 3
   次、`client_secret` 本地 AES-256-GCM 解密（IV ‖ 密文 ‖ tag 布局，密钥不出 CLI）
 - 凭证持久化于 `<home>/qq/credentials.json` 并作为配置解析的末级回退
-- P220 已移植完整设置向导（`ulnclaw qq setup` —— hermes `_setup_qqbot`）：扫码/手动凭证二选一、DM
+- P220 已实现完整设置向导（`ulnclaw qq setup` —— hermes `_setup_qqbot`）：扫码/手动凭证二选一、DM
   安全策略选择（pairing/open/allowlist，含自助添加与逗号列表输入）并持久化到 `[messaging.qq]`（`dm_policy` + `allow_from`，合并式
   TOML 编辑保留其余配置）、home 频道选择持久化为 `<home>/.env` 的 `QQBOT_HOME_CHANNEL`
 - 密钥输入经 crossterm raw 模式隐藏回显）
@@ -834,16 +834,16 @@
 - 腾讯元宝 App 机器人：WebSocket 网关会话经 HMAC-SHA256 `sign-token` HTTP 握手引导（北京时间 +08:00 时间戳、签名令牌缓存）、手写
   protobuf 线格式编解码（`src/yuanbao_proto.rs`：ConnMsg 信封、AUTH_BIND/BIND_ACK、ping、push 回执、30
   秒私聊/群组心跳）、入站推送解码 + 每发送者 1.5 秒防抖、DM/群组准入策略（pairing/allowlist/open/disabled）映射到白名单∪配对门控、markdown 感知
-  4000 字符分块回复经 WS 发送（send-c2c/send-group）、复刻 hermes
-  不重连关闭码（4012/4013/4014/4018/4019/4021）、出站媒体已移植（`MEDIA:` 回复路径经 `genUploadInfo` 临时 COS 凭证 + 签名全球加速 PUT
+  4000 字符分块回复经 WS 发送（send-c2c/send-group）、对齐 hermes
+  不重连关闭码（4012/4013/4014/4018/4019/4021）、出站媒体已实现（`MEDIA:` 回复路径经 `genUploadInfo` 临时 COS 凭证 + 签名全球加速 PUT
   上传——hermes `yuanbao_media.py`——再以 TIMImageElem（解析 PNG/JPEG/GIF/WebP 尺寸、md5 uuid、TIM `image_format`）或
   TIMFileElem 分发，说明文字以 TIMTextElem 追加）
-- 表情包已移植（hermes `yuanbao_sticker.py`：59 条内置贴纸表，精确/包含/描述/模糊四级查找，入站 TIMFaceElem 渲染为 `[emoji:
+- 表情包已实现（hermes `yuanbao_sticker.py`：59 条内置贴纸表，精确/包含/描述/模糊四级查找，入站 TIMFaceElem 渲染为 `[emoji:
   <名称>]`，`STICKER:<名称>` 回复标签以 TIMFaceElem（`data` JSON 载荷）发送目录贴纸，proto `index` 字段 9）
-- 入站媒体解析/下载已移植（hermes ExtractContentMiddleware + MediaResolveMiddleware：图片/文件引用渲染为
+- 入站媒体解析/下载已实现（hermes ExtractContentMiddleware + MediaResolveMiddleware：图片/文件引用渲染为
   `[image|ybres:RID]` / `[file:name|ybres:RID]` 锚点，经 `/api/resource/v1/download` resourceId 交换（401
-  强制刷新令牌重试一次）、限大小下载入媒体缓存成为附件，锚点替换为本地路径，24 小时 resourceId 缓存 + 满载淘汰最旧 25%，复刻 hermes 占位符过滤
-- 引用/观察媒体回填已移植（适配器侧消息内容缓存 + 群组观察缓冲区替代 hermes 转写库 —— ulnclaw 转写不保存平台消息 id：引用消息中的已本地锚点原样注入、残留
+  强制刷新令牌重试一次）、限大小下载入媒体缓存成为附件，锚点替换为本地路径，24 小时 resourceId 缓存 + 满载淘汰最旧 25%，对齐 hermes 占位符过滤
+- 引用/观察媒体回填已实现（适配器侧消息内容缓存 + 群组观察缓冲区替代 hermes 转写库 —— ulnclaw 转写不保存平台消息 id：引用消息中的已本地锚点原样注入、残留
   `[kind|ybres:RID]` 锚点重新解析，无引用的群聊回合按最新优先从最近 50 条消息回填至多 12 个引用并按 rid 去重，另注入 `[Replying to: "..."]`
   引用提示（500 字符截断））
 - 微信转发聊天记录（elem_type 1009）深解析入提示 —— TIMCustomElem ext_map 中的 ForwardMsgData protobuf、单条 1000
@@ -905,7 +905,7 @@
   秒），按域的人类可读格式化（climate/sensor/binary_sensor/light/switch/fan/alarm_control_panel，通用回退），事件投递到合成频道
   `ha_events`，回复经 REST API 以持久通知送达（`persistent_notification/create`、4096 字符分块、REST 独立发送以避免与事件监听竞争同一
   WS）
-- `notify/notify` 进程外独立发送器已移植：只要配置 HASS_URL + HASS_TOKEN（即便未启用实时适配器）即注册仅凭凭证的发送器，向
+- `notify/notify` 进程外独立发送器已实现：只要配置 HASS_URL + HASS_TOKEN（即便未启用实时适配器）即注册仅凭凭证的发送器，向
   `/api/services/notify/notify` 投递 `{message, target}`（hermes `_standalone_send`）
 - 实时适配器启动后以其持久通知发送器覆盖该槽位
 - `[messaging.homeassistant]` 或 HASS_TOKEN/HASS_URL
@@ -913,7 +913,7 @@
 **WhatsApp** —— hermes `platforms.whatsapp` 插件，Baileys HTTP 桥传输 + 完整桥进程监督
 
 - ：Baileys 桥（`scripts/whatsapp-bridge/bridge.js` + `package.json`）编译期内嵌于二进制，运行时同步到 `<home>/scripts/whatsapp-bridge/`
-- `src/whatsapp_bridge.rs` 复刻 hermes adapter 的 connect 生命周期——PATH 解析 `node`/`npm`、以 `package.json`
+- `src/whatsapp_bridge.rs` 对齐 hermes adapter 的 connect 生命周期——PATH 解析 `node`/`npm`、以 `package.json`
   哈希印章（`node_modules/.hermes-pkg-hash`）门控的 `npm install`、pidfile 复核（`bridge.pid` 记录 PID + 内核启动时间，回收的
   PID 永不被误杀）与仅 LISTEN 状态端口占用者的陈旧桥清理、以 `node bridge.js --port N --session DIR --mode MODE` 拉起且
   stdout/stderr 追加写入 `bridge.log`、两阶段就绪等待（HTTP 起来 ≤15 秒，其后 `status == "connected"` 再 ≤15
@@ -933,7 +933,7 @@
   WHATSAPP_BRIDGE_URL/WHATSAPP_BRIDGE_PORT/WHATSAPP_SESSION_PATH/WHATSAPP_AUTO_SPAWN/WHATSAPP_ALLOWED_USERS
 
 **IRC**
-- hermes `platforms.irc` 插件：rustls 零依赖 TCP 客户端——复刻 hermes 注册序列（PASS/NICK/USER、30 秒等待 RPL_WELCOME、可选
+- hermes `platforms.irc` 插件：rustls 零依赖 TCP 客户端——对齐 hermes 注册序列（PASS/NICK/USER、30 秒等待 RPL_WELCOME、可选
   NickServ IDENTIFY、JOIN），433 昵称冲突按递增后缀重试，PING/PONG 保活，CTCP ACTION 折叠（`/me` → `* nick 文本`），频道入站需
   `nick:`/`nick,`/`nick ` 寻址（派发前剥离），白名单为可选——留空即允许所有人（hermes IRC 语义，昵称无身份可言），回复去 markdown（IRC 变体：图片 →
   url、链接 → `文本 (url)`）并按 510 字节行限制分块 + 0.3 秒防洪停顿
@@ -941,7 +941,7 @@
 
 **ntfy**
 - hermes `platforms.ntfy` 插件：HTTP 流式订阅 `GET /<topic>/json?poll=false` NDJSON，2/5/10/30/60 秒重连退避（流存活
-  ≥ 60 秒后重置）、401/404 致命即停，Bearer 或 Basic 令牌认证，消息 id 去重（300 秒窗口、1000 条），`hermes-agent` 回声标签防循环，复刻
+  ≥ 60 秒后重置）、401/404 致命即停，Bearer 或 Basic 令牌认证，消息 id 去重（300 秒窗口、1000 条），`hermes-agent` 回声标签防循环，对齐
   hermes 可信频道身份模型（user_id = 主题
 - 发布者可控的 title 永不作为授权依据），回复 POST 至发布主题（带回声标签 + 可选 `X-Markdown`），4096 字符上限
 - `[messaging.ntfy]` 或 NTFY_TOPIC/NTFY_SERVER_URL/NTFY_TOKEN
@@ -955,41 +955,41 @@
 - `[messaging.simplex]` 或 SIMPLEX_WS_URL/SIMPLEX_ALLOWED_USERS
 
 - 外加十一个挂载于网关的 webhook 平台（WhatsApp Cloud、Microsoft Graph 变更通知、通用 webhook 平台、BlueBubbles、飞书、Twilio
-  SMS、Microsoft Teams、LINE、Google Chat、Raft wake 端点与 A2A agent 服务，详见下文）。复刻 hermes
-  配对语义：每个平台均受白名单门控，空白名单失败关闭并记录待添加的 id。交互式配对码（hermes `gateway/pairing.py` 移植，`src/pairing.rs`）：未授权发送者收到
+  SMS、Microsoft Teams、LINE、Google Chat、Raft wake 端点与 A2A agent 服务，详见下文）。对齐 hermes
+  配对语义：每个平台均受白名单门控，空白名单失败关闭并记录待添加的 id。交互式配对码（hermes `gateway/pairing.py` 实现，`src/pairing.rs`）：未授权发送者收到
   8 位 CSPRNG 配对码（存储为加盐 SHA-256、1 小时过期、每平台至多 3 个待审、每用户每 10 分钟一次请求、连续 5 次审批失败锁定平台 1 小时）
 - `ulnclaw pairing list|approve|revoke|clear-pending` 管理授权，获批用户与白名单在认证门控处取并集（`[messaging] pairing =
-  true` 默认开启）。媒体附件（hermes media-cache 管道移植，`src/media_cache.rs`）：入站 Telegram
+  true` 默认开启）。媒体附件（hermes media-cache 管道实现，`src/media_cache.rs`）：入站 Telegram
   photo/document/video/audio/voice（getFile 下载、照片取最大尺寸）、Discord `attachments`、Slack `files`（bot bearer
   下载）按内容寻址缓存于 `<home>/media-cache/`（SHA-256 命名、hermes mime→ext 表、25 MB 上限），以路径引用 +
   vision_analyze/video_analyze/read_file 提示交付 agent（hermes 文本回退语义）
 - 出站回复中的 `MEDIA:<路径>` 标签在 Telegram（sendPhoto/sendDocument）、Discord（multipart）与 Slack（现代
   `files.getUploadURLExternal` → PUT → `files.completeUploadExternal` 流程）转为原生上传，纯媒体入站消息无需文本即可流转
 
-**WhatsApp Cloud** —— hermes `whatsapp_cloud.py` 移植，`src/webhook_platforms.rs`
+**WhatsApp Cloud** —— hermes `whatsapp_cloud.py` 实现，`src/webhook_platforms.rs`
 
 ：网关挂载 `/webhooks/whatsapp`，Meta 验证握手（hub.challenge 回显）、原始请求体 `X-Hub-Signature-256` HMAC 校验，文本 +
 image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门控（入站媒体经 Graph `/media` 对象下载、按 Meta
 分型大小上限入内容寻址缓存、caption 作为消息文本），回复经 Graph API 分块发送，另支持两步式原生媒体发送（`/media` multipart 上传 → media-id 消息
 
-**Microsoft Graph 变更通知接入** —— hermes `msgraph_webhook.py` 移植
+**Microsoft Graph 变更通知接入** —— hermes `msgraph_webhook.py` 实现
 
-- ：`/webhooks/msgraph` validationToken 回显 + 必填 clientState 校验，通知以内部事件呈现并复刻 hermes 语义——回执去重（`id:<通知
+- ：`/webhooks/msgraph` validationToken 回显 + 必填 clientState 校验，通知以内部事件呈现并对齐 hermes 语义——回执去重（`id:<通知
   id>` 台账、默认 5000、FIFO 淘汰）、`accepted_resources` 资源过滤（精确/子路径/`prefix*` 通配）、提示词渲染（`prompt` 自定义
   `{dotted.path}` 模板，否则排序 JSON 美化转储截断 4000 字符）、`msgraph:<subscriptionId>` 聊天作用域 + 回执键或 sha1 消息
   id、hermes 状态码（202 接受/去重、403 整批鉴权失败、400 格式错误/资源未接受、413 超限）
-- 未移植：`notification_scheduler` 钩子（hermes 侧同样无消费者）、源 CIDR 白名单 + 独立健康端点（hermes 独立 aiohttp 服务器，ulnclaw
-  挂载共享网关）。通用 webhook 平台（hermes `webhook.py` 移植）：`[messaging.webhook]` 路由挂载于
+- 未实现：`notification_scheduler` 钩子（hermes 侧同样无消费者）、源 CIDR 白名单 + 独立健康端点（hermes 独立 aiohttp 服务器，ulnclaw
+  挂载共享网关）。通用 webhook 平台（hermes `webhook.py` 实现）：`[messaging.webhook]` 路由挂载于
   `/webhooks/hook/<name>`，多方案签名校验（Svix `svix-*` 头 + base64 `whsec_` 密钥、GitHub
   `X-Hub-Signature-256`、GitLab `X-Gitlab-Token`、时间戳绑定的通用 V2 且禁止降级 V1、旧版 V1、测试用 `INSECURE_NO_AUTH`），300
   秒重放窗口，每路由固定窗口限流（默认 30 次/分钟），投递 id 幂等（`X-Webhook-Delivery-Id` 或 `svix-id`，1 小时
   TTL），头部事件过滤（`X-Webhook-Event`/`X-GitHub-Event`/`X-Gitlab-Event`），`{event}`/`{body}`
   提示词模板，投递目标（`log`/`telegram`/`discord`/`slack`/`whatsapp_cloud`）与 `deliver_only` 零 LLM 推送
 
-**BlueBubbles iMessage 桥** —— hermes `bluebubbles.py` 移植
+**BlueBubbles iMessage 桥** —— hermes `bluebubbles.py` 实现
 
 - ：`[messaging.bluebubbles]` 在网关挂载 `/webhooks/bluebubbles`，密码认证（查询参数 —— BlueBubbles webhook 无法发送自定义头
-  —— 或 `x-password`/`x-guid`/`x-bluebubbles-guid` 头），JSON 载荷 + 表单编码回退，复刻 hermes 事件门控（仅
+  —— 或 `x-password`/`x-guid`/`x-bluebubbles-guid` 头），JSON 载荷 + 表单编码回退，对齐 hermes 事件门控（仅
   `new-message`/`message`/`updated-message`
 - 自己发出的消息与 tapback 反应 2000–2005/3000–3005 静默确认），chat-GUID 解析经 LRU-500 缓存 + 严格 `chatIdentifier`
   匹配（不做参与者回退 —— hermes #24157）并支持 v1.9+ `chats[0]` 提取，附件下载入内容寻址媒体缓存，回复按段落分块（4000 字符上限、地址目标经 `chat/new`
@@ -1006,17 +1006,17 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
   SHA-256 webhook 签名（`timestamp+nonce+encrypt_key+body`）、事件 id 去重、`im.message.receive_v1` 文本 +
   提及占位符归一化（`@_user_N` → `@名称`）、图片/文件/音频/富文帖处理（租户令牌资源下载入媒体缓存）、群组 require-mention 门控，文本回复经
   `/open-apis/im/v1/messages`（chat_id/open_id 接收端解析）、`MEDIA:` 标签走图片/文件上传
-- 卫星处理器：`drive.notice.comment_add_v1` 文档评论 agent（hermes `feishu_comment.py` 移植——事件解析 +
+- 卫星处理器：`drive.notice.comment_add_v1` 文档评论 agent（hermes `feishu_comment.py` 实现——事件解析 +
   自回/接收者/通知类型过滤、`feishu_comment_rules.json` 三级访问规则（精确 `docType:token`/`wiki:token` 键 > 通配 `*` >
   顶层，enabled/policy/allow_from 逐字段回退，allowlist∪pairing 策略 + `feishu_comment_pairing.json` 授权，mtime
   热加载）、agent 工作期间 OK 表情回应、文档元信息 + 评论 batch_query 并行拉取、全文档 vs 局部评论线程时间线组装（hermes 窗口化选取）+ 评论内文档链接提取与
   wiki 节点解析、hermes 提示词构建、按文档 agent 会话（`comment-doc:<file_type>:<file_token>`）、4000 字符分块回帖（1069302
-  错误回退全文档评论））与 `vc.bot.meeting_invited_v1` 会议邀请（hermes `feishu_meeting_invite.py` 移植——解析为入会提示词，以 DM
+  错误回退全文档评论））与 `vc.bot.meeting_invited_v1` 会议邀请（hermes `feishu_meeting_invite.py` 实现——解析为入会提示词，以 DM
   形式经正常管道分发给邀请者）
-- 表情回应已移植（agent 工作期间经 `/open-apis/im/v1/messages/<id>/reactions` 贴 Typing 徽章——完成即移除、失败换 CrossMark，`FEISHU_REACTIONS` 默认开启
+- 表情回应已实现（agent 工作期间经 `/open-apis/im/v1/messages/<id>/reactions` 贴 Typing 徽章——完成即移除、失败换 CrossMark，`FEISHU_REACTIONS` 默认开启
 - 本机器人所发消息上的用户表情经机器人作者校验后以 `reaction:<added|removed>:<emoji>` 合成事件路由，bot/app
   来源的表情丢弃以断开生命周期回环——hermes `on_processing_start`/`on_processing_complete`/`_handle_reaction_event`）
-- 交互式卡片动作已移植（hermes `send_exec_approval` / `send_update_prompt` +
+- 交互式卡片动作已实现（hermes `send_exec_approval` / `send_update_prompt` +
   `_on_card_action_trigger`）：执行审批卡片（橙色标题栏、3000 字符围栏命令预览、✅ Allow Once / ✅ Session / ✅ Always / ❌
   Deny，smart deny 时隐藏会话档）走 `send_exec_approval` 契约，更新确认卡片（✓ Yes / ✗ No），webhook 模式卡片回调经操作者授权（白名单 ∪
   配对、回调聊天匹配）后回流审批网关解锁，并以内联已解析卡片（`P2CardActionTriggerResponse` JSON）响应，更新确认应答原子写入 `.update_response`
@@ -1035,14 +1035,14 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
   `SMS_INSECURE_NO_SIGNATURE=true`），64 KiB
   请求体上限、自有号码回声抑制、白名单∪配对准入（`SMS_ALLOWED_USERS`/`SMS_ALLOW_ALL_USERS`，配对码经 SMS 送达），回复去 markdown 并按 1600
   字符分块经 Twilio Messages REST API 发送（HTTP Basic 认证）
-- MMS 媒体处理未移植
+- MMS 媒体处理未实现
 - `[messaging.sms]` 或 TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_PHONE_NUMBER/SMS_WEBHOOK_URL
 
 **Microsoft Teams** —— hermes `platforms.teams` 插件——`microsoft-teams-apps` Python SDK 改为原生 Bot
   Framework 协议
 
 - ：`/webhooks/teams` 接收 `message` 活动，活动 id 去重（300 秒窗口）、`<at>` 提及 HTML
-  剥离、会话类型映射（personal/groupChat/channel）、发送者门控（aadObjectId 或 id）走白名单∪配对，附件入站复刻 hermes 跳过规则（html
+  剥离、会话类型映射（personal/groupChat/channel）、发送者门控（aadObjectId 或 id）走白名单∪配对，附件入站对齐 hermes 跳过规则（html
   镜像、自适应/英雄卡片）——文件同意 `downloadUrl`、`image/*` 与 bearer 鉴权的 `contentUrl` 下载入媒体缓存——回复经 OAuth2
   客户端凭证令牌（`login.microsoftonline.com/<tenant>/oauth2/v2.0/token`、`https://api.botframework.com/.default`
   作用域、带缓存）POST 至 `{serviceUrl}v3/conversations/<conv>/activities` markdown 活动
@@ -1051,13 +1051,13 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
   按钮），`adaptiveCard/action` invoke 点按在默认拒绝的白名单门控下（`TEAMS_ALLOWED_USERS`
   为空时拒绝所有点按）解析会话阻塞审批并以替换卡片回显决定，`/approve [all] [session|always]` / `/deny [all]` 聊天命令在所有平台可用（hermes
   斜杠命令语义）
-- 摘要写入路径未移植
+- 摘要写入路径未实现
 - `[messaging.teams]` 或 TEAMS_CLIENT_ID/TEAMS_CLIENT_SECRET/TEAMS_TENANT_ID/TEAMS_ALLOWED_USERS
 
 **LINE** —— hermes `platforms.line` 插件——独立 aiohttp 服务器改为网关挂载路由
 
 - ：`/webhooks/line` 校验 `X-Line-Signature`（以 channel secret 为键对原始请求体做 base64 HMAC-SHA256、恒定时间比较），1
-  MiB 请求体上限、webhook 事件 id 去重（LRU-1000）、来源解析（user/group/room）+ 复刻 hermes
+  MiB 请求体上限、webhook 事件 id 去重（LRU-1000）、来源解析（user/group/room）+ 对齐 hermes
   三白名单门控（`LINE_ALLOWED_USERS`/`LINE_ALLOWED_GROUPS`/`LINE_ALLOWED_ROOMS`、`LINE_ALLOW_ALL_USERS` 开发豁免）∪
   配对，文本 + 图片/视频/音频/文件内容下载（`api-data.line.me`）入媒体缓存（贴纸/位置降级为文本备注）、loading 指示发送，回复优先使用一次性 reply
   token、被拒后回退计费 Push——去 markdown 保留 URL（`[label](url)` → `label (url)`）、4500 字符气泡、单次调用 5 条消息预算 +
@@ -1076,7 +1076,7 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
   + 服务账号邮箱匹配——hermes 的本地 google-auth 证书校验改为在线探测），仅路由 `MESSAGE` 信封（跳过 BOT 发送者、消息名去重 300
   秒窗口），`argumentText` 优先于 `text`，DIRECT_MESSAGE 空间映射为 DM，发送者按邮箱/用户资源白名单 ∪ 配对门控，回复保持在入站线程内，经 Chat REST
   API 发送（`POST /v1/{space}/messages`、4000 字符分块），服务账号 RS256 JWT-bearer 令牌（带缓存、`chat.bot` 作用域）
-- 原生文件附件走按用户 OAuth `media.upload` 流程（`oauth.py` 移植，`src/google_chat_oauth.rs`）：Google 对 media.upload
+- 原生文件附件走按用户 OAuth `media.upload` 流程（`oauth.py` 实现，`src/google_chat_oauth.rs`）：Google 对 media.upload
   硬性拒绝服务账号，每位用户经聊天内 `/setup-files` 命令一次性授予 `chat.messages.create` 作用域（PKCE 安装应用流程，`http://localhost:1`
   重定向预期失败——用户将失败 URL 或 code 粘贴回来
 - 子命令：无参数状态、`start`、`revoke`、`<code-or-url>` 兑换
@@ -1084,13 +1084,13 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
   client-secret|auth-url|auth-code|revoke|check`
 - `MEDIA:` 回复以该聊天最近发送者身份上传（multipart `attachments:upload` → 携带返回 `attachmentDataRef` 的
   `messages.create`，两步均用用户令牌、线程附 `messageReplyOption`），401/403 使缓存令牌失效并回退为携带主机路径的设置指引文本提示
-- 打字卡片 patch 已移植：回合开始前投递 "ulnclaw is thinking…" 标记卡片（`typing_status_text` 覆盖，hermes
+- 打字卡片 patch 已实现：回合开始前投递 "ulnclaw is thinking…" 标记卡片（`typing_status_text` 覆盖，hermes
   `send_typing`），回复经 `messages.patch?updateMask=text` 原地改写该卡片——首块 patch、溢出块新建、patch 失败回退新建、空回复 patch
   "(interrupted)"、consumed 哨兵槽位防重复标记（hermes `_typing_messages`/`_TYPING_CONSUMED_SENTINEL` 语义）
 - 配置 `pubsub_subscription`（`GOOGLE_CHAT_PUBSUB_SUBSCRIPTION`）后入站改走 Pub/Sub——以 `pubsub` 作用域服务账号令牌对订阅做
   REST 拉取（与 hermes gRPC 流式拉取同语义、无 gRPC 依赖），CloudEvents 信封（`ce-type` 属性）支持 hermes 全部三种载荷格式（Workspace
   Add-ons `chat.messagePayload`、原生 Chat API `{type:MESSAGE}`、中继扁平格式），成员/卡片事件记录日志后直接
-  ack，至少一次投递经同一消息名窗口去重，无条件 ack（含畸形载荷），复刻 hermes 监督循环（全抖动指数退避、2 秒基底/120 秒上限、连续 10 次失败或认证/权限错误即终止）
+  ack，至少一次投递经同一消息名窗口去重，无条件 ack（含畸形载荷），对齐 hermes 监督循环（全抖动指数退避、2 秒基底/120 秒上限、连续 10 次失败或认证/权限错误即终止）
 - `[messaging.google_chat]` 或
   GOOGLE_CHAT_SERVICE_ACCOUNT_FILE/GOOGLE_CHAT_HTTP_EVENTS_AUDIENCE/GOOGLE_CHAT_HTTP_EVENTS_SERVICE_ACCOUNT/GOOGLE_CHAT_PUBSUB_SUBSCRIPTION
 
@@ -1101,7 +1101,7 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
 - ：入站传输可选（hermes `transport`）：`auto`（默认）优先 NIP-42 认证的 WebSocket 订阅，20 秒内无法认证则回退 CLI 轮询
 - `websocket` 强制 WS
 - `poll` 仅 CLI 轮询。WS 路径以签名 kind-22242 事件应答中继 `AUTH` 质询（`src/nostr_auth.rs` —— 轻量 BIP-340 schnorr +
-  nsec bech32 解码，hermes `nostr_auth.py` 移植
+  nsec bech32 解码，hermes `nostr_auth.py` 实现
 - 密钥来自 `BUZZ_PRIVATE_KEY` 或 `~/.config/buzz/*credentials*.json` 文件，可选 `BUZZ_AUTH_TAG` NIP-OA
   归属标签），按频道订阅（`kinds=[9]`、`#h`、`since` 断点续传）并订阅 kind-44100 成员事件流，事件走与轮询相同的去重/提及/白名单机制，1→30 秒退避重连
 - 未配置 `BUZZ_PUBKEY` 时从密钥推导自身公钥。轮询路径每 4 秒对每个已配置频道调用本地 `buzz` CLI（`buzz messages get --channel <id>
@@ -1115,7 +1115,7 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
   订阅（新私聊从头部开始分发），轮询传输每 5 轮扫描再发现一次（`_DM_DISCOVERY_EVERY=5`）
 - 经 `channels list` 泄漏进来、名为 "DM" 且描述为空的会话先按群组监听，首条结构化 p 标签且无可见提及的消息到达时闩锁为 chat_type=dm（`_maybe_latch_dm`
 - 显式配置的频道与有真实名称/描述的频道永不重分类）
-- 群组管理未移植
+- 群组管理未实现
 - `[messaging.buzz]` 或
   BUZZ_CHANNELS/BUZZ_CLI/BUZZ_PUBKEY/BUZZ_POLL_INTERVAL_MS/BUZZ_RELAY_URL/BUZZ_PRIVATE_KEY/BUZZ_CREDENTIALS_FILE/BUZZ_TRANSPORT/BUZZ_AUTH_TAG
 
@@ -1130,11 +1130,11 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
   hermes `hermes` 唤醒词，分发前剥离），发送 `/typing` 输入指示（每聊天 5 秒冷却），回复以 8000 字符上限经 `POST /send`（`{spaceId,
   text}` + markdown `format` 提示，`PHOTON_MARKDOWN` 总开关）以共享 bearer 令牌发送——纯 URL 回复走
   `/send-richlink`，失败回退纯文本
-- 表情回应（iMessage tapback）已移植：`PHOTON_REACTIONS` 开启的生命周期 tapback（处理中 👀，完成后先移除再追加 👍 成功/👎 agent
+- 表情回应（iMessage tapback）已实现：`PHOTON_REACTIONS` 开启的生命周期 tapback（处理中 👀，完成后先移除再追加 👍 成功/👎 agent
   出错）、sidecar `/react` + `/unreact`，入站 tapback 仅在目标为机器人所发消息时（`targetDirection: outbound` 或目标在自送台账中）以
   `reaction:added:<emoji>` 合成文本路由给 agent——tapback 永不触发提及门控（hermes
   `on_processing_start`/`_add_reaction`/反应路由）
-- agent 侧 `send_message action="react"` 面已于 P259 移植（`send_message` 工具的 react/unreact 动作经
+- agent 侧 `send_message action="react"` 面已于 P259 实现（`send_message` 工具的 react/unreact 动作经
   `setMessageReaction` 抵达 Telegram，省略 message_id 时经频道目录回退到最近消息）
 - `[messaging.photon]` 或
   PHOTON_SIDECAR_URL/PHOTON_SIDECAR_TOKEN/PHOTON_ALLOWED_USERS/PHOTON_REQUIRE_MENTION/PHOTON_MENTION_PATTERNS/PHOTON_MARKDOWN
@@ -1168,7 +1168,7 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
 - Slack 渲染 Block Kit 按钮（mrkdwn 转义 ❓ 区块、`hermes_clarify_choice_<idx>` action id + `<id>|<idx>` 值打包 +
   ✏️ Other… 行，interactive 信封 block_actions 路由 + 双击台账，chat.update 结果改写——hermes
   `_handle_clarify_action`）
-- 元宝媒体/表情包通道已移植（见元宝贵条目）
+- 元宝媒体/表情包通道已实现（见元宝贵条目）
 - P225：Telegram 执行审批以行内键盘呈现 —— ✅ Allow Once / Session / Always + ❌ Deny 每行两键排布，`ea:<choice>:<id>`
   回调数据经审批 id → 会话注册表映射（hermes `_approval_state`），先解析后渲染 —— 过期点击显示 ⌛ Approval expired 而非谎报成功（hermes
   #63501），鉴权与 clarify 点击同为白名单∪配对码并集
@@ -1191,7 +1191,7 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
 - Discord 渲染嵌入+按钮视图（hermes ClarifyChoiceView 布局——交互回调应答、Other 切换文本捕获、300 秒视觉过期跳过等待文本应答的提问）
 - Slack 渲染 Block Kit 按钮（hermes action id/值布局、Other 切换文本捕获、结果经 chat.update 改写提问、原子双击守卫）
 - Baileys 桥适配器（`[messaging.whatsapp]`）改以原生单选投票渲染 2–12 选项的 clarify——hermes Baileys
-  `send_clarify`，所选选项以纯文本入站——并回退编号文本），并阻塞回合直至应答。点按路由复刻 `_dispatch_interactive_reply`
+  `send_clarify`，所选选项以纯文本入站——并回退编号文本），并阻塞回合直至应答。点按路由对齐 `_dispatch_interactive_reply`
   语义：索引→选项文本解析、Other 切换文本捕获（`mark_awaiting_text` + ✏️ 提示）、未授权点按认领不分发、过期 id
   回退为以按钮标题作文本分发。会话内下一条纯文本消息将应答等待中的 clarify 而非开启新回合（hermes
   `_maybe_intercept_clarify_text`）。其余平台收到编号文本提问
@@ -1206,12 +1206,12 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
   `local_command`（命令逃生舱，`ULNCLAW_LOCAL_STT_COMMAND`）、`groq`（whisper-large-v3-turbo）、`openai`（whisper-1）、`mistral`（Voxtral）、`xai`、`elevenlabs`（Scribe）、`deepinfra`（在线目录模型发现），均为
   OpenAI 兼容 multipart 上传
 - 自定义命令 provider 经 `[stt.providers.<name>]` + 旧式顶层块，保持内置名永远优先的不变式
-- 网关语音消息（audio/* 附件）在回合前转写，复刻 hermes 语义 —— provider 失败时回退本地命令、空转写哨兵（#41603）、中性失败标记不进提示词、`🎙️ "<转写>"`
+- 网关语音消息（audio/* 附件）在回合前转写，对齐 hermes 语义 —— provider 失败时回退本地命令、空转写哨兵（#41603）、中性失败标记不进提示词、`🎙️ "<转写>"`
   回显（stt.echo_transcripts）、STT 关闭时 WAV/ffprobe 时长注记
 - `transcribe_audio` agent 工具（可选 `stt` 工具集）支持 model/language 覆盖。P327 将该管线暴露给桌面端：`POST
   /api/audio/transcribe`（base64 data-URL 语音输入、返回转写文本
 - 25 MiB 上限、mime 校验、provider 就绪检查——对应 hermes `/api/audio/transcribe`
-- TTS 已经以 `POST /api/audio/speak` 移植，走 `[tts]` openai/elevenlabs provider——P344），桌面输入框提供麦克风按钮与助手回复 🔊
+- TTS 已经以 `POST /api/audio/speak` 实现，走 `[tts]` openai/elevenlabs provider——P344），桌面输入框提供麦克风按钮与助手回复 🔊
   朗读动作。已知差异：hermes 默认 `local` provider（faster-whisper，Python）无法嵌入静态二进制 —— 以 `stt.local.command` 或云
   provider 替代
 
@@ -1219,12 +1219,12 @@ image/document/audio/video/sticker 入站走同一白名单∪配对 + 插件门
 
 #### OAuth 登录 + 技能同步（`hermes_cli/portal_cli.py`、`tools/skills_sync_client.py`） — ✅ 核心
 
-`src/oauth.rs` + `src/skills_sync.rs`：hermes 门户认证 + Skill Sync 的服务无关移植。`ulnclaw auth login` 对任意配置的
+`src/oauth.rs` + `src/skills_sync.rs`：hermes 门户认证 + Skill Sync 的服务无关实现。`ulnclaw auth login` 对任意配置的
 `[oauth]` provider（device_authorization_url/token_url/client_id/scopes）执行 RFC 8628 设备授权许可，处理
 authorization_pending/slow_down，令牌存于 `oauth_tokens.json`（0600）、refresh-token
 许可、`status`/`refresh`/`logout`/`open`。`ulnclaw sync status|pull|push|now|enable|disable|device` 原样保留
 hermes 的 UX：可选技能同步 + 稳定设备 id + 设备标签，`[sync] base_url` 未配置时报告 INERT 门控，pull 绝不覆盖本地技能。传输通用：HTTP(S)
-REST（bearer = OAuth 令牌或 `[sync] api_key`）或共享目录（离线/NAS 同步）。Nous 门户专属的订阅特性与组织提案审批流程未移植
+REST（bearer = OAuth 令牌或 `[sync] api_key`）或共享目录（离线/NAS 同步）。Nous 门户专属的订阅特性与组织提案审批流程未实现
 
 <a id="oauth-上游代理-hermes-cli-proxy"></a>
 
@@ -1235,14 +1235,14 @@ REST（bearer = OAuth 令牌或 `[sync] api_key`）或共享目录（离线/NAS 
 并带路径白名单（`/chat/completions`、`/completions`、`/embeddings`、`/models`、`/responses`），丢弃客户端 bearer，附加
 `oauth_tokens.json` 访问令牌（过期前 60 秒自动刷新并持久化），上游 401/429 时一次性强制刷新重试，10 MB 请求上限（hermes
 `MAX_REQUEST_BYTES`），剥离 hop-by-hop 头，字节流恒等透传（保留 SSE），`/health` 探针。差异：适配器为 provider 无关（`[proxy]
-upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池适配器（凭证池存储本身已精简移植——见凭证池行）
+upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池适配器（凭证池存储本身已精简实现——见凭证池行）
 
 <a id="桌面-gui-apps-desktop-electron"></a>
 
 #### 桌面 GUI（`apps/desktop` Electron） — ✅ 核心
 
-- `desktop-electron/` —— **ulnclaw desktop**：v0.7.0 起 ulnclaw 直接交付 hermes Electron
-  桌面端（v2026.8.3）的忠实移植（早前的 Tauri 2 外壳退役）：React 19 + Vite 渲染层（十六视图 + 命令面板 + 主题/字体 + 多语言切换）、xterm.js
+- `desktop-electron/` —— **ulnclaw desktop**：v0.7.0 起 ulnclaw 直接交付自有的 Electron 桌面客户端（Electron 外壳含 hermes desktop
+  v2026.8.3 的 MIT 派生代码，归属声明见 NOTICE；早前的 Tauri 2 外壳退役）：React 19 + Vite 渲染层（十六视图 + 命令面板 + 主题/字体 + 多语言切换）、xterm.js
   终端面板、文件树 + git 审查侧栏、会话浏览器、经 JSON-RPC WebSocket + HTTP/SSE 对接 ulnclaw 网关的实时回合流式，Electron
   主进程负责拉起/监管内置的静态链接网关二进制（`ULNCLAW_DESKTOP=1`、健康探测 + 有上限重生、启动诊断、托盘 + 原生菜单、`ulnclaw://`
   深链、单实例交接、窗口状态持久化）。网关 JSON-RPC WS 面覆盖桌面的全部方法目录——会话生命周期（`session.create` 按 hermes 懒建行契约铸造会话 id，并把逐会话的
@@ -1263,7 +1263,7 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
 
 #### 会话浏览（`hermes_cli/sessions_cmd.py browse` + curses 挑选器） — ✅ 核心
 
-- `ulnclaw sessions browse [--source S] [--limit N]`：TTY 上启用原始模式 TUI（crossterm 移植 curses 挑选器 ——
+- `ulnclaw sessions browse [--source S] [--limit N]`：TTY 上启用原始模式 TUI（crossterm 实现 curses 挑选器 ——
   备用屏幕、↑/↓/PgUp/PgDn/Home/End 滚动导航、键入即过滤 + 退格、绿色 `▶` 选中高亮、Enter 选择、无过滤时裸按 `q` 退出、Esc 先清空过滤再按一次才退出、单步
   ↑/↓ 在列表首尾回绕、暗色列头（Title/Preview · Active · Src · ID）与底部页脚（光标位置 + 过滤前总数）、"终端过小"保护、LF（`Ctrl+J`）形式的
   Enter 同样接受）
@@ -1290,7 +1290,7 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
 - `/new` 轮换到新会话键并重置按会话的目标管理器
 - `latest_session_id` 按最近活动挑选 `--continue` 目标（跳过已归档）
 - 所有带 id 的 `sessions` 动作（`show`/`export`/`recap`/`delete`/`rename`）均经 `resolve_session_id` 接受唯一前缀
-- P232 移植 hermes 的 `-c <会话名>` 标题查找：`-c/--continue` 现接受可选值 —— 裸 `-c` 保持续接最近会话，`-c 名称` 先按精确
+- P232 实现 hermes 的 `-c <会话名>` 标题查找：`-c/--continue` 现接受可选值 —— 裸 `-c` 保持续接最近会话，`-c 名称` 先按精确
   id/唯一前缀解析，再按标题解析（`resolve_session_by_title` —— `title #N` 谱系编号变体取最新、跳过已归档、LIKE
   通配符转义），并沿压缩链向前投影（`compression_tip`），使恢复落在存活的链尖而非过期的被压缩父会话
 
@@ -1341,7 +1341,7 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
 | 环境探针（`tools/env_probe.py`） | ✅ | 终端后端为本地时，向系统提示注入一行确定性的 Python 工具链说明：python3/python 版本、pip 模块可用性、`pip`↔`python3` 版本错配、PEP 668 外部管理标记（有 uv 时不告警）；健康环境保持静默；进程级缓存由单一后台线程构建，调用方最多等 10 秒后放行；远端后端（docker/ssh）跳过探测；`[agent] environment_probe` 开关（默认开启） |
 | 上下文压缩（`conversation_compression.py`） | ✅ | 预算触发，中段对话经二次模型调用摘要，保留系统提示词 + 首条用户消息 + 最近尾部；摘要调用遵循 `[auxiliary.compression]` 路由。P … [详情](#上下文压缩-conversation-compression-py) |
 | 流式思考块清洗（`agent/think_scrubber.py`） | ✅ | `think_scrubber.rs`：对流式增量中的 `<think>`/`<thinking>`/`<reasoning>`/`<thought>`/`<REASONING_SCRATCHPAD>` 块做有状态抑制 —— `call_with()` 中每个内容增量都经过状态机喂送（开标签可跨增量分片存活，未闭合开标签受块边界门控），流结束时冲刷暂留的部分标签尾部，非流式路径走完整字符串 `strip_think_blocks`；闭合对总是被抑制，开标签仅在块边界生效，因此仅提及标签名的正文不会被误剥离 |
-| 会话标题生成器（`agent/title_generator.py`） | ✅ | `title_generator.rs`：首轮交流后即发即忘的自动标题（后台任务，不增加回复延迟）—— 前 2 轮用户消息守卫、已有标题守卫、`[auxiliary.title_generation]` 路由（`language` 语言固定、`enabled` 开关，`is_truthy_value` 语义，默认 true）；500 字符摘要、答案先经推理块清洗、引号/"Title:" 前缀/首行/80 字符清理；`set_auto_title_if_empty` 原子持久化 —— 生成进行中手动设置的标题优先保留；可选标题回调与 portal/记账标签未移植（无对应实时 UI 面） |
+| 会话标题生成器（`agent/title_generator.py`） | ✅ | `title_generator.rs`：首轮交流后即发即忘的自动标题（后台任务，不增加回复延迟）—— 前 2 轮用户消息守卫、已有标题守卫、`[auxiliary.title_generation]` 路由（`language` 语言固定、`enabled` 开关，`is_truthy_value` 语义，默认 true）；500 字符摘要、答案先经推理块清洗、引号/"Title:" 前缀/首行/80 字符清理；`set_auto_title_if_empty` 原子持久化 —— 生成进行中手动设置的标题优先保留；可选标题回调与 portal/记账标签未实现（无对应实时 UI 面） |
 | 持久化目标 —— Ralph 循环（`hermes_cli/goals.py`） | ✅ 核心 | `goals.rs`：跨轮次存续的既定目标 —— 每个助手轮次结束后由 `goal_judge` 辅助模型裁决 done/continue/wait；未完成时把 … [详情](#持久化目标-ralph-循环-hermes-cli-goals-py) |
 | 时区感知时钟（`hermes_time.py`） | ✅ | `hermes_time.rs`：IANA 时区解析顺序 `ULNCLAW_TIMEZONE` → `HERMES_TIMEZONE` → 配置 `timezone` → 服务器本地时间（非法时区名告警后回退，进程级缓存 + `reset_cache()`）；系统提示词注入仅含日期的 "Conversation started" 行 + Model/Provider（全天字节稳定以保护前缀缓存，hermes PR #20451）；压缩摘要携带 `Current date` 时间锚点 |
 | 审批系统（`approval.py`） | ✅ | 命令归一化（反斜杠续行、`${IFS}`、注释剥离）、硬性底线（直接阻止）、可恢复但昂贵的操作（需确认）；REPL y/N 提示；网关运行审批（ … [详情](#审批系统-approval-py) |
@@ -1353,21 +1353,21 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
 | 辅助模型路由（`auxiliary_client.py`） | ✅ 核心 | `[auxiliary.<task>]` 按任务覆盖 provider/模型/base_url/api_key/key_env（`compression`、`vision`、`title_generation`）；`"auto"`/留空继承主运行时；无覆盖时复用主客户端 |
 | models.dev 目录（`agent/models_dev.py`） | ✅ 核心 | `models_dev.rs`：拉取 `https://models.dev/api.json`，三级缓存——内存（1 小时 TTL，过期数据立即返回并由后台线 … [详情](#models-dev-目录-agent-models-dev-py) |
 | 配置（`config.yaml`） | ✅ | `config.toml` + `.env` 文件、profiles、环境变量优先级 |
-| 技能系统 | ✅ | 发现、frontmatter、关联文件、`/skill-name` 调用脚手架（hermes `build_skill_invocation_message` 移植：激活注记 + 技能正文 + 技能目录/辅助文件提示 + 用户指令标记、`skill_usage` 计数；供 `sessions retitle-skills` 识别） |
+| 技能系统 | ✅ | 发现、frontmatter、关联文件、`/skill-name` 调用脚手架（hermes `build_skill_invocation_message` 对应实现：激活注记 + 技能正文 + 技能目录/辅助文件提示 + 用户指令标记、`skill_usage` 计数；供 `sessions retitle-skills` 识别） |
 | 记忆系统 | ✅ | MEMORY.md/USER.md，注入提示词 |
 | Cron 调度器 | ✅ | 任务存储 + 计划解析 + 轮询循环（`cron::run_scheduler`） |
 | MCP 客户端（`mcp_tool.py`） | ✅ 核心 | stdio JSON-RPC：initialize/tools/list/tools/call；`[[mcp.servers]]` 配置；工具注册为 … [详情](#mcp-客户端-mcp-tool-py) |
-| MCP 频道桥（`mcp_serve.py`） | ✅ 核心 | P260 完整移植 hermes `mcp_serve.py`（`src/mcp_serve.rs`， … [详情](#mcp-频道桥-mcp-serve-py) |
-| ACP 适配器（`acp_adapter/`） | ✅ 核心 | P261 移植 hermes `acp_adapter/`（`src/acp_adapter.rs`，`ulnclaw acp [--verbose]`）：面向 … [详情](#acp-适配器-acp-adapter) |
-| 批量运行器（`batch_runner.py`） | ✅ 核心 | P262 完整移植 hermes `batch_runner.py`（`src/batch_runner.rs`， … [详情](#批量运行器-batch-runner-py) |
-| Send CLI（`hermes_cli/send_cmd.py`） | ✅ 核心 | P263 完整移植 hermes `hermes send`（`ulnclaw send`）：脚本/cron/CI 消息投递，无 LLM、无 agent 循环— … [详情](#send-cli-hermes-cli-send-cmd-py) |
-| Slack 原生斜杠命令 + 应用清单（`hermes_cli/slack_cli.py` + slack 适配器斜杠流） | ✅ 核心 | P265 移植 hermes `hermes slack manifest` + Slack socket-mode 斜杠路径： … [详情](#slack-原生斜杠命令-应用清单-hermes-cli-slack-cli-py-slack-适配器斜杠流) |
-| 网关监控 + OTLP 导出（`agent/monitoring/*`） | ✅ 核心 | P266 完整移植 hermes 网关监控平面（`src/monitoring.rs`）：无内容 `GatewayHealthEvent`/ … [详情](#网关监控-otlp-导出-agent-monitoring) |
-| 安装向导（`hermes_cli/setup.py`） | ✅ 核心 | P267 精简移植 hermes 交互式安装向导（`src/setup_cmd.rs`）： … [详情](#安装向导-hermes-cli-setup-py) |
-| 模型挑选器（`cmd_model` / `select_provider_and_model`） | ✅ 核心 | P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY 的交互式 provider … [详情](#模型挑选器-cmd-model-select-provider-and-model) |
-| 桌面启动器 + 命令别名（`cmd_gui` / `cmd_login` / `cmd_logout` / journey 别名） | ✅ 核心 | P269 移植 hermes 剩余的小型界面：`ulnclaw gui [--binary PATH] [--dev]`（别名 `desktop`）解析已打包的 … [详情](#桌面启动器-命令别名-cmd-gui-cmd-login-cmd-logout-journey-别名) |
-| 动态 webhook 订阅（`hermes_cli/webhook.py`） | ✅ 核心 | P270 移植 hermes `hermes webhook`： … [详情](#动态-webhook-订阅-hermes-cli-webhook-py) |
-| WhatsApp Cloud 安装向导（`hermes_cli/setup_whatsapp_cloud.py`） | ✅ 核心 | P271 精简移植 hermes `hermes whatsapp-cloud`：`ulnclaw whatsapp-cloud` —— 需 TTY 的交互式向 … [详情](#whatsapp-cloud-安装向导-hermes-cli-setup-whatsapp-cloud-py) |
+| MCP 频道桥（`mcp_serve.py`） | ✅ 核心 | P260 完整实现 hermes `mcp_serve.py`（`src/mcp_serve.rs`， … [详情](#mcp-频道桥-mcp-serve-py) |
+| ACP 适配器（`acp_adapter/`） | ✅ 核心 | P261 实现 hermes `acp_adapter/`（`src/acp_adapter.rs`，`ulnclaw acp [--verbose]`）：面向 … [详情](#acp-适配器-acp-adapter) |
+| 批量运行器（`batch_runner.py`） | ✅ 核心 | P262 完整实现 hermes `batch_runner.py`（`src/batch_runner.rs`， … [详情](#批量运行器-batch-runner-py) |
+| Send CLI（`hermes_cli/send_cmd.py`） | ✅ 核心 | P263 完整实现 hermes `hermes send`（`ulnclaw send`）：脚本/cron/CI 消息投递，无 LLM、无 agent 循环— … [详情](#send-cli-hermes-cli-send-cmd-py) |
+| Slack 原生斜杠命令 + 应用清单（`hermes_cli/slack_cli.py` + slack 适配器斜杠流） | ✅ 核心 | P265 实现 hermes `hermes slack manifest` + Slack socket-mode 斜杠路径： … [详情](#slack-原生斜杠命令-应用清单-hermes-cli-slack-cli-py-slack-适配器斜杠流) |
+| 网关监控 + OTLP 导出（`agent/monitoring/*`） | ✅ 核心 | P266 完整实现 hermes 网关监控平面（`src/monitoring.rs`）：无内容 `GatewayHealthEvent`/ … [详情](#网关监控-otlp-导出-agent-monitoring) |
+| 安装向导（`hermes_cli/setup.py`） | ✅ 核心 | P267 精简实现 hermes 交互式安装向导（`src/setup_cmd.rs`）： … [详情](#安装向导-hermes-cli-setup-py) |
+| 模型挑选器（`cmd_model` / `select_provider_and_model`） | ✅ 核心 | P268 实现 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY 的交互式 provider … [详情](#模型挑选器-cmd-model-select-provider-and-model) |
+| 桌面启动器 + 命令别名（`cmd_gui` / `cmd_login` / `cmd_logout` / journey 别名） | ✅ 核心 | P269 实现 hermes 剩余的小型界面：`ulnclaw gui [--binary PATH] [--dev]`（别名 `desktop`）解析已打包的 … [详情](#桌面启动器-命令别名-cmd-gui-cmd-login-cmd-logout-journey-别名) |
+| 动态 webhook 订阅（`hermes_cli/webhook.py`） | ✅ 核心 | P270 实现 hermes `hermes webhook`： … [详情](#动态-webhook-订阅-hermes-cli-webhook-py) |
+| WhatsApp Cloud 安装向导（`hermes_cli/setup_whatsapp_cloud.py`） | ✅ 核心 | P271 精简实现 hermes `hermes whatsapp-cloud`：`ulnclaw whatsapp-cloud` —— 需 TTY 的交互式向 … [详情](#whatsapp-cloud-安装向导-hermes-cli-setup-whatsapp-cloud-py) |
 | WhatsApp 桥状态（`hermes whatsapp` 面） | ✅ 核心 | P272 以只读诊断取代 hermes 的 Baileys 向导：`ulnclaw whatsapp [status]` —— 平台/模式状态、解析后的桥 URL（内置自动拉起 vs 外部）、Node.js 检测、脚本目录安装/依赖新鲜度（无副作用检查）、pidfile 进程状态（运行中/陈旧/外来）、实时 `/health` 探测（connected-as-JID / QR 配对摘要）与后续步骤提示。向导的安装+配对职责由网关监督的桥承担（首次启动安装依赖、启动时 QR 见 bridge.log）——已记录为差异 |
 | CLI（`hermes_cli/`） | ✅ 核心 | 带斜杠命令的聊天 REPL（含 `/rollback [N\|hash] [file]`、`/rollback diff <N>`、`/diff` 检查点命令 … [详情](#cli-hermes-cli) |
 | Git 工作区 diff（`working_diff.py`） | ✅ | `ulnclaw diff [--staged\|--all] [--dir PATH] [paths...]` + REPL `/gitdiff [staged\|all]`：working/staged/all 三模式，未跟踪文件经 `git diff --no-index` 折入（上限 50 个），带超时；基于检查点的 REPL `/diff` 保持独立 |
@@ -1380,7 +1380,7 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
 | 检查点管理器（`checkpoint_manager.py`） | ✅ | v2 共享 shadow git 存储（`<home>/checkpoints/store`）：按项目 ref/index，编辑前透明快照（每轮 `write_file`/`patch` 前一次），list/restore/diff/prune CLI，容量上限、超大文件过滤、孤儿/过期自动清理；P317 将检查点经 HTTP 暴露——`GET /api/checkpoints/status`、`GET /api/checkpoints?dir=`、`POST /api/checkpoints/restore`、`POST /api/checkpoints/prune`——并在 Doctor 提供存储概览、逐项目行与清理面板 |
 | 浏览器监督器 | ✅ | `ULNCLAW_BROWSER_CDP=auto` 时自动启动受管 headless Chrome/Chromium |
 | Camofox 后端（`tools/browser_camofox.py`） | ✅ 核心 | `browser/camofox.rs`：`CAMOFOX_URL` REST 反检测浏览器（Camoufox）后端——全部 12 个 browser 工具经 … [详情](#camofox-后端-tools-browser-camofox-py) |
-| 云浏览器 provider（`agent/browser_provider.py` + `agent/browser_registry.py` + `plugins/browser/*`） | ✅ 核心 | `browser/cloud.rs`：`CloudBrowserProvider` trait + 注册表移植——**Browserbase**（ … [详情](#云浏览器-provider-agent-browser-provider-py-agent-browser-registry-py-plugins-browser) |
+| 云浏览器 provider（`agent/browser_provider.py` + `agent/browser_registry.py` + `plugins/browser/*`） | ✅ 核心 | `browser/cloud.rs`：`CloudBrowserProvider` trait + 注册表实现——**Browserbase**（ … [详情](#云浏览器-provider-agent-browser-provider-py-agent-browser-registry-py-plugins-browser) |
 
 ### 详细说明（功能对标）
 
@@ -1389,7 +1389,7 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
 #### 上下文压缩（`conversation_compression.py`） — ✅
 
 - 预算触发，中段对话经二次模型调用摘要，保留系统提示词 + 首条用户消息 + 最近尾部
-- 摘要调用遵循 `[auxiliary.compression]` 路由。P233 移植三层工具结果持久化（`tools/tool_result_storage.py` +
+- 摘要调用遵循 `[auxiliary.compression]` 路由。P233 实现三层工具结果持久化（`tools/tool_result_storage.py` +
   `budget_config.py`）：第 2 层将超过阈值（默认 10 万字符
 - `read_file` 钉死为无穷大，防 persist→read→persist 循环）的工具结果经 terminal backend 写入
   `<tmp>/ulnclaw-results/<call-id>.txt`（本地直写、docker/ssh 走 stdin 管道，命令在哪跑文件就在哪可达），上下文内替换为
@@ -1420,7 +1420,7 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
 - REPL y/N 提示
 - 网关运行审批（`POST /v1/runs/:id/approval`，once/session/always/deny，SSE `approval.request`）、fail-closed
   `[approvals] timeout`（默认 300s）、`always` 授权跨重启持久化
-- 消息会话在聊天内审批（hermes `tools/approval.py` 网关注册表移植，`src/approval_gateway.rs`）：approve
+- 消息会话在聊天内审批（hermes `tools/approval.py` 网关注册表实现，`src/approval_gateway.rs`）：approve
   回调注册按会话阻塞条目，在平台上渲染审批提示（Teams AdaptiveCard 按钮，其余平台 `/approve` 文本回退，命令先经凭据脱敏），`/approve [all]
   [session|always]` / `/deny [all]` 聊天命令或卡片点按解析最旧的待决条目
 - `[approvals] mode = manual|smart|off` —— smart 模式先询问辅助守护 LLM（防提示注入的提示词设计，运维 `smart_policy`
@@ -1428,7 +1428,7 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
 - `cron_mode = deny|approve` 管控无人值守 cron 运行（deny = fail-closed 默认）
 - P221 补齐 smart 审批面：`denial_breaker_threshold`（默认 3）—— 连续 N 次守护 DENY 后，无人值守拒绝消息从 "do not retry"
   升级为硬停止指令（向用户报告/请求手动执行），任何批准都会重置计数
-- `deny` fnmatch 通配规则无条件阻断匹配命令，先于 mode=off/yolo 旁路生效（大小写不敏感 `*`/`?`/`[...]` 语义）。P237 移植 tirith
+- `deny` fnmatch 通配规则无条件阻断匹配命令，先于 mode=off/yolo 旁路生效（大小写不敏感 `*`/`?`/`[...]` 语义）。P237 实现 tirith
   执行前内容扫描器（`tools/tirith_security.py`）：每条过闸终端命令额外经外部 `tirith` 二进制扫描（同形异义 URL、管道直灌解释器、终端注入等）
 - 退出码即裁决（0 放行 / 1 阻止 / 2 警告），JSON 输出仅用于充实 findings（上限 50 条）/ summary（上限 500 字符）
 - block 与 warn 均转为可审批警告并合并进确认原因（`_format_tirith_description`），运行性故障（拉起失败 / 超时 / 未知退出码 / 信号杀死）遵循
@@ -1460,41 +1460,41 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
 - stdio JSON-RPC：initialize/tools/list/tools/call
 - `[[mcp.servers]]` 配置
 - 工具注册为 `mcp__<server>__<tool>`
-- npx/uvx/pipx 启动前的 OSV 恶意软件检查（`osv_check.py` 移植：MAL-* 通告阻止启动、fail-open、1
-  小时结论缓存、`OSV_ENDPOINT`/`OSV_CHECK_CACHE_TTL` 覆盖）。P235 以内核原语移植 stdio
+- npx/uvx/pipx 启动前的 OSV 恶意软件检查（`osv_check.py` 对应实现：MAL-* 通告阻止启动、fail-open、1
+  小时结论缓存、`OSV_ENDPOINT`/`OSV_CHECK_CACHE_TTL` 覆盖）。P235 以内核原语实现 stdio
   看门狗（`mcp_stdio_watchdog.py`）：Linux 上每个 MCP 子进程以 `prctl(PR_SET_PDEATHSIG, SIGKILL)` 拉起，ulnclaw
   硬死亡（kill -9 / 崩溃）时由内核回收服务器进程，避免孤儿进程与下次启动抢占同一上游会话（hermes 用监督进程达成同效
-- macOS/Windows 仍走优雅退出回收）。P236 移植 schema 缓存与懒启动（`mcp_schema_cache.py` + `mcp_tool.py`
+- macOS/Windows 仍走优雅退出回收）。P236 实现 schema 缓存与懒启动（`mcp_schema_cache.py` + `mcp_tool.py`
   `_register_from_cache_sync`）：每个服务器的工具清单持久化到 `<home>/cache/mcp_schema_cache.json`（0700 `cache/` 目录下
   0600 文件、原子暂存重命名），以服务器名 + 连接配置的 SHA-256 指纹为键（与 hermes 相同的载荷结构：command/args/url/transport/tools 过滤器
 - 与 hermes 一致不纳入 env）
 - 每次成功连接后实时注册会写回刷新清单，`lazy = true` 且缓存指纹匹配的服务器注册工具时不拉起子进程——首次工具调用才执行 OSV 预检、拉起服务器，并将实时工具列表与过期清单对账（刷新缓存
 - 幻影工具不再反注册，而是以过期 schema 错误快速失败，因 ulnclaw 处理器不持有注册表句柄
-- 完全相同的缓存条目跳过重写）。P238 移植 `/reload-mcp` 与 slash 确认原语（`tools/slash_confirm.py` + `cli.py
+- 完全相同的缓存条目跳过重写）。P238 实现 `/reload-mcp` 与 slash 确认原语（`tools/slash_confirm.py` + `cli.py
   _confirm_and_reload_mcp/_reload_mcp`）：REPL `/reload-mcp` 先警告重建工具面会使 provider 提示词缓存失效，提示 Approve Once
   / Always Approve / Cancel（由 `approvals.mcp_reload_confirm` 门控，默认开启
 - 选 "always" 经配置写入器持久化 `false`），随后重新读取 config.toml、注销全部 `mcp:*` 工具、重连所有服务器（懒注册服务器从缓存重新注册）、报告
   Reconnected/Added/Removed 与工具数，并在会话末尾注入变更说明——模型下一回合即见新工具面，而提示词缓存前缀得以保留
 - 网关侧确认原语（`src/slash_confirm.rs`：按会话键的待决登记表、confirm_id 取代语义、先弹出再执行防重复回调、300 秒过期、once/always/cancel
-  选项）支撑平台按钮 / `/approve` 文本两条裁决路径。P239 移植远程 MCP 传输（hermes `mcp_tool.py` 的 Streamable HTTP + SSE 路径，以手写
+  选项）支撑平台按钮 / `/approve` 文本两条裁决路径。P239 实现远程 MCP 传输（hermes `mcp_tool.py` 的 Streamable HTTP + SSE 路径，以手写
   JSON-RPC-over-HTTP 取代 Python MCP SDK）：带 `url` 的 `[[mcp.servers]]` 条目经 Streamable HTTP 连接（POST 携
   `Accept: application/json, text/event-stream`，响应体可为 JSON 或 SSE，捕获/回传 `Mcp-Session-Id`，协议版本
   2025-03-26），`transport = "sse"` 选择 2025-03-26 之前的 SSE 协议（GET 流 → `endpoint` 事件 → POST 并以 `message`
   事件按 id 关联应答），静态 `headers`（如 `Authorization`）随每个请求发送
-- schema 缓存指纹自此携带真实 url/transport。P240 移植 MCP OAuth 2.1 + PKCE（`tools/mcp_oauth.py` +
+- schema 缓存指纹自此携带真实 url/transport。P240 实现 MCP OAuth 2.1 + PKCE（`tools/mcp_oauth.py` +
   `tools/mcp_oauth_manager.py` 核心，以手写实现取代 MCP SDK 的 `OAuthClientProvider`）：`[[mcp.servers]] auth =
   "oauth"`（可选 `[mcp_servers.<name>.oauth]`
   client_id/client_secret/scope/redirect_port/redirect_uri/redirect_host/client_name）执行 受保护资源 → 授权服务器
   元数据发现、RFC 7591 动态客户端注册、S256 PKCE 授权码流程（loopback 回调服务器：自动端口、state 校验、300 秒超时、自动拉起浏览器）、令牌交换 + 刷新授权
 - 令牌/注册信息/元数据以 0600 持久化于 `<home>/mcp-tokens/<server>.{json,client.json,meta.json}`（hermes 布局）
 - 无人值守会话（cron）使用缓存/可刷新令牌，否则快速失败
-- 远程请求收到 401 触发一次恢复（刷新 → 重新授权，按服务器去重）并重放一次请求。P241 移植 stdio 环境过滤（hermes `_build_safe_env` +
+- 远程请求收到 401 触发一次恢复（刷新 → 重新授权，按服务器去重）并重放一次请求。P241 实现 stdio 环境过滤（hermes `_build_safe_env` +
   `_interpolate_env_vars`）：stdio MCP
   子进程以清空的环境启动，再叠加过滤副本——仅安全基线变量（PATH/HOME/USER/LANG/LC_ALL/TERM/SHELL/TMPDIR 及大小写不敏感的 Windows
   进程/位置变量集）、`XDG_*` 变量、密钥源标记变量（存在于 `<home>/.env`——即 ulnclaw 自身加载的 dotenv 层——中的键）以及服务器 `env`
   块中显式声明的变量得以透传，环境中的 API 密钥/令牌/凭据不会泄漏给 MCP 服务器
 - `command`/`args`/`env` 值中的 `${VAR}` 与 Cursor 风格 `${env:VAR}`
-  占位符先查密钥作用域、再查进程环境解析，未设置的引用保留字面占位符。P242 移植 dashboard 中介 OAuth 桥（hermes `tools/mcp_dashboard_oauth.py`
+  占位符先查密钥作用域、再查进程环境解析，未设置的引用保留字面占位符。P242 实现 dashboard 中介 OAuth 桥（hermes `tools/mcp_dashboard_oauth.py`
   + `web_server.py` 流程登记表/路由）：网关提供 `POST /api/mcp/servers/<name>/auth`（校验服务器为远程且走 OAuth——stdio 服务器用
   env 键认证、头部认证服务器用头部
 - 进行中流程上限 8 → 429、按服务器去重 → 409、15 分钟 TTL GC）、`GET /api/mcp/oauth/flows/<flow_id>`（状态 +
@@ -1502,7 +1502,7 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
   409 拒绝、provider 错误返回 400
 - OAuth 机制经任务本地变量（hermes contextvar）侦测当前流程，将授权 URL 的发布/回调的等待改经流程而非绑定 loopback 端口，redirect_uri 解析为网关回调 URL，并在动态客户端注册时保持一致登记
 - worker 在强制重新授权前备份已存令牌、失败时恢复，随后以新令牌探测服务器工具列表（展示于流程快照）。分歧：ulnclaw 网关是不持有代理工具注册表的独立守护进程，故跳过 hermes
-  的进程内实时重连——新令牌于下一会话/懒启动时生效。P243 移植 OAuth 管理器加固（hermes `tools/mcp_oauth_manager.py`）：进程级
+  的进程内实时重连——新令牌于下一会话/懒启动时生效。P243 实现 OAuth 管理器加固（hermes `tools/mcp_oauth_manager.py`）：进程级
   `OAuthManager`（`src/mcp/oauth_manager.rs`）维护按服务器的令牌文件 mtime 水位——请求前磁盘监视（每次 POST 一次 `stat()`，hermes
   `HermesMCPOAuthProvider` 流程前重载）使另一进程在磁盘上刷新的令牌（cron 任务、dashboard 桥、其他 profile）无需重启即可被拾取
 - 401 恢复按失败的访问令牌去重，经共享的在途 future 合并（hermes `handle_401` / `pending_401`，设计参考 Claude Code
@@ -1521,7 +1521,7 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
 
 #### MCP 频道桥（`mcp_serve.py`） — ✅ 核心
 
-- P260 完整移植 hermes `mcp_serve.py`（`src/mcp_serve.rs`，`ulnclaw mcp serve [--verbose]`）：stdio JSON-RPC
+- P260 完整实现 hermes `mcp_serve.py`（`src/mcp_serve.rs`，`ulnclaw mcp serve [--verbose]`）：stdio JSON-RPC
   2.0 MCP 服务器，向任意 MCP 客户端（Claude Code、Cursor、Codex 等）暴露消息会话。OpenClaw 9 工具桥面 + hermes 特有
   `channels_list`：`conversations_list`（platform/search 过滤、limit 1–200
   钳制）、`conversation_get`、`messages_read`（仅 user/assistant、2000 字符上限、按时间序 +
@@ -1537,7 +1537,7 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
 
 #### ACP 适配器（`acp_adapter/`） — ✅ 核心
 
-P261 移植 hermes `acp_adapter/`（`src/acp_adapter.rs`，`ulnclaw acp [--verbose]`）：面向编辑器（Zed）的 Agent
+P261 实现 hermes `acp_adapter/`（`src/acp_adapter.rs`，`ulnclaw acp [--verbose]`）：面向编辑器（Zed）的 Agent
 Client Protocol stdio 服务器。双向换行分隔 JSON-RPC 2.0，出站请求按 id 匹配响应。表面：`initialize`（协议 v1、loadSession +
 image/embeddedContext 提示能力）、`authenticate`（不广播认证方式）、`session/new` / `session/load`（从
 `acp-<sessionId>` 存储行回放历史为 user/agent 消息块）、`session/prompt`（文本 + 图像块 → 经 `run_with_session_images`
@@ -1550,7 +1550,7 @@ image/embeddedContext 提示能力）、`authenticate`（不广播认证方式�
 
 #### 批量运行器（`batch_runner.py`） — ✅ 核心
 
-P262 完整移植 hermes `batch_runner.py`（`src/batch_runner.rs`，`ulnclaw batch --dataset-file X --run-name
+P262 完整实现 hermes `batch_runner.py`（`src/batch_runner.rs`，`ulnclaw batch --dataset-file X --run-name
 R [--batch-size N] [--num-workers N] [--resume] [--verbose] [--max-iterations N] [--model M]`）：JSONL
 数据集逐行校验加载，并行批处理（tokio `buffer_unordered` 工作池——批间并行、批内提示词串行，hermes Pool
 语义），检查点（`batch_runs/<run>/checkpoint.json`：完成索引 + 每批统计、原子 tmp+rename 写入、run_name 守卫加载），智能续跑（已存
@@ -1562,7 +1562,7 @@ R [--batch-size N] [--num-workers N] [--resume] [--verbose] [--max-iterations N]
 
 #### Send CLI（`hermes_cli/send_cmd.py`） — ✅ 核心
 
-P263 完整移植 hermes `hermes send`（`ulnclaw send`）：脚本/cron/CI 消息投递，无 LLM、无 agent 循环——`--to
+P263 完整实现 hermes `hermes send`（`ulnclaw send`）：脚本/cron/CI 消息投递，无 LLM、无 agent 循环——`--to
 platform[:chat[:thread]]` 目标语法，消息体取自位置参数 / `--file PATH` / `-` / 管道 stdin（TTY 感知），`--subject`
 标题前置，`--list [platform]` 频道目录渲染并合并已配置未发现的平台，`--json` 原始结果、`--quiet` 仅退出码模式，hermes 退出码契约（0 成功 / 1
 投递失败 / 2 用法错误）。复用 P259 `send_message` 管道，含 Telegram/Discord/Slack 独立 REST 路径（bot 令牌平台无需运行网关）
@@ -1571,7 +1571,7 @@ platform[:chat[:thread]]` 目标语法，消息体取自位置参数 / `--file P
 
 #### Slack 原生斜杠命令 + 应用清单（`hermes_cli/slack_cli.py` + slack 适配器斜杠流） — ✅ 核心
 
-- P265 移植 hermes `hermes slack manifest` + Slack socket-mode 斜杠路径：`ulnclaw slack manifest [--write
+- P265 实现 hermes `hermes slack manifest` + Slack socket-mode 斜杠路径：`ulnclaw slack manifest [--write
   [PATH]] [--name N] [--description D] [--long-description T | --long-description-file F]
   [--slashes-only] [--no-assistant | --agent-view]` 生成 Slack 应用清单，把每个平台命令注册为原生斜杠命令（`/ulnclaw`
   兜底命令恒居首位、hermes 保留命令跳过表、50 条上限、命令名净化、175–4000 字符长描述校验、assistant/agent/none 三种消息体验及对应 scopes +
@@ -1585,10 +1585,10 @@ platform[:chat[:thread]]` 目标语法，消息体取自位置参数 / `--file P
 
 #### 网关监控 + OTLP 导出（`agent/monitoring/*`） — ✅ 核心
 
-P266 完整移植 hermes 网关监控平面（`src/monitoring.rs`）：无内容
+P266 完整实现 hermes 网关监控平面（`src/monitoring.rs`）：无内容
 `GatewayHealthEvent`/`GatewayDiagnosticEvent`/`CronExecutionEvent` 投影，全局有界发射器（fire-and-forget，1024
 上限丢弃）、无条件出站脱敏（secrets→PII：bearer/token/`***`/email/uuid/电话清洗——hermes `_PHONE_RE` 语义的无 lookbehind
-移植）、持久化 install-id 铸造、`[monitoring]` 配置（hermes 默认值 + 间隔下限：健康 60s / 诊断 5s，下限 5/1）、内置 OTLP/HTTP JSON
+实现）、持久化 install-id 铸造、`[monitoring]` 配置（hermes 默认值 + 间隔下限：健康 60s / 诊断 5s，下限 5/1）、内置 OTLP/HTTP JSON
 trace 导出器（resourceSpans/scopeSpans、按 span 类型的 `ulnclaw.*` 属性白名单 + 500 字符截断、`headers_env`
 导出时解析、`/v1/traces` 只追加一次、超时刷新的批量循环）。网关接线：`gateway_started` 生命周期事件、基于实时运行状态 + 启用平台数的周期性心跳采样、来自调度器的
 cron 执行事件、`ulnclaw monitoring status` 界面。范围仅健康 + 脱敏诊断——不含提示词、消息、工具参数/结果或用量分析
@@ -1597,7 +1597,7 @@ cron 执行事件、`ulnclaw monitoring status` 界面。范围仅健康 + 脱�
 
 #### 安装向导（`hermes_cli/setup.py`） — ✅ 核心
 
-P267 精简移植 hermes 交互式安装向导（`src/setup_cmd.rs`）：`ulnclaw setup [model|terminal|gateway|tools|agent]
+P267 精简实现 hermes 交互式安装向导（`src/setup_cmd.rs`）：`ulnclaw setup [model|terminal|gateway|tools|agent]
 [--quick] [--reset] [--non-interactive]` —— 首次安装模式选择（完整安装 / 空白起点）、既有安装的重配置流程（每个提示以当前值为默认）、按 section
 单独运行、修改前的时间戳配置备份（#3522）、无 TTY 时的非交互指引、provider
 挑选器（OpenAI/Anthropic/OpenRouter/DashScope/Ollama/llama.cpp/自定义）且 API key 写入
@@ -1609,7 +1609,7 @@ config.toml 说明）与 hermes 缺失 home 频道提示、基于实时注册表
 
 #### 模型挑选器（`cmd_model` / `select_provider_and_model`） — ✅ 核心
 
-P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY 的交互式 provider + 模型切换器。Provider
+P268 实现 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY 的交互式 provider + 模型切换器。Provider
 清单（内置 + 用户 `[providers.<slug>]` 条目，当前项标记/默认）、缺失时凭据提示写入 `.env`、models.dev 目录模型列表（agentic 模型、40
 行上限、目录离线/未知时回退“手动输入模型名”）、配置持久化、切换后摘要（provider/模型/端点/密钥状态）。`--refresh` 先清空 models.dev 挑选器缓存。同时加固
 `models_dev::fetch_from_network`：reqwest 阻塞客户端在 scoped OS 线程内创建/销毁，目录抓取在异步网关/分发上下文中不再 panic
@@ -1618,7 +1618,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
 
 #### 桌面启动器 + 命令别名（`cmd_gui` / `cmd_login` / `cmd_logout` / journey 别名） — ✅ 核心
 
-- P269 移植 hermes 剩余的小型界面：`ulnclaw gui [--binary PATH] [--dev]`（别名 `desktop`）解析已打包的 `ulnclaw desktop`
+- P269 实现 hermes 剩余的小型界面：`ulnclaw gui [--binary PATH] [--dev]`（别名 `desktop`）解析已打包的 `ulnclaw desktop`
   可执行文件（`--binary` → `ULNCLAW_DESKTOP_BINARY` →
   `desktop-electron/release/{linux,win,mac}-unpacked`）并分离启动，`--dev` 在 `desktop-electron/` 经 `npm
   start` 运行未打包应用，二进制缺失时打印构建指引
@@ -1629,7 +1629,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
 
 #### 动态 webhook 订阅（`hermes_cli/webhook.py`） — ✅ 核心
 
-- P270 移植 hermes `hermes webhook`：`ulnclaw webhook subscribe <name> [--description D] [--events
+- P270 实现 hermes `hermes webhook`：`ulnclaw webhook subscribe <name> [--description D] [--events
   e1,e2] [--secret S] [--prompt P] [--skills s1,s2] [--deliver target] [--deliver-chat-id C]
   [--deliver-only] [--script CMD]`、`webhook list`、`webhook remove <name>`、`webhook test <name>
   [--payload JSON]`（HMAC-SHA256 签名 POST）。订阅持久化于 `webhook_subscriptions.json`（原子写入、0600 权限——存放每路由 HMAC
@@ -1642,7 +1642,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
 
 #### WhatsApp Cloud 安装向导（`hermes_cli/setup_whatsapp_cloud.py`） — ✅ 核心
 
-- P271 精简移植 hermes `hermes whatsapp-cloud`：`ulnclaw whatsapp-cloud` —— 需 TTY 的交互式向导，带 hermes
+- P271 精简实现 hermes `hermes whatsapp-cloud`：`ulnclaw whatsapp-cloud` —— 需 TTY 的交互式向导，带 hermes
   字段形状校验器（Phone Number ID 与误贴电话号码陷阱、`EAA` 访问令牌前缀 + OpenAI/Slack/GitHub 误贴诊断、32 位十六进制 App Secret）、自动铸造
   verify token（可重新生成）、收件人白名单归一化，以及按 ulnclaw 路径改写的 SETUP COMPLETE 后续步骤（cloudflared 隧道、网关、Meta webhook
   面板
@@ -1683,7 +1683,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
   订阅）、`whatsapp-cloud`（WhatsApp Business Cloud API 安装向导）、`whatsapp [status]`（Baileys 桥诊断）、`sync
   status/pull/push/now/enable/disable/device`、`uninstall --full/--dry-run/--yes`（代码检出 + shell PATH 条目
   + 包装符号链接 + 可选清除主目录
-- hermes `uninstall.py` 移植 —— Windows 注册表/环境变量步骤未移植））、`moa run/list/delete`、`models
+- hermes `uninstall.py` 实现 —— Windows 注册表/环境变量步骤未实现））、`moa run/list/delete`、`models
   providers/list/info/refresh`（models.dev 目录）、`skills blueprints/schedule/unschedule`、`diff`、`init`
 
 <a id="混合智能体-moa-moa-loop-py-moa-config-py"></a>
@@ -1692,7 +1692,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
 
 - `[moa.presets.<name>]` 参考模型并行扇出 + 聚合器综合（`ulnclaw moa run/list/delete`、REPL `/moa <prompt>`）
 - loud/silent 降级策略、全部失败提前返回、聚合失败回退拼接结果
-- P169 移植了持久门面 + trace + 隐私过滤：`[model] provider = "moa"` 让整个 agent 循环跑在预设上（`model` 选择预设——hermes
+- P169 实现了持久门面 + trace + 隐私过滤：`[model] provider = "moa"` 让整个 agent 循环跑在预设上（`model` 选择预设——hermes
   `build_moa_facade`）：按用户轮参考扇出并在工具循环迭代间缓存（hermes reference
   cache）、指引附加在聚合器提示末尾（`_attach_reference_guidance`，prompt 缓存友好）、调用方的工具转发给聚合器、聚合失败回退返回指引块
 - `[moa] save_traces`/`trace_dir` 按消毒后的会话 id 在 `moa-traces/` 下逐轮写入 JSONL 记录（hermes `save_moa_turn`）
@@ -1705,13 +1705,13 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
 - `ulnclaw gateway`：OpenAI 兼容 `/v1/chat/completions`（`X-Ulnclaw-Session-Id` 会话续接、`stream: true` SSE
   令牌流 + `hermes.tool.progress` 事件）、`/v1/responses`（经 `previous_response_id` 有状态续接、`stream: true`
   Responses-API SSE 事件）、`/v1/models`、`/api/model/options` 多 provider 选择器清单（P168，hermes `inventory.py`
-  移植：当前 provider 行经 models.dev 增强含能力/成本映射、`[providers.<slug>]` 配置行带有界 `/models` 实时探测、env 密钥认证的规范
+  对应实现：当前 provider 行经 models.dev 增强含能力/成本映射、`[providers.<slug>]` 配置行带有界 `/models` 实时探测、env 密钥认证的规范
   provider 行、`include_unconfigured` 骨架行带 `auth_type`/`key_env`/`warning` 配置提示、`explicit_only`
   过滤、规范声明顺序、按实验室精选模型 + 格式化定价、`[model_catalog] excluded_providers`
 - `?refresh=true` 刷新目录缓存并重新探测）、`/v1/capabilities`、`/v1/runs`（异步运行 + SSE 事件 + 停止 +
   审批）、`/api/sessions` 增删查改 + 会话聊天 +
   chat/stream（斜杠直通：`/help`/`/skills`/`/tools`/`/recap`/`/title`/`/usage` 免 LLM 回合直接执行
-- `/skill-name` + `/<bundle>` 调用展开为 hermes 技能脚手架用户轮——复刻 hermes gateway/run.py 的技能命令共享）+
+- `/skill-name` + `/<bundle>` 调用展开为 hermes 技能脚手架用户轮——对齐 hermes gateway/run.py 的技能命令共享）+
   `PATCH`（title/end_reason）+ `fork` + 会话级模型锁（每轮生效）+ `recap` + `POST /api/sessions/prune|archive`
   批量清理（可过滤、dry-run 预览——对应 `sessions prune/archive`）、`/api/jobs` 定时任务 HTTP API（增删查改 + pause/resume/run
   + `GET /api/jobs/delivery-targets` + `POST /api/jobs/fire` Chronos NAS 触发 webhook——P219：`deliver` 目标
@@ -1754,11 +1754,11 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
 #### 云浏览器 provider（`agent/browser_provider.py` + `agent/browser_registry.py` + `plugins/browser/*`） — ✅ 核心
 
 `browser/cloud.rs`：`CloudBrowserProvider` trait +
-注册表移植——**Browserbase**（`BROWSERBASE_API_KEY`+`BROWSERBASE_PROJECT_ID`，`POST
+注册表实现——**Browserbase**（`BROWSERBASE_API_KEY`+`BROWSERBASE_PROJECT_ID`，`POST
 /v1/sessions`，keepAlive/proxies/advancedStealth/timeout 开关及 hermes 402 回退链，`REQUEST_RELEASE`
 关闭）、**Browser Use**（直连 `BROWSER_USE_API_KEY` 或经 `[browser] use_gateway` 的受管 Nous gateway，`POST
 /browsers` 含 `X-Idempotency-Key` 受管语义、`timeoutAt` 过期权威、`PATCH {action: stop}`
-关闭）、**Firecrawl**（`FIRECRAWL_API_KEY`，`POST /v2/browser` 含 `FIRECRAWL_BROWSER_TTL`，DELETE 关闭）。解析复刻
+关闭）、**Firecrawl**（`FIRECRAWL_API_KEY`，`POST /v2/browser` 含 `FIRECRAWL_BROWSER_TTL`，DELETE 关闭）。解析对齐
 `_resolve`：`"local"` 彻底禁用云模式，显式名称无论可用性一律胜出（给出精确的缺凭据错误），否则按 browser-use → browserbase
 传统顺序按可用性遍历——firecrawl 仅限显式选择，避免 web-extract 密钥被静默导向付费云浏览器。`with_session` 惰性创建/缓存会话、退役过期端点，`main`
 退出时释放会话（hermes atexit 清理）。端点解析新增 `[browser] cdp_url` 配置层（env > config > cloud > 托管启动）
@@ -1794,27 +1794,27 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
 - CLI 上审批交互为终端 y/N 提示（hermes 有更丰富的平台化流程）；网关通过
   HTTP 暴露运行审批（once/session/always/deny）。chat-completions 请求没有
   run 上下文，确认级命令按设计自动拒绝。Smart 审批（LLM 守护）与 cron
-  审批模式已移植；无人值守的运行默认 fail-closed，`cron_mode = "approve"`
+  审批模式已实现；无人值守的运行默认 fail-closed，`cron_mode = "approve"`
   可放行。
 - 浏览器监督器直接启动本地 Chrome/Chromium；hermes 驱动外部 `agent-browser`
-  守护进程。Camofox REST 后端已移植（含受管持久化，以
+  守护进程。Camofox REST 后端已实现（含受管持久化，以
   `CAMOFOX_MANAGED_PERSISTENCE` 环境变量替代 hermes 的 config.yaml 开关）；
   云浏览器 provider（Browserbase、Browser Use、Firecrawl）已在
-  `browser/cloud.rs` 移植。
+  `browser/cloud.rs` 实现。
 - 网关实现了 api_server 平台的子集（多 profile 复用
-  `/p/<profile>/...` 已移植 —— 见功能表）。
-- `/api/model/options` 清单：hermes 的凭据池行与 Nous 免费档门控未移植
-  （凭证池存储本身已精简移植——见凭证池行——但选择器仍按 provider 单行展示）；多 provider 行集、选择器
-  提示、精选模型与定价已移植（P168，见 HTTP 网关行）。
+  `/p/<profile>/...` 已实现 —— 见功能表）。
+- `/api/model/options` 清单：hermes 的凭据池行与 Nous 免费档门控未实现
+  （凭证池存储本身已精简实现——见凭证池行——但选择器仍按 provider 单行展示）；多 provider 行集、选择器
+  提示、精选模型与定价已实现（P168，见 HTTP 网关行）。
 - 压缩使用 字符数/4 的 token 估算而非分词器。
 - `patch` 模糊链实现了全部 9 种 hermes 策略；相似度基于 LCS 比率
   （difflib.SequenceMatcher 的等价实现），边界阈值与 CPython 实现可能略有差异。
 - 环境覆盖 local/docker/ssh；hermes 的 modal/daytona/vercel 后端及其凭据
-  流程未移植。
+  流程未实现。
 - 检查点跳过 hermes 的 pre-v2 旧存储迁移（仅全新存储），孤儿判定使用
   工作目录存在性（不记录卷设备/inode 证据）。
 - Secrets：`secrets sync` 干跑对比的是启动钩子已应用后的 env（hermes 行为
-  相同）；Bitwarden `token` 轮换子命令已移植（`secrets bitwarden token
+  相同）；Bitwarden `token` 轮换子命令已实现（`secrets bitwarden token
   [--access-token] [--no-verify]` —— 先对新令牌做 Bitwarden 校验再落盘，
   粘错令牌不会弄坏可用的旧令牌，并清除旧令牌指纹缓存）；bws 自动安装的
   Windows 资产路径未测试。
@@ -1822,13 +1822,13 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
   后处理/多模态驱逐层；macOS TCC 授权流程已暴露给桌面端
   （`/api/tools/computer-use/permissions/grant` 以可轮询后台动作拉起
   `cua-driver permissions grant`，仅 macOS）；嵌入式守护进程 socket 模式
-  未移植；`install` 直接调用上游 trycua 安装脚本。
+  未实现；`install` 直接调用上游 trycua 安装脚本。
 - 插件：ulnclaw 插件是讲 hermes shell-hook JSON 协议的子进程（目录插件 + `[hooks]` 配置），不是 Python 导入
   - 核心触发 hermes v2026.8.3 运行期实际发出的全部钩子（23 个中的 13 个 —— 其余 10 个在 hermes 中也仅存于目录）
   - pre_verify 无 ulnclaw verify 循环可挂载
   - `ulnclaw kanban` 引擎现已在 claim/done/block 时触发 kanban_task_claimed/completed/blocked 钩子，agent 侧
     kanban_* 工具现已改用同一 KanbanStore 引擎（P119 统一了此前独立的表）：
-    - P122 移植了调度器 tick（`kanban dispatch` CLI + `POST /api/kanban/dispatch`：过期认领回收（存活 pid 自动续期）、父任务完成的
+    - P122 实现了调度器 tick（`kanban dispatch` CLI + `POST /api/kanban/dispatch`：过期认领回收（存活 pid 自动续期）、父任务完成的
         todo→ready 晋升、就绪任务经分离的 `ulnclaw run` 生成 worker（ULNCLAW_KANBAN_TASK 环境）、实时并发上限、连续 2 次 spawn
         失败自动阻塞）
     - P123 新增网关内嵌定时调度（`[kanban] dispatch_in_gateway / dispatch_interval_secs / max_spawn`，默认开/60 秒/2）
@@ -1837,7 +1837,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
     - P124 补齐了按任务 git-worktree 隔离（`[kanban] worktrees`，默认开启：每个被调度的 worker 运行在
         `<repo>/.worktrees/<task-id>` 的 `kanban/<task-id>` 分支上，重启可复用； `ulnclaw kanban gc`
         清理已完成/归档任务的树，分支保留）
-    - P125 移植了 hermes kanban swarm（`hermes_cli/kanban_swarm.py`）：`ulnclaw kanban swarm <goal> --worker
+    - P125 实现了 hermes kanban swarm（`hermes_cli/kanban_swarm.py`）：`ulnclaw kanban swarm <goal> --worker
         ASSIGNEE:TITLE [--worker ...] --verifier ASSIGNEE --synthesizer ASSIGNEE [--json]` 构建
         workers→verifier→synthesizer 任务图 —— 根黑板/审计任务（创建即 done）、N 个注入 swarm 协议简报的 ready worker、链接到所有
         worker 的验证者、链接到验证者的综合者；拓扑以 `blackboard` 评论 + `swarm` 事件发布，调度器随父任务完成逐级晋升验证者/综合者
@@ -1848,11 +1848,11 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
         N --idempotency-key K`，网关创建 API 同字段）、幂等 swarm 恢复（同键 ⇒ 从根黑板重建拓扑，不重复建图）、调度器
         `reap_timed_out`（SIGTERM + 5 秒宽限 + SIGKILL，任务回 ready 并记 `timed_out` 事件），派生 worker
         的启动提示词内联强制加载的技能（hermes 以 `--skills` 参数对传递）
-    - P128 移植了 triage 流水线（`hermes_cli/kanban_specify.py` + `kanban_decompose.py`）： `kanban create
+    - P128 实现了 triage 流水线（`hermes_cli/kanban_specify.py` + `kanban_decompose.py`）： `kanban create
         --triage` 把想法暂存进新的 `triage` 列，`kanban specify` 经 `auxiliary.triage_specifier` 生成
         Goal/Approach/Acceptance-criteria 规格并晋升 triage→todo，`kanban decompose` 将其扇出为 2-6 个子任务依赖图并按
         profile 名册路由（`[kanban] orchestrator_profile / default_assignee /
-        auto_promote_children`；根任务作为所有子任务的父级存留作唤醒卡，Kahn 环检测，--all 批量时对单任务失败容错）， `kanban diagnostics` 移植
+        auto_promote_children`；根任务作为所有子任务的父级存留作唤醒卡，Kahn 环检测，--all 批量时对单任务失败容错）， `kanban diagnostics` 实现
         `kanban_diagnostics.py` 规则引擎（幻觉卡号、正文幻影引用、重复 spawn 失败、worker 崩溃循环、阻塞超 24 小时、 block/unblock 循环、滞留
         ready、triage 无辅助模型），阈值与严重度排序与 hermes 一致
     - P129 补齐了其余 hermes kanban CLI 面： schedule/promote（父任务门控、--force 覆盖）/reclaim/reassign
@@ -1860,7 +1860,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
         事件流、按看板状态统计、boards rename/set-workdir
     - P130 新增全板 `kanban watch` 实时事件流（assignee/kind 过滤，hermes watch 后端）、`kanban stats` 采用 hermes
         `board_stats` 语义（按 assignee 统计 + 最老 ready 等待时长 + `--json`）与 `kanban dispatch --json`
-    - P131 移植网关通知底座： `kanban_notify_subs` 表（task × platform × chat × thread 主键，
+    - P131 实现网关通知底座： `kanban_notify_subs` 表（task × platform × chat × thread 主键，
         订阅时游标快照到当前最新事件、chat_type/profile/metadata 自愈）、 `kanban notify-subscribe / notify-list /
         notify-unsubscribe` CLI、供网关通知器使用的 `unseen_events_for_sub` + `advance_notify_cursor` 构件，以及
         `kanban log [--tail N]` —— 打印任务在 `<home>/kanban/worker-logs/` 下的 worker 日志，tail 采用 hermes 的
@@ -1874,7 +1874,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
         auto_decompose`（默认开）/ `auto_decompose_per_tick` （默认 3），翻转开关在下一 tick 即停止失控扇出、无需重启网关（hermes
         #49638 故障安全语义 —— 配置读取失败则本轮跳过），随后在 dispatch 扇出之前经辅助 LLM 分解至多 N 个 triage 任务，成功记 info、无操作跳过记
         debug
-    - P134 补齐 hermes kanban CLI 的最后几块：`kanban context`（完整移植 `build_worker_context` —— 带上限的正文/附件、历史尝试的
+    - P134 补齐 hermes kanban CLI 的最后几块：`kanban context`（完整实现 `build_worker_context` —— 带上限的正文/附件、历史尝试的
         run 摘要与 metadata、已完成父任务的交接结果与相对时间陈旧度提示、assignee 跨任务角色历史、带上限的评论区；`kanban_show` 工具同步返回
         `worker_context`，spawn 出的 worker 无需额外往返即可读取）、`kanban repair`（integrity_check + 内容寻址隔离备份 + 仅索引损坏的
         REINDEX 自动修复，其余情况保守失败）、`kanban assignees`（配置名册与看板 assignee 合并、按状态计数）、`kanban daemon`（hermes
@@ -1884,7 +1884,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
         archived/unblocked 只推游标不发声，避免堵塞后续事件），按 hermes 消息格式渲染（✔ 完成 + 交接首行、⏸ 阻塞 + 原因、⏱ 超时、 ✖ 崩溃/放弃、🔄
         状态变更，带 @assignee 与 [board] 标签），经已注册的平台发送器投递，投递后推进每个订阅的游标；订阅在任务崩溃/重试周期中保留，仅当任务真正 done/archived
         时移除（去重靠游标）。与 hermes 的范围差异：无按 profile 的适配器归属（单一共享存储）、无线程路由与死聊天清理（PlatformSender 无失败通道），发送视为已送达
-    - P136 移植统一失败记账与熔断器（hermes `_record_task_failure`）：任务新增 `consecutive_failures` /
+    - P136 实现统一失败记账与熔断器（hermes `_record_task_failure`）：任务新增 `consecutive_failures` /
         `last_failure_error` / `max_retries` 列，每次 spawn 失败与超时尝试都消耗重试预算，达到阈值（按任务 `max_retries` > 调度器
         limit > 默认 2）即 ready→blocked 并发出 `gave_up` 事件（payload 含 failures / effective_limit /
         limit_source / trigger_outcome），计数器在任务完成与主动 unblock 时清零（hermes 重新起步策略）。 CLI：`kanban create
@@ -1898,7 +1898,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
     - P138 加固内嵌调度器的运维安全（hermes gateway 循环）：排他 `flock` 单例锁（`<home>/kanban/dispatcher.lock`）保证全机只有
         一个网关进程在调度 —— 第二个网关记录竞争日志、继续提供 HTTP 但不调度（防配置漂移与重启竞争的兜底）—— 并新增调度器卡死健康遥测：ready 队列连续 6 拍非空却零 spawn
         时告警（300 秒节流）
-    - P139 移植 hermes 的按任务工作区：任务新增 `workspace_kind`（默认 `scratch` / `worktree` / `dir`）、
+    - P139 实现 hermes 的按任务工作区：任务新增 `workspace_kind`（默认 `scratch` / `worktree` / `dir`）、
         `workspace_path`、`branch_name` 三列；`kanban create --workspace
         scratch|worktree|worktree:<path>|dir:<path>` 与 `--branch <名>` （仅 worktree 可用，校验文案与 hermes
         一致），网关创建 API 接受相同字段；调度器在 spawn 之前解析工作区（hermes `resolve_workspace` /
@@ -1914,13 +1914,13 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
         `ULNCLAW_KANBAN_RATE_LIMIT_COOLDOWN_SECONDS` 默认 300，0 关闭）、
         `blocker_auth`（最近失败命中配额/鉴权模式）、`recent_success` （1 小时内有已完成 run 且其后无主动重新入队）、`active_pr` （24
         小时内评论中出现 GitHub PR 链接）；被守卫的任务保持 ready，每次延后都会记录 `respawn_guarded` 事件，网关 dispatch API 一并返回
-    - P141 移植唤醒路由：任务新增 `session_id` 列，由 agent `kanban_create` 工具写入（网关创建 API 亦接受该字段）；
+    - P141 实现唤醒路由：任务新增 `session_id` 列，由 agent `kanban_create` 工具写入（网关创建 API 亦接受该字段）；
         订阅任务进入可唤醒终态事件（`completed` / `gave_up` / `crashed` / `timed_out` / `blocked` —— hermes
         `_WAKE_KINDS`）时，通知器以 hermes 格式的唤醒文案（`[kanban] Task <id> <status>. …`）自 POST 网关自身的
         `/v1/chat/completions` 并携带 `X-Ulnclaw-Session-Id`，恢复创建者会话（hermes
         `_self_post_chat_completion`：通配绑定走回环、配置了密钥则带 bearer、单轮上限 600 秒、429/瞬时错误按 2/5/10 秒退避重试、其余 HTTP
         错误快速失败）；唤醒在文本通知之后尽力异步执行，不阻塞其他订阅
-    - P142 移植类型化阻塞（hermes `block_task(kind=…)`）：`kanban block --kind dependency` 把任务停进
+    - P142 实现类型化阻塞（hermes `block_task(kind=…)`）：`kanban block --kind dependency` 把任务停进
         `todo`（`dependency_wait` 事件），由父任务门控 + `recompute_ready` 在父任务完成后自动晋升 —— 无需人工与定时解锁；`needs_input`
         / `capability` / `transient` / 未类型化进入 `blocked` 并持久化 `block_kind` 与 `block_recurrences`，解锁循环
         熔断器在同一原因于解锁后再次阻塞达到 `BLOCK_RECURRENCE_LIMIT`（2）次时把任务改路由到 `triage` （`block_loop_detected` 事件）——
@@ -1943,12 +1943,12 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
         `skipped_nonspawnable`（只能经 claim 拉取的控制面通道，绝不自动 spawn —— hermes #kanban-dispatcher-crash-loop）；
         网关调度器的 stuck 警告改由 `has_spawnable_ready` 判定，就绪队列里只有通道任务时视为"正常空闲"，仅在确有可 spawn 工作（未指派或已配置 profile
         的任务）等待时才告警。
-    - P147 移植完成工件：`kanban done --artifact <path>`（可重复）、agent `kanban_done` 工具（`artifacts` 数组）与网关
+    - P147 实现完成工件：`kanban done --artifact <path>`（可重复）、agent `kanban_done` 工具（`artifacts` 数组）与网关
         complete API 会把托管 scratch 工作区内的文件先行暂存到 `<home>/kanban/attachments/<task>/`（25 MiB 上限，缺失/超限的声
         明直接让完成失败并回滚），登记为 `artifact` 附件并发出 `attached` 事件，同时合并 summary/result 文本中提到的绝对交付物路径，最终路径随
         `completed` 事件与 run metadata 下发（hermes `kanban_complete(artifacts=[...])`、
         `_persist_scratch_completion_artifacts`、 `_merge_completion_prose_artifacts`）。
-    - P148 移植 review 列： `review` 加入状态集（🔍）；worker 开 PR 后调用 `kanban review <id> [--reason]` /
+    - P148 实现 review 列： `review` 加入状态集（🔍）；worker 开 PR 后调用 `kanban review <id> [--reason]` /
         `kanban_review` 工具（running → review，收尾 worker run，发出 `review_requested` 事件）；`dispatch_once` 新增共享
         max_spawn 上限的 review 循环 —— 未指派的 review 任务归入 `skipped_unassigned`，未知 assignee 归入
         `skipped_nonspawnable`，认领时开新 run 且不再复查父任务依赖（`claim_review_task`）， `<home>/skills/` 装有
@@ -1956,7 +1956,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
     - P149 增加按 profile 的并发上限：`[kanban] max_in_progress_per_profile`（hermes #21582）
         即使全局仍有余量，也拒绝为已达在飞上限的 assignee 再生 worker —— 计数每 tick 从 running 列播种、dry-run 的拟 spawn 同样计数；被跳过
         的任务归入 `skipped_per_profile_capped`（CLI 行 + dispatch JSON）。
-    - P150 移植反幻觉完成门：`kanban done --created-card <id>`（可重复； agent `created_cards` 数组与网关 complete API
+    - P150 实现反幻觉完成门：`kanban done --created-card <id>`（可重复； agent `created_cards` 数组与网关 complete API
         同步）逐一核验声明的卡片 —— 必须存在，且由该 worker 的 profile 创建、以 worker 任务 id 作为 created_by、或已挂为 worker 任务的子任务。幻影
         id 发出 `completion_blocked_hallucination` 事件并在零改动下阻断完成（hermes `HallucinatedCardsError`）；核验通过的 id
         随 `completed` 事件下发，summary/result 文本中无法解析的 `t_<hex>` 引用在成功完成后以
@@ -1974,7 +1974,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
     - P154 增加 `[kanban] max_in_progress` 全局并发上限（#33488）：当板上运行中任务已达上限时，本轮调度直接提前返回（积压任务保持
         ready，不落任何跳过桶）；否则有效 spawn 上限收紧为 `max_spawn` 与 `max_in_progress` 的较小者，使运行列恰好填满上限 —— 慢
         worker（本地模型、资源受限主机）先消化存量，避免堆积任务超时。
-    - P154 同时移植了一次性 scratch 工作区提示（hermes `_maybe_emit_scratch_tip`）：整个安装内首次物化 scratch 工作区时，调度器警告
+    - P154 同时实现了一次性 scratch 工作区提示（hermes `_maybe_emit_scratch_tip`）：整个安装内首次物化 scratch 工作区时，调度器警告
         scratch 产物是临时的（任务完成即删除），在任务上记录 `tip_scratch_workspace` 事件，并写入 `.scratch_tip_shown` 哨兵文件
         使提示不再重复；worktree/dir 工作区按设计保留，从不提示。
     - P156 增加看板 goal 模式 worker（hermes `create --goal` / `--goal-max-turns`）：goal 卡片 spawn 的 worker
@@ -1992,7 +1992,7 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
         model 时一并清 provider；只给 provider 不给 model 按 hermes 契约拒绝），全局 `-m/--model` 与 `--provider` CLI
         标志（优先于配置与 profile，spawn 出的 `ulnclaw run` worker 携带同名标志），`dispatch_spawn` 依卡片透传 `--model` /
         `--provider`。
-    - P160 移植了 hermes 的一等项目登记簿（`projects_db` + `project` CLI）：按 profile 隔离的 `projects.db` 具名多文件夹工作区
+    - P160 实现了 hermes 的一等项目登记簿（`projects_db` + `project` CLI）：按 profile 隔离的 `projects.db` 具名多文件夹工作区
         （`ulnclaw project create/list/show/add-folder/remove-folder/rename/
         set-primary/use/archive/restore/bind-board` —— slug 唯一化、主目录重指、活跃项目指针；`bind-board` 同时把主仓库镜像为绑定
         board 的 `default_workdir`），以及 `kanban create --project <id|slug>`（CLI 与网关 create 请求体）：建卡时解析项目，把
@@ -2014,8 +2014,8 @@ P268 移植 hermes `hermes model`：`ulnclaw model [--refresh]` —— 需 TTY �
   图片）仍为缓存路径引用，agent 用 vision_analyze/video_analyze/read_file
   检视。注入的图片仅存活于当前轮（会话历史保留文本轮）。
   语音消息经 `[stt]` 管道转写，但内置 `local` faster-whisper provider
-  在静态二进制中需以 `stt.local.command` 或云 provider 替代；Telegram clarify + 执行审批行内键盘已移植（P225）；
-  hermes 全部二十二个平台适配器均已移植（微信/QQ/元宝以原生适配器加入；WhatsApp Cloud + MS-Graph 接入、通用 webhook 平台、Twilio SMS、Microsoft Teams、LINE、Google Chat、Raft 与 A2A 均经网关 webhook 路由）；配对与 hermes 相同按
+  在静态二进制中需以 `stt.local.command` 或云 provider 替代；Telegram clarify + 执行审批行内键盘已实现（P225）；
+  hermes 全部二十二个平台适配器均已实现（微信/QQ/元宝以原生适配器加入；WhatsApp Cloud + MS-Graph 接入、通用 webhook 平台、Twilio SMS、Microsoft Teams、LINE、Google Chat、Raft 与 A2A 均经网关 webhook 路由）；配对与 hermes 相同按
   发送者 id 生效，但配置式白名单仍以聊天/频道 id 为粒度（认证门控 =
   白名单 OR 已批准配对）。
 - OAuth/同步：流程与提供方无关（任意 RFC 8628 端点），不绑定 Nous 门户；
@@ -2047,7 +2047,7 @@ REST 命名空间路由）做逐路由审计：每条 hermes 路由要么已被�
 | `/api/status`、`/api/system/stats` | `/api/health`、`/api/system`（P334） |
 | `/api/analytics/usage` | `/api/usage` + `/api/analytics/models` + `/api/insights` |
 | `/api/learning/node` | `/api/learning/node`（GET/PUT/DELETE） |
-| `/api/sessions/import` | 同路径（P348——经 `GET /api/sessions/:id/export?format=json` 的可移植 JSON 往返） |
+| `/api/sessions/import` | 同路径（P348——经 `GET /api/sessions/:id/export?format=json` 的可实现 JSON 往返） |
 | `/api/providers/oauth*` | 同路径（P350——精简设备码目录：基于 `[oauth]` 流程的 list/start/poll/submit/cancel/disconnect） |
 | `/api/dashboard/plugins*`、`/api/dashboard/agent-plugins*`、`/api/dashboard/plugin-providers` | 同路径（P351——精简插件市场：活动清单 + 重新扫描、基于精选 `plugin-hub/index.json` + 本地目录候选的合并市场载荷（安装/更新/移除/启用/禁用）、持久化到 `[plugins]` 的记忆/上下文 provider 选择、`dashboard.hidden_plugins` 可见性开关） |
 | `/api/plugins/kanban/*`（hermes 将 kanban 插件的 FastAPI 路由挂载进 web server） | 同路径（v0.7.0-rc13——桌面 kanban 插件 REST 命名空间由 `KanbanStore` 原生承载：`board` 按 hermes 列序输 … [详情](#api-plugins-kanban-hermes-将-kanban-插件的-fastapi-路由挂载进-web-server) |
@@ -2084,7 +2084,7 @@ PATCH、projects、orchestration GET/PUT（读写 `[kanban.*]` 配置）、dispa
 - **记忆 provider**（`/api/memory/provider`、
   `/api/memory/providers/{name}/config|setup`）——ulnclaw 的记忆是文件式
   MEMORY.md/USER.md 双件 + `memory` 工具，`/api/memory` 提供清单与定向
-  重置；可插拔第三方记忆后端不在移植范围。
+  重置；可插拔第三方记忆后端不在实现范围。
 - **引导向导**（`/api/messaging/telegram/onboarding/*`、
   `/api/messaging/whatsapp/onboarding/*`）——配置向导在 CLI 侧
   （`ulnclaw setup`、`ulnclaw whatsapp-cloud`；P267/P271）；WhatsApp 走
@@ -2097,13 +2097,13 @@ PATCH、projects、orchestration GET/PUT（读写 `[kanban.*]` 配置）、dispa
 - **Provider OAuth**（`/api/providers/oauth*`）——已在同路径覆盖
   （P350）：基于服务无关 `[oauth]` 设备流程的精简设备码目录，含
   start/poll/submit/cancel/disconnect 会话。厂商专属市场式握手
-  （Anthropic 重定向、Codex、Nous 门户）不在移植范围。
+  （Anthropic 重定向、Codex、Nous 门户）不在实现范围。
 - **模型集成**（`/api/model/moa`）——不迁移 Mixture-of-Agents 集成路由；
   单网关模型 + 会话级模型锁定的设计已取代它。
 - **TTS provider**——线协议面已覆盖（见上表；P344），edge/openai/
-  elevenlabs 均已移植；P349 实现免费 `edge` provider（微软 read-aloud
+  elevenlabs 均已实现；P349 实现免费 `edge` provider（微软 read-aloud
   websocket 协议 + Sec-MS-GEC 7.x DRM 令牌交换——无需 API key）。本地
-  模型（piper/neutts/kittentts）仍不在移植范围。
+  模型（piper/neutts/kittentts）仍不在实现范围。
 - **运维杂项**（`/api/ops/checkpoints*`、`/api/ops/config-migrate`、
   `/api/ops/debug-share`、`/api/ops/import*`、
   `/api/ops/backup/download`）——检查点由 `/api/backups` + 会话分叉取代；
@@ -2116,7 +2116,7 @@ PATCH、projects、orchestration GET/PUT（读写 `[kanban.*]` 配置）、dispa
 
 ## 完成状态
 
-agent 核心已与 hermes-agent v2026.8.3 对齐 —— 以下各面均已移植，至此
+agent 核心已与 hermes-agent v2026.8.3 对齐 —— 以下各面均已实现，至此
 v2026.8.3 对标面全部完成：
 
 - 全部核心工具；
@@ -2143,20 +2143,20 @@ v2026.8.3 对标面全部完成：
 - 动态 webhook 订阅 `ulnclaw webhook`（P270）；
 - WhatsApp Cloud 安装向导 `ulnclaw whatsapp-cloud`（P271）；
 - WhatsApp 桥诊断 `ulnclaw whatsapp status`（P272）；
-- 桌面 GUI（`desktop-electron/`，hermes Electron 桌面端的忠实移植）及其余 CLI。
+- 桌面 GUI（`desktop-electron/`，hermes Electron 桌面端的对等实现）及其余 CLI。
 
 `sessions` 面仅有意省略 `optimize-storage`（ulnclaw 自始即采用紧凑的
-外联内容 FTS 布局，无旧布局可迁移）；`-c <会话名>` 标题查找已于 P232 移植。
+外联内容 FTS 布局，无旧布局可迁移）；`-c <会话名>` 标题查找已于 P232 实现。
 
-有意不移植（超出本地 agent 范围的 hermes 面）：
+有意不实现（超出本地 agent 范围的 hermes 面）：
 
-- Electron 桌面应用本身 —— v0.7.0 起撤销：ulnclaw 现直接交付（`desktop-electron/` 为 hermes desktop v2026.8.3 的忠实移植，后台对接 ulnclaw 网关；早前的 Tauri 外壳、其精简对位界面清单与桌面装饰/Electron 专有面豁免一并退役——忠实移植悉数包含）；
+- Electron 桌面应用本身 —— v0.7.0 起撤销：ulnclaw 现直接交付（`desktop-electron/` 为 hermes desktop v2026.8.3 的对等实现，后台对接 ulnclaw 网关；早前的 Tauri 外壳、其精简对位界面清单与桌面装饰/Electron 专有面豁免一并退役——对等实现悉数包含）；
 - Python 插件导入/entry-point 包及其携带的 provider 注册（ulnclaw 插件体系改用 shell 钩子线协议 + 目录插件，并含 git install/update/remove 生命周期）；
 - Nous 门户专属的订阅门控与组织提案审批流程（OAuth/同步为 provider 无关）；
-- xAI 凭证池代理适配器（凭证池存储已精简移植——见凭证池行——但 xAI 适配器本身仍未移植）；
-- cua-driver 内嵌守护/套接字模式，以及上下文级截图驱逐（P228 已移植视觉后处理一半——对返回截图按 `max_image_dimension` 做客户端最长边强制限制；驱逐一半在 v2026.8.3 检出中无参考实现）。
+- xAI 凭证池代理适配器（凭证池存储已精简实现——见凭证池行——但 xAI 适配器本身仍未实现）；
+- cua-driver 内嵌守护/套接字模式，以及上下文级截图驱逐（P228 已实现视觉后处理一半——对返回截图按 `max_image_dimension` 做客户端最长边强制限制；驱逐一半在 v2026.8.3 检出中无参考实现）。
 
-另有若干 CLI 面刻意不移植（已记录为差异，按 v2026.8.3 审计）：
+另有若干 CLI 面刻意不实现（已记录为差异，按 v2026.8.3 审计）：
 
 - `hermes console` —— “安全”命令控制台与 ulnclaw 聊天 REPL 的斜杠命令面重叠（`/help` `/tools` `/skills` `/sessions` ……已可在免 LLM 回合下应答）；
 - `hermes dashboard` / `hermes serve` —— 独立 Web UI 服务器由 `desktop-electron/` 应用 + 网关 OpenAI 兼容 API 面取代（网关保留 hermes dashboard 的本地应用 CORS 模型）；

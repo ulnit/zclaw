@@ -1,5 +1,5 @@
 //! `ulnclaw prompt-size` — what the system prompt costs (hermes
-//! `hermes_cli/prompt_size.py` port).
+//! `hermes_cli/prompt_size.py` parity).
 //!
 //! Measures the fixed per-call payload the agent sends on every turn: the
 //! system prompt broken into its four tiers (base identity, persistent

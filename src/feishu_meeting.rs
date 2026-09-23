@@ -1,4 +1,4 @@
-//! Feishu/Lark meeting-invitation handling — port of hermes
+//! Feishu/Lark meeting-invitation handling — aligned with hermes
 //! `plugins/platforms/feishu/feishu_meeting_invite.py` @ v2026.8.3.
 //!
 //! `vc.bot.meeting_invited_v1` events are converted into a synthetic

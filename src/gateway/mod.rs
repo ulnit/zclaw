@@ -1,6 +1,6 @@
 //! HTTP gateway — OpenAI-compatible API server.
 //!
-//! Minimal Rust port of hermes' `gateway/platforms/api_server.py`:
+//! Minimal Rust aligned with hermes' `gateway/platforms/api_server.py`:
 //!   - `GET  /health`, `GET /health/detailed` — probes (always unauthenticated)
 //!   - `GET  /v1/models`, `GET /api/model/options`, `GET /v1/capabilities`
 //!   - `POST /v1/chat/completions` — OpenAI Chat Completions format; opt-in
@@ -4135,7 +4135,7 @@ fn git_action_target(body: &GitActionBody) -> std::result::Result<PathBuf, Respo
 }
 
 /// `GET /api/git/status` — branch, ahead/behind and per-area path
-/// lists (hermes `/api/git/status` parity, lean port).
+/// lists (hermes `/api/git/status` parity, lean parity).
 async fn git_status(Query(query): Query<FsPathQuery>) -> Response {
     let query = FsPathQuery {
         path: query.path.or_else(|| Some(".".to_string())),
@@ -4160,7 +4160,7 @@ async fn git_status(Query(query): Query<FsPathQuery>) -> Response {
 }
 
 /// `GET /api/git/branches` — local branches, current first (hermes
-/// `/api/git/branches` parity, lean port).
+/// `/api/git/branches` parity, lean parity).
 async fn git_branches(Query(query): Query<FsPathQuery>) -> Response {
     let query = FsPathQuery {
         path: query.path.or_else(|| Some(".".to_string())),
@@ -4366,7 +4366,7 @@ struct GitBranchBody {
 }
 
 /// `POST /api/git/branch/create` — create a branch (hermes
-/// `/api/git/branch` parity, lean port).
+/// `/api/git/branch` parity, lean parity).
 async fn git_branch_create(Json(body): Json<GitBranchBody>) -> Response {
     let target = match git_action_target(&GitActionBody {
         path: body.path.clone(),
@@ -5659,7 +5659,7 @@ struct McpCatalogInstallBody {
 
 /// `POST /api/mcp/catalog/install` — append the catalog entry to
 /// `[[mcp.servers]]`, storing any supplied env vars with it (hermes
-/// `POST /api/mcp/catalog/install` parity, lean port).
+/// `POST /api/mcp/catalog/install` parity, lean parity).
 async fn mcp_catalog_install(Json(body): Json<McpCatalogInstallBody>) -> Response {
     let name = body.name.trim().to_string();
     let Some(entry) = crate::mcp_catalog::get_entry(&name) else {
@@ -14741,7 +14741,7 @@ impl ResponsesSseState {
 }
 
 /// Stream a `/v1/responses` run as OpenAI Responses SSE events (hermes
-/// `_write_responses_sse_stream` port): `response.created`,
+/// `_write_responses_sse_stream` parity): `response.created`,
 /// `response.output_text.delta`, `response.output_item.added/done` for
 /// `function_call` + `function_call_output` items, and a terminal
 /// `response.completed` / `response.failed` carrying the full envelope.

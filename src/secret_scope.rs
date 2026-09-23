@@ -1,5 +1,5 @@
 //! Profile-scoped credential resolution for multi-profile gateway
-//! multiplexing (hermes `agent/secret_scope.py` port).
+//! multiplexing (hermes `agent/secret_scope.py` parity).
 //!
 //! The multiplexing gateway serves many profiles from one process. Each
 //! profile has its own `.env` with its own provider keys and platform

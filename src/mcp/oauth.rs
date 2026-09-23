@@ -1,4 +1,4 @@
-//! MCP OAuth 2.1 client — port of hermes' `tools/mcp_oauth.py` +
+//! MCP OAuth 2.1 client — aligned with hermes' `tools/mcp_oauth.py` +
 //! `tools/mcp_oauth_manager.py` core (the MCP SDK's `OAuthClientProvider`
 //! is replaced by a hand-rolled implementation: metadata discovery,
 //! dynamic client registration, PKCE authorization-code flow with a
@@ -386,7 +386,7 @@ pub fn build_authorization_url(
     format!("{}?{}", authorization_endpoint, query)
 }
 
-/// Bind the loopback callback listener (redirect_port = 0 → free port).
+/// Bind the loopback callback listener (redirect_port = 0 → free parity).
 pub fn bind_callback_listener(port: u16) -> Result<(tokio::net::TcpListener, u16)> {
     let bind = |p: u16| std::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], p)));
     let listener = if port == 0 {

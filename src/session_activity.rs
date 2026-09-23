@@ -1,4 +1,4 @@
-//! Shared session activity observation contract — port of hermes
+//! Shared session activity observation contract — aligned with hermes
 //! `agent/session_activity.py` (#72016 / #72039).
 //!
 //! Observation-only: timestamp + bounded description + provenance.

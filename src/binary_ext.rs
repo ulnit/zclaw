@@ -1,4 +1,4 @@
-//! Binary file extensions — port of hermes' `tools/binary_extensions.py`.
+//! Binary file extensions — aligned with hermes' `tools/binary_extensions.py`.
 //!
 //! Files that can't be meaningfully compared as text and are often large;
 //! text-based operations (read_file) skip them by extension with no I/O.

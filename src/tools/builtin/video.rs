@@ -1,4 +1,4 @@
-//! Video generation tools — port of hermes `tools/video_generation_tool.py`
+//! Video generation tools — aligned with hermes `tools/video_generation_tool.py`
 //! + `tools/flux3_video_tool.py` (v2026.8.3).
 //!
 //! Two surfaces:

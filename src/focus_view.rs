@@ -1,4 +1,4 @@
-//! Focus view — port of hermes `hermes_cli/focus_view.py`.
+//! Focus view — aligned with hermes `hermes_cli/focus_view.py`.
 //!
 //! `/focus` answers one question the `/verbose` cycle cannot: *"just show
 //! me my prompt and the answer — and tell me what you hid."*

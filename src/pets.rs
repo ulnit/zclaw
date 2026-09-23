@@ -1,4 +1,4 @@
-//! Petdex pet engine — port of hermes `agent/pet/` + `hermes_cli/pets.py`
+//! Petdex pet engine — aligned with hermes `agent/pet/` + `hermes_cli/pets.py`
 //! (v2026.8.3).
 //!
 //! Petdex (https://github.com/crafter-station/petdex) is a public gallery of
@@ -13,7 +13,7 @@
 //!
 //! Known diffs vs hermes:
 //! - The Ink-TUI `/pet` REPL command, the desktop overlay, and the LLM pet
-//!   "hatch" pipeline (`agent/pet/generate/`) are not ported yet.
+//!   "hatch" pipeline (`agent/pet/generate/`) are not implemented yet.
 //! - Terminal rendering supports kitty / iTerm2 / sixel / Unicode half-blocks
 //!   exactly like hermes; the kitty *Unicode placeholder* payload builder for
 //!   grid-host apps is included for future surfaces.

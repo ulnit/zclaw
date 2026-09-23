@@ -1,4 +1,4 @@
-//! Mattermost platform adapter — port of hermes
+//! Mattermost platform adapter — aligned with hermes
 //! `plugins/platforms/mattermost` @ v2026.8.3 (adapter.py).
 //!
 //! Connects to a self-hosted (or cloud) Mattermost instance via the REST
@@ -17,7 +17,7 @@
 //! via the multipart files endpoint and attach `file_ids` to the post.
 //!
 //! Known differences: message editing (`edit_message`) and the
-//! interactive `hermes gateway setup` wizard are not ported; typing
+//! interactive `hermes gateway setup` wizard are not implemented; typing
 //! indicators use the REST `users/<id>/typing` endpoint on a best-effort
 //! basis.
 

@@ -1,4 +1,4 @@
-//! Web tools — port of hermes' web_search/web_extract + web provider registry
+//! Web tools — aligned with hermes' web_search/web_extract + web provider registry
 //!
 //! `web_search` dispatches to a pluggable backend:
 //!   - tavily   (TAVILY_API_KEY)
