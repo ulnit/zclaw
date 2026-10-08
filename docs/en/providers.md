@@ -539,7 +539,15 @@ evidence):
   request that follows it, and accepted ours;
 - `not-required` — it served a request with no client certificate;
 - `rejected` — the handshake failed while presenting our identity (trust, chain,
-  expiry), printing the TLS error.
+  expiry), printing the TLS error;
+- `identity-missing` — no certificate is configured locally, so only the
+  anonymous arm could run.
+
+The report also states whether the target is inside `ULNCLAW_MTLS_HOSTS`
+(`host_in_scope` in `--json`, a `scope` line in text). The probe presents the
+identity on purpose — that is its job — while the running agent would not, so an
+out-of-scope endpoint is labelled `OUT OF SCOPE` instead of looking exactly like
+the real gateway.
 
 `ulnclaw mtls keygen` (self-signed, for staging) and `ulnclaw mtls csr` (key + CSR
 for the gateway's CA to sign) bootstrap the certificate without hand-written openssl

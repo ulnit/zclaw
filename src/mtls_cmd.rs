@@ -227,12 +227,26 @@ fn validate_sans(sans: &[String]) -> Result<Vec<String>, String> {
             if entry.is_empty() {
                 return Err("--san 不能为空字符串".to_string());
             }
-            if !(entry.starts_with("DNS:") || entry.starts_with("IP:") || entry.starts_with("email:")) {
-                return Err(format!(
-                    "--san 必须以 DNS:/IP:/email: 开头（收到 {entry:?}）"
-                ));
+            let (kind, value) = match entry.split_once(':') {
+                Some((k, v)) => (k.trim().to_ascii_lowercase(), v.trim()),
+                None => (String::new(), ""),
+            };
+            // openssl wants the canonical spelling, so normalise whatever
+            // casing the operator typed (DNS: / dns: / Dns: all mean the same).
+            let canonical = match kind.as_str() {
+                "dns" => "DNS",
+                "ip" => "IP",
+                "email" => "email",
+                _ => {
+                    return Err(format!(
+                        "--san 必须以 DNS:/IP:/email: 开头（大小写不敏感，收到 {entry:?}）"
+                    ))
+                }
+            };
+            if value.is_empty() {
+                return Err(format!("--san {entry:?} 缺少值（例如 DNS:agent-01.internal）"));
             }
-            Ok(entry.to_string())
+            Ok(format!("{canonical}:{value}"))
         })
         .collect()
 }
@@ -318,6 +332,30 @@ mod tests {
         );
         assert!(validate_sans(&["gw.example.com".into()]).is_err());
         assert!(validate_sans(&["  ".into()]).is_err());
+    }
+
+    #[test]
+    fn san_prefix_is_case_insensitive() {
+        assert_eq!(
+            validate_sans(&[
+                "dns:gw.example.com".into(),
+                "Dns:other.example.com".into(),
+                "ip:10.0.0.7".into(),
+                "EMAIL:ops@example.com".into(),
+                " Email:OPS2@example.com ".into(),
+            ])
+            .unwrap(),
+            vec![
+                "DNS:gw.example.com".to_string(),
+                "DNS:other.example.com".to_string(),
+                "IP:10.0.0.7".to_string(),
+                "email:ops@example.com".to_string(),
+                "email:OPS2@example.com".to_string(),
+            ],
+            "lowercase/mixed-case prefixes must be normalised to openssl spelling"
+        );
+        assert!(validate_sans(&["dns:".into()]).is_err(), "missing value");
+        assert!(validate_sans(&["url:https://x".into()]).is_err());
     }
 
     #[test]

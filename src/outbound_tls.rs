@@ -817,6 +817,11 @@ pub struct ProbeReport {
     pub with_identity: Option<HandshakeOutcome>,
     pub without_identity: HandshakeOutcome,
     pub identity_fingerprint: Option<String>,
+    /// Whether ULNCLAW_MTLS_HOSTS actually covers this host. The probe presents
+    /// the identity deliberately (that is its job), so without this an
+    /// out-of-scope endpoint would be indistinguishable from one the agent
+    /// really talks to with mTLS. `None` == no identity configured at all.
+    pub host_in_scope: Option<bool>,
     /// Why the verdict came out the way it did (evidence, not boilerplate).
     pub reason: String,
 }
@@ -836,6 +841,7 @@ impl ProbeReport {
             "explanation": self.verdict.explanation(),
             "reason": self.reason,
             "identity_fingerprint": self.identity_fingerprint,
+            "host_in_scope": self.host_in_scope,
             "with_identity": self.with_identity.as_ref().map(|o| o.json()),
             "without_identity": self.without_identity.json(),
         })
@@ -873,12 +879,36 @@ impl ProbeReport {
                 self.without_identity.request.detail()
             ));
         }
+        out.push_str(&format!("  scope           : {}\n", self.scope_note()));
         out.push_str(&format!("  verdict         : {}\n", self.verdict.label()));
         out.push_str(&format!("  meaning         : {}\n", self.verdict.explanation()));
         out.push_str(&format!("  reason          : {}\n", self.reason));
         out
     }
 }
+
+impl ProbeReport {
+    /// One line explaining whether ULNCLAW_MTLS_HOSTS actually covers this host.
+    ///
+    /// The probe presents the identity on purpose (that is its whole job) while
+    /// the running agent would not, so an out-of-scope endpoint must be labelled:
+    /// otherwise it reads exactly like the real gateway.
+    pub fn scope_note(&self) -> String {
+        match self.host_in_scope {
+            Some(true) => "host is in ULNCLAW_MTLS_HOSTS (the agent presents this identity here)"
+                .to_string(),
+            Some(false) => format!(
+                "OUT OF SCOPE — ULNCLAW_MTLS_HOSTS does not cover \"{}\", so the running agent would \
+NOT present this identity; the probe presents it on purpose. {IN_SCOPE_HINT}",
+                self.host
+            ),
+            None => "(no identity configured)".to_string(),
+        }
+    }
+}
+
+/// Short pointer used when a probe target is outside the configured scope.
+const IN_SCOPE_HINT: &str = "set ULNCLAW_MTLS_HOSTS to include it if that is intended";
 
 /// Probe an HTTPS endpoint and report whether it enforces client certificates.
 ///
@@ -931,6 +961,7 @@ pub async fn probe_with(
 
     let verdict = classify(with_identity.as_ref(), &without_identity);
     let reason = verdict_reason(&verdict, with_identity.as_ref(), &without_identity);
+    let host_in_scope = policy.map(|p| p.applies_to(&host));
     Ok(ProbeReport {
         url: url.to_string(),
         host,
@@ -939,6 +970,7 @@ pub async fn probe_with(
         with_identity,
         without_identity,
         identity_fingerprint,
+        host_in_scope,
         reason,
     })
 }

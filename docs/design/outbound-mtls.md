@@ -133,7 +133,14 @@ ulnclaw mtls csr    --cn NAME [--san DNS[,DNS…]] [--out DIR] [--force]
 it never prints key material. Invalid config exits non-zero with the exact
 remediation text.
 
-`probe` runs the handshake **twice** against the same endpoint:
+`--san` accepts `DNS:` / `dns:` equally (the prefix is normalised to the
+openssl spelling), so following the `--help` example cannot fail.
+
+`probe` runs the handshake **twice** against the same endpoint. It always prints
+the resolved **scope** for the target (`host is in ULNCLAW_MTLS_HOSTS` /
+`OUT OF SCOPE`): the probe presents the identity on purpose, the running agent
+would not, and without that line an out-of-scope endpoint is indistinguishable
+from the real gateway (same verdict, same wording).
 
 | with identity | without identity | verdict |
 | --- | --- | --- |

@@ -522,15 +522,20 @@ Ollama、llama.cpp、自定义端点）、`src/provider/anthropic.rs`（Anthropi
 `outbound_tls::apply_env(builder, host)?` 接入；`ulnclaw mtls status` 会列出本构建真正生效的清单。
 裸 `rustls` 路径用 `OutboundTls::rustls_config()` 取得相同的身份/CA/最低版本。
 
-`ulnclaw mtls probe <url>` 会做**两次**握手（带身份 / 不带身份），结论只有三种：
+`ulnclaw mtls probe <url>` 会做**两次**握手（带身份 / 不带身份），结论有四种：
 
 - `enforced`——服务端拒绝了匿名的**握手**或握手之后的**请求**，同时接受了我们的证书；
 - `not-required`——服务端在没有客户端证书的情况下正常响应了请求；
-- `rejected`——带我们的身份握手失败（信任链、证书过期等），并打印 TLS 错误。
+- `rejected`——带我们的身份握手失败（信任链、证书过期等），并打印 TLS 错误；
+- `identity-missing`——本机未配置证书，只跑得动匿名一侧。
 
 匿名一侧会**主动发一个 `GET /`**：TLS 1.3 的服务端可能先完成握手、之后再校验客户端证书，只看握手会把
 「要求 mTLS 的网关」误判成开放的。请求被拒（连接被关闭，或返回 400/403/495/496/497）即判 `enforced`；
 能正常响应则判 `not-required`。每个判定都带 `reason` 字段写明原始证据。
+
+报告还会写明目标是否落在 `ULNCLAW_MTLS_HOSTS` 之内（`--json` 里的 `host_in_scope`，文本输出里的
+`scope` 行）。探测**有意**出示身份（这就是它的用途），而真正运行时不会——所以不在作用域内的端点会被
+标成 `OUT OF SCOPE`，而不是和真实网关长得一模一样。
 
 `ulnclaw mtls keygen`（自签，用于测试环境）与 `ulnclaw mtls csr`（生成私钥 + CSR 交给网关 CA
 签发）让证书申请无需手写 openssl 命令。完整设计见

@@ -22,8 +22,10 @@
   `probe <url>` contacts the endpoint with and without the identity (the
   anonymous arm also sends one `GET /`, because a TLS 1.3 server may complete
   the handshake and only verify the certificate afterwards) and reports
-  `enforced` / `not-required` / `rejected` with a `reason` — evidence, not an
-  assumption;
+  `enforced` / `not-required` / `rejected` / `identity-missing` with a `reason` —
+  evidence, not an assumption — and states whether the target is inside
+  `ULNCLAW_MTLS_HOSTS` (`host_in_scope`), since the probe presents the identity
+  on purpose while the running agent would not;
   `keygen`/`csr` bootstrap certificates via the system openssl.
 - **Wired:** `src/provider/openai.rs` (OpenAI-compatible chat), `src/provider/anthropic.rs`,
   `src/stt.rs`, `src/tts.rs`; `outbound_tls::apply_env` / `client_for` for other
@@ -36,6 +38,22 @@
   provider guides (en/zh), parity matrix note (this is a deliberate ulnclaw
   extension — the hermes parity baseline has no outbound client certificates),
   README feature row.
+
+### Fixes found by the end-to-end run
+
+- `--san` is now case-insensitive (`dns:` == `DNS:`), normalised to the openssl
+  spelling before it reaches `openssl req`. The `--help` text and the design note
+  both showed lowercase, so the documented example used to fail validation.
+- Scope matching (`ULNCLAW_MTLS_HOSTS=*.example.com`) requires a label boundary:
+  `evilinternal.example.com` is no longer matched by `*.example.com`, and the
+  identity is therefore never presented to it (fail-closed).
+- A rustls `CryptoProvider` is installed explicitly before building client/server
+  configs (process-wide default plus the outbound-TLS entry point), so mTLS works
+  in binaries that never initialise a provider themselves.
+- The mTLS probe now distinguishes "handshake completed but the request was
+  refused" (TLS 1.3 post-handshake certificate check, e.g. openssl's
+  `CertificateRequired` alert) from "endpoint served us anonymously", which is
+  the difference between `enforced` and `not-required`.
 
 
 ## v0.2.0 — 2026-08-10

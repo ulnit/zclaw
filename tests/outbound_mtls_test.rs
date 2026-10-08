@@ -207,6 +207,11 @@ async fn probe_reports_enforced_against_mtls_server() {
     );
     assert!(report.ok());
     assert!(report.with_identity.as_ref().expect("identity arm").ok);
+    assert_eq!(
+        report.host_in_scope,
+        Some(true),
+        "127.0.0.1 is inside ULNCLAW_MTLS_HOSTS here, so the agent itself would use the identity"
+    );
     assert!(
         matches!(
             report.without_identity.request,
@@ -243,4 +248,38 @@ async fn probe_refuses_plain_http() {
         .await
         .expect_err("http must be refused");
     assert!(err.contains("https"), "{err}");
+}
+
+/// The probe deliberately presents the identity even when the target is outside
+/// ULNCLAW_MTLS_HOSTS, so it must label that case: otherwise an endpoint the
+/// agent would never send its certificate to looks identical to the real
+/// gateway (same verdict, same wording).
+#[tokio::test]
+async fn probe_labels_targets_outside_the_configured_scope() {
+    let (port, server) = spawn_server(true).await;
+    let url = format!("https://127.0.0.1:{port}/");
+    let policy = policy("gw.example.com");
+    assert!(
+        !policy.applies_to("127.0.0.1"),
+        "precondition: the test scope must not cover the loopback target"
+    );
+
+    let report = outbound_tls::probe_with(&url, Duration::from_secs(10), Some(&policy))
+        .await
+        .expect("probe runs");
+    assert_eq!(report.host_in_scope, Some(false));
+    assert!(
+        report.to_text().contains("OUT OF SCOPE"),
+        "text report must warn about the scope:\n{}",
+        report.to_text()
+    );
+    assert!(
+        report
+            .to_json()
+            .to_string()
+            .contains("\"host_in_scope\":false"),
+        "json report must carry host_in_scope=false: {}",
+        report.to_json()
+    );
+    server.abort();
 }
