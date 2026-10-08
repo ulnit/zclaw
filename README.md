@@ -32,7 +32,7 @@ mapping, including the HTTP route parity appendix.
 <tr><td><b>🤝 Delegates &amp; parallelizes</b></td><td>Background subagent delegation with a persistent async registry, kanban task engine with swarm mode, <code>execute_code</code> pipelines, Mixture-of-Agents fan-out (<code>moa</code>).</td></tr>
 <tr><td><b>🌐 Browser &amp; computer use</b></td><td>12 <code>browser_*</code> tools over CDP — managed headless Chrome/Chromium, Camofox anti-detect, cloud sessions (Browserbase / Browser Use / Firecrawl) — plus <code>computer_use</code> via the cua-driver daemon, approval-gated like hermes.</td></tr>
 <tr><td><b>🔌 Extensible</b></td><td>MCP client (stdio + Streamable HTTP/SSE, OAuth 2.1 + PKCE, lazy servers), plugins + shell hooks firing all 13 hermes hook events, ACP adapter, OpenAI-compatible HTTP gateway, MCP channel bridge.</td></tr>
-<tr><td><b>🛡️ Secure by default</b></td><td>Approval system with fail-closed gateway approvals, secrets vaults (Bitwarden SM / 1Password / command), SSRF guards, secret redaction, sandbox credential scrub, egress firewall for Docker sandboxes, transparent checkpoints.</td></tr>
+<tr><td><b>🛡️ Secure by default</b></td><td>Approval system with fail-closed gateway approvals, secrets vaults (Bitwarden SM / 1Password / command), SSRF guards, secret redaction, sandbox credential scrub, egress firewall for Docker sandboxes, outbound mTLS for mTLS-fronted gateways (<code>ulnclaw mtls</code>), transparent checkpoints.</td></tr>
 <tr><td><b>🗜️ Context management</b></td><td>Budget-triggered middle-turn compression, three-layer tool-result persistence, <code>/context</code> window breakdown.</td></tr>
 <tr><td><b>🖥️ Desktop GUI</b></td><td><b>ulnclaw desktop</b> — the Electron desktop client: 16 views, command palette, xterm.js terminal panes, live turn streaming over WebSocket/SSE, silent whole-shell auto-update.</td></tr>
 <tr><td><b>📦 Runs anywhere</b></td><td>Single static musl binary; terminal backends: local, Docker, SSH.</td></tr>
@@ -278,7 +278,7 @@ async fn main() -> Result<()> {
 | [Integration Guide](docs/en/integration.md) | Gateway, embedding, messaging platforms |
 | [API Reference](docs/en/api-reference.md) | HTTP gateway endpoints |
 | [Development Guide](docs/en/development.md) | Dev setup, testing |
-| Design notes | [Multiplexing Gateway](docs/design/multiplexing-gateway.md) · [Browser CDP Client](docs/design/browser-cdp.md) · [Desktop Electron](docs/design/desktop-electron.md) |
+| Design notes | [Multiplexing Gateway](docs/design/multiplexing-gateway.md) · [Outbound mTLS](docs/design/outbound-mtls.md) · [Browser CDP Client](docs/design/browser-cdp.md) · [Desktop Electron](docs/design/desktop-electron.md) |
 | [Desktop App](desktop-electron/README.md) | The Electron shell (`ulnclaw desktop`) |
 
 ## Migrating from hermes-agent

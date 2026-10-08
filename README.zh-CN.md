@@ -30,7 +30,7 @@ Anthropic、Dashscope 等），`ulnclaw model` 一键切换，无需改代码。
 <tr><td><b>🤝 委派与并行</b></td><td>后台子代理委派（持久化异步注册表）、支持 swarm 模式的 kanban 任务引擎、<code>execute_code</code> 流水线、Mixture-of-Agents 扇出（<code>moa</code>）。</td></tr>
 <tr><td><b>🌐 浏览器与电脑操作</b></td><td>12 个经 CDP 的 <code>browser_*</code> 工具 —— 托管无头 Chrome/Chromium、Camofox 反检测、云会话（Browserbase / Browser Use / Firecrawl）—— 另有经 cua-driver 守护进程的 <code>computer_use</code>，与 hermes 相同的审批门控。</td></tr>
 <tr><td><b>🔌 可扩展</b></td><td>MCP 客户端（stdio + Streamable HTTP/SSE、OAuth 2.1 + PKCE、懒加载）、插件 + shell 钩子（触发 hermes 全部 13 个钩子事件）、ACP 适配器、OpenAI 兼容 HTTP 网关、MCP 频道桥。</td></tr>
-<tr><td><b>🛡️ 默认安全</b></td><td>审批系统（网关审批失败关闭）、Secrets 保险库（Bitwarden SM / 1Password / command）、SSRF 防护、密钥脱敏、沙箱凭据清洗、Docker 沙箱出站防火墙、透明 checkpoint。</td></tr>
+<tr><td><b>🛡️ 默认安全</b></td><td>审批系统（网关审批失败关闭）、Secrets 保险库（Bitwarden SM / 1Password / command）、SSRF 防护、密钥脱敏、沙箱凭据清洗、Docker 沙箱出站防火墙、面向 mTLS 网关的出站客户端证书（<code>ulnclaw mtls</code>）、透明 checkpoint。</td></tr>
 <tr><td><b>🗜️ 上下文管理</b></td><td>预算触发的回合中压缩、三层工具结果持久化、<code>/context</code> 窗口构成视图。</td></tr>
 <tr><td><b>🖥️ 桌面 GUI</b></td><td><b>ulnclaw desktop</b> —— hermes Electron 桌面端的对等实现：十六个视图、命令面板、xterm.js 终端面板、经 WebSocket/SSE 的实时回合流式、整壳静默自动更新。</td></tr>
 <tr><td><b>📦 随处运行</b></td><td>单一静态 musl 二进制；终端后端：local、Docker、SSH。</td></tr>
@@ -268,7 +268,7 @@ async fn main() -> Result<()> {
 | [集成指南](docs/zh/integration.md) | 网关、嵌入、消息平台 |
 | [API 参考](docs/zh/api-reference.md) | HTTP 网关端点 |
 | [开发指南](docs/zh/development.md) | 开发环境、测试 |
-| 设计文档 | [多路复用网关](docs/design/multiplexing-gateway.md) · [浏览器 CDP 客户端](docs/design/browser-cdp.md) · [桌面 Electron](docs/design/desktop-electron.md) |
+| 设计文档 | [多路复用网关](docs/design/multiplexing-gateway.md) · [出站 mTLS](docs/design/outbound-mtls.md) · [浏览器 CDP 客户端](docs/design/browser-cdp.md) · [桌面 Electron](docs/design/desktop-electron.md) |
 | [桌面应用](desktop-electron/README.md) | Electron 外壳（`ulnclaw desktop`） |
 
 ## 从 hermes-agent 迁移

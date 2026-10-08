@@ -737,6 +737,23 @@ hermes-agent v2026.8.3 对标兼容 —— 原生性能，单一静态二进制�
 - CA 主题品牌化
 - 仅 Docker 作用域强制（hermes v2026.8.3）
 
+#### 出站 mTLS（`src/outbound_tls.rs`） — ➕ ulnclaw 扩展
+
+- `ulnclaw mtls status|probe|keygen|csr` + 统一的 HTTPS **出站**客户端证书策略
+  （`ULNCLAW_MTLS_CERT`/`_KEY`/`_CA`/`_TRUST_BUILTIN`/`_HOSTS`/`_MIN_TLS`，每次构建客户端时经
+  `config::get_env_value` 解析，因此 `<home>/.env` 同样生效）。对标说明：hermes v2026.8.3 并**无**
+  出站客户端证书能力——它的出站链路是 iron-proxy 方向（沙箱 → 守护进程），那是进沙箱方向，与此无关。
+  之所以补这一块：控制面（"C2"）要按调用方计量 agent 用量，只能用 mTLS 认证调用者，缺了它计量就一直关着。
+- 失败关闭：配置了身份却没有 `ULNCLAW_MTLS_HOSTS` 直接报错（客户端证书对任何索要它的主机出示都是凭据
+  泄露），缺私钥 / PEM 不可读 / `_MIN_TLS` 非法同样报错，出站路径把错误抛出来而不是降级成匿名 TLS。
+  主机作用域（精确、`*.后缀`、`*`）按每次客户端构建判定，无关端点永远看不到该身份。
+- 已接入：`src/provider/openai.rs`、`src/provider/anthropic.rs`、`src/stt.rs`、`src/tts.rs`
+  （`outbound_tls::apply_env` / `client_for`）；裸 rustls 路径用 `OutboundTls::rustls_config()`。
+  `ulnclaw mtls probe <url>` 做两次握手（带/不带身份），给出 `enforced` / `not-required` /
+  `rejected` 的确定结论——是证据而不是假设。
+- 身份属**部署级**（非按 profile），与 `src/secret_scope.rs` 中监听器设置的先例一致；多租户各自身份需
+  一租户一进程。设计文档：`docs/design/outbound-mtls.md`。
+
 <a id="computer-use-tools-computer-use"></a>
 
 #### Computer Use（`tools/computer_use/`） — ✅ 核心

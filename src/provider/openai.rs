@@ -238,8 +238,14 @@ impl OpenAiProviderBuilder {
             .ok_or_else(|| AgentError::config("model is required"))?;
         let name = self.name.unwrap_or_else(|| model.clone());
 
-        let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(120))
+        // Outbound mTLS: present this host's client certificate when the
+        // endpoint (C2 / metering gateway) is in scope. Misconfiguration
+        // fails closed — we must never silently send unauthenticated
+        // traffic to an endpoint that expects an identity.
+        let builder = Client::builder().timeout(std::time::Duration::from_secs(120));
+        let builder = crate::outbound_tls::apply_env(builder, &crate::outbound_tls::host_of(&endpoint))
+            .map_err(|e| AgentError::config(format!("outbound mTLS: {e}")))?;
+        let client = builder
             .build()
             .map_err(|e| AgentError::Internal(format!("Failed to build HTTP client: {}", e)))?;
 

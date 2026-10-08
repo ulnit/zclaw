@@ -132,8 +132,11 @@ async fn synthesize_openai(config: &TtsOpenaiConfig, text: &str) -> Result<TtsOu
     // `text_to_speech` tool: ULNCLAW_TTS_ENDPOINT (+ optional
     // ULNCLAW_TTS_KEY) wins before OPENAI_API_KEY.
     if let Some(endpoint) = crate::config::get_env_value("ULNCLAW_TTS_ENDPOINT") {
-        let mut request = reqwest::Client::new()
-            .post(&endpoint)
+        // Outbound mTLS policy applies to audio egress too (fail closed).
+        let mut request =
+            crate::outbound_tls::client_for(&crate::outbound_tls::host_of(&endpoint))
+                .map_err(|e| format!("outbound mTLS: {e}"))?
+                .post(&endpoint)
             .timeout(std::time::Duration::from_secs(60))
             .json(&serde_json::json!({ "text": text, "voice": config.voice }));
         if let Some(key) = crate::config::get_env_value("ULNCLAW_TTS_KEY") {
@@ -169,7 +172,9 @@ async fn synthesize_openai(config: &TtsOpenaiConfig, text: &str) -> Result<TtsOu
     let base = crate::config::get_env_value("OPENAI_BASE_URL")
         .unwrap_or_else(|| "https://api.openai.com/v1".into());
     let url = format!("{}/audio/speech", base.trim_end_matches('/'));
-    let response = reqwest::Client::new()
+    let client = crate::outbound_tls::client_for(&crate::outbound_tls::host_of(&url))
+        .map_err(|e| format!("outbound mTLS: {e}"))?;
+    let response = client
         .post(&url)
         .timeout(std::time::Duration::from_secs(60))
         .bearer_auth(&key)
@@ -214,7 +219,9 @@ async fn synthesize_elevenlabs(
         "https://api.elevenlabs.io/v1/text-to-speech/{}",
         urlencoding(&config.voice_id)
     );
-    let response = reqwest::Client::new()
+    let client = crate::outbound_tls::client_for(&crate::outbound_tls::host_of(&url))
+        .map_err(|e| format!("outbound mTLS: {e}"))?;
+    let response = client
         .post(&url)
         .timeout(std::time::Duration::from_secs(60))
         .header("xi-api-key", &key)
@@ -315,7 +322,9 @@ async fn open_openai_pcm_response(
     let base = crate::config::get_env_value("OPENAI_BASE_URL")
         .unwrap_or_else(|| "https://api.openai.com/v1".into());
     let url = format!("{}/audio/speech", base.trim_end_matches('/'));
-    let response = reqwest::Client::new()
+    let client = crate::outbound_tls::client_for(&crate::outbound_tls::host_of(&url))
+        .map_err(|e| format!("outbound mTLS: {e}"))?;
+    let response = client
         .post(&url)
         .timeout(std::time::Duration::from_secs(60))
         .bearer_auth(&key)
@@ -352,7 +361,9 @@ async fn open_elevenlabs_pcm_response(
         "https://api.elevenlabs.io/v1/text-to-speech/{}?output_format=pcm_24000",
         urlencoding(&config.voice_id)
     );
-    let response = reqwest::Client::new()
+    let client = crate::outbound_tls::client_for(&crate::outbound_tls::host_of(&url))
+        .map_err(|e| format!("outbound mTLS: {e}"))?;
+    let response = client
         .post(&url)
         .timeout(std::time::Duration::from_secs(60))
         .header("xi-api-key", &key)
@@ -607,7 +618,9 @@ pub enum VoicesError {
 /// metadata for the desktop voice picker (hermes
 /// `/api/audio/elevenlabs/voices` parity).
 pub async fn elevenlabs_voices(api_key: &str) -> Result<Vec<serde_json::Value>, VoicesError> {
-    let response = reqwest::Client::new()
+    let client = crate::outbound_tls::client_for(crate::outbound_tls::ELEVENLABS_HOST)
+        .map_err(|e| VoicesError::Other(format!("outbound mTLS: {e}")))?;
+    let response = client
         .get("https://api.elevenlabs.io/v1/voices")
         .timeout(std::time::Duration::from_secs(10))
         .header("Accept", "application/json")

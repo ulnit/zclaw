@@ -1,6 +1,6 @@
 [package]
 name = "ulnclaw"
-version = "0.6.3"
+version = "0.6.4"
 edition = "2021"
 authors = ["ZStep Team"]
 description = "An independently designed AI agent engine written in Rust (hermes-agent compatible)"
@@ -53,6 +53,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 image = { version = "0.25", default-features = false, features = ["png", "webp"] }
 rustls = "0.23"
 tokio-rustls = "0.26"
+rustls-pemfile = "2"
 webpki-roots = "0.26"
 mailparse = "0.16"
 charset = "0.1"

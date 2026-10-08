@@ -844,6 +844,28 @@ performance and a single static binary.
 - branded CA subject
 - Docker-scope enforcement only (hermes v2026.8.3)
 
+#### Outbound mTLS (`src/outbound_tls.rs`) — ➕ ulnclaw extension
+
+- `ulnclaw mtls status|probe|keygen|csr` + a shared client-certificate policy for
+  HTTPS **egress** (`ULNCLAW_MTLS_CERT`/`_KEY`/`_CA`/`_TRUST_BUILTIN`/`_HOSTS`/`_MIN_TLS`,
+  resolved on every client build via `config::get_env_value`, so `<home>/.env` works).
+  Hermes parity note: hermes v2026.8.3 has **no** outbound client-certificate support —
+  its egress story is the iron-proxy direction (sandbox → daemon), which is inbound to
+  the sandbox and unrelated. This block exists because a control plane ("C2") that meters
+  agent usage can only authenticate callers over mTLS, and without it metering stays off.
+- Fail-closed by design: identity configured without `ULNCLAW_MTLS_HOSTS` is an error
+  (presenting a client certificate to any host that asks is a credential leak), missing
+  key / unreadable PEM / unsupported `_MIN_TLS` are errors, and egress paths surface them
+  instead of downgrading to anonymous TLS. Host scope (exact, `*.suffix`, `*`) decides per
+  client build, so unrelated endpoints never see the identity.
+- Wired: `src/provider/openai.rs`, `src/provider/anthropic.rs`, `src/stt.rs`, `src/tts.rs`
+  (`outbound_tls::apply_env` / `client_for`); `OutboundTls::rustls_config()` for raw-rustls
+  paths. `ulnclaw mtls probe <url>` runs two handshakes (with/without the identity) and
+  reports `enforced` / `not-required` / `rejected` — evidence rather than an assumption.
+- Deployment-level (not per-profile) identity, matching the listener-settings precedent in
+  `src/secret_scope.rs`; per-tenant identities require one process per tenant. Design note:
+  `docs/design/outbound-mtls.md`.
+
 <a id="computer-use-tools-computer-use"></a>
 
 #### Computer Use (`tools/computer_use/`) — ✅ core

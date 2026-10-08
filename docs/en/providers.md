@@ -10,6 +10,7 @@ Complete guide to ulnclaw's provider abstraction and implementation.
 - [Supported Providers](#supported-providers)
 - [Implementing Custom Providers](#implementing-custom-providers)
 - [Provider Configuration](#provider-configuration)
+- [Outbound mTLS (Client Certificates)](#outbound-mtls-client-certificates)
 - [Error Handling](#error-handling)
 - [Best Practices](#best-practices)
 - [Auxiliary Model Routing](#auxiliary-model-routing)
@@ -486,6 +487,63 @@ async fn try_providers(configs: Vec<ProviderConfig>, message: &str) -> Result<St
     Err(last_error.unwrap())
 }
 ```
+
+## Outbound mTLS (Client Certificates)
+
+Deployments that route provider traffic through an mTLS-fronted gateway (a control
+plane that authorises, meters and audits every call) must present a client
+certificate on egress. ulnclaw resolves that policy from the environment whenever it
+builds a provider client:
+
+| Variable | Meaning |
+| --- | --- |
+| `ULNCLAW_MTLS_CERT` | PEM path of the client certificate chain (leaf first; may embed the key) |
+| `ULNCLAW_MTLS_KEY` | PEM path of the private key (PKCS#8 / PKCS#1 / SEC1) when it is not in the cert file |
+| `ULNCLAW_MTLS_CA` | Extra trust anchors — the gateway's private CA |
+| `ULNCLAW_MTLS_TRUST_BUILTIN` | `1` (default) keeps the public roots; `0` trusts **only** `ULNCLAW_MTLS_CA` |
+| `ULNCLAW_MTLS_HOSTS` | **Required when an identity is set**: comma-separated hosts, `*.example.com`, or `*` |
+| `ULNCLAW_MTLS_MIN_TLS` | Minimum TLS version: `1.2` (default) or `1.3` |
+
+```bash
+# ~/.ulnclaw/.env works too (same variables, read on client build)
+export ULNCLAW_MTLS_CERT=~/.ulnclaw/mtls/client.crt
+export ULNCLAW_MTLS_KEY=~/.ulnclaw/mtls/client.key
+export ULNCLAW_MTLS_CA=~/.ulnclaw/mtls/gateway-ca.crt
+export ULNCLAW_MTLS_HOSTS=gw.example.com
+
+ulnclaw mtls status   # resolved policy + leaf SHA-256 fingerprint (never key material)
+ulnclaw mtls probe https://gw.example.com/health
+```
+
+The scope is enforced per client build: a host outside `ULNCLAW_MTLS_HOSTS` gets a
+plain client, so a provider pointed at `api.openai.com` never presents the gateway
+identity. Misconfiguration (missing key, unreadable PEM, unresolvable scope) is a
+**hard error when the provider is built** — ulnclaw never silently downgrades to
+unauthenticated TLS.
+
+Wired paths: `src/provider/openai.rs` (OpenAI-compatible chat — OpenAI, DashScope,
+OpenRouter, Ollama, llama.cpp, custom endpoints), `src/provider/anthropic.rs`
+(Anthropic Messages API), `src/stt.rs` and `src/tts.rs` (audio in/out). Other egress
+surfaces (messaging platforms, webhooks, MCP) can adopt the same one-liner,
+`outbound_tls::apply_env(builder, host)?`; run `ulnclaw mtls status` to see the list
+this build actually honours. Raw-`rustls` paths use
+`OutboundTls::rustls_config()` for the same identity/CA/min-version.
+
+`ulnclaw mtls probe <url>` performs **two** handshakes — with and without the
+identity — and reports one of (the anonymous arm also sends a single `GET /`,
+because a TLS 1.3 server can complete the handshake and only check the client
+certificate afterwards; every verdict carries a `reason` field with the raw
+evidence):
+
+- `enforced` — the server refused the anonymous *handshake* **or** the anonymous
+  request that follows it, and accepted ours;
+- `not-required` — it served a request with no client certificate;
+- `rejected` — the handshake failed while presenting our identity (trust, chain,
+  expiry), printing the TLS error.
+
+`ulnclaw mtls keygen` (self-signed, for staging) and `ulnclaw mtls csr` (key + CSR
+for the gateway's CA to sign) bootstrap the certificate without hand-written openssl
+commands. Full design: [Outbound mTLS design note](../design/outbound-mtls.md).
 
 ## Error Handling
 

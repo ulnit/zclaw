@@ -298,6 +298,12 @@ enum Commands {
         #[command(subcommand)]
         action: EgressAction,
     },
+    /// Outbound mTLS identity: status/probe/csr/keygen — client-certificate
+    /// auth for egress through an mTLS-fronted gateway (C2 / metering plane)
+    Mtls {
+        #[command(subcommand)]
+        action: MtlsAction,
+    },
     /// Skill library curation — pin/archive/restore/prune/usage reports
     /// (hermes `hermes curator`)
     Curator {
@@ -2009,6 +2015,61 @@ enum PairingAction {
 }
 
 #[derive(Subcommand)]
+enum MtlsAction {
+    /// Show the resolved outbound-mTLS policy (never prints key material)
+    Status {
+        /// Emit machine-readable JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Two-handshake probe: does this endpoint enforce client certificates,
+    /// and does it accept ours?
+    Probe {
+        /// HTTPS endpoint to probe (e.g. https://gw.example.com/healthz)
+        url: String,
+        /// Per-handshake timeout in seconds (default 15)
+        #[arg(long)]
+        timeout: Option<u64>,
+        /// Emit machine-readable JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Generate a key + CSR to hand to the gateway CA (production onboarding)
+    Csr {
+        /// Certificate subject CN — must match what the gateway maps identity to
+        #[arg(long)]
+        cn: String,
+        /// subjectAltName entries, e.g. --san dns:agent-01.internal
+        #[arg(long = "san")]
+        san: Vec<String>,
+        /// Output directory (default: <ulnclaw home>/mtls)
+        #[arg(long)]
+        out: Option<std::path::PathBuf>,
+        /// Overwrite an existing key/CSR in the output directory
+        #[arg(long)]
+        force: bool,
+    },
+    /// Generate a self-signed identity (staging/local use only)
+    Keygen {
+        /// Certificate subject CN
+        #[arg(long)]
+        cn: String,
+        /// subjectAltName entries, e.g. --san dns:agent-01.internal
+        #[arg(long = "san")]
+        san: Vec<String>,
+        /// Validity in days (default 365)
+        #[arg(long)]
+        days: Option<u32>,
+        /// Output directory (default: <ulnclaw home>/mtls)
+        #[arg(long)]
+        out: Option<std::path::PathBuf>,
+        /// Overwrite an existing key/certificate in the output directory
+        #[arg(long)]
+        force: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum ProfilesAction {
     /// List configured profiles (default)
     List,
@@ -3098,6 +3159,7 @@ async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
         Commands::Sync { action } => sync_cmd(&config, action.unwrap_or(SyncAction::Status)).await,
         Commands::Proxy { action } => proxy_cmd(&config, action).await,
         Commands::Egress { action } => egress_cmd(action).await,
+        Commands::Mtls { action } => mtls_cmd(action).await,
         Commands::Cron { action } => cron_cmd(&config, action.unwrap_or(CronAction::List)).await,
         Commands::Gateway {
             host,
@@ -5838,6 +5900,43 @@ async fn egress_cmd(action: EgressAction) -> Result<(), String> {
     })
     .await
     .map_err(|e| format!("egress task join: {e}"))?
+}
+
+/// `ulnclaw mtls` — outbound mTLS identity and diagnostics. Thin wrapper over
+/// [`ulnclaw::mtls_cmd`]; the policy itself lives in `outbound_tls`.
+async fn mtls_cmd(action: MtlsAction) -> Result<(), String> {
+    match action {
+        MtlsAction::Status { json } => ulnclaw::mtls_cmd::handle_status(json),
+        MtlsAction::Probe {
+            url,
+            timeout,
+            json,
+        } => ulnclaw::mtls_cmd::handle_probe(url, timeout, json).await,
+        MtlsAction::Csr {
+            cn,
+            san,
+            out,
+            force,
+        } => ulnclaw::mtls_cmd::handle_csr(
+            cn,
+            san,
+            out.unwrap_or_else(ulnclaw::mtls_cmd::default_dir),
+            force,
+        ),
+        MtlsAction::Keygen {
+            cn,
+            san,
+            days,
+            out,
+            force,
+        } => ulnclaw::mtls_cmd::handle_keygen(
+            cn,
+            days,
+            san,
+            out.unwrap_or_else(ulnclaw::mtls_cmd::default_dir),
+            force,
+        ),
+    }
 }
 
 async fn sync_cmd(config: &UlncLawConfig, action: SyncAction) -> Result<(), String> {

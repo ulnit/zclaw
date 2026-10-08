@@ -406,10 +406,13 @@ async fn openai_compat_transcribe(
     if let Some(language) = language {
         form = form.text("language", language.to_string());
     }
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(300))
-        .build()
-        .unwrap_or_default();
+    let client = match crate::outbound_tls::builder_for(&crate::outbound_tls::host_of(url)) {
+        Ok(builder) => builder
+            .timeout(std::time::Duration::from_secs(300))
+            .build()
+            .unwrap_or_default(),
+        Err(e) => return SttOutcome::fail(name, format!("outbound mTLS: {e}")),
+    };
     let response = client
         .post(url)
         .bearer_auth(api_key)
@@ -445,7 +448,10 @@ async fn openai_compat_transcribe(
 /// model from the live catalog (hermes "first stt-tagged model" rule,
 /// approximated over the OpenAI-compatible model list).
 async fn deepinfra_default_model(base: &str) -> Option<String> {
-    let client = reqwest::Client::builder()
+    // Discovery only: a policy error degrades to "no default model"; the real
+    // transcription call fails closed.
+    let client = crate::outbound_tls::builder_for(&crate::outbound_tls::host_of(base))
+        .ok()?
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .ok()?;
@@ -609,10 +615,16 @@ pub async fn transcribe_audio(stt: &SttConfig, path: &Path) -> SttOutcome {
                     stt.elevenlabs.language_code.trim().to_string(),
                 );
             }
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(300))
-                .build()
-                .unwrap_or_default();
+            let client =
+                match crate::outbound_tls::builder_for(crate::outbound_tls::ELEVENLABS_HOST) {
+                    Ok(builder) => builder
+                        .timeout(std::time::Duration::from_secs(300))
+                        .build()
+                        .unwrap_or_default(),
+                    Err(e) => {
+                        return SttOutcome::fail("elevenlabs", format!("outbound mTLS: {e}"))
+                    }
+                };
             let response = client
                 .post("https://api.elevenlabs.io/v1/speech-to-text")
                 .header("xi-api-key", key)

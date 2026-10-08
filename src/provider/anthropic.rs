@@ -290,9 +290,14 @@ impl AnthropicProviderBuilder {
         let model = self
             .model
             .unwrap_or_else(|| "claude-sonnet-4-5".to_string());
+        // Outbound mTLS: same policy as the OpenAI path (see
+        // `outbound_tls`); fail closed on misconfiguration.
+        let builder = Client::builder().timeout(std::time::Duration::from_secs(600));
+        let builder =
+            crate::outbound_tls::apply_env(builder, &crate::outbound_tls::host_of(&endpoint))
+                .map_err(|e| AgentError::config(format!("outbound mTLS: {e}")))?;
         Ok(AnthropicProvider {
-            client: Client::builder()
-                .timeout(std::time::Duration::from_secs(600))
+            client: builder
                 .build()
                 .map_err(|e| AgentError::Provider(format!("HTTP client: {}", e)))?,
             endpoint,

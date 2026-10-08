@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.6.4 — 2026-10-05
+
+### Outbound mTLS (client certificates)
+
+- **New: `ULNCLAW_MTLS_*` egress identity.** Deployments behind an
+  mTLS-fronted gateway (a control plane that authorises/meters calls) can now
+  present a client certificate on outbound HTTPS instead of staying
+  unauthenticated. `ULNCLAW_MTLS_CERT` (+ `_KEY` when the key is not embedded),
+  `ULNCLAW_MTLS_CA` for the gateway's private CA, `ULNCLAW_MTLS_TRUST_BUILTIN=0`
+  for pin-only trust, `ULNCLAW_MTLS_HOSTS` to scope the identity, and
+  `ULNCLAW_MTLS_MIN_TLS` (1.2 default / 1.3). Resolved from the process
+  environment or `~/.ulnclaw/.env` on every client build.
+- **Fail-closed.** A certificate without a key, an unreadable PEM, an
+  unsupported min-TLS value, or an identity without `ULNCLAW_MTLS_HOSTS` is a
+  hard error on the egress path — never a silent downgrade to anonymous TLS.
+  (Presenting a client certificate to *any* host that asks for one is a
+  credential leak, so the scope must be written down explicitly, `*` included.)
+- **New CLI: `ulnclaw mtls status|probe|keygen|csr`.** `status` prints the
+  resolved policy plus the leaf SHA-256 fingerprint (never key material);
+  `probe <url>` contacts the endpoint with and without the identity (the
+  anonymous arm also sends one `GET /`, because a TLS 1.3 server may complete
+  the handshake and only verify the certificate afterwards) and reports
+  `enforced` / `not-required` / `rejected` with a `reason` — evidence, not an
+  assumption;
+  `keygen`/`csr` bootstrap certificates via the system openssl.
+- **Wired:** `src/provider/openai.rs` (OpenAI-compatible chat), `src/provider/anthropic.rs`,
+  `src/stt.rs`, `src/tts.rs`; `outbound_tls::apply_env` / `client_for` for other
+  reqwest call sites and `OutboundTls::rustls_config()` for raw-rustls paths.
+- **Tests:** unit tests for scope matching, fail-closed validation, PEM loading
+  and fingerprinting, plus `tests/outbound_mtls_test.rs` — a loopback rustls
+  server that *requires* a client certificate: identity accepted, anonymous
+  refused, probe verdicts checked in both directions.
+- **Docs:** `docs/design/outbound-mtls.md` (design + operations),
+  provider guides (en/zh), parity matrix note (this is a deliberate ulnclaw
+  extension — the hermes parity baseline has no outbound client certificates),
+  README feature row.
+
+
 ## v0.2.0 — 2026-08-10
 
 Hermes v2026.8.3 parity milestone.

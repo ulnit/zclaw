@@ -10,6 +10,7 @@ ulnclaw 提供商抽象和实现的完整指南。
 - [支持的提供商](#支持的提供商)
 - [实现自定义提供商](#实现自定义提供商)
 - [提供商配置](#提供商配置)
+- [出站 mTLS（客户端证书）](#出站-mtls客户端证书)
 - [错误处理](#错误处理)
 - [最佳实践](#最佳实践)
 - [辅助模型路由](#辅助模型路由)
@@ -485,6 +486,55 @@ async fn try_providers(configs: Vec<ProviderConfig>, message: &str) -> Result<St
     Err(last_error.unwrap())
 }
 ```
+
+## 出站 mTLS（客户端证书）
+
+当部署把 provider 流量导流到带 mTLS 的网关（控制面：负责鉴权、计量、审计）后面时，出站
+握手必须出示客户端证书。ulnclaw 在**构建 provider 客户端时**从环境解析该策略：
+
+| 变量 | 含义 |
+| --- | --- |
+| `ULNCLAW_MTLS_CERT` | 客户端证书链 PEM 路径（叶证书在前；可内嵌私钥） |
+| `ULNCLAW_MTLS_KEY` | 私钥 PEM 路径（PKCS#8 / PKCS#1 / SEC1），仅当证书文件未内嵌私钥时需要 |
+| `ULNCLAW_MTLS_CA` | 追加信任锚——网关私有 CA |
+| `ULNCLAW_MTLS_TRUST_BUILTIN` | `1`（默认）保留公共根证书；`0` 表示**只**信任 `ULNCLAW_MTLS_CA` |
+| `ULNCLAW_MTLS_HOSTS` | **设置身份时必填**：逗号分隔的主机、`*.example.com` 通配或 `*` |
+| `ULNCLAW_MTLS_MIN_TLS` | 最低 TLS 版本：`1.2`（默认）或 `1.3` |
+
+```bash
+# 也可写进 ~/.ulnclaw/.env（同名变量，构建客户端时读取）
+export ULNCLAW_MTLS_CERT=~/.ulnclaw/mtls/client.crt
+export ULNCLAW_MTLS_KEY=~/.ulnclaw/mtls/client.key
+export ULNCLAW_MTLS_CA=~/.ulnclaw/mtls/gateway-ca.crt
+export ULNCLAW_MTLS_HOSTS=gw.example.com
+
+ulnclaw mtls status   # 已解析策略 + 叶证书 SHA-256 指纹（绝不打印私钥内容）
+ulnclaw mtls probe https://gw.example.com/health
+```
+
+作用域按客户端构建逐个判定：不在 `ULNCLAW_MTLS_HOSTS` 里的主机只拿到普通客户端，因此指向
+`api.openai.com` 的 provider 永远不会出示网关身份。配置不完整（缺私钥、PEM 不可读、作用域缺失）
+在**构建 provider 时直接硬失败**——绝不静默降级为无身份 TLS。
+
+已接入的路径：`src/provider/openai.rs`（OpenAI 兼容对话——OpenAI、DashScope、OpenRouter、
+Ollama、llama.cpp、自定义端点）、`src/provider/anthropic.rs`（Anthropic Messages API）、
+`src/stt.rs` 与 `src/tts.rs`（语音输入/输出）。其余出站面（消息平台、webhook、MCP）可用同一行
+`outbound_tls::apply_env(builder, host)?` 接入；`ulnclaw mtls status` 会列出本构建真正生效的清单。
+裸 `rustls` 路径用 `OutboundTls::rustls_config()` 取得相同的身份/CA/最低版本。
+
+`ulnclaw mtls probe <url>` 会做**两次**握手（带身份 / 不带身份），结论只有三种：
+
+- `enforced`——服务端拒绝了匿名的**握手**或握手之后的**请求**，同时接受了我们的证书；
+- `not-required`——服务端在没有客户端证书的情况下正常响应了请求；
+- `rejected`——带我们的身份握手失败（信任链、证书过期等），并打印 TLS 错误。
+
+匿名一侧会**主动发一个 `GET /`**：TLS 1.3 的服务端可能先完成握手、之后再校验客户端证书，只看握手会把
+「要求 mTLS 的网关」误判成开放的。请求被拒（连接被关闭，或返回 400/403/495/496/497）即判 `enforced`；
+能正常响应则判 `not-required`。每个判定都带 `reason` 字段写明原始证据。
+
+`ulnclaw mtls keygen`（自签，用于测试环境）与 `ulnclaw mtls csr`（生成私钥 + CSR 交给网关 CA
+签发）让证书申请无需手写 openssl 命令。完整设计见
+[出站 mTLS 设计文档](../design/outbound-mtls.md)。
 
 ## 错误处理
 
