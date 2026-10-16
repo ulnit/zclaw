@@ -40,7 +40,7 @@ availability walk), else the managed local launch.
 |---|---|
 | `ws://...` / `wss://...` | used directly as the browser-level WS endpoint |
 | `http://host:port` | discovery via `/json/version` (browser WS URL) with `/json` fallback |
-| `auto` | the supervisor finds a Chromium-family binary and launches it headless with a debug port, then attaches |
+| `auto` | the supervisor finds a Chromium-family binary and launches it headless with a debug implementation, then attaches |
 
 Resolution chain (hermes `_get_cdp_override` + cloud-mode precedence):
 
@@ -104,7 +104,7 @@ and `/browser connect` find the same browsers.
 
 ## Local attach layer (`connect.rs`)
 
-Port of hermes `hermes_cli/browser_connect.py` — the REPL `/browser connect`
+parity with hermes `hermes_cli/browser_connect.py` — the REPL `/browser connect`
 default flow (`connect_local_default`):
 
 1. **candidate discovery** — the same browser groups as managed launch,
@@ -190,7 +190,7 @@ profiles, matching hermes' single-process semantics.
 
 ## Cloud browser providers (`cloud.rs`)
 
-Port of hermes `agent/browser_provider.py` + `agent/browser_registry.py`
+parity with hermes `agent/browser_provider.py` + `agent/browser_registry.py`
 and the built-in provider plugins (`plugins/browser/{browserbase,
 browser_use,firecrawl}`). Each backend implements the `CloudBrowserProvider`
 trait — `is_available` (cheap credential check, no network), `create_session`

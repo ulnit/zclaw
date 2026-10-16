@@ -1,5 +1,5 @@
 //! `/learn` — build the standards-guided prompt that turns whatever the
-//! user described into a reusable skill (port of hermes
+//! user described into a reusable skill (aligned with hermes
 //! `agent/learn_prompt.py`).
 //!
 //! `/learn` is open-ended: the user can point it at a directory of code,

@@ -1,5 +1,5 @@
 //! Tool result persistence — preserves large outputs instead of
-//! truncating them. Port of hermes `tools/tool_result_storage.py` +
+//! truncating them. Aligned with hermes `tools/tool_result_storage.py` +
 //! `tools/budget_config.py` (v2026.8.3).
 //!
 //! Defense against context-window overflow operates at three levels:

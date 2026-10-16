@@ -1,4 +1,4 @@
-//! Tool registry — port of hermes' tools/registry.py
+//! Tool registry — aligned with hermes' tools/registry.py
 //!
 //! Tools self-register with a JSON schema, a toolset, an async handler, an
 //! optional `check_fn` availability gate, and optional confirmation
@@ -28,7 +28,7 @@ pub struct ToolDefinition {
     pub parameters: serde_json::Value,
 }
 
-/// Availability check result — port of hermes `check_fn`.
+/// Availability check result — aligned with hermes `check_fn`.
 #[derive(Debug, Clone)]
 pub enum ToolAvailability {
     Available,

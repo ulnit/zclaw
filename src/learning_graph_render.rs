@@ -1,11 +1,11 @@
-//! Timeline renderer for the learning graph — port of hermes
+//! Timeline renderer for the learning graph — aligned with hermes
 //! `agent/learning_graph_render.py` (v2026.8.3).
 //!
 //! The desktop app paints a GPU radial constellation; a terminal can't, so
 //! this is a *rendition* of the same data as a timeline bar chart — date
 //! rows, proportional skill/memory bars colored by the day's dominant
 //! category, and a cumulative trajectory sparkline. The age gradient and
-//! complementary memory ink are ported from the desktop source, not
+//! complementary memory ink are implemented from the desktop source, not
 //! guessed.
 //!
 //! Grids are emitted as style runs — `(text, style, alpha, hex?)` — so
@@ -62,7 +62,7 @@ fn smoothstep(p: f64) -> f64 {
     p * p * (3.0 - 2.0 * p)
 }
 
-/// Port of geometry.ts `recencyInk` — smoothstep age → ink alpha.
+/// Aligned with geometry.ts `recencyInk` — smoothstep age → ink alpha.
 pub fn recency_ink(rec: f64) -> f64 {
     let t = clamp(rec, 0.0, 1.0);
     if t <= AGE_MID {
@@ -89,7 +89,7 @@ fn to_ts(value: &Value) -> Option<f64> {
     }
 }
 
-/// Port of time-axis.ts `computeRecency` (id → recency ratio, timed flag).
+/// Aligned with time-axis.ts `computeRecency` (id → recency ratio, timed flag).
 pub fn compute_recency(nodes: &[Value]) -> Recency {
     let known: Vec<f64> = nodes
         .iter()
@@ -164,7 +164,7 @@ fn node_id(node: &Value) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Color — ported from color.ts so memory ink + age fade match the desktop
+// Color — implemented from color.ts so memory ink + age fade match the desktop
 // ---------------------------------------------------------------------------
 
 pub fn hex_to_rgb(s: &str) -> (u8, u8, u8) {
@@ -258,7 +258,7 @@ fn complementary_ink(c: (u8, u8, u8)) -> (u8, u8, u8) {
     hsl_to_rgb(h + 165.0, s.max(0.5), clamp(light, 0.5, 0.7))
 }
 
-/// Port of color.ts `computePalette` (the bits a terminal needs).
+/// Aligned with color.ts `computePalette` (the bits a terminal needs).
 pub fn derive_palette(primary_hex: &str, dark: bool) -> std::collections::HashMap<String, String> {
     let primary = hex_to_rgb(primary_hex);
     let base = if dark { (255, 255, 255) } else { (0, 0, 0) };

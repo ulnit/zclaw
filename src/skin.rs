@@ -1,4 +1,4 @@
-//! Skin/theme engine — port of hermes `hermes_cli/skin_engine.py`
+//! Skin/theme engine — aligned with hermes `hermes_cli/skin_engine.py`
 //! (v2026.8.3), built-in skins + active-skin resolution.
 //!
 //! A skin is a named palette + branding bundle. All nine hermes built-in

@@ -7,12 +7,12 @@
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/Lang-中文-red?style=for-the-badge" alt="中文"></a>
 </p>
 
-**A high-performance AI agent engine written in Rust — a port of [hermes-agent v2026.8.3](https://github.com/NousResearch/hermes-agent/tree/v2026.8.3) by [Nous Research](https://nousresearch.com).**
+**A high-performance AI agent engine written in Rust — independently designed and implemented; its tool surface is compatible with [hermes-agent v2026.8.3](https://github.com/NousResearch/hermes-agent/tree/v2026.8.3).**
 
-ulnclaw re-implements the Hermes Agent engine in Rust: the same tool surface
-(50+ built-in tools), the same SQLite session / memory / skills / cron storage
-layout, the same toolset composition — with native performance and a single
-static musl binary. Use any model you want (OpenAI-compatible endpoints,
+ulnclaw implements its own agent engine from scratch in Rust: an equivalent tool
+surface (50+ built-in tools), a compatible SQLite session / memory / skills / cron
+storage layout, and a flexible toolset composition — with native performance and a
+single static musl binary. Use any model you want (OpenAI-compatible endpoints,
 Ollama, Anthropic, DashScope, …) and switch with `ulnclaw model` — no code
 changes. Run it on your laptop, a $5 VPS, or in Docker sandboxes — and talk to
 it from the terminal, the desktop app, or 26 messaging platforms.
@@ -32,9 +32,9 @@ mapping, including the HTTP route parity appendix.
 <tr><td><b>🤝 Delegates &amp; parallelizes</b></td><td>Background subagent delegation with a persistent async registry, kanban task engine with swarm mode, <code>execute_code</code> pipelines, Mixture-of-Agents fan-out (<code>moa</code>).</td></tr>
 <tr><td><b>🌐 Browser &amp; computer use</b></td><td>12 <code>browser_*</code> tools over CDP — managed headless Chrome/Chromium, Camofox anti-detect, cloud sessions (Browserbase / Browser Use / Firecrawl) — plus <code>computer_use</code> via the cua-driver daemon, approval-gated like hermes.</td></tr>
 <tr><td><b>🔌 Extensible</b></td><td>MCP client (stdio + Streamable HTTP/SSE, OAuth 2.1 + PKCE, lazy servers), plugins + shell hooks firing all 13 hermes hook events, ACP adapter, OpenAI-compatible HTTP gateway, MCP channel bridge.</td></tr>
-<tr><td><b>🛡️ Secure by default</b></td><td>Approval system with fail-closed gateway approvals, secrets vaults (Bitwarden SM / 1Password / command), SSRF guards, secret redaction, sandbox credential scrub, egress firewall for Docker sandboxes, transparent checkpoints.</td></tr>
+<tr><td><b>🛡️ Secure by default</b></td><td>Approval system with fail-closed gateway approvals, secrets vaults (Bitwarden SM / 1Password / command), SSRF guards, secret redaction, sandbox credential scrub, egress firewall for Docker sandboxes, outbound mTLS for mTLS-fronted gateways (<code>ulnclaw mtls</code>), transparent checkpoints.</td></tr>
 <tr><td><b>🗜️ Context management</b></td><td>Budget-triggered middle-turn compression, three-layer tool-result persistence, <code>/context</code> window breakdown.</td></tr>
-<tr><td><b>🖥️ Desktop GUI</b></td><td><b>ulnclaw desktop</b> — a faithful port of the hermes Electron desktop: 16 views, command palette, xterm.js terminal panes, live turn streaming over WebSocket/SSE, silent whole-shell auto-update.</td></tr>
+<tr><td><b>🖥️ Desktop GUI</b></td><td><b>ulnclaw desktop</b> — the Electron desktop client: 16 views, command palette, xterm.js terminal panes, live turn streaming over WebSocket/SSE, silent whole-shell auto-update.</td></tr>
 <tr><td><b>📦 Runs anywhere</b></td><td>Single static musl binary; terminal backends: local, Docker, SSH.</td></tr>
 </table>
 
@@ -117,8 +117,8 @@ ulnclaw dump                               # copy-pasteable setup summary for su
 ## Desktop App
 
 Prebuilt installers ship on the releases page for every `v*` tag (product name
-**ulnclaw desktop**), built from the Electron shell in `desktop-electron/` — a
-faithful port of the hermes desktop (v2026.8.3): React 19 renderer with sixteen
+**ulnclaw desktop**), built from the Electron shell in `desktop-electron/`:
+React 19 renderer with sixteen
 views (chat, sessions, jobs, usage, models, skills, kanban, projects, runs,
 webhooks, plugins, pairing, profiles, config, doctor, settings), command
 palette, xterm.js terminal panes, file tree with git review, and live turn
@@ -278,7 +278,7 @@ async fn main() -> Result<()> {
 | [Integration Guide](docs/en/integration.md) | Gateway, embedding, messaging platforms |
 | [API Reference](docs/en/api-reference.md) | HTTP gateway endpoints |
 | [Development Guide](docs/en/development.md) | Dev setup, testing |
-| Design notes | [Multiplexing Gateway](docs/design/multiplexing-gateway.md) · [Browser CDP Client](docs/design/browser-cdp.md) · [Desktop Electron](docs/design/desktop-electron.md) |
+| Design notes | [Multiplexing Gateway](docs/design/multiplexing-gateway.md) · [Outbound mTLS](docs/design/outbound-mtls.md) · [Browser CDP Client](docs/design/browser-cdp.md) · [Desktop Electron](docs/design/desktop-electron.md) |
 | [Desktop App](desktop-electron/README.md) | The Electron shell (`ulnclaw desktop`) |
 
 ## Migrating from hermes-agent
@@ -306,6 +306,8 @@ adding or changing hermes-equivalent behaviour.
 
 MIT OR Apache-2.0
 
-ulnclaw is a Rust port of [hermes-agent](https://github.com/NousResearch/hermes-agent)
-by [Nous Research](https://nousresearch.com). See that project for the
-original design and documentation.
+ulnclaw is an independent Rust implementation with its own architecture and design.
+
+The desktop shell under `desktop-electron/` additionally contains MIT-licensed code
+derived from [hermes-agent](https://github.com/NousResearch/hermes-agent) by
+[Nous Research](https://nousresearch.com) — attribution is retained in [NOTICE](NOTICE).

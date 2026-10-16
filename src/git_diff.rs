@@ -1,4 +1,4 @@
-//! Working-tree git diff collection — port of hermes' `tools/working_diff.py`.
+//! Working-tree git diff collection — aligned with hermes' `tools/working_diff.py`.
 //!
 //! Answers "what changed here?" with three modes:
 //! - `working` (default): unstaged changes plus untracked files — what
@@ -204,7 +204,7 @@ pub fn collect_working_diff(cwd: &Path, mode: DiffMode, paths: &[String]) -> Res
 }
 
 // ---------------------------------------------------------------------------
-// Git review actions — lean port of hermes' `/api/git/*` review router
+// Git review actions — lean aligned with hermes' `/api/git/*` review router
 // (status/stage/unstage/revert/commit/push), backing the desktop
 // file-tree Changes pane.
 // ---------------------------------------------------------------------------

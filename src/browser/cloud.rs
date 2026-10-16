@@ -1,4 +1,4 @@
-//! Cloud browser providers — port of hermes `agent/browser_provider.py` +
+//! Cloud browser providers — aligned with hermes `agent/browser_provider.py` +
 //! `agent/browser_registry.py` + `plugins/browser/{browserbase,browser_use,
 //! firecrawl}`.
 //!

@@ -1,4 +1,4 @@
-//! Resolve gateway `terminal.cwd` placeholder values — port of hermes
+//! Resolve gateway `terminal.cwd` placeholder values — aligned with hermes
 //! `gateway/cwd_placeholder.py`.
 //!
 //! When `terminal.cwd` is unset or a placeholder (`.`, `auto`, `cwd`),

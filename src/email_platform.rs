@@ -1,4 +1,4 @@
-//! Email platform adapter — port of hermes `plugins/platforms/email`
+//! Email platform adapter — aligned with hermes `plugins/platforms/email`
 //! @ v2026.8.3 (adapter.py).
 //!
 //! Users interact with the agent by email: IMAP polls the INBOX for new

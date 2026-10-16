@@ -1,4 +1,4 @@
-//! Secret redaction — port of hermes' `agent/redact.py` (core subset).
+//! Secret redaction — aligned with hermes' `agent/redact.py` (core subset).
 //!
 //! Regex-based masking of API keys, tokens, and credentials before they
 //! reach tool output returned to the model. Short tokens are fully
@@ -364,7 +364,7 @@ fn redact_query_string(query: &str) -> String {
 }
 
 /// Apply all redaction patterns to a block of text. Non-matching text
-/// passes through unchanged (port of hermes `redact_sensitive_text`).
+/// passes through unchanged (aligned with hermes `redact_sensitive_text`).
 pub fn redact_sensitive_text(text: &str, opts: RedactOpts) -> String {
     if text.is_empty() {
         return String::new();

@@ -1,4 +1,4 @@
-//! Streaming-TTS consumer — port of hermes `gateway/streaming_tts_consumer.py`.
+//! Streaming-TTS consumer — aligned with hermes `gateway/streaming_tts_consumer.py`.
 //!
 //! Bridges LLM text deltas to a voice-capable platform sink's streaming
 //! audio contract so playback begins while the model is still generating.

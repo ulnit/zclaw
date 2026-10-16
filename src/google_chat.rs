@@ -1,4 +1,4 @@
-//! Google Chat platform adapter — port of hermes
+//! Google Chat platform adapter — aligned with hermes
 //! `plugins/platforms/google_chat` @ v2026.8.3 (adapter.py, HTTP
 //! callback transport).
 //!
@@ -9,7 +9,7 @@
 //! configured audience + the bot's service-account email(s) — hermes'
 //! local-cert verification path is replaced by the online tokeninfo
 //! probe (documented divergence; the Pub/Sub streaming-pull inbound
-//! mode needs gRPC and is not ported).
+//! mode needs gRPC and is not implemented).
 //!
 //! Envelope handling mirrors hermes: only `MESSAGE` events dispatch,
 //! `BOT` senders are skipped, message names dedup (300 s window),
@@ -24,7 +24,7 @@
 //! per-user OAuth `media.upload` flow (hermes `oauth.py`): users grant
 //! the `chat.messages.create` scope once via `/setup-files`, and the
 //! bot uploads + posts attachments AS the user. Typing-card patching
-//! is not ported.
+//! is not implemented.
 
 use crate::messaging::{Dispatcher, MessageEvent};
 use base64::Engine;

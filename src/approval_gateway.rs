@@ -1,4 +1,4 @@
-//! Blocking exec approvals for messaging sessions — port of hermes
+//! Blocking exec approvals for messaging sessions — aligned with hermes
 //! `tools/approval.py` gateway registry (`has_blocking_approval` /
 //! `resolve_gateway_approval`).
 //!

@@ -1,4 +1,4 @@
-//! Local-environment toolchain probe — port of hermes' `tools/env_probe.py`.
+//! Local-environment toolchain probe — aligned with hermes' `tools/env_probe.py`.
 //!
 //! When the terminal backend is local (the agent's tools run on the same
 //! machine as ulnclaw itself), a single deterministic line about the Python

@@ -1,5 +1,5 @@
 //! `ulnclaw dump` + rich `ulnclaw version` (hermes `hermes_cli/dump.py`
-//! and `hermes_cli/build_info.py` port).
+//! and `hermes_cli/build_info.py` parity).
 //!
 //! `dump` outputs a compact, plain-text summary of the user's setup that can
 //! be copy-pasted into a bug report or chat for support context. No ANSI
@@ -21,7 +21,7 @@ const BUILD_SHA_FILE: &str = ".ulnclaw_build_sha";
 
 /// Return the baked-in build SHA truncated to `short` chars, or `None`.
 ///
-/// Port of `build_info.get_build_sha`: returns `None` when the file is
+/// Aligned with `build_info.get_build_sha`: returns `None` when the file is
 /// absent, unreadable, or empty — the build SHA is a nice-to-have for
 /// support triage and must never crash the CLI.
 pub fn get_build_sha(root: &Path, short: usize) -> Option<String> {

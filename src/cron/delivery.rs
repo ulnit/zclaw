@@ -1,4 +1,4 @@
-//! Cron delivery targets — port of hermes `cron/scheduler.py` delivery
+//! Cron delivery targets — aligned with hermes `cron/scheduler.py` delivery
 //! resolution (`_KNOWN_DELIVERY_PLATFORMS`, `_HOME_TARGET_ENV_VARS`,
 //! `_get_home_target_chat_id`, `_get_home_target_thread_id`,
 //! `cron_delivery_targets`, `_resolve_delivery_targets`,

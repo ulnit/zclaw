@@ -1,5 +1,5 @@
 //! `ulnclaw approvals [manual|smart|off]` — inspect or persist the terminal
-//! approval mode (hermes `hermes_cli/approval_mode.py` port).
+//! approval mode (hermes `hermes_cli/approval_mode.py` parity).
 //!
 //! Approval mode is persistent configuration, not conversation state: it is
 //! read from `config.toml` when a run starts, so changes take effect in new

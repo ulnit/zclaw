@@ -1,4 +1,4 @@
-//! Nous managed tool gateway helpers — port of hermes
+//! Nous managed tool gateway helpers — aligned with hermes
 //! `tools/managed_tool_gateway.py` (v2026.8.3).
 //!
 //! Managed vendors (e.g. BFL FLUX 3 video) are reached through a

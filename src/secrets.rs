@@ -1,4 +1,4 @@
-//! External secret sources (hermes `agent/secret_sources/` port).
+//! External secret sources (hermes `agent/secret_sources/` parity).
 //!
 //! Resolves credentials from external secret managers into
 //! environment-variable-shaped values at process startup, after `.env`
@@ -9,7 +9,7 @@
 //! had. Sources fetch; the orchestrator ([`apply_to_env`]) owns
 //! precedence and the actual writes.
 //!
-//! Sources ported: `command` (user helper via `/bin/sh -c`) and
+//! Sources implemented: `command` (user helper via `/bin/sh -c`) and
 //! `bitwarden` (Bitwarden Secrets Manager via the `bws` CLI). The
 //! 1Password source stays unported.
 

@@ -1,4 +1,4 @@
-//! Direct slash commands for messaging platforms — port of the hermes
+//! Direct slash commands for messaging platforms — aligned with the hermes
 //! `gateway/slash_commands.py` direct-command subset.
 //!
 //! Messaging platforms (Telegram, Discord, Slack, …) dispatch chat messages

@@ -1,4 +1,4 @@
-//! Weixin platform adapter — port of hermes `gateway/platforms/weixin.py`
+//! Weixin platform adapter — aligned with hermes `gateway/platforms/weixin.py`
 //! @ v2026.8.3.
 //!
 //! Connects ulnclaw to WeChat personal accounts via Tencent's iLink Bot

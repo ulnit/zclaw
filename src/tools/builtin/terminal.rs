@@ -1,4 +1,4 @@
-//! Terminal tools — port of hermes' tools/terminal_tool.py
+//! Terminal tools — aligned with hermes' tools/terminal_tool.py
 //!
 //! Tools: `terminal` (foreground/background shell execution) and `process`
 //! (background session management: list/log/kill/wait/write).
@@ -122,7 +122,7 @@ pub fn list_background_processes() -> Vec<crate::goals::BackgroundProcessInfo> {
 /// Close-view sink set by a driver (desktop bridge): called with
 /// `(ui_session_id, process_is_running, process_id)` when the agent asks
 /// to close a read-only terminal tab. Distinct from kill — the process
-/// keeps running; only the UI view is dropped (port of hermes
+/// keeps running; only the UI view is dropped (aligned with hermes
 /// `process_registry.on_close`).
 pub type CloseSink = Arc<dyn Fn(&str, bool, &str) + Send + Sync>;
 
@@ -137,7 +137,7 @@ pub fn set_close_sink(sink: Option<CloseSink>) {
 }
 
 /// Ask the desktop GUI to close the read-only terminal tab mirroring a
-/// background process (port of hermes `request_close_terminal`).
+/// background process (aligned with hermes `request_close_terminal`).
 ///
 /// This does NOT kill the process — it only drops the view. Output keeps
 /// buffering and the user can reopen the tab. Desktop-only: returns an

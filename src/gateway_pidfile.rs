@@ -1,4 +1,4 @@
-//! Gateway single-instance guard — port of the hermes
+//! Gateway single-instance guard — aligned with the hermes
 //! `gateway.status.get_running_pid` + `gateway run --replace` contract
 //! (v2026.8.3).
 //!

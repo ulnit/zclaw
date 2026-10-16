@@ -1,4 +1,4 @@
-//! SQLite session storage — port of hermes_state.py / hermes_state_common.py
+//! SQLite session storage — aligned with hermes_state.py / hermes_state_common.py
 //!
 //! Schema follows the hermes SCHEMA_SQL (sessions + messages + system_prompts
 //! + state_meta + async_delegations) with FTS5 full-text search over message

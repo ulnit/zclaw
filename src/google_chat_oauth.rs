@@ -1,4 +1,4 @@
-//! Google Chat per-user OAuth for native attachment delivery — port of
+//! Google Chat per-user OAuth for native attachment delivery — aligned with
 //! hermes `plugins/platforms/google_chat/oauth.py`.
 //!
 //! Google Chat's `media.upload` endpoint hard-rejects service-account

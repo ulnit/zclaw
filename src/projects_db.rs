@@ -1,4 +1,4 @@
-//! Per-profile first-class Project store — port of hermes
+//! Per-profile first-class Project store — aligned with hermes
 //! `hermes_cli/projects_db.py` (v2026.8.3).
 //!
 //! A **Project** is a human-named, multi-folder workspace. Unlike inferred

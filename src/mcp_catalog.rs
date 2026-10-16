@@ -1,4 +1,4 @@
-//! Curated MCP server catalog — lean port of hermes' `optional-mcps/`
+//! Curated MCP server catalog — lean aligned with hermes' `optional-mcps/`
 //! manifests (`GET /api/mcp/catalog` + `POST /api/mcp/catalog/install`).
 //! Entries are well-known reference servers; installing one appends a
 //! `[[mcp.servers]]` entry to config.toml (restart or `/reload-mcp`

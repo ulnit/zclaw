@@ -1,5 +1,5 @@
 //! Messaging pairing codes — DM authorization via pairing codes that the
-//! bot owner approves from the CLI (hermes `gateway/pairing.py` port).
+//! bot owner approves from the CLI (hermes `gateway/pairing.py` parity).
 //!
 //! An unknown sender who messages the bot receives a short pairing code;
 //! the owner runs `ulnclaw pairing approve <platform> <code>` to grant

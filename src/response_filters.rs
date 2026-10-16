@@ -1,4 +1,4 @@
-//! Gateway response filtering helpers — port of hermes
+//! Gateway response filtering helpers — aligned with hermes
 //! `gateway/response_filters.py`.
 //!
 //! These helpers operate at the gateway boundary: they decide whether a

@@ -10,6 +10,7 @@ Complete guide to ulnclaw's provider abstraction and implementation.
 - [Supported Providers](#supported-providers)
 - [Implementing Custom Providers](#implementing-custom-providers)
 - [Provider Configuration](#provider-configuration)
+- [Outbound mTLS (Client Certificates)](#outbound-mtls-client-certificates)
 - [Error Handling](#error-handling)
 - [Best Practices](#best-practices)
 - [Auxiliary Model Routing](#auxiliary-model-routing)
@@ -158,7 +159,7 @@ let provider = OpenAiProvider::builder()
 ### Anthropic (Claude)
 
 Native Messages API (`POST /v1/messages`, `x-api-key` auth,
-`anthropic-version: 2023-06-01`) — port of hermes' `anthropic_messages`
+`anthropic-version: 2023-06-01`) — aligned with hermes' `anthropic_messages`
 transport:
 
 ```rust
@@ -487,6 +488,71 @@ async fn try_providers(configs: Vec<ProviderConfig>, message: &str) -> Result<St
 }
 ```
 
+## Outbound mTLS (Client Certificates)
+
+Deployments that route provider traffic through an mTLS-fronted gateway (a control
+plane that authorises, meters and audits every call) must present a client
+certificate on egress. ulnclaw resolves that policy from the environment whenever it
+builds a provider client:
+
+| Variable | Meaning |
+| --- | --- |
+| `ULNCLAW_MTLS_CERT` | PEM path of the client certificate chain (leaf first; may embed the key) |
+| `ULNCLAW_MTLS_KEY` | PEM path of the private key (PKCS#8 / PKCS#1 / SEC1) when it is not in the cert file |
+| `ULNCLAW_MTLS_CA` | Extra trust anchors — the gateway's private CA |
+| `ULNCLAW_MTLS_TRUST_BUILTIN` | `1` (default) keeps the public roots; `0` trusts **only** `ULNCLAW_MTLS_CA` |
+| `ULNCLAW_MTLS_HOSTS` | **Required when an identity is set**: comma-separated hosts, `*.example.com`, or `*` |
+| `ULNCLAW_MTLS_MIN_TLS` | Minimum TLS version: `1.2` (default) or `1.3` |
+
+```bash
+# ~/.ulnclaw/.env works too (same variables, read on client build)
+export ULNCLAW_MTLS_CERT=~/.ulnclaw/mtls/client.crt
+export ULNCLAW_MTLS_KEY=~/.ulnclaw/mtls/client.key
+export ULNCLAW_MTLS_CA=~/.ulnclaw/mtls/gateway-ca.crt
+export ULNCLAW_MTLS_HOSTS=gw.example.com
+
+ulnclaw mtls status   # resolved policy + leaf SHA-256 fingerprint (never key material)
+ulnclaw mtls probe https://gw.example.com/health
+```
+
+The scope is enforced per client build: a host outside `ULNCLAW_MTLS_HOSTS` gets a
+plain client, so a provider pointed at `api.openai.com` never presents the gateway
+identity. Misconfiguration (missing key, unreadable PEM, unresolvable scope) is a
+**hard error when the provider is built** — ulnclaw never silently downgrades to
+unauthenticated TLS.
+
+Wired paths: `src/provider/openai.rs` (OpenAI-compatible chat — OpenAI, DashScope,
+OpenRouter, Ollama, llama.cpp, custom endpoints), `src/provider/anthropic.rs`
+(Anthropic Messages API), `src/stt.rs` and `src/tts.rs` (audio in/out). Other egress
+surfaces (messaging platforms, webhooks, MCP) can adopt the same one-liner,
+`outbound_tls::apply_env(builder, host)?`; run `ulnclaw mtls status` to see the list
+this build actually honours. Raw-`rustls` paths use
+`OutboundTls::rustls_config()` for the same identity/CA/min-version.
+
+`ulnclaw mtls probe <url>` performs **two** handshakes — with and without the
+identity — and reports one of (the anonymous arm also sends a single `GET /`,
+because a TLS 1.3 server can complete the handshake and only check the client
+certificate afterwards; every verdict carries a `reason` field with the raw
+evidence):
+
+- `enforced` — the server refused the anonymous *handshake* **or** the anonymous
+  request that follows it, and accepted ours;
+- `not-required` — it served a request with no client certificate;
+- `rejected` — the handshake failed while presenting our identity (trust, chain,
+  expiry), printing the TLS error;
+- `identity-missing` — no certificate is configured locally, so only the
+  anonymous arm could run.
+
+The report also states whether the target is inside `ULNCLAW_MTLS_HOSTS`
+(`host_in_scope` in `--json`, a `scope` line in text). The probe presents the
+identity on purpose — that is its job — while the running agent would not, so an
+out-of-scope endpoint is labelled `OUT OF SCOPE` instead of looking exactly like
+the real gateway.
+
+`ulnclaw mtls keygen` (self-signed, for staging) and `ulnclaw mtls csr` (key + CSR
+for the gateway's CA to sign) bootstrap the certificate without hand-written openssl
+commands. Full design: [Outbound mTLS design note](../design/outbound-mtls.md).
+
 ## Error Handling
 
 ### Provider Errors
@@ -686,7 +752,7 @@ let request = ProviderRequest {
 
 Secondary LLM calls — context-compression summaries and vision analysis —
 can run on a different provider/model than the main conversation. This is a
-port of hermes' `agent/auxiliary_client.py` task layer: each task checks
+aligned with hermes' `agent/auxiliary_client.py` task layer: each task checks
 `[auxiliary.<task>]` config first and inherits the main runtime when the
 entry is blank or `"auto"`.
 
@@ -726,7 +792,7 @@ Wired tasks: `compression` (context compressor summary call) and `vision`
 ## Mixture of Agents (MoA)
 
 MoA fans a prompt out to several *reference* models in parallel, then asks an
-*aggregator* model to synthesize their answers into concise guidance — a port
+*aggregator* model to synthesize their answers into concise guidance — a implementation
 of hermes' `moa_loop.py` synthesis path (`aggregate_moa_context`).
 
 Configure presets in `config.toml`:
@@ -775,13 +841,13 @@ Behavior (mirrors hermes):
 - If the aggregator itself fails, the joined reference outputs are returned
   as the synthesis.
 
-Not ported: the persistent `provider: moa` client facade (MoA as the acting
+Not implemented: the persistent `provider: moa` client facade (MoA as the acting
 model for whole sessions), MoA traces, and the privacy filter.
 
 ## Provider Fallback Chain
 
 `[model] fallbacks` lists backup `"provider:model"` entries tried in order
-when a model call fails — a port of hermes' `fallback_providers` chain
+when a model call fails — an implementation matching hermes' `fallback_providers` chain
 (`try_activate_fallback` + `restore_primary_runtime`):
 
 ```toml

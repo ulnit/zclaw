@@ -1,4 +1,4 @@
-//! Session recap — port of hermes' `session_recap.py` (inspired by Claude
+//! Session recap — aligned with hermes' `session_recap.py` (inspired by Claude
 //! Code's `/recap`): an instant, local-only summary of what happened in a
 //! conversation so users juggling multiple sessions can re-orient quickly.
 //! No LLM call — pure computation over the message history.

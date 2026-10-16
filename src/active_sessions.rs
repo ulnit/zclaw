@@ -1,4 +1,4 @@
-//! Cross-process active chat session leases — port of
+//! Cross-process active chat session leases — aligned with
 //! `hermes_cli/active_sessions.py`.
 //!
 //! The session database records persisted conversations; this registry

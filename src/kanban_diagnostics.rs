@@ -1,7 +1,7 @@
 //! Kanban diagnostics — structured, actionable distress signals for
 //! tasks (P678).
 //!
-//! Port of the operator-fixable rule subset of hermes
+//! Aligned with the operator-fixable rule subset of hermes
 //! `kanban_diagnostics.py` (v2026.8.3): repeated failures, crash loops,
 //! stuck-blocked, stranded-in-ready, block/unblock cycling, and
 //! hallucinated card references. Rules run over (task, events, runs),

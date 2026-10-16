@@ -1,4 +1,4 @@
-//! Memory tool — port of hermes' tools/memory_tool.py
+//! Memory tool — aligned with hermes' tools/memory_tool.py
 //!
 //! Persistent memory stored as markdown entries in `<home>/memory/MEMORY.md`
 //! (agent notes) and `<home>/memory/USER.md` (user profile). Supports

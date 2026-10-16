@@ -1,4 +1,4 @@
-//! Session export — port of hermes' `session_export_md.py`: renders a
+//! Session export — aligned with hermes' `session_export_md.py`: renders a
 //! session as a verifiable Markdown document (frontmatter + message
 //! headings + tool-call blocks + SHA256 export verification) and keeps a
 //! `manifest.jsonl` alongside the exports.

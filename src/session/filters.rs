@@ -1,4 +1,4 @@
-//! Session prune/archive filter parsing — port of hermes
+//! Session prune/archive filter parsing — aligned with hermes
 //! `hermes_cli/session_filters.py` (v2026.8.3), scoped to ulnclaw's
 //! sessions schema.
 //!

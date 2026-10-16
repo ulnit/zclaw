@@ -1,5 +1,5 @@
 //! Profile-scoped credential resolution for multi-profile gateway
-//! multiplexing (hermes `agent/secret_scope.py` port).
+//! multiplexing (hermes `agent/secret_scope.py` parity).
 //!
 //! The multiplexing gateway serves many profiles from one process. Each
 //! profile has its own `.env` with its own provider keys and platform
@@ -173,6 +173,18 @@ const GLOBAL_ENV_EXACT: &[&str] = &[
     "API_SERVER_HOST",
     "API_SERVER_PORT",
     "API_SERVER_CORS_ORIGINS",
+    // Outbound mTLS identity — deployment-level egress policy (like
+    // SSL_CERT_FILE): the client certificate is this machine's identity
+    // towards the C2/gateway, not a per-profile LLM credential. In
+    // multiplex mode all profiles on this host share it by design; for
+    // per-profile identities run separate gateway processes. The key
+    // *contents* stay on disk (0600) and are never logged.
+    "ULNCLAW_MTLS_CERT",
+    "ULNCLAW_MTLS_KEY",
+    "ULNCLAW_MTLS_CA",
+    "ULNCLAW_MTLS_TRUST_BUILTIN",
+    "ULNCLAW_MTLS_HOSTS",
+    "ULNCLAW_MTLS_MIN_TLS",
 ];
 
 const GLOBAL_ENV_PREFIXES: &[&str] = &[

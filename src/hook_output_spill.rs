@@ -1,6 +1,6 @@
 //! Spill oversized hook-injected context to disk with a preview
-//! placeholder. Port of hermes `tools/hook_output_spill.py` (v2026.8.3,
-//! itself ported from openai/codex PR #21069).
+//! placeholder. Aligned with hermes `tools/hook_output_spill.py` (v2026.8.3,
+//! itself implemented from openai/codex PR #21069).
 //!
 //! Shell hooks and plugin hooks can return `{"context": "..."}` which is
 //! concatenated into the current turn's user message on EVERY subsequent

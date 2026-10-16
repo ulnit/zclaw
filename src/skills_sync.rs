@@ -1,4 +1,4 @@
-//! Skill Sync — port of hermes `tools/skills_sync_client.py` +
+//! Skill Sync — aligned with hermes `tools/skills_sync_client.py` +
 //! `hermes sync` (personal skills across devices).
 //!
 //! Hermes syncs through the Nous Portal; ulnclaw keeps the exact UX but

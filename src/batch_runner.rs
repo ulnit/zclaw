@@ -1,4 +1,4 @@
-//! Batch runner (P262) — port of hermes `batch_runner.py`: parallel batch
+//! Batch runner (P262) — aligned with hermes `batch_runner.py`: parallel batch
 //! processing for running the agent across many prompts from a JSONL
 //! dataset, with checkpointing for fault tolerance/resumption, trajectory
 //! saving in the hermes from/value training format, and aggregated tool

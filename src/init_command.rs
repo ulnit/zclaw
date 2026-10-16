@@ -1,7 +1,7 @@
 //! `/init` — build the prompt that generates or updates a project
 //! AGENTS.md (P665).
 //!
-//! Port of hermes `init_command.py` (v2026.8.3). Hermes already *loads*
+//! Aligned with hermes `init_command.py` (v2026.8.3). Hermes already *loads*
 //! AGENTS.md as project context; `/init` bootstraps one by handing the
 //! live agent ONE guidance-laden prompt instructing it to inspect the
 //! project with its own read-only tools and write a concise AGENTS.md

@@ -1,4 +1,4 @@
-//! A2A inbound platform adapter — port of hermes `plugins/platforms/a2a`
+//! A2A inbound platform adapter — aligned with hermes `plugins/platforms/a2a`
 //! @ v2026.8.3 (adapter.py core).
 //!
 //! Exposes ulnclaw as an A2A v1.0-discoverable agent on the gateway:

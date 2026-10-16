@@ -1,5 +1,5 @@
 //! Live session context-window breakdown (hermes `agent/context_breakdown.py`
-//! port) — estimates how the next provider request is composed: system prompt
+//! parity) — estimates how the next provider request is composed: system prompt
 //! tiers, tool schemas, MCP schemas, persistent memory, and conversation
 //! history. Uses the same rough chars/4 heuristic as
 //! [`ContextCompressor::estimate_tokens`] so numbers align with compression

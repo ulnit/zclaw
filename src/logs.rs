@@ -1,4 +1,4 @@
-//! Log file management — port of `hermes_cli/logs.py` (viewer) and the
+//! Log file management — aligned with `hermes_cli/logs.py` (viewer) and the
 //! rotating file handlers of `hermes_logging.py` (writer).
 //!
 //! Files live under `<home>/logs/`:

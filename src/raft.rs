@@ -1,4 +1,4 @@
-//! Raft channel platform adapter — port of hermes `plugins/platforms/raft`
+//! Raft channel platform adapter — aligned with hermes `plugins/platforms/raft`
 //! @ v2026.8.3 (adapter.py, wake-endpoint half).
 //!
 //! Raft integration model: a local wake endpoint receives content-free

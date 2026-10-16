@@ -1,4 +1,4 @@
-//! Per-platform display/verbosity configuration resolver — port of
+//! Per-platform display/verbosity configuration resolver — aligned with
 //! hermes `gateway/display_config.py`.
 //!
 //! Provides [`resolve`] — the single entry-point for reading display

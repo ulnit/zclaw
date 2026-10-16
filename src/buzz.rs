@@ -1,4 +1,4 @@
-//! Buzz platform adapter — port of hermes `plugins/platforms/buzz`
+//! Buzz platform adapter — aligned with hermes `plugins/platforms/buzz`
 //! @ v2026.8.3 (adapter.py, CLI poll transport).
 //!
 //! Buzz is Block's Nostr-based human+agent collaboration platform. The

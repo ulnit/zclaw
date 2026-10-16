@@ -1,4 +1,4 @@
-//! Terminal execution environments — Rust-native port of hermes'
+//! Terminal execution environments — Rust-native aligned with hermes'
 //! environments concept: run terminal commands locally (default), inside a
 //! Docker container, or on a remote host over SSH.
 //!

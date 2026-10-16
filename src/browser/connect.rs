@@ -1,6 +1,6 @@
 //! Local Chromium-family CDP attach helpers.
 //!
-//! Port of hermes `hermes_cli/browser_connect.py` (v2026.8.3): candidate
+//! Aligned with hermes `hermes_cli/browser_connect.py` (v2026.8.3): candidate
 //! discovery across macOS/Windows/Linux (incl. WSL), dual-stack loopback
 //! CDP probes, port arbitration, and a diagnostics-rich visible debug
 //! browser launch (per-candidate attempts, stderr tail, single-instance

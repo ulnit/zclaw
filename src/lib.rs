@@ -170,6 +170,8 @@ pub mod model_cmd;
 pub mod model_inventory;
 pub mod models_dev;
 pub mod monitoring;
+pub mod mtls_cmd;
+pub mod outbound_tls;
 pub mod nostr_auth;
 pub mod ntfy;
 pub mod oauth;

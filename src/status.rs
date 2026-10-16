@@ -1,6 +1,6 @@
 //! Status — quick overview of all components.
 //!
-//! Port of hermes `hermes_cli/status.py` (+ `hermes_cli/timefmt.py`'s
+//! Aligned with hermes `hermes_cli/status.py` (+ `hermes_cli/timefmt.py`'s
 //! `relative_time`) adapted for ulnclaw: boxed banner, ✓/✗ marks,
 //! environment/model/API-key/terminal/browser/gateway/cron/sessions/
 //! skills/suggestions sections, and `--deep` probes.

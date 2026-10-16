@@ -1,6 +1,6 @@
 //! Session insights — usage analytics over the session store.
 //!
-//! Port of hermes `agent/insights.py` (v2026.8.3), adapted for ulnclaw's
+//! Aligned with hermes `agent/insights.py` (v2026.8.3), adapted for ulnclaw's
 //! SQLite schema: token consumption, models.dev-backed cost estimates,
 //! tool usage, activity patterns (hour/weekday), source and model
 //! breakdowns, top sessions. Inspired by Claude Code's `/insights`.

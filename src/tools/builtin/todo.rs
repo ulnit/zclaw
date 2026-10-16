@@ -1,4 +1,4 @@
-//! Todo tool — port of hermes' tools/todo_tool.py
+//! Todo tool — aligned with hermes' tools/todo_tool.py
 //!
 //! Session-scoped task list. Stored per-session in `<home>/sessions/<id>.todos.json`
 //! so it survives process restarts but not session boundaries.

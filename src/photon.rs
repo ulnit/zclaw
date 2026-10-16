@@ -1,4 +1,4 @@
-//! Photon Spectrum (iMessage) platform adapter — port of hermes
+//! Photon Spectrum (iMessage) platform adapter — aligned with hermes
 //! `plugins/platforms/photon` @ v2026.8.3 (adapter.py, sidecar-client
 //! transport).
 //!
@@ -643,7 +643,7 @@ fn parse_content_node(content: &Value, attachments: &mut Vec<MediaAttachment>) -
             }
             Some(String::new())
         }
-        // reactions/notices: not ported.
+        // reactions/notices: not implemented.
         _ => None,
     }
 }

@@ -1,4 +1,4 @@
-//! Signal platform adapter — port of hermes `gateway/platforms/signal.py`
+//! Signal platform adapter — aligned with hermes `gateway/platforms/signal.py`
 //! (+ `signal_format.py`, `signal_rate_limit.py` essentials) @ v2026.8.3.
 //!
 //! Talks to a signal-cli daemon in HTTP mode: inbound messages arrive on

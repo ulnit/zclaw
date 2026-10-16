@@ -1,4 +1,4 @@
-//! Skills Guard — security scanner for externally-sourced skills (port of
+//! Skills Guard — security scanner for externally-sourced skills (aligned with
 //! hermes' `tools/skills_guard.py`, scanner `skills-guard-v1`).
 //!
 //! Regex-based static analysis detects known-bad patterns (data
@@ -861,7 +861,7 @@ mod tests {
         assert!(report.contains("Decision: BLOCKED"), "got: {report}");
     }
 }
-/// Threat patterns (pattern, id, severity, category, description) — port of
+/// Threat patterns (pattern, id, severity, category, description) — aligned with
 /// hermes `tools/skills_guard.py` THREAT_PATTERNS (skills-guard-v1).
 const THREAT_PATTERNS: &[(&str, &str, &str, &str, &str)] = &[
     (

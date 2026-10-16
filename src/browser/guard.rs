@@ -1,4 +1,4 @@
-//! Browser SSRF / private-page guard — port of the browser-tool guards in
+//! Browser SSRF / private-page guard — aligned with the browser-tool guards in
 //! hermes `tools/browser_tool.py` and `tools/browser_cdp_tool.py`.
 //!
 //! Layers (all reusing the shared `url_safety` module):

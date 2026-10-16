@@ -1,4 +1,4 @@
-//! Uninstaller — port of hermes `hermes_cli/uninstall.py`.
+//! Uninstaller — aligned with hermes `hermes_cli/uninstall.py`.
 //!
 //! Options (hermes parity):
 //! - **Keep data** (default): remove code + shell PATH entries + wrapper
@@ -8,7 +8,7 @@
 //! Steps mirror hermes `_perform_uninstall`: stop gateway processes →
 //! strip PATH entries from shell rc files → remove wrapper symlinks →
 //! remove the code checkout → optionally wipe the home dir. Windows
-//! registry/env cleanup is not ported (hermes Windows installer
+//! registry/env cleanup is not implemented (hermes Windows installer
 //! artifacts; ulnclaw ships as a plain binary).
 
 use std::path::{Path, PathBuf};

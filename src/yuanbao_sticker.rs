@@ -1,4 +1,4 @@
-//! Yuanbao sticker (TIMFaceElem) support — port of hermes
+//! Yuanbao sticker (TIMFaceElem) support — aligned with hermes
 //! `gateway/platforms/yuanbao_sticker.py` @ v2026.8.3.
 //!
 //! The builtin 59-sticker catalog (hermes `STICKER_MAP`, originally

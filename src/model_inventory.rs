@@ -1,4 +1,4 @@
-//! Provider/model inventory for `GET /api/model/options` — port of
+//! Provider/model inventory for `GET /api/model/options` — aligned with
 //! hermes' `hermes_cli/inventory.py` substrate (`build_model_options_payload`).
 //!
 //! Builds the `{providers, model, provider}` picker payload from:
@@ -12,7 +12,7 @@
 //! 4. (with `include_unconfigured`) skeleton rows for the remaining
 //!    canonical providers with `auth_type`/`key_env`/`warning` hints.
 //!
-//! Not ported: hermes' credential-pool rows (ulnclaw keeps one key per
+//! Not implemented: hermes' credential-pool rows (ulnclaw keeps one key per
 //! provider) and the Nous free-tier gating (no Nous Portal provider).
 
 use serde_json::{json, Value};
@@ -315,7 +315,7 @@ pub fn format_price_per_mtok(per_mtok: f64) -> String {
 }
 
 /// Per-model capability/cost enrichment shared by every row (same shape
-/// the single-row handler produced before the inventory port).
+/// the single-row handler produced before the inventory parity).
 fn enrich_from_catalog(row: &mut Row) {
     if row.name.is_empty() {
         if let Some(info) = crate::models_dev::get_provider_info(&row.slug, false) {

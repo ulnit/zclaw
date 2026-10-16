@@ -225,7 +225,7 @@ pub fn whatsapp_parse_messages_full(payload: &Value) -> Vec<(MessageEvent, Vec<W
                     }
                     _ => {
                         // interactive/contacts/location/unknown — skipped
-                        // like hermes (text + media are the ported types).
+                        // like hermes (text + media are the implemented types).
                         continue;
                     }
                 }

@@ -1,4 +1,4 @@
-//! Generic slash-command confirmation primitive (gateway-side) — port of
+//! Generic slash-command confirmation primitive (gateway-side) — aligned with
 //! hermes' `tools/slash_confirm.py`.
 //!
 //! Slash commands with a non-destructive but expensive side effect worth

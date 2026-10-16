@@ -1,6 +1,6 @@
 //! Doctor — diagnose configuration and dependencies.
 //!
-//! Port of hermes `hermes_cli/doctor.py` (v2026.8.3), adapted for a Rust
+//! Aligned with hermes `hermes_cli/doctor.py` (v2026.8.3), adapted for a Rust
 //! binary: boxed report banner, ✓/⚠/✗/ℹ checks grouped in sections, an
 //! issues summary with a `--fix` fast path, plus `--online` provider
 //! connectivity probes and `--json` output.
@@ -126,7 +126,7 @@ fn paint(hex: &str, bold: bool, text: &str, enabled: bool) -> String {
 }
 
 /// Doctor options (hermes `doctor --fix`; `--online`/`--json` are ulnclaw
-/// extensions for the Rust port).
+/// extensions for the Rust parity).
 #[derive(Debug, Clone, Default)]
 pub struct DoctorOptions {
     pub fix: bool,

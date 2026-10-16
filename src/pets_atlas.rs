@@ -1,5 +1,5 @@
 //! Deterministic spritesheet assembly — generated row strips → Hermes atlas.
-//! Port of hermes `agent/pet/generate/atlas.py` (v2026.8.3).
+//! Aligned with hermes `agent/pet/generate/atlas.py` (v2026.8.3).
 //!
 //! Image-generation models are good at *drawing* a row of poses but bad at
 //! exact grid geometry, so the model never owns the atlas layout: it produces

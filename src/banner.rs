@@ -1,6 +1,6 @@
 //! Welcome banner, ASCII art, skills summary, and update check.
 //!
-//! Port of hermes `hermes_cli/banner.py` (v2026.8.3): a skin-aware welcome
+//! Aligned with hermes `hermes_cli/banner.py` (v2026.8.3): a skin-aware welcome
 //! panel (hero art + model/tool/skill info), git-based update check with a
 //! 6-hour cache and background prefetch, a version label carrying the
 //! upstream short hash, and latest-release-tag lookup.

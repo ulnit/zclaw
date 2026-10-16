@@ -1,4 +1,4 @@
-//! Channel directory (P259) — port of hermes `gateway/channel_directory.py`:
+//! Channel directory (P259) — aligned with hermes `gateway/channel_directory.py`:
 //! a persistent registry of the messaging channels the adapters have seen,
 //! keyed by platform. Powers `send_message` target resolution (human-friendly
 //! names → chat ids), the `list` action, and reaction `message_id` recall.

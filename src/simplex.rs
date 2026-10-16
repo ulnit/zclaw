@@ -1,4 +1,4 @@
-//! SimpleX Chat platform adapter — port of hermes
+//! SimpleX Chat platform adapter — aligned with hermes
 //! `plugins/platforms/simplex` @ v2026.8.3 (adapter.py).
 //!
 //! Connects to a `simplex-chat` daemon running in WebSocket mode

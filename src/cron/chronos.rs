@@ -1,4 +1,4 @@
-//! Inbound cron-fire token verification for Chronos — port of hermes
+//! Inbound cron-fire token verification for Chronos — aligned with hermes
 //! `plugins/cron_providers/chronos/verify.py`.
 //!
 //! When NAS relays an external scheduler fire to the agent, it POSTs

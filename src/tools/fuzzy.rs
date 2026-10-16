@@ -1,4 +1,4 @@
-//! Fuzzy find-and-replace chain — full port of hermes' `tools/fuzzy_match.py`.
+//! Fuzzy find-and-replace chain — full aligned with hermes' `tools/fuzzy_match.py`.
 //!
 //! Nine strategies, tried in order:
 //!   1. exact                    — literal substring

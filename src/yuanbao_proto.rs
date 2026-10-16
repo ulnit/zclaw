@@ -1,4 +1,4 @@
-//! Yuanbao WebSocket protocol codec — port of hermes
+//! Yuanbao WebSocket protocol codec — aligned with hermes
 //! `gateway/platforms/yuanbao_proto.py` @ v2026.8.3.
 //!
 //! Protocol layering:

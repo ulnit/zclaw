@@ -1,4 +1,4 @@
-//! ACP adapter (P261) — port of hermes `acp_adapter/`: run ulnclaw as an
+//! ACP adapter (P261) — aligned with hermes `acp_adapter/`: run ulnclaw as an
 //! Agent Client Protocol (ACP) stdio server so editors like Zed can drive
 //! it natively (`ulnclaw acp`).
 //!

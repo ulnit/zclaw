@@ -1,4 +1,4 @@
-//! Prompt stash — port of hermes `hermes_cli/prompt_stash.py`.
+//! Prompt stash — aligned with hermes `hermes_cli/prompt_stash.py`.
 //!
 //! Park a half-written prompt, send something else, then bring the draft
 //! back. Mirrors Claude Code's "ctrl + s to stash prompt" affordance; in

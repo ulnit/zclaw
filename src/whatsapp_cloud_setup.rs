@@ -1,5 +1,5 @@
 //! `ulnclaw whatsapp-cloud` — WhatsApp Business Cloud API setup wizard
-//! (lean port of hermes `hermes_cli/setup_whatsapp_cloud.py`).
+//! (lean aligned with hermes `hermes_cli/setup_whatsapp_cloud.py`).
 //!
 //! Walks the Meta-side credentials (Phone Number ID, Access Token, App
 //! Secret), auto-generates the webhook verify token, captures the

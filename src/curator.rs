@@ -1,4 +1,4 @@
-//! Skill curator — port of the local (non-LLM) half of hermes
+//! Skill curator — aligned with the local (non-LLM) half of hermes
 //! `hermes_cli/curator.py` (v2026.8.3).
 //!
 //! The curator keeps the skill library tidy: pin/unpin, manual
@@ -138,7 +138,7 @@ pub struct AutoTransitionCounts {
 }
 
 /// Deterministic stale/archive/reactivate pass over curated skills —
-/// lean port of hermes `apply_automatic_transitions` (no cron-reference
+/// lean aligned with hermes `apply_automatic_transitions` (no cron-reference
 /// exemption, no builtin seeding). Pinned skills are never touched;
 /// skills without a parseable activity timestamp are left alone.
 /// `dry_run` counts the would-be transitions without mutating anything.

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Vendor-sync the hermes desktop source into this directory.
 //
-// ulnclaw desktop is a vendored copy of hermes desktop (Nous Research,
-// MIT — see docs/zh/hermes-parity.md and UPSTREAM-SYNC.md). This script
+// The desktop shell carries MIT-licensed code derived from hermes desktop
+// (Nous Research — attribution in NOTICE, divergence catalog in UPSTREAM-SYNC.md). This script
 // re-applies that copy from a hermes checkout:
 //
 //   node scripts/sync-from-hermes.mjs /path/to/hermes-agent          # check

@@ -1,0 +1,21 @@
+# Third-party notices
+
+ulnclaw is an independent project: the Rust engine (`src/`, `Cargo.toml`) is
+original work by the ulnclaw maintainers — its architecture, tool registry,
+scheduler, storage layer and CLI are designed and written in Rust for ulnclaw
+itself. Feature coverage that overlaps with the hermes-agent tool surface is
+tracked in `docs/en/hermes-parity.md` / `docs/zh/hermes-parity.md`.
+
+## MIT-licensed code in the desktop shell
+
+The Electron shell under `desktop-electron/` contains code derived from
+hermes-agent (https://github.com/NousResearch/hermes-agent) by Nous Research,
+used under the MIT License. The upstream attribution is retained here as that
+license requires:
+
+- Project: hermes-agent — Copyright (c) Nous Research and contributors
+- License: MIT — full text at
+  https://github.com/NousResearch/hermes-agent/blob/main/LICENSE
+
+The desktop shell is wired to the ulnclaw Rust gateway; the backend plumbing
+and packaging layout are ulnclaw's own (see `UPSTREAM-SYNC.md`).

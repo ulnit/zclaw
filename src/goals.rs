@@ -1,4 +1,4 @@
-//! Persistent session goals — the Ralph loop (port of hermes
+//! Persistent session goals — the Ralph loop (aligned with hermes
 //! `hermes_cli/goals.py`, v2026.8.3).
 //!
 //! A goal is a free-form user objective that stays active across turns.

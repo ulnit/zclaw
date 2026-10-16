@@ -1,4 +1,4 @@
-//! Cron — port of hermes' cron/ package (job store + schedule parsing +
+//! Cron — aligned with hermes' cron/ package (job store + schedule parsing +
 //! scheduler loop).
 //!
 //! Jobs live in the state DB (`cron_jobs` table). Schedules support:

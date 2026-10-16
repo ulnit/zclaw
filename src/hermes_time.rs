@@ -1,4 +1,4 @@
-//! Timezone-aware clock — port of hermes `hermes_time.py` (v2026.8.3).
+//! Timezone-aware clock — aligned with hermes `hermes_time.py` (v2026.8.3).
 //!
 //! Provides timezone-aware "now" helpers for prompt timestamps and
 //! compression anchoring. Resolution order for the IANA timezone:

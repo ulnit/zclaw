@@ -1,4 +1,4 @@
-//! Skill usage telemetry — port of hermes `tools/skill_usage.py`
+//! Skill usage telemetry — aligned with hermes `tools/skill_usage.py`
 //! (v2026.8.3), scoped to what the learning graph / journey surface needs.
 //!
 //! Every profile skill carries a sidecar record in `<home>/skills/.usage.json`

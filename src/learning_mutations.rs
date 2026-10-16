@@ -1,4 +1,4 @@
-//! Journey node mutations — port of hermes `agent/learning_mutations.py`
+//! Journey node mutations — aligned with hermes `agent/learning_mutations.py`
 //! (v2026.8.3).
 //!
 //! The journey graph (`learning_graph`) gives every node a stable id:

@@ -1,4 +1,4 @@
-//! Kanban task engine — port of the hermes `hermes_cli/kanban_db.py`
+//! Kanban task engine — aligned with the hermes `hermes_cli/kanban_db.py`
 //! core (boards, tasks, claim locks, comments, events) backing
 //! `ulnclaw kanban`.
 //!
@@ -6602,7 +6602,7 @@ impl KanbanStore {
         Some(file)
     }
 
-    /// Run one dispatcher tick (hermes `dispatch_once`, scoped port):
+    /// Run one dispatcher tick (hermes `dispatch_once`, scoped parity):
     /// 1. reclaim stale claims, 2. promote parent-done todos (and
     ///    auto-recover non-sticky blocked tasks under the failure
     ///    limit), 3. spawn

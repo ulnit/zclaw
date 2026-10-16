@@ -1,4 +1,4 @@
-//! Skills tools — port of hermes' tools/skills_tool.py
+//! Skills tools — aligned with hermes' tools/skills_tool.py
 //!
 //! Tools: skills_list, skill_view, skill_manage.
 

@@ -1,4 +1,4 @@
-//! Gateway monitoring — port of hermes `agent/monitoring/*`.
+//! Gateway monitoring — aligned with hermes `agent/monitoring/*`.
 //!
 //! Service health monitoring plus redacted operational diagnostics for the
 //! gateway daemon, exported over OTLP/HTTP to an operator-configured

@@ -1,4 +1,4 @@
-//! Home Assistant platform adapter — port of hermes
+//! Home Assistant platform adapter — aligned with hermes
 //! `plugins/platforms/homeassistant` @ v2026.8.3 (adapter.py).
 //!
 //! Connects to the Home Assistant WebSocket API (`/api/websocket`),
@@ -16,7 +16,7 @@
 //! listener on the shared WS connection.
 //!
 //! The hermes standalone cron sender (`_standalone_send` → the HA
-//! `notify/notify` service) is ported as a credential-only sender that
+//! `notify/notify` service) is implemented as a credential-only sender that
 //! registers whenever HASS_URL + HASS_TOKEN are set, so delivery works
 //! without the live WebSocket adapter; a live adapter overwrites the
 //! slot with its persistent-notification sender.

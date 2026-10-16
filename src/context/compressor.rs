@@ -1,4 +1,4 @@
-//! Context compression — port of hermes' agent/conversation_compression.py
+//! Context compression — aligned with hermes' agent/conversation_compression.py
 //!
 //! When the conversation exceeds the token budget, the middle turns are
 //! summarized by a secondary model call and replaced with a compact

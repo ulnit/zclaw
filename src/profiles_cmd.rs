@@ -1,5 +1,5 @@
 //! Named-profile management over `[profiles.*]` in config.toml
-//! (hermes profiles parity, lean port). Hermes models a profile as a
+//! (hermes profiles parity, lean parity). Hermes models a profile as a
 //! full per-profile home directory; ulnclaw profiles are config
 //! overrides (model + toolsets) applied via `--profile`, kanban
 //! assignment or `/p/<profile>` gateway multiplexing. These helpers

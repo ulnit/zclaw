@@ -1,4 +1,4 @@
-//! Configuration layer — port of hermes_cli/config.py
+//! Configuration layer — aligned with hermes_cli/config.py
 //!
 //! Config lives at `~/.ulnclaw/config.toml`. Environment variables can be
 //! placed in `~/.ulnclaw/.env` (KEY=VALUE lines). Values resolve with the
@@ -111,7 +111,7 @@ pub fn reload_env() -> usize {
 }
 
 /// Config-aware env lookup: process env first, then `~/.ulnclaw/.env`.
-/// Port of hermes' `get_env_value`.
+/// Aligned with hermes' `get_env_value`.
 pub fn get_env_value(name: &str) -> Option<String> {
     if let Ok(val) = std::env::var(name) {
         if !val.is_empty() {
@@ -122,7 +122,7 @@ pub fn get_env_value(name: &str) -> Option<String> {
     load_env_file(&env_file).remove(name)
 }
 
-/// Web search backend selection (port of `web.backend` config).
+/// Web search backend selection (aligned with `web.backend` config).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WebConfig {
     /// Search backend: "duckduckgo" (built-in), "tavily", "brave", "searxng", "auto".
@@ -152,7 +152,7 @@ pub struct BrowserConfig {
     pub use_gateway: Option<Truthiness>,
 }
 
-/// Model/provider settings (port of the model section of hermes config).
+/// Model/provider settings (aligned with the model section of hermes config).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelConfig {
     #[serde(default = "default_provider")]
@@ -202,7 +202,7 @@ impl Default for ModelConfig {
     }
 }
 
-/// `[providers.<slug>]` — user-defined provider entry (port of hermes'
+/// `[providers.<slug>]` — user-defined provider entry (aligned with hermes'
 /// v12+ keyed `providers:` config form). Rows surface in the
 /// `/api/model/options` picker inventory; the runtime keeps using the
 /// `[model]` section for the active provider.
@@ -432,7 +432,7 @@ impl Default for AgentSettings {
     }
 }
 
-/// Delegation limits (port of hermes `delegation` config).
+/// Delegation limits (aligned with hermes `delegation` config).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DelegationConfig {
     #[serde(default = "default_max_children")]
@@ -464,7 +464,7 @@ impl Default for DelegationConfig {
     }
 }
 
-/// Terminal tool settings (port of TERMINAL_* env defaults).
+/// Terminal tool settings (aligned with TERMINAL_* env defaults).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalConfig {
     #[serde(default = "default_terminal_timeout")]
@@ -531,7 +531,7 @@ impl Default for TerminalConfig {
     }
 }
 
-/// Memory limits (port of MemoryStore defaults: 2200/1375 chars).
+/// Memory limits (aligned with MemoryStore defaults: 2200/1375 chars).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryConfig {
     #[serde(default = "default_memory_limit")]
@@ -580,7 +580,7 @@ impl Truthiness {
     }
 }
 
-/// Per-task auxiliary provider override (port of hermes' `auxiliary.<task>`
+/// Per-task auxiliary provider override (aligned with hermes' `auxiliary.<task>`
 /// config consumed by `agent/auxiliary_client.py`).
 ///
 /// Tasks are auxiliary LLM calls such as `compression` (context
@@ -691,7 +691,7 @@ impl AuxiliaryTaskConfig {
 }
 
 /// Mixture-of-Agents slot — one provider/model selection (reference or
-/// aggregator). Port of hermes' MoA preset slots (`moa_config.py`).
+/// aggregator). Aligned with hermes' MoA preset slots (`moa_config.py`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoaSlot {
     pub provider: String,
@@ -861,7 +861,7 @@ impl MoaConfig {
     }
 }
 
-/// HTTP gateway settings (`[gateway]`) — port of hermes' api_server platform.
+/// HTTP gateway settings (`[gateway]`) — aligned with hermes' api_server platform.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayConfig {
     #[serde(default = "default_gateway_host")]
@@ -1286,7 +1286,7 @@ pub struct FalVideoGenConfig {
     pub model: Option<String>,
 }
 
-/// `[x_search]` — xAI X-search tuning (port of hermes `x_search.*`).
+/// `[x_search]` — xAI X-search tuning (aligned with hermes `x_search.*`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct XSearchConfig {
@@ -1537,7 +1537,7 @@ impl Default for PetDisplayConfig {
     }
 }
 
-/// `[security]` — URL safety + tirith scanner (port of hermes `security.*`).
+/// `[security]` — URL safety + tirith scanner (aligned with hermes `security.*`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SecurityConfig {
@@ -1588,7 +1588,7 @@ impl Default for SecurityConfig {
     }
 }
 
-/// `[tool_output]` — configurable tool-output truncation limits (port of
+/// `[tool_output]` — configurable tool-output truncation limits (aligned with
 /// hermes `tools/tool_output_limits.py`). Defaults preserve the existing
 /// ulnclaw behaviour; invalid or non-positive values fall back to the
 /// defaults.

@@ -1,6 +1,6 @@
 //! models.dev registry integration — multi-provider model catalog.
 //!
-//! Port of hermes `agent/models_dev.py` (v2026.8.3). Fetches
+//! Aligned with hermes `agent/models_dev.py` (v2026.8.3). Fetches
 //! `https://models.dev/api.json` — a community-maintained database of
 //! thousands of models across 100+ providers — providing:
 //!

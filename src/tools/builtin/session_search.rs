@@ -1,4 +1,4 @@
-//! session_search — port of hermes' tools/session_search_tool.py
+//! session_search — aligned with hermes' tools/session_search_tool.py
 //!
 //! FTS-backed retrieval over the SQLite message store. Two shapes:
 //! discovery (query → top sessions with snippets) and scroll (session_id →

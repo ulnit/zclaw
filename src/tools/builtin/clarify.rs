@@ -1,4 +1,4 @@
-//! Clarify tool — port of hermes' tools/clarify_tool.py
+//! Clarify tool — aligned with hermes' tools/clarify_tool.py
 //!
 //! Asks the user a question (single/multi-select or open-ended) via the
 //! clarify callback installed on the ToolContext. Non-interactive runs get a

@@ -1,4 +1,4 @@
-//! Gateway clarify registry — port of hermes `tools/clarify_gateway.py`.
+//! Gateway clarify registry — aligned with hermes `tools/clarify_gateway.py`.
 //!
 //! Pending clarify prompts raised by the `clarify` tool inside messaging
 //! sessions. The tool registers an entry, the platform adapter renders it

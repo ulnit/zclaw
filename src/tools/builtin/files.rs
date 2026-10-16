@@ -1,4 +1,4 @@
-//! File tools — port of hermes' tools/file_tools.py
+//! File tools — aligned with hermes' tools/file_tools.py
 //!
 //! Tools: read_file, write_file, patch (replace + V4A patch), search_files.
 
@@ -359,7 +359,7 @@ fn patch_tool() -> crate::tools::Tool {
         .expect("patch builds")
 }
 
-/// Fuzzy find-and-replace — port of the hermes strategy chain (exact →
+/// Fuzzy find-and-replace — aligned with the hermes strategy chain (exact →
 /// line-trimmed → whitespace-normalized → indentation-flexible →
 /// boundary-trimmed).
 /// Check whether an edit was already applied (hermes is_already_applied).
@@ -525,7 +525,7 @@ fn patch_replace(
     }))
 }
 
-/// V4A patch application — port of tools/patch_parser.py (Update/Add/Delete).
+/// V4A patch application — aligned with tools/patch_parser.py (Update/Add/Delete).
 fn apply_v4a_patch(ctx: &Arc<ToolContext>, patch: &str) -> Result<serde_json::Value> {
     #[derive(Debug)]
     struct Op {

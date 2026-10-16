@@ -1,4 +1,4 @@
-//! Video generation provider layer — port of hermes
+//! Video generation provider layer — aligned with hermes
 //! `agent/video_gen_provider.py` + `agent/video_gen_registry.py`
 //! (v2026.8.3).
 //!

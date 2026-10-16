@@ -1,4 +1,4 @@
-//! Offline, non-destructive session-database recovery — port of hermes'
+//! Offline, non-destructive session-database recovery — aligned with hermes'
 //! `hermes_cli/session_recovery.py`.
 //!
 //! The recovery path deliberately avoids in-place repair:

@@ -7,10 +7,10 @@
   <a href="README.md"><img src="https://img.shields.io/badge/Lang-English-blue?style=for-the-badge" alt="English"></a>
 </p>
 
-**Rust 编写的高性能 AI Agent 引擎 —— [Nous Research](https://nousresearch.com) [hermes-agent v2026.8.3](https://github.com/NousResearch/hermes-agent/tree/v2026.8.3) 的 Rust 移植。**
+**Rust 编写的高性能 AI Agent 引擎 —— 自研架构、独立实现；工具面与 [hermes-agent v2026.8.3](https://github.com/NousResearch/hermes-agent/tree/v2026.8.3) 兼容。**
 
-ulnclaw 用 Rust 重新实现了 Hermes Agent 引擎：相同的工具面（50+ 内置工具）、
-相同的 SQLite 会话 / 记忆 / 技能 / 定时任务存储布局、相同的工具集组合方式 ——
+ulnclaw 的 Agent 引擎由 Rust 自研实现：自有架构与工具注册/调度设计（50+ 内置工具）、
+与 hermes-agent 兼容的 SQLite 会话 / 记忆 / 技能 / 定时任务存储布局、灵活的工具集组合方式 ——
 原生性能，单一静态 musl 二进制。任意模型随意用（OpenAI 兼容端点、Ollama、
 Anthropic、Dashscope 等），`ulnclaw model` 一键切换，无需改代码。可以跑在
 笔记本、5 美元 VPS 或 Docker 沙箱里 —— 通过终端、桌面应用或 26 个消息平台
@@ -30,9 +30,9 @@ Anthropic、Dashscope 等），`ulnclaw model` 一键切换，无需改代码。
 <tr><td><b>🤝 委派与并行</b></td><td>后台子代理委派（持久化异步注册表）、支持 swarm 模式的 kanban 任务引擎、<code>execute_code</code> 流水线、Mixture-of-Agents 扇出（<code>moa</code>）。</td></tr>
 <tr><td><b>🌐 浏览器与电脑操作</b></td><td>12 个经 CDP 的 <code>browser_*</code> 工具 —— 托管无头 Chrome/Chromium、Camofox 反检测、云会话（Browserbase / Browser Use / Firecrawl）—— 另有经 cua-driver 守护进程的 <code>computer_use</code>，与 hermes 相同的审批门控。</td></tr>
 <tr><td><b>🔌 可扩展</b></td><td>MCP 客户端（stdio + Streamable HTTP/SSE、OAuth 2.1 + PKCE、懒加载）、插件 + shell 钩子（触发 hermes 全部 13 个钩子事件）、ACP 适配器、OpenAI 兼容 HTTP 网关、MCP 频道桥。</td></tr>
-<tr><td><b>🛡️ 默认安全</b></td><td>审批系统（网关审批失败关闭）、Secrets 保险库（Bitwarden SM / 1Password / command）、SSRF 防护、密钥脱敏、沙箱凭据清洗、Docker 沙箱出站防火墙、透明 checkpoint。</td></tr>
+<tr><td><b>🛡️ 默认安全</b></td><td>审批系统（网关审批失败关闭）、Secrets 保险库（Bitwarden SM / 1Password / command）、SSRF 防护、密钥脱敏、沙箱凭据清洗、Docker 沙箱出站防火墙、面向 mTLS 网关的出站客户端证书（<code>ulnclaw mtls</code>）、透明 checkpoint。</td></tr>
 <tr><td><b>🗜️ 上下文管理</b></td><td>预算触发的回合中压缩、三层工具结果持久化、<code>/context</code> 窗口构成视图。</td></tr>
-<tr><td><b>🖥️ 桌面 GUI</b></td><td><b>ulnclaw desktop</b> —— hermes Electron 桌面端的忠实移植：十六个视图、命令面板、xterm.js 终端面板、经 WebSocket/SSE 的实时回合流式、整壳静默自动更新。</td></tr>
+<tr><td><b>🖥️ 桌面 GUI</b></td><td><b>ulnclaw desktop</b> —— hermes Electron 桌面端的对等实现：十六个视图、命令面板、xterm.js 终端面板、经 WebSocket/SSE 的实时回合流式、整壳静默自动更新。</td></tr>
 <tr><td><b>📦 随处运行</b></td><td>单一静态 musl 二进制；终端后端：local、Docker、SSH。</td></tr>
 </table>
 
@@ -116,7 +116,7 @@ ulnclaw dump                               # 可复制粘贴的支持信息摘�
 
 每个 `v*` tag 都会在 Releases 页面产出安装包（产品名 **ulnclaw desktop**），
 由 `desktop-electron/` 的 Electron 外壳构建 —— hermes 桌面端（v2026.8.3）的
-忠实移植：React 19 渲染层，十六个视图（聊天、会话、任务、用量、模型、技能、
+对等实现：React 19 渲染层，十六个视图（聊天、会话、任务、用量、模型、技能、
 看板、项目、运行、Webhooks、插件、配对、配置档案、配置、诊断、设置）、
 命令面板、xterm.js 终端面板、带 git 审查的文件树，以及经 JSON-RPC WebSocket
 + HTTP/SSE 的实时回合流式。
@@ -268,7 +268,7 @@ async fn main() -> Result<()> {
 | [集成指南](docs/zh/integration.md) | 网关、嵌入、消息平台 |
 | [API 参考](docs/zh/api-reference.md) | HTTP 网关端点 |
 | [开发指南](docs/zh/development.md) | 开发环境、测试 |
-| 设计文档 | [多路复用网关](docs/design/multiplexing-gateway.md) · [浏览器 CDP 客户端](docs/design/browser-cdp.md) · [桌面 Electron](docs/design/desktop-electron.md) |
+| 设计文档 | [多路复用网关](docs/design/multiplexing-gateway.md) · [出站 mTLS](docs/design/outbound-mtls.md) · [浏览器 CDP 客户端](docs/design/browser-cdp.md) · [桌面 Electron](docs/design/desktop-electron.md) |
 | [桌面应用](desktop-electron/README.md) | Electron 外壳（`ulnclaw desktop`） |
 
 ## 从 hermes-agent 迁移
@@ -295,5 +295,5 @@ cargo build --release --target x86_64-unknown-linux-musl   # 静态二进制
 MIT OR Apache-2.0
 
 ulnclaw 是 [Nous Research](https://nousresearch.com)
-[hermes-agent](https://github.com/NousResearch/hermes-agent) 的 Rust 移植，
+[hermes-agent](https://github.com/NousResearch/hermes-agent) 的 Rust 实现，
 原始设计与文档见该项目。

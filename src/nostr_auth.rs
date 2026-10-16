@@ -1,9 +1,9 @@
 //! Dependency-light Nostr signing for Buzz WebSocket authentication —
-//! port of hermes `plugins/platforms/buzz/nostr_auth.py`.
+//! aligned with hermes `plugins/platforms/buzz/nostr_auth.py`.
 //!
 //! NIP-42 relay auth answers the relay's `AUTH` challenge with a signed
 //! kind-22242 event. Curve math rides the pure-Rust `k256` crate
-//! (BIP-340 schnorr); the nsec bech32 decoding is a direct port of the
+//! (BIP-340 schnorr); the nsec bech32 decoding is a direct aligned with the
 //! hermes implementation.
 
 use serde_json::{json, Value};
