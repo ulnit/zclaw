@@ -16,6 +16,7 @@ import { GeneratedImage } from '@/components/chat/generated-image-result'
 import { SCAFFOLD_LABEL_CLASS, SCAFFOLD_META_CLASS, ScaffoldRow } from '@/components/chat/scaffold-row'
 import { useI18n } from '@/i18n'
 import { generatedImageFromResult } from '@/lib/generated-images'
+import { isTodoToolName } from '@/lib/todos'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 
@@ -49,7 +50,7 @@ const DelegateToolPart: FC<ToolCallMessagePartProps> = props => {
 
 const ChainToolFallback: FC<ToolCallMessagePartProps> = props => {
   // todo parts are hoisted to a dedicated panel above the message content.
-  if (props.toolName === 'todo') {
+  if (isTodoToolName(props.toolName)) {
     return null
   }
 

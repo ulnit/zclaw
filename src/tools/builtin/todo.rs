@@ -91,7 +91,7 @@ fn render(todos: &[TodoItem]) -> serde_json::Value {
 }
 
 fn todo_tool() -> crate::tools::Tool {
-    tool("todo")
+    tool("todo_list")
         .description(
             "Manage your task list for the current session. Use for complex tasks with 3+ steps \
              or when the user provides multiple tasks. Call with no parameters to read the \

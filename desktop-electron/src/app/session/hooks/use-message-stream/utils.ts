@@ -1,4 +1,5 @@
 import type { GatewayEventPayload } from '@/lib/chat-messages'
+import { isTodoToolName } from '@/lib/todos'
 import { normalizePersonalityValue } from '@/lib/chat-runtime'
 
 import type { ClientSessionState } from '../../../types'
@@ -103,9 +104,9 @@ export function toTodoPayload(payload: GatewayEventPayload | undefined): Gateway
     return undefined
   }
 
-  const isTodo = payload.name === 'todo' || (!payload.name && Object.hasOwn(payload, 'todos'))
+  const isTodo = isTodoToolName(payload.name) || (!payload.name && Object.hasOwn(payload, 'todos'))
 
-  return isTodo ? { ...payload, name: 'todo', tool_id: payload.tool_id || 'todo-live' } : undefined
+  return isTodo ? { ...payload, name: 'todo_list', tool_id: payload.tool_id || 'todo-live' } : undefined
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

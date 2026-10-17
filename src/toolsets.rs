@@ -78,7 +78,7 @@ pub fn toolsets() -> &'static std::collections::HashMap<&'static str, ToolsetDef
         });
         map.insert("terminal", ToolsetDef {
             description: "Shell command execution and background process management",
-            tools: &["terminal", "process"],
+            tools: &["terminal", "process_manage"],
             includes: &[],
         });
         map.insert("skills", ToolsetDef {
@@ -98,7 +98,7 @@ pub fn toolsets() -> &'static std::collections::HashMap<&'static str, ToolsetDef
         });
         map.insert("cronjob", ToolsetDef {
             description: "Scheduled job management",
-            tools: &["cronjob"],
+            tools: &["cronjob_manage"],
             includes: &[],
         });
         map.insert("file", ToolsetDef {
@@ -121,7 +121,7 @@ pub fn toolsets() -> &'static std::collections::HashMap<&'static str, ToolsetDef
         });
         map.insert("todo", ToolsetDef {
             description: "Session task list",
-            tools: &["todo"],
+            tools: &["todo_list"],
             includes: &[],
         });
         map.insert("memory", ToolsetDef {
@@ -190,7 +190,7 @@ pub fn toolsets() -> &'static std::collections::HashMap<&'static str, ToolsetDef
         });
         map.insert("debugging", ToolsetDef {
             description: "Terminal + web + file tools for debugging sessions",
-            tools: &["terminal", "process"],
+            tools: &["terminal", "process_manage"],
             includes: &["web", "file"],
         });
         map.insert("safe", ToolsetDef {
@@ -202,7 +202,7 @@ pub fn toolsets() -> &'static std::collections::HashMap<&'static str, ToolsetDef
             description: "The default coding-agent toolset (hermes _HERMES_CORE_TOOLS)",
             tools: &[
                 "web_search", "web_extract",
-                "terminal", "process",
+                "terminal", "process_manage",
                 "read_file", "write_file", "patch", "search_files",
                 "vision_analyze", "image_generate",
                 "skills_list", "skill_view", "skill_manage",
@@ -210,8 +210,8 @@ pub fn toolsets() -> &'static std::collections::HashMap<&'static str, ToolsetDef
                 "browser_scroll", "browser_back", "browser_press", "browser_get_images",
                 "browser_vision", "browser_console", "browser_cdp", "browser_dialog",
                 "text_to_speech",
-                "todo", "memory", "session_search",
-                "execute_code", "delegate_task", "cronjob",
+                "todo_list", "memory", "session_search",
+                "execute_code", "delegate_task", "cronjob_manage",
                 "ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service",
                 "kanban_show", "kanban_list", "kanban_complete", "kanban_block",
                 "kanban_heartbeat", "kanban_comment", "kanban_create", "kanban_link",

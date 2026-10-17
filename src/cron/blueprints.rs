@@ -984,7 +984,7 @@ pub fn closest_blueprint_keys(query: &str) -> Vec<&'static str> {
 /// Build the natural-language fill-request the agent will act on
 /// (hermes `build_blueprint_seed`): the agent reads this as a normal
 /// user turn, asks for each slot one at a time, then calls the
-/// `cronjob` tool with the rendered schedule + prompt.
+/// `cronjob_manage` tool with the rendered schedule + prompt.
 pub fn build_blueprint_seed(blueprint: &AutomationBlueprint) -> String {
     let mut lines: Vec<String> = Vec::new();
     lines.push(format!(
@@ -1022,7 +1022,7 @@ pub fn build_blueprint_seed(blueprint: &AutomationBlueprint) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     lines.push(format!(
-        "Once you have my answers, create the job by calling the cronjob tool \
+        "Once you have my answers, create the job by calling the cronjob_manage tool \
          with action='create'. Build the schedule as a cron expression from \
          this template: `{}` (fill {{minute}}/{{hour}} from the chosen time, \
          {{dow}} from the weekday choice using {{{presets}}}, {{interval_min}} \
@@ -1400,7 +1400,7 @@ mod tests {
         assert!(seed.contains("Custom reminder"));
         assert!(seed.contains("(what)"));
         assert!(seed.contains("[default: take a break and stretch]"));
-        assert!(seed.contains("cronjob tool"));
+        assert!(seed.contains("cronjob_manage tool"));
         assert!(seed.contains("{minute} {hour} * * {dow}"));
     }
 

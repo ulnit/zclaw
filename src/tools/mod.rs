@@ -110,6 +110,31 @@ impl ToolResult {
     }
 }
 
+/// Legacy tool-name aliases, accepted at every dispatch seam so that old
+/// sessions and saved prompts keep working — but **schemas advertise only the
+/// canonical names** (aliases never enter `tools`, so `definitions()`/`names()`
+/// never expose them, and the model never sees a duplicate tool).
+///
+/// Mirrors hermes-agent v0.22.2 `model_tools._LEGACY_TOOL_ALIASES`, which renamed
+/// `todo` → `todo_list`, `cronjob` → `cronjob_manage`, `process` → `process_manage`
+/// ("the old names still work"). `tour`/`tip` map to tools ulnclaw does not (yet)
+/// implement, so they are intentionally absent.
+pub const LEGACY_TOOL_ALIASES: &[(&str, &str)] = &[
+    ("todo", "todo_list"),
+    ("cronjob", "cronjob_manage"),
+    ("process", "process_manage"),
+];
+
+/// Resolve a possibly-legacy tool name to its canonical name.
+/// Returns the input unchanged when it is not a known alias.
+pub fn canonical_tool_name(name: &str) -> &str {
+    LEGACY_TOOL_ALIASES
+        .iter()
+        .find(|(legacy, _)| *legacy == name)
+        .map(|(_, canonical)| *canonical)
+        .unwrap_or(name)
+}
+
 /// Central registry for all tools
 pub struct ToolRegistry {
     tools: HashMap<String, Tool>,
@@ -156,9 +181,9 @@ impl ToolRegistry {
         }
     }
 
-    /// Get a tool by name
+    /// Get a tool by name (legacy aliases resolve to the canonical tool).
     pub fn get(&self, name: &str) -> Option<&Tool> {
-        self.tools.get(name)
+        self.tools.get(canonical_tool_name(name))
     }
 
     /// Dispatch a tool call — checks toolset enablement and availability.
@@ -168,9 +193,10 @@ impl ToolRegistry {
         arguments: serde_json::Value,
         context: Arc<ToolContext>,
     ) -> Result<serde_json::Value> {
+        let canonical = canonical_tool_name(name);
         let tool = self
             .tools
-            .get(name)
+            .get(canonical)
             .ok_or_else(|| AgentError::ToolNotFound(name.to_string()))?;
 
         if self.disabled_toolsets.contains(&tool.toolset) {
@@ -230,9 +256,9 @@ impl ToolRegistry {
         names
     }
 
-    /// Check if a tool exists
+    /// Check if a tool exists (legacy aliases resolve to the canonical tool).
     pub fn has(&self, name: &str) -> bool {
-        self.tools.contains_key(name)
+        self.tools.contains_key(canonical_tool_name(name))
     }
 
     /// Get the number of registered tools
@@ -393,4 +419,123 @@ impl ToolBuilder {
 /// Convenience function to create a tool builder
 pub fn tool(name: impl Into<String>) -> ToolBuilder {
     ToolBuilder::new(name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::sync::Arc;
+
+    fn stub_tool(name: &str, toolset: &str) -> Tool {
+        tool(name)
+            .description("stub")
+            .parameters(json!({"type": "object", "properties": {}}))
+            .toolset(toolset)
+            .handler(|_args, _ctx| async move { Ok(json!({"ok": true})) })
+            .build()
+            .unwrap()
+    }
+
+    /// v0.22.2 renamed todo/cronjob/process; hermes keeps the old names working.
+    #[test]
+    fn canonical_tool_name_maps_legacy_aliases() {
+        assert_eq!(canonical_tool_name("todo"), "todo_list");
+        assert_eq!(canonical_tool_name("cronjob"), "cronjob_manage");
+        assert_eq!(canonical_tool_name("process"), "process_manage");
+    }
+
+    #[test]
+    fn canonical_tool_name_is_idempotent_and_passthrough() {
+        for n in ["todo_list", "cronjob_manage", "process_manage"] {
+            assert_eq!(canonical_tool_name(n), n, "new names must be stable");
+        }
+        assert_eq!(canonical_tool_name("read_file"), "read_file");
+        assert_eq!(canonical_tool_name("mcp__srv__echo"), "mcp__srv__echo");
+        assert_eq!(canonical_tool_name("no_such_tool"), "no_such_tool");
+    }
+
+    #[test]
+    fn registry_resolves_legacy_names() {
+        let mut r = ToolRegistry::new();
+        r.register(stub_tool("todo_list", "todo"));
+        r.register(stub_tool("cronjob_manage", "cronjob"));
+        r.register(stub_tool("process_manage", "terminal"));
+
+        for legacy in ["todo", "cronjob", "process"] {
+            assert!(r.has(legacy), "has() must accept legacy alias {legacy}");
+            let t = r.get(legacy).unwrap_or_else(|| panic!("get() must accept {legacy}"));
+            assert_ne!(t.definition.name, legacy, "must resolve to the canonical tool");
+        }
+        assert_eq!(r.get("todo").unwrap().definition.name, "todo_list");
+        assert_eq!(r.get("cronjob").unwrap().definition.name, "cronjob_manage");
+        assert_eq!(r.get("process").unwrap().definition.name, "process_manage");
+        // toolset 名保持旧名（hermes 亦如此：toolset "todo" 含 ["todo_list"]）
+        assert_eq!(r.get("todo").unwrap().toolset, "todo");
+        assert_eq!(r.get("process").unwrap().toolset, "terminal");
+    }
+
+    /// 🔴 别名只用于解析，绝不能进 schema —— 否则模型看到重复工具、白耗 token。
+    #[test]
+    fn aliases_never_leak_into_model_schema() {
+        let mut r = ToolRegistry::new();
+        r.register(stub_tool("todo_list", "todo"));
+        r.register(stub_tool("cronjob_manage", "cronjob"));
+        r.register(stub_tool("process_manage", "terminal"));
+
+        let advertised: Vec<String> = r.definitions().iter().map(|d| d.name.clone()).collect();
+        assert_eq!(advertised, vec!["cronjob_manage", "process_manage", "todo_list"]);
+        for alias in ["todo", "cronjob", "process"] {
+            assert!(
+                !advertised.iter().any(|n| n == alias),
+                "alias {alias} must not be advertised to the model"
+            );
+        }
+        assert_eq!(r.names(), vec!["cronjob_manage", "process_manage", "todo_list"]);
+        assert_eq!(r.len(), 3, "aliases must not inflate the registry");
+    }
+
+    #[tokio::test]
+    async fn dispatch_accepts_legacy_names() {
+        let mut r = ToolRegistry::new();
+        r.register(stub_tool("todo_list", "todo"));
+        let ctx = Arc::new(ToolContext::new());
+        let out = r
+            .dispatch("todo", json!({}), ctx.clone())
+            .await
+            .expect("legacy alias must dispatch");
+        assert_eq!(out["ok"], json!(true));
+        let out2 = r.dispatch("todo_list", json!({}), ctx).await.unwrap();
+        assert_eq!(out2["ok"], json!(true), "canonical name still works");
+    }
+
+    /// toolset 开关必须对别名同样生效（否则禁用 toolset 能被旧名绕过）。
+    #[tokio::test]
+    async fn disabled_toolset_also_blocks_legacy_name() {
+        let mut r = ToolRegistry::new();
+        r.register(stub_tool("todo_list", "todo"));
+        let ctx = Arc::new(ToolContext::new());
+        assert!(r.dispatch("todo", json!({}), ctx.clone()).await.is_ok());
+
+        r.disable_toolset("todo");
+        let err = r
+            .dispatch("todo", json!({}), ctx.clone())
+            .await
+            .expect_err("disabled toolset must block the alias too");
+        assert!(err.to_string().contains("disabled"), "got: {err}");
+        assert!(r.dispatch("todo_list", json!({}), ctx).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn unknown_tool_still_reports_not_found_with_original_name() {
+        let mut r = ToolRegistry::new();
+        r.register(stub_tool("todo_list", "todo"));
+        let ctx = Arc::new(ToolContext::new());
+        let err = r
+            .dispatch("todo_lis", json!({}), ctx)
+            .await
+            .expect_err("typo must fail");
+        // 错误消息回显调用方用的原始名，便于诊断
+        assert!(err.to_string().contains("todo_lis"), "got: {err}");
+    }
 }

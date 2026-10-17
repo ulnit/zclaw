@@ -956,7 +956,7 @@ mod tests {
             toolsets: vec![
                 (
                     "terminal".to_string(),
-                    vec!["terminal".to_string(), "process".to_string()],
+                    vec!["terminal".to_string(), "process_manage".to_string()],
                 ),
                 (
                     "browser".to_string(),

@@ -824,7 +824,10 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
 
           // terminal/process tool calls are the only things that spawn or reap
           // background processes — sync the composer status stack right after.
-          if (!sessionInterrupted(sessionId) && (payload?.name === 'terminal' || payload?.name === 'process')) {
+          if (
+            !sessionInterrupted(sessionId) &&
+            (payload?.name === 'terminal' || payload?.name === 'process_manage' || payload?.name === 'process')
+          ) {
             void refreshBackgroundProcesses(sessionId)
           }
         }

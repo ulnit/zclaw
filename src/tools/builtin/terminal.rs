@@ -1,6 +1,6 @@
 //! Terminal tools — aligned with hermes' tools/terminal_tool.py
 //!
-//! Tools: `terminal` (foreground/background shell execution) and `process`
+//! Tools: `terminal` (foreground/background shell execution) and `process_manage`
 //! (background session management: list/log/kill/wait/write).
 
 use crate::error::Result;
@@ -229,7 +229,7 @@ fn terminal_tool() -> crate::tools::Tool {
              `cd`-only commands change it for future calls.\n\n\
              Foreground (default): blocks until the command exits or times out.\n\
              Background (background=true): returns a session_id immediately; manage it with \
-             the `process` tool. Pair with notify_on_complete=true for bounded long tasks.",
+             the `process_manage` tool. Pair with notify_on_complete=true for bounded long tasks.",
         )
         .parameters(json!({
             "type": "object",
@@ -537,7 +537,7 @@ async fn spawn_background(
 }
 
 fn process_tool() -> crate::tools::Tool {
-    tool("process")
+    tool("process_manage")
         .description(
             "Manage background terminal sessions started with terminal(background=true).\n\
              Actions:\n\

@@ -44,7 +44,7 @@ fn now() -> f64 {
 }
 
 fn cronjob_tool() -> crate::tools::Tool {
-    tool("cronjob")
+    tool("cronjob_manage")
         .description(
             "Manage scheduled cron jobs with a single compressed tool.\n\n\
              Use action='create' to schedule a new job from a prompt or one or more skills.\n\

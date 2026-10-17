@@ -12,7 +12,7 @@
 //! - `session/prompt` — runs a full agent turn, streaming
 //!   `session/update` notifications: `agent_message_chunk`,
 //!   `agent_thought_chunk`, `tool_call` / `tool_call_update`, and `plan`
-//!   updates from the `todo` tool (hermes events.py parity)
+//!   updates from the `todo_list` tool (hermes events.py parity)
 //! - `session/cancel` — cooperative cancellation flag
 //! - `session/set_mode` / `session/set_model` — acknowledged no-ops
 //! - Tool approvals ride `session/request_permission` (hermes
@@ -336,9 +336,9 @@ fn tool_kind(name: &str) -> &'static str {
     match name {
         "read_file" | "search_files" | "session_search" => "read",
         "write_file" | "patch" => "edit",
-        "terminal" | "process" | "execute_code" => "execute",
+        "terminal" | "process_manage" | "process" | "execute_code" => "execute",
         "web_search" | "web_extract" => "fetch",
-        "todo" => "other",
+        "todo_list" | "todo" => "other",
         _ => "other",
     }
 }
@@ -602,7 +602,7 @@ async fn handle_prompt(state: &Arc<ServerState>, id: Value, params: Value) {
             move |name: &str, args: &Value| {
                 let call_id = format!("call-{}", counter.fetch_add(1, Ordering::SeqCst));
                 let title = match name {
-                    "terminal" | "process" => args
+                    "terminal" | "process_manage" | "process" => args
                         .get("command")
                         .and_then(Value::as_str)
                         .map(|c| format!("{name}: {c}"))
@@ -644,7 +644,7 @@ async fn handle_prompt(state: &Arc<ServerState>, id: Value, params: Value) {
             let open_calls = open_tool_calls.clone();
             move |name: &str, result: &Value| {
                 // Plan updates from todo results (hermes events.py).
-                let plan = if name == "todo" {
+                let plan = if name == "todo_list" || name == "todo" {
                     plan_update_from_todo_result(result)
                 } else {
                     None

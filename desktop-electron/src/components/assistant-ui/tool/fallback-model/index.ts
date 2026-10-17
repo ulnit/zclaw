@@ -347,6 +347,7 @@ const DEFAULT_COUNT_NOUN_BY_TOOL: Record<string, string> = {
   search_files: 'result',
   session_search_recall: 'result',
   todo: 'todo',
+  todo_list: 'todo',
   web_search: 'result'
 }
 
@@ -1051,7 +1052,7 @@ function toolSubtitle(
     return firstStringField(resultRecord, ['message', 'error'])
   }
 
-  if (toolName === 'cronjob') {
+  if (toolName === 'cronjob_manage' || toolName === 'cronjob') {
     return cronjobSubtitle(argsRecord, resultRecord)
   }
 
@@ -1178,7 +1179,7 @@ function toolDetailText(
       .replace(/\bDuration\s+S\s*:/gi, 'Duration:')
   }
 
-  if (part.toolName === 'cronjob') {
+  if (part.toolName === 'cronjob_manage' || part.toolName === 'cronjob') {
     return cronjobDetail(argsRecord, resultRecord)
   }
 
