@@ -1,6 +1,6 @@
 [package]
 name = "ulnclaw"
-version = "0.6.4"
+version = "0.6.5"
 edition = "2021"
 authors = ["ZStep Team"]
 description = "An independently designed AI agent engine written in Rust (hermes-agent compatible)"

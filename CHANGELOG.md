@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.6.5 — 2026-10-16
+
+### Tool-naming alignment with hermes-agent v0.22.2 (P1 + P2a)
+
+hermes-agent renamed several core tools in the v0.22.0 "Threshold Release"
+(`todo` → `todo_list`, `cronjob` → `cronjob_manage`, `process` → `process_manage`)
+and consolidated the preview tool into a `desktop_ui` toolset as
+`desktop_preview`. ulnclaw now advertises the same canonical names.
+
+- **Legacy aliases, not a breaking rename.** `LEGACY_TOOL_ALIASES` +
+  `canonical_tool_name()` resolve the old names at every dispatch seam
+  (`get`/`has`/`dispatch`), so old sessions and saved transcripts keep working.
+  Aliases never enter the registry, so `definitions()`/`names()` advertise only
+  the new names — the model never sees a duplicate tool, and no tokens are wasted.
+  Mirrors hermes `model_tools._LEGACY_TOOL_ALIASES`.
+- **`desktop_preview`** replaces `open_preview` (alias retained). Gains an
+  optional `action` parameter (`enum=[open]`, default `open`); `close`/`read`
+  are intentionally *not* stubbed — they need Electron bridge wiring that this
+  build does not verify, so they are deferred rather than shipped hollow.
+- **Model-visible text corrected:** the `terminal` tool description, the cron
+  blueprint prompt seed, and `learn_prompt`'s tool list now name the new tools.
+- **Deliberately unchanged** (verified by point, not blind-replaced): the kanban
+  status literal `"todo"` and the usage-JSON field `"process"` share spellings
+  with the renamed tools but are unrelated.
+- **Scope note:** the remaining hermes-v0.22.2 tools (`set_theme`, `show_tip`,
+  `gui_tour`, `setup_beat`, `manage_catalog`, `manage_connections`,
+  `annotate_preview`, `read_window_below`, `drive_preview`, `desktop_project`,
+  `browser_vault`, `browser_exec`) are desktop-gated in hermes
+  (`platforms={"desktop"}` / `CLIENT_SURFACE_TOOLSETS`) and are **not** part of
+  the mobile-ffi surface (which registers only the 7 phone-safe families), so
+  they are out of scope for this release. The parity matrix body remains a
+  v2026.8.3 audit; only the tool-naming layer tracks v0.22.2 here.
+- **Tests:** `tools::tests` (alias mapping, idempotency, aliases-never-leak-to-schema,
+  dispatch-via-alias, disabled-toolset-blocks-alias, error-echoes-original-name)
+  plus the existing desktop suite. Verified on Linux (the Unix-only upstream test
+  target does not compile on Windows).
+
 ## v0.6.4 — 2026-10-05
 
 ### Outbound mTLS (client certificates)

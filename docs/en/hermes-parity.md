@@ -9,6 +9,18 @@ surface, storage layout and configuration semantics are compatible with the
 hermes agent — native
 performance and a single static binary.
 
+> **Parity-baseline note (v0.6.5, 2026-10-16):** the body of this matrix is still
+> a **v2026.8.3** audit. From v0.6.5 the **tool-naming layer** additionally tracks
+> hermes-agent **v0.22.2**'s core-tool renames (`todo`→`todo_list`,
+> `cronjob`→`cronjob_manage`, `process`→`process_manage`,
+> `open_preview`→`desktop_preview`); the old names stay callable through
+> `LEGACY_TOOL_ALIASES` while schemas advertise only the new names (see CHANGELOG
+> v0.6.5). The other v0.22.2 tools (`set_theme` / `show_tip` / `gui_tour` /
+> `manage_connections` / `manage_catalog` / `browser_vault` / `browser_exec`, etc.)
+> are desktop-gated in hermes and are **not** part of mobile-ffi's 7 phone-safe tool
+> families, so they are **not yet implemented**; the tables below still describe them
+> against v2026.8.3 and do not reflect v0.22.2 completeness.
+
 <a id="tool-parity"></a>
 
 ## Tool parity
