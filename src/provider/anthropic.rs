@@ -119,8 +119,13 @@ impl AnthropicProvider {
             .unwrap_or(false)
     }
 
+    /// Statuses worth retrying (rate limits + transient server errors).
+    ///
+    /// `529` ("overloaded") is Anthropic's own transient overload signal and is
+    /// retried with the same backoff — hermes-agent classifies 503/529 alike as
+    /// `overloaded` → backoff, not a turn-ending failure.
     fn retriable_status(status: reqwest::StatusCode) -> bool {
-        matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504)
+        matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504 | 529)
     }
 
     fn retry_delay(attempt: usize) -> std::time::Duration {
@@ -1099,5 +1104,27 @@ mod tests {
         }];
         attach_images_anthropic(&mut messages, &images);
         assert_eq!(messages[0]["content"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_retriable_status() {
+        use reqwest::StatusCode;
+        // Anthropic's transient classes: 429 rate-limit, 500/502/503/504 server,
+        // and 529 "overloaded" — the last is Anthropic's own overload signal and
+        // hermes classifies 503/529 alike as backoff-retryable.
+        assert!(AnthropicProvider::retriable_status(StatusCode::TOO_MANY_REQUESTS));
+        assert!(AnthropicProvider::retriable_status(StatusCode::INTERNAL_SERVER_ERROR));
+        assert!(AnthropicProvider::retriable_status(StatusCode::BAD_GATEWAY));
+        assert!(AnthropicProvider::retriable_status(StatusCode::SERVICE_UNAVAILABLE));
+        assert!(AnthropicProvider::retriable_status(StatusCode::GATEWAY_TIMEOUT));
+        assert!(AnthropicProvider::retriable_status(StatusCode::from_u16(529).unwrap()));
+        // Deterministic failures must NOT retry: 400 bad request, 401 auth,
+        // 403 blocked, 404 model/route, 402 billing, 413 payload.
+        assert!(!AnthropicProvider::retriable_status(StatusCode::BAD_REQUEST));
+        assert!(!AnthropicProvider::retriable_status(StatusCode::UNAUTHORIZED));
+        assert!(!AnthropicProvider::retriable_status(StatusCode::FORBIDDEN));
+        assert!(!AnthropicProvider::retriable_status(StatusCode::NOT_FOUND));
+        assert!(!AnthropicProvider::retriable_status(StatusCode::PAYMENT_REQUIRED));
+        assert!(!AnthropicProvider::retriable_status(StatusCode::PAYLOAD_TOO_LARGE));
     }
 }

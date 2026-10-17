@@ -70,8 +70,14 @@ impl OpenAiProvider {
     }
 
     /// Statuses worth retrying (rate limits + transient server errors).
+    ///
+    /// `529` ("overloaded", used by Anthropic and some aggregators/CDNs) is
+    /// retried with the same backoff: hermes-agent classifies 503/529 alike as
+    /// `overloaded` → backoff, not a turn-ending failure. On a mobile network
+    /// behind a fronting proxy this is a common transient, so failing the turn
+    /// instead of retrying is the wrong default.
     fn retriable_status(status: reqwest::StatusCode) -> bool {
-        matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504)
+        matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504 | 529)
     }
 
     /// Exponential backoff with a small jitter: 500ms, 1s, 2s, ... capped.
@@ -913,9 +919,21 @@ mod streaming_tests {
         assert!(OpenAiProvider::retriable_status(
             StatusCode::GATEWAY_TIMEOUT
         ));
+        // 529 "overloaded" — hermes classifies it with 503 as backoff-retryable.
+        assert!(OpenAiProvider::retriable_status(
+            StatusCode::from_u16(529).unwrap()
+        ));
         assert!(!OpenAiProvider::retriable_status(StatusCode::BAD_REQUEST));
         assert!(!OpenAiProvider::retriable_status(StatusCode::UNAUTHORIZED));
         assert!(!OpenAiProvider::retriable_status(StatusCode::NOT_FOUND));
+        // 402 billing / 413 payload / 403 blocked are deterministic — never retried.
+        assert!(!OpenAiProvider::retriable_status(
+            StatusCode::PAYMENT_REQUIRED
+        ));
+        assert!(!OpenAiProvider::retriable_status(
+            StatusCode::PAYLOAD_TOO_LARGE
+        ));
+        assert!(!OpenAiProvider::retriable_status(StatusCode::FORBIDDEN));
     }
 
     #[tokio::test]
