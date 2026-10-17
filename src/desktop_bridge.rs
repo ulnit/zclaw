@@ -1,7 +1,7 @@
 //! Gateway transport for the desktop UI bridge (P231).
 //!
 //! The desktop affordance tools (`close_terminal`, `read_terminal`,
-//! `focus_pane`, `open_preview`, `react_to_message`) reach the renderer
+//! `focus_pane`, `desktop_preview`, `react_to_message`) reach the renderer
 //! through [`crate::desktop`]'s emitter + blocking read callback. When
 //! the gateway runs as a desktop shell's child process
 //! (`ULNCLAW_DESKTOP=1`), the renderer is a webview speaking HTTP, so

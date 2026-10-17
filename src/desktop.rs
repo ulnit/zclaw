@@ -1,7 +1,7 @@
 //! Desktop UI bridge — aligned with hermes' `tools/desktop_ui.py`.
 //!
 //! The desktop affordances (`close_terminal`, `read_terminal`,
-//! `focus_pane`, `open_preview`) live in a renderer process, so the
+//! `focus_pane`, `desktop_preview`) live in a renderer process, so the
 //! desktop-gated tools reach them through an emitter a host application
 //! installs at startup via [`set_emitter`]. Everywhere else the emitter
 //! stays `None` and the tools report "desktop only".

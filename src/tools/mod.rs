@@ -118,11 +118,13 @@ impl ToolResult {
 /// Mirrors hermes-agent v0.22.2 `model_tools._LEGACY_TOOL_ALIASES`, which renamed
 /// `todo` → `todo_list`, `cronjob` → `cronjob_manage`, `process` → `process_manage`
 /// ("the old names still work"). `tour`/`tip` map to tools ulnclaw does not (yet)
-/// implement, so they are intentionally absent.
+/// implement, so they are intentionally absent. `open_preview` → `desktop_preview`
+/// tracks hermes' consolidation of the preview tool into the `desktop_ui` toolset.
 pub const LEGACY_TOOL_ALIASES: &[(&str, &str)] = &[
     ("todo", "todo_list"),
     ("cronjob", "cronjob_manage"),
     ("process", "process_manage"),
+    ("open_preview", "desktop_preview"),
 ];
 
 /// Resolve a possibly-legacy tool name to its canonical name.
@@ -443,6 +445,7 @@ mod tests {
         assert_eq!(canonical_tool_name("todo"), "todo_list");
         assert_eq!(canonical_tool_name("cronjob"), "cronjob_manage");
         assert_eq!(canonical_tool_name("process"), "process_manage");
+        assert_eq!(canonical_tool_name("open_preview"), "desktop_preview");
     }
 
     #[test]

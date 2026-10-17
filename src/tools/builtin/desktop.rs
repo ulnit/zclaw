@@ -1,5 +1,5 @@
 //! Desktop GUI tools — aligned with hermes' `close_terminal_tool.py`,
-//! `read_terminal_tool.py`, `focus_pane_tool.py`, `open_preview_tool.py`.
+//! `read_terminal_tool.py`, `focus_pane_tool.py`, `desktop_preview` (preview_tool.py).
 //!
 //! Each `terminal(background=true)` process can be mirrored as a
 //! read-only tab in a desktop terminal pane; these tools let the agent
@@ -27,7 +27,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(close_terminal_tool());
     registry.register(read_terminal_tool());
     registry.register(focus_pane_tool());
-    registry.register(open_preview_tool());
+    registry.register(desktop_preview_tool());
     registry.register(react_to_message_tool());
 }
 
@@ -252,7 +252,7 @@ fn focus_pane_tool() -> crate::tools::Tool {
              — e.g. \"show me the terminal\", \"open the file browser\", \"show the diff\". \
              Panes: chat (the conversation), files (project file browser), terminal (embedded \
              shell), review (git diff), sessions (the session list). To show a URL or file in \
-             the preview pane, use open_preview instead.",
+             the preview pane, use desktop_preview instead.",
         )
         .parameters(json!({
             "type": "object",
@@ -291,31 +291,46 @@ fn focus_pane_tool() -> crate::tools::Tool {
         .expect("focus_pane builds")
 }
 
-fn open_preview_tool() -> crate::tools::Tool {
-    tool("open_preview")
+fn desktop_preview_tool() -> crate::tools::Tool {
+    tool("desktop_preview")
         .description(
             "Open something in the preview pane beside the chat in the ulnclaw desktop app. \
              Use this when the user asks to see a page, dev server, or file in the preview \
              pane — e.g. \"open cnn.com in the preview pane\" or \"preview localhost:3000\". \
              Accepts a web URL (a bare domain like www.cnn.com is fine), a localhost \
              dev-server URL, or a file path (HTML renders live; other files show their \
-             contents). The pane opens for the current window only.",
+             contents). The pane opens for the current window only. `action` defaults to \
+             \"open\" (close/read are not wired in this build).",
         )
         .parameters(json!({
             "type": "object",
             "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["open"],
+                    "description": "What to do with the preview pane. Only 'open' is supported in this build; omit for 'open'."
+                },
                 "url": {
                     "type": "string",
-                    "description": "What to preview: a web URL (https://… or a bare domain), a localhost URL (localhost:3000), or a file path."
+                    "description": "open: what to preview — a web URL (https://… or a bare domain), a localhost URL (localhost:3000), or a file path."
                 },
                 "label": {
                     "type": "string",
-                    "description": "Optional tab label; defaults to the target's name."
+                    "description": "open: optional tab label; defaults to the target's name."
                 }
             },
             "required": ["url"]
         }))
         .handler(|args, ctx| async move {
+            let action = args
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("open");
+            if action != "open" {
+                return Ok(json!({
+                    "error": "desktop_preview: only action='open' is supported in this build."
+                }));
+            }
             let target = crate::desktop::normalize_preview_target(
                 args.get("url").and_then(|v| v.as_str()).unwrap_or(""),
             );
@@ -345,7 +360,7 @@ fn open_preview_tool() -> crate::tools::Tool {
         .emoji("🖼️")
         .check_fn(check_desktop_requirements)
         .build()
-        .expect("open_preview builds")
+        .expect("desktop_preview builds")
 }
 
 #[cfg(test)]
@@ -432,9 +447,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn open_preview_normalizes_and_emits() {
+    async fn desktop_preview_normalizes_and_emits() {
         let _guard = BRIDGE_TEST_LOCK.lock().unwrap();
-        let tool = open_preview_tool();
+        let tool = desktop_preview_tool();
         let out = call(&tool, json!({"url": "   "})).await;
         assert!(out["error"].as_str().unwrap().contains("url is required"));
         crate::desktop::set_emitter(None);

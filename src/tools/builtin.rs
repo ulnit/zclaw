@@ -107,7 +107,7 @@ pub fn builtin_tool_names() -> Vec<&'static str> {
         "close_terminal",
         "read_terminal",
         "focus_pane",
-        "open_preview",
+        "desktop_preview",
         "x_search",
         "video_generate",
         "xai_video_edit",
