@@ -229,6 +229,14 @@ pub struct BrowseRow {
 /// Maximum session title length in characters (hermes `MAX_TITLE_LENGTH`).
 pub const MAX_TITLE_LENGTH: usize = 100;
 
+/// VACUUM only rewrites the DB when the reclaimable fraction exceeds this
+/// (hermes `AUTO_VACUUM_MIN_FREELIST_RATIO`, `hermes_state_common.py:290`). A
+/// module constant, **not** a config key: upstream never exposes it in the
+/// `[sessions]` block — it is the freelist-ratio leg of the VACUUM triple gate
+/// (pruned>0 + `min_vacuum_interval_days` + this), so a small prune on a dense
+/// multi-GB database never triggers a full rewrite (#54189).
+pub const AUTO_VACUUM_MIN_FREELIST_RATIO: f64 = 0.25;
+
 /// Clean a user-supplied session title (hermes `sanitize_title`): strip
 /// ASCII/Unicode control characters, collapse whitespace runs, trim, and
 /// normalize empty input to `None`. Errors when the cleaned title exceeds

@@ -995,6 +995,13 @@ pub struct UlncLawConfig {
     /// Transparent filesystem checkpoints (hermes checkpoint_manager).
     #[serde(default)]
     pub checkpoints: crate::checkpoint::CheckpointsConfig,
+    /// Automatic session-store cleanup (hermes `sessions.*`).
+    ///
+    /// 🔴 Distinct from `checkpoints` above: both blocks define `retention_days`,
+    /// but this one governs ENDED *sessions* in state.db (default 90 days) while
+    /// `checkpoints.retention_days` governs *filesystem checkpoints* (7 days).
+    #[serde(default)]
+    pub sessions: SessionsConfig,
     #[serde(default)]
     pub memory: MemoryConfig,
     #[serde(default)]
@@ -1284,6 +1291,69 @@ pub struct FalVideoGenConfig {
     /// top-level `video_gen.model` when it names a known family.
     #[serde(default)]
     pub model: Option<String>,
+}
+
+/// `[sessions]` — automatic cleanup of the session store (aligned with hermes
+/// `sessions.*`, `hermes_cli/config_defaults.py:2264`).
+///
+/// Without this the store grows without bound — multi-GB installs were reported
+/// within weeks upstream, which is why `auto_prune` defaults **on** (#54189).
+///
+/// 🔴 Scope: only the keys the auto-prune/VACUUM trigger (P3-3 ⑥) consumes are
+/// modelled here. Upstream's block also carries `auto_archive` /
+/// `auto_archive_days` / `show_subagents`; those belong to separate features that
+/// this port has not wired up, so they are NOT YET PORTED rather than silently
+/// dropped from the contract.
+///
+/// 🔴 Do not confuse with `CheckpointsConfig`: that block has its own
+/// `retention_days` (7) and `auto_prune_hours` (24) governing *filesystem
+/// checkpoints*. Same key names, unrelated feature.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SessionsConfig {
+    /// Prune ENDED sessions inactive for `retention_days` about once per
+    /// `min_interval_hours` at startup (hermes `auto_prune`, default **true**).
+    ///
+    /// Activity is the freshest of live activity / latest message / creation
+    /// time. Open, pinned, or mid-turn sessions are never deleted; the only open
+    /// rows the sweep touches are stale automation sessions (cron/kanban/
+    /// subagent/one-shot CLI) whose process died without closing them — those are
+    /// *closed*, not deleted, and get a further full retention window.
+    pub auto_prune: bool,
+    /// Inactive days of ended-session history to keep (= `ulnclaw sessions
+    /// prune`; hermes `retention_days`, default 90).
+    ///
+    /// 🔴 A negative value is meaningless here and must skip maintenance: it would
+    /// produce a cutoff in the future and therefore match every ended session.
+    pub retention_days: i64,
+    /// VACUUM after a prune that deleted rows — SQLite never reclaims disk on
+    /// DELETE (hermes `vacuum_after_prune`, default true). VACUUM blocks writes
+    /// for ~seconds per 100MB, so it runs only at startup and only when at least
+    /// one session was deleted AND the freelist ratio exceeds
+    /// `AUTO_VACUUM_MIN_FREELIST_RATIO` (a module constant, not a config key).
+    pub vacuum_after_prune: bool,
+    /// Minimum days between VACUUM rewrites; pruning keeps its normal cadence
+    /// (hermes `min_vacuum_interval_days`, default 30).
+    pub min_vacuum_interval_days: u64,
+    /// Minimum hours between auto-maintenance runs, tracked in `state_meta` and
+    /// therefore shared across processes (hermes `min_interval_hours`, default 24).
+    pub min_interval_hours: u64,
+}
+
+impl Default for SessionsConfig {
+    fn default() -> Self {
+        Self {
+            // 🔴 Upstream default is TRUE (`config_defaults.py:2269`), not the
+            // `False` that `gateway/run.py:4669`'s `.get("auto_prune", False)`
+            // fallback suggests — that fallback only applies when the key is
+            // missing entirely, which it never is.
+            auto_prune: true,
+            retention_days: 90,
+            vacuum_after_prune: true,
+            min_vacuum_interval_days: 30,
+            min_interval_hours: 24,
+        }
+    }
 }
 
 /// `[x_search]` — xAI X-search tuning (aligned with hermes `x_search.*`).
@@ -1841,6 +1911,40 @@ impl UlncLawConfig {
 
 #[cfg(test)]
 mod tests {
+
+    /// The `[sessions]` defaults are an external contract (users write these keys
+    /// into config.toml), so they are pinned here against hermes
+    /// `config_defaults.py:2264`.
+    #[test]
+    fn sessions_config_defaults_match_upstream() {
+        let d = super::SessionsConfig::default();
+        // 🔴 auto_prune defaults TRUE upstream (#54189) — the `False` in
+        // `gateway/run.py`'s `.get("auto_prune", False)` is only a missing-key
+        // fallback and never applies.
+        assert!(d.auto_prune, "auto_prune must default on");
+        assert_eq!(d.retention_days, 90);
+        assert!(d.vacuum_after_prune);
+        assert_eq!(d.min_vacuum_interval_days, 30);
+        assert_eq!(d.min_interval_hours, 24);
+    }
+
+    /// A root config with no `[sessions]` block still gets the upstream defaults
+    /// (serde `#[serde(default)]`), and a partial block overrides only what it sets.
+    #[test]
+    fn sessions_block_is_optional_and_partially_overridable() {
+        let root: super::UlncLawConfig = toml::from_str("").expect("empty config parses");
+        assert!(root.sessions.auto_prune);
+        assert_eq!(root.sessions.retention_days, 90);
+
+        let root: super::UlncLawConfig =
+            toml::from_str("[sessions]\nauto_prune = false\nretention_days = 7\n")
+                .expect("partial sessions block parses");
+        assert!(!root.sessions.auto_prune, "explicit off is honoured");
+        assert_eq!(root.sessions.retention_days, 7);
+        // Unset keys keep their defaults.
+        assert!(root.sessions.vacuum_after_prune);
+        assert_eq!(root.sessions.min_interval_hours, 24);
+    }
 
     #[test]
     fn test_tool_output_limits_coercion() {
