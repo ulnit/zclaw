@@ -1,5 +1,75 @@
 # Changelog
 
+## Unreleased
+
+Changes landed after v0.6.5. No version bump yet: these are engine-only changes,
+and releasing them as `0.6.6` would invalidate `mobile-ffi/Cargo.lock` and imply a
+mobile app rebuild — that is a release decision, not bookkeeping.
+
+### Retry 529 as overloaded (P3-2, `1a45671`)
+
+`retriable_status` in both `provider/openai.rs` and `provider/anthropic.rs` was
+`408 | 429 | 500 | 502 | 503 | 504` — missing **529**. Upstream
+`agent/error_classifier.py` classifies `overloaded = 503/529 → backoff`, so an
+overloaded upstream returned a hard error instead of being retried. Added `| 529`
+to both (the only two retry lists).
+
+### Assistant reasoning is now persisted (P3-1, `f528e3f` + mobile-ffi `bd04e8d`)
+
+Reasoning was received and then discarded: `ProviderResponse` and stream deltas
+carry it (`openai.rs` already merges `reasoning_content`/`reasoning`/
+`reasoning_details`), but `Message` had no field and the `messages` table no
+column, so every turn's chain of thought vanished on store.
+
+- `Message.reasoning: Option<String>` (`skip_serializing_if = Option::is_none`, so
+  existing messages serialize byte-identically).
+- `messages.reasoning TEXT`: new DBs via `CREATE TABLE`, existing DBs via an
+  idempotent `ensure_reasoning_column` (`PRAGMA table_info` → `ALTER TABLE`),
+  mirroring the `display_metadata` precedent. **Already-installed users'
+  `state.db` upgrades losslessly.**
+- Read back by both paths (`load_messages` and `load_messages_with_timestamps`,
+  which feeds export/recap). `load_message_rows` returns the lightweight
+  `MessageRow` and correctly needs none.
+
+### Per-provider reasoning echo policy (P3-1b, `669afc5`)
+
+Makes the stored reasoning usable for replay. New module `provider::reasoning_echo`
+transcribes hermes' `_REASONING_ECHO_RULES` / `_REASONING_CARRIER_ROUTES` into
+three tiers resolved from `(provider name, model, endpoint)`:
+
+- **must-echo** — DeepSeek, Kimi/moonshot hosts, Xiaomi MiMo, Nous Portal
+  `stealth/missingno`. Every assistant turn carries `reasoning_content`, padded
+  with `" "` when there is no text; `""` is rejected by DeepSeek V4 (#17341), and
+  omission is a proven HTTP 400 there.
+- **strict** — Mistral, Groq, Cerebras, SambaNova, Tencent Hunyuan. Their
+  `additionalProperties: false` schemas 400/422 on any reasoning key (#45655,
+  #70233), so they never get one.
+- **content** — openrouter, kilocode, nous, fireworks, novita, minimax, tokenhub,
+  ollama-cloud, lmstudio, upstage; replays only when non-blank text exists.
+
+🔴 **Deliberate deviation from upstream:** *unknown* routes resolve to **off**, not
+to `reasoning_content`. hermes defaults unknown routes to sending it and stays safe
+only because it **learns** rejections at runtime
+(`record_reasoning_field_rejection`); ulnclaw has no such learner, so unknown
+routes stay silent — preserving today's working behaviour instead of risking a
+400/422 on a provider that currently works. Porting the runtime learner would
+allow relaxing this.
+
+Applied to **assistant turns only**; the route is resolved once per request in both
+the streaming and non-streaming paths.
+
+**Fallback needs no reapply step.** hermes requires
+`reapply_reasoning_echo_for_provider` after a fallback because it mutates a live
+provider; ulnclaw's `build_fallback_provider` constructs a fresh provider per
+entry and `name`/`model`/`endpoint` are immutable after construction, so the route
+is derived at request time and follows the switch automatically.
+
+**Anthropic is out of scope.** It replays reasoning as *signed* `thinking` blocks;
+`signature` appears 0 times in `anthropic.rs` and `messages_to_anthropic` builds no
+thinking blocks, so it replays nothing today and remains correct. hermes'
+`agent/anthropic_thinking_policy.py` (signed replay + durable suppression) is a
+separate, larger item.
+
 ## v0.6.5 — 2026-10-16
 
 ### Tool-naming alignment with hermes-agent v0.22.2 (P1 + P2a)

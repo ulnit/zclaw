@@ -9,7 +9,7 @@ surface, storage layout and configuration semantics are compatible with the
 hermes agent — native
 performance and a single static binary.
 
-> **Parity-baseline note (v0.6.5, 2026-10-16):** the body of this matrix is still
+> **Parity-baseline note (v0.6.5, 2026-10-16; amended 2026-10-19):** the body of this matrix is still
 > a **v2026.8.3** audit. From v0.6.5 the **tool-naming layer** additionally tracks
 > hermes-agent **v0.22.2**'s core-tool renames (`todo`→`todo_list`,
 > `cronjob`→`cronjob_manage`, `process`→`process_manage`,
@@ -20,6 +20,16 @@ performance and a single static binary.
 > are desktop-gated in hermes and are **not** part of mobile-ffi's 7 phone-safe tool
 > families, so they are **not yet implemented**; the tables below still describe them
 > against v2026.8.3 and do not reflect v0.22.2 completeness.
+>
+> The **agent-core behaviour layer** has also begun tracking v0.22.2 (see CHANGELOG
+> "Unreleased"): 529 overloaded is now retried (P3-2), assistant reasoning is
+> persisted (P3-1), and a tiered per-provider reasoning replay policy lives in
+> `provider::reasoning_echo` (P3-1b). P3-1b has one **deliberate deviation** from
+> upstream — unknown provider routes do *not* send `reasoning_content`, because
+> hermes only tolerates that default via runtime rejection learning, which ulnclaw
+> does not have yet. Anthropic's **signed thinking replay** remains unimplemented
+> (`anthropic.rs` has no `signature` and builds no thinking blocks, so replaying
+> nothing there is currently correct).
 
 <a id="tool-parity"></a>
 

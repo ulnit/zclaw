@@ -7,7 +7,7 @@
 的对应关系。ulnclaw 是自研的 Rust Agent 引擎：工具面、存储布局与配置语义均与
 hermes-agent v2026.8.3 对标兼容 —— 原生性能，单一静态二进制。
 
-> **对标基线说明（v0.6.5，2026-10-16）**：本矩阵正文仍是 **v2026.8.3** 的审计。
+> **对标基线说明（v0.6.5，2026-10-16；2026-10-19 补充）**：本矩阵正文仍是 **v2026.8.3** 的审计。
 > v0.6.5 起，**工具命名层**已额外对齐 hermes-agent **v0.22.2** 的核心工具改名
 > （`todo`→`todo_list`、`cronjob`→`cronjob_manage`、`process`→`process_manage`、
 > `open_preview`→`desktop_preview`），旧名经 `LEGACY_TOOL_ALIASES` 保留可调用、
@@ -15,6 +15,13 @@ hermes-agent v2026.8.3 对标兼容 —— 原生性能，单一静态二进制�
 > `show_tip`/`gui_tour`/`manage_connections`/`manage_catalog`/`browser_vault`/
 > `browser_exec` 等）在 hermes 侧为 desktop 门控，且不在 mobile-ffi 的 7 个手机安全
 > 工具族内，**尚未实现**；正文表格中它们仍按 v2026.8.3 口径标注，不代表 v0.22.2 完成度。
+>
+> 此外，**agent 核心行为层**也已开始对齐 v0.22.2（见 CHANGELOG「Unreleased」）：
+> 529 overloaded 纳入重试（P3-2）、assistant reasoning 落库持久化（P3-1）、
+> 以及按 provider 分层的 reasoning 回放策略 `provider::reasoning_echo`（P3-1b）。
+> P3-1b 有一处**刻意偏离**上游：未知 provider 路线不发 `reasoning_content`（hermes 靠运行时
+> rejection 学习兜底，ulnclaw 尚无该机制）。Anthropic 的**签名 thinking 回放**仍未实现
+> （`anthropic.rs` 无 `signature`，也不构造 thinking block，因此当前不回放＝正确）。
 
 <a id="工具对标"></a>
 
