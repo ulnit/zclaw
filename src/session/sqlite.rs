@@ -405,6 +405,38 @@ fn ensure_reasoning_column(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// `model_config` key holding the durable rejected-reasoning-route table.
+/// Same literal as hermes `_REJECTION_MODEL_CONFIG_KEY`.
+pub const REJECTED_REASONING_KEY: &str = "reasoning_rejected_carriers";
+
+/// Carrier names a persisted rejection may name (hermes `_ALL_CARRIERS`).
+///
+/// Read-side whitelist: upstream filters stored carriers through it
+/// (`k for k in entry[3] if k in _ALL_CARRIERS`), so a corrupt or hand-edited
+/// blob cannot inject an arbitrary string into the replay decision. ulnclaw's
+/// wire only sends `reasoning_content`, but the upstream two are listed so the
+/// table stays readable if the wire is ever widened.
+pub const KNOWN_REASONING_CARRIERS: &[&str] =
+    &["reasoning_content", "reasoning", "reasoning_details"];
+
+/// One route whose schema rejected `reasoning_content`
+/// (hermes' `(provider, host, model) -> carriers` map entry, flattened).
+///
+/// 🔴 The route key is `(provider, host, model)` — NOT just provider. Upstream is
+/// explicit about why: "one gateway serves models on different upstream lanes, so
+/// a rejection learned for one model must not strip carriers from its siblings".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RejectedReasoningRoute {
+    pub provider: String,
+    /// Base-URL host, as produced by `provider::reasoning_echo::host_of`.
+    pub host: String,
+    pub model: String,
+    /// Rejected carriers. ulnclaw's wire has one (`reasoning_content`); the vec
+    /// keeps upstream's shape so the extra carriers can be added without a
+    /// storage migration.
+    pub carriers: Vec<String>,
+}
+
 /// Tolerant `model_config` decode (hermes `_parse_model_config`,
 /// `hermes_state_sessions.py`): JSON text → object; anything else → empty.
 ///
@@ -1770,6 +1802,106 @@ impl SqliteSessionStore {
         )
         .map_err(|e| AgentError::session(e.to_string()))?;
         Ok(())
+    }
+
+    /// Durable list of reasoning-echo routes that have rejected
+    /// `reasoning_content` (hermes `_REJECTION_MODEL_CONFIG_KEY`, read by
+    /// `rejected_reasoning_carriers` / written by
+    /// `record_reasoning_field_rejection`).
+    ///
+    /// This is what makes the P3-1d learner survive a `--resume` or a gateway
+    /// restart instead of re-learning with another 400. The row shape matches
+    /// upstream — `[provider, host, model, [carriers…]]` — so the 4-tuple stays
+    /// available if the wire ever grows upstream's extra carriers.
+    ///
+    /// Malformed rows are dropped, never propagated: a corrupt blob must degrade
+    /// to "nothing learned yet", not to a session-load failure.
+    pub fn rejected_reasoning_routes(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<RejectedReasoningRoute>> {
+        let Some(value) =
+            self.get_session_model_config_value(session_id, REJECTED_REASONING_KEY)?
+        else {
+            return Ok(Vec::new());
+        };
+        let Some(rows) = value.as_array() else {
+            return Ok(Vec::new());
+        };
+        let mut out = Vec::new();
+        for row in rows {
+            let Some(cols) = row.as_array() else { continue };
+            // hermes validates `len(entry) == 4 and isinstance(entry[3], list)`.
+            if cols.len() != 4 {
+                continue;
+            }
+            let Some(carriers) = cols[3].as_array() else {
+                continue;
+            };
+            // 🔴 A row whose key columns are not strings is corrupt, not
+            // "empty": coercing with unwrap_or("") would fabricate a route
+            // keyed ("","","") that could then match nothing — or worse, match
+            // a real all-empty route. Drop the row.
+            let (Some(provider), Some(host), Some(model)) =
+                (cols[0].as_str(), cols[1].as_str(), cols[2].as_str())
+            else {
+                continue;
+            };
+            // 🔴 Filter to the known carrier whitelist, exactly as upstream does
+            // (`update(k for k in entry[3] if k in _ALL_CARRIERS)`). A corrupt or
+            // hand-edited blob must not be able to inject arbitrary strings into
+            // the replay decision.
+            let carriers: Vec<String> = carriers
+                .iter()
+                .filter_map(|c| c.as_str().map(str::to_string))
+                .filter(|c| KNOWN_REASONING_CARRIERS.contains(&c.as_str()))
+                .collect();
+            out.push(RejectedReasoningRoute {
+                provider: provider.to_string(),
+                host: host.to_string(),
+                model: model.to_string(),
+                carriers,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Persist the rejected-route table (hermes' patcher call). Sorted by
+    /// (provider, host, model) so rewriting the same set is byte-stable; an
+    /// empty table writes `Null`, which removes the key and leaves the column
+    /// NULL rather than `"[]"`.
+    pub fn set_rejected_reasoning_routes(
+        &self,
+        session_id: &str,
+        routes: &[RejectedReasoningRoute],
+    ) -> Result<()> {
+        let mut rows: Vec<&RejectedReasoningRoute> = routes.iter().collect();
+        rows.sort_by(|a, b| {
+            (&a.provider, &a.host, &a.model).cmp(&(&b.provider, &b.host, &b.model))
+        });
+        let value: Vec<Value> = rows
+            .into_iter()
+            .map(|r| {
+                let mut carriers = r.carriers.clone();
+                carriers.sort();
+                Value::Array(vec![
+                    Value::from(r.provider.clone()),
+                    Value::from(r.host.clone()),
+                    Value::from(r.model.clone()),
+                    Value::Array(carriers.into_iter().map(Value::from).collect()),
+                ])
+            })
+            .collect();
+        let mut patch = Map::new();
+        patch.insert(
+            REJECTED_REASONING_KEY.to_string(),
+            if value.is_empty() {
+                Value::Null
+            } else {
+                Value::Array(value)
+            },
+        );
+        self.patch_session_model_config(session_id, &patch)
     }
 
     /// Ensure a session row exists (create it if missing). Used by the
@@ -4043,5 +4175,134 @@ mod tests {
         // truncated / garbage → {} (must not panic or error)
         assert!(parse_model_config("{not json").is_empty());
         assert!(parse_model_config(r#"{"a":1,"#).is_empty());
+    }
+
+    // ---------------------------------------------------------------
+    // P3-1e: durable rejected-reasoning-route table
+    // ---------------------------------------------------------------
+
+    fn route(p: &str, h: &str, m: &str) -> RejectedReasoningRoute {
+        RejectedReasoningRoute {
+            provider: p.into(),
+            host: h.into(),
+            model: m.into(),
+            carriers: vec!["reasoning_content".into()],
+        }
+    }
+
+    #[test]
+    fn rejected_routes_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        assert!(
+            store.rejected_reasoning_routes(&sid).unwrap().is_empty(),
+            "a fresh session has learned nothing"
+        );
+        let routes = vec![route("mistral", "api.mistral.ai", "mistral-large")];
+        store.set_rejected_reasoning_routes(&sid, &routes).unwrap();
+        assert_eq!(store.rejected_reasoning_routes(&sid).unwrap(), routes);
+    }
+
+    /// The key is per-(provider, host, model): one gateway serves models on
+    /// different upstream lanes, so a rejection learned for one model must not
+    /// strip carriers from its siblings (upstream's stated reason).
+    #[test]
+    fn rejected_routes_keep_siblings_distinct() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        let routes = vec![
+            route("openrouter", "openrouter.ai", "model-a"),
+            route("openrouter", "openrouter.ai", "model-b"),
+        ];
+        store.set_rejected_reasoning_routes(&sid, &routes).unwrap();
+        let got = store.rejected_reasoning_routes(&sid).unwrap();
+        assert_eq!(got.len(), 2, "both sibling models must survive");
+        assert!(got.contains(&routes[0]) && got.contains(&routes[1]));
+    }
+
+    /// Survives a reopen — the entire point of persisting it.
+    #[test]
+    fn rejected_routes_survive_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let sid = {
+            let store = store_with(dir.path());
+            let sid = store.create_session("cli", Some("m"), None).unwrap();
+            store
+                .set_rejected_reasoning_routes(&sid, &[route("groq", "groq.com", "llama")])
+                .unwrap();
+            sid
+        };
+        let store = store_with(dir.path());
+        let got = store.rejected_reasoning_routes(&sid).unwrap();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].model, "llama");
+        assert_eq!(got[0].carriers, vec!["reasoning_content".to_string()]);
+    }
+
+    /// An empty table removes the key (column back to NULL, not "[]"), and the
+    /// blob is sorted so rewriting the same set is byte-stable.
+    #[test]
+    fn rejected_routes_empty_clears_and_sorting_is_stable() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        store
+            .set_rejected_reasoning_routes(&sid, &[route("a", "h", "m")])
+            .unwrap();
+        store.set_rejected_reasoning_routes(&sid, &[]).unwrap();
+        assert!(store.rejected_reasoning_routes(&sid).unwrap().is_empty());
+        assert_eq!(
+            store
+                .get_session_model_config_value(&sid, REJECTED_REASONING_KEY)
+                .unwrap(),
+            None,
+            "clearing must leave the key absent, not an empty array"
+        );
+        store
+            .set_rejected_reasoning_routes(
+                &sid,
+                &[route("zeta", "z", "m"), route("alpha", "a", "m")],
+            )
+            .unwrap();
+        let got = store.rejected_reasoning_routes(&sid).unwrap();
+        assert_eq!(got[0].provider, "alpha");
+        assert_eq!(got[1].provider, "zeta");
+    }
+
+    /// Malformed rows are dropped, never propagated — a corrupt blob degrades to
+    /// "nothing learned", it must not break session load.
+    #[test]
+    fn rejected_routes_tolerate_malformed_blobs() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        // Write garbage directly through the KV layer, bypassing the typed setter.
+        let mut patch = Map::new();
+        patch.insert(
+            REJECTED_REASONING_KEY.to_string(),
+            serde_json::json!([
+                ["ok", "host", "model", ["reasoning_content"]],
+                ["too", "few"],
+                "not-an-array",
+                ["bad-carriers", "h", "m", "not-a-list"],
+                [1, 2, 3, []]
+            ]),
+        );
+        store.patch_session_model_config(&sid, &patch).unwrap();
+        let got = store.rejected_reasoning_routes(&sid).unwrap();
+        assert_eq!(got.len(), 1, "only the well-formed row survives: {:?}", got);
+        assert_eq!(got[0].provider, "ok");
+        assert_eq!(got[0].carriers, vec!["reasoning_content".to_string()]);
+
+        // A wholly non-array value yields an empty table, not an error.
+        let mut patch = Map::new();
+        patch.insert(
+            REJECTED_REASONING_KEY.to_string(),
+            serde_json::json!({"not": "an array"}),
+        );
+        store.patch_session_model_config(&sid, &patch).unwrap();
+        assert!(store.rejected_reasoning_routes(&sid).unwrap().is_empty());
     }
 }
