@@ -19,10 +19,12 @@ hermes-agent v2026.8.3 对标兼容 —— 原生性能，单一静态二进制�
 > 此外，**agent 核心行为层**也已开始对齐 v0.22.2（见 CHANGELOG「Unreleased」）：
 > 529 overloaded 纳入重试（P3-2）、assistant reasoning 落库持久化（P3-1）、
 > 以及按 provider 分层的 reasoning 回放策略 `provider::reasoning_echo`（P3-1b）。
-> P3-1b 有一处**刻意偏离**上游：未知 provider 路线不发 `reasoning_content`。P3-1d 已补上
-> hermes 的**运行时 rejection 学习器**（`ReasoningRejectionLog`，某路线 400 点名该字段后即
-> 整段降级为不发、并当场剥离重试一次），但未知路线的默认值仍保持不发——学习器只能在
-> provider 已经吃过一次 400 之后才起作用，默认打开等于让每个新 provider 的首个请求必然失败。
+> P3-1b/P3-1d 与上游一致：未知 provider 路线发 `reasoning_content`（上游
+> `_DEFAULT_CARRIERS = frozenset({RC})`，「事实标准载体」），并由 P3-1d 移植的**运行时
+> rejection 学习器**（`ReasoningRejectionLog`）兜底——某路线 400 点名该字段后即整段降级为
+> 不发、并当场剥离重试一次。上游把「默认发 + 学习兜底」当作一套完整设计，两半缺一不可。
+> tier 次序亦同上游：**strict 压倒 must-echo**（`pad and RC in carriers`，strict 路线
+> 连 pad 都不给）。
 > Anthropic 的**签名 thinking 回放**仍未实现
 > （`anthropic.rs` 无 `signature`，也不构造 thinking block，因此当前不回放＝正确）。
 

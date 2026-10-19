@@ -24,13 +24,14 @@ performance and a single static binary.
 > The **agent-core behaviour layer** has also begun tracking v0.22.2 (see CHANGELOG
 > "Unreleased"): 529 overloaded is now retried (P3-2), assistant reasoning is
 > persisted (P3-1), and a tiered per-provider reasoning replay policy lives in
-> `provider::reasoning_echo` (P3-1b). P3-1b has one **deliberate deviation** from
-> upstream — unknown provider routes do *not* send `reasoning_content`. P3-1d added
-> hermes' **runtime rejection learner** (`ReasoningRejectionLog`: once a route 400s
-> naming that field it is downgraded to not sending it, and the field is stripped and
-> retried once), but the unknown-route default deliberately stays off — the learner
-> only helps *after* a provider has already eaten a 400, so opting unknown routes in
-> would make every new provider's first request fail. Anthropic's **signed thinking
+> `provider::reasoning_echo` (P3-1b). P3-1b/P3-1d match upstream here: unknown provider
+> routes **do** send `reasoning_content` (upstream `_DEFAULT_CARRIERS = frozenset({RC})`,
+> "the de-facto standard"), backed by the **runtime rejection learner** P3-1d ported
+> (`ReasoningRejectionLog`: once a route 400s naming that field it is downgraded to not
+> sending it, and the field is stripped and retried once). Upstream treats "send by
+> default + learn on rejection" as one design; both halves are required. Tier precedence
+> also matches: **strict beats must-echo** (`pad and RC in carriers` — a strict route
+> gets no reasoning key, not even the pad). Anthropic's **signed thinking
 > replay** remains unimplemented (`anthropic.rs` has no `signature` and builds no
 > thinking blocks, so replaying nothing there is currently correct).
 

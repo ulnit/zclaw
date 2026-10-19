@@ -47,14 +47,21 @@ three tiers resolved from `(provider name, model, endpoint)`:
 - **content** — openrouter, kilocode, nous, fireworks, novita, minimax, tokenhub,
   ollama-cloud, lmstudio, upstage; replays only when non-blank text exists.
 
-🔴 **Deliberate deviation from upstream:** *unknown* routes resolve to **off**, not
-to `reasoning_content`. hermes defaults unknown routes to sending it and stays safe
-only because it **learns** rejections at runtime
-(`record_reasoning_field_rejection`). ulnclaw now has that learner too — see
-"P3-1d" below — but the unknown-route default is still kept at **off**, because the
-learner only helps *after* a provider has already eaten one 400. Opting unknown
-routes in would trade a guaranteed first-request failure on every new provider for
-an unproven benefit.
+Unknown routes resolve to `reasoning_content`, matching upstream
+`_DEFAULT_CARRIERS = frozenset({RC})` ("every other route defaults to
+`reasoning_content`, which is the de-facto standard"). That default is safe because of
+the runtime rejection learner below — upstream ships both halves as one design, and so
+does this port. *(This entry originally documented unknown routes as **off**, on the
+grounds that ulnclaw lacked the learner that makes the upstream default safe. The
+learner landed in P3-1d, which removed that justification; the deviation was then
+corrected in `d5080e6` rather than left documented as intentional.)*
+
+Tier precedence matches upstream too: **strict beats must-echo**. hermes returns
+`pad and RC in carriers`, and a strict route's carrier set is empty, so the must-echo
+pad is withheld there as well ("a strict route never gets a reasoning key, not even
+the must-echo pad"). `d5080e6` corrected this port's original must-echo-first order,
+which would have handed the pad to e.g. a deepseek *model* served through a groq
+*host* and been rejected by groq's `additionalProperties: false` schema.
 
 Applied to **assistant turns only**; the route is resolved once per request in both
 the streaming and non-streaming paths.
@@ -110,11 +117,17 @@ the loop and return `last_error = None`, i.e. the generic *"request failed after
 retries"* — **swallowing the real 400** the recovery exists to fix. A test asserts
 that string never appears.
 
-**Scope: process-lifetime, not persisted.** hermes also writes rejections into the
-session's `model_config` so a resumed process never re-learns with another 400.
-ulnclaw's provider layer sits *below* the session layer and holds no store handle, so
-threading persistence in would invert that dependency. A restart re-learns once.
-Tracked as P3-1e.
+**Scope: process-lifetime, not persisted — still owed.** hermes also writes rejections
+into the session's `model_config` so a resumed process never re-learns with another
+400. ulnclaw's provider layer sits *below* the session layer and holds no store
+handle, and ulnclaw has no session-level JSON KV store at all yet (hermes'
+`patch_session_model_config` / `get_session_model_config_value`). So this port
+currently re-learns once per process restart. That is unfinished upstream parity, not
+an accepted scope cut: the prerequisite is a `sessions.model_config` column plus
+get/patch helpers, which P3-1e adds and the compressor's cross-turn state needs too.
+
+With this learner in place, unknown routes now send `reasoning_content` as upstream
+does (`d5080e6`) — the learner is exactly what makes that default safe.
 
 ### Compression tail capped at 20% of the budget (`0117e54`)
 
@@ -143,11 +156,54 @@ An end-to-end test asserts the actual bug is gone: a 40 × 1000-token conversati
 under a 10k budget must come back with **less than half** the tokens, fewer messages,
 and the summary present.
 
-**Not done here:** the other half of that same hermes release — triggering compaction
-on provider-reported usage (`last_real_prompt_tokens`) instead of the chars/4 estimate
-— needs the agent loop to feed real usage back into the compression decision, so it is
-a separate change. Anti-thrash cooldown and the ineffective-compaction breaker are
-likewise untouched.
+The other half of that same hermes release — triggering compaction on
+provider-reported usage instead of the chars/4 estimate — landed separately as
+**P3-5b** below.
+
+### Compaction triggers on real token counts (P3-5b, `4392b14`)
+
+Ports hermes #104555: *"Compaction triggers on real token counts — provider-reported
+usage, not bytes/4"*. `estimate_tokens` counts only message content and tool-call
+arguments, so it systematically **under-counts** the real prompt: the system prompt and
+the tool *schemas* never appear in `messages` at all. hermes #14695 puts that
+incompressible floor at 20–30K tokens with 50+ tools — which means the old trigger
+could sit under budget while the provider was already at its limit.
+
+- `needs_compression()` is now **usage-anchored**: when a provider reading exists it is
+  authoritative, and the estimate only covers messages appended since that reading
+  (`anchor_len` snapshots `messages.len()` at send time, because the provider's usage
+  describes *that* request — pairing it with whatever the loop appended before the
+  response arrives would mis-anchor). With no reading yet it falls back to the estimate.
+- `note_response_usage()` is called on **every completed response**, not only when
+  usage is present: a response without usage is itself the signal that this provider
+  omits it (hermes `note_usage_less_response`, #2153), and it is what consumes the
+  post-compaction latch.
+- `note_compaction_ran()` arms that latch and discards the reading, which described a
+  transcript that was just replaced. 🔴 Without it the next iteration re-compresses on
+  stale numbers — the death spiral hermes fixed in #4750/#2153.
+- **Anti-thrash breaker**: two provider-confirmed *ineffective* compactions stop
+  auto-compression for the run. When the incompressible floor alone exceeds the
+  threshold, shrinking messages can never help and every pass is wasted money and lost
+  context (#14695). A real reading back under the threshold resets it.
+- The ineffective verdict is judged **only** in `note_response_usage`, never in the
+  trigger check: hermes is explicit that the trigger runs twice per turn against two
+  different measures (rough preflight vs real post-response, #36718), and the rough one
+  can dip below the threshold and clear the strike every turn, re-opening the loop.
+
+**Not yet ported — prerequisite to be built:** hermes'
+`should_defer_preflight_to_real_usage` lets a rough over-estimate wait one request for
+the provider to adjudicate, and its docstring states the prerequisite — *"its overflow
+error still triggers reactive recovery"*. ulnclaw has **no reactive context-overflow
+recovery** yet (no `error_classifier` overflow class, no "maximum context length is N"
+parsing, no step-down), so deferring today would turn a preventive compaction into a
+hard 400. That recovery is therefore the prerequisite and is being built (P3-6);
+the estimate keeps its preventive role only until it lands.
+
+**Scope limit still owed:** `ContextCompressor` is constructed inside `run()`, and
+`run_with_session` is called once per user turn, so the usage anchor accumulates only
+within a single run — it does not survive across turns. hermes keeps it on the session
+and persists it across `--resume`. Lifting the compressor to `Agent` and binding it to
+the session lifetime is tracked as P3-5d.
 
 ## v0.6.5 — 2026-10-16
 
