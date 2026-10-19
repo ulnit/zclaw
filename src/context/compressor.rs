@@ -5,7 +5,7 @@
 //! "[CONTEXT SUMMARY]" message, keeping the system prompt, the first user
 //! message, and the most recent turns intact.
 
-use crate::provider::{Message, Provider, Role};
+use crate::provider::{Message, Provider, Role, Usage};
 
 /// Hard share of the context budget the verbatim tail may occupy
 /// (hermes `TAIL_MAX_CONTEXT_FRACTION`, `agent/context_compressor.py`).
@@ -32,6 +32,10 @@ that preserves: decisions made, facts learned, file paths touched, pending work,
 constraints the user stated. Be dense and factual; bullet points are fine. Do not address the \
 user — this summary is injected back into the model's context.\n\nCONVERSATION SEGMENT:\n";
 
+/// How many provider-confirmed *ineffective* compactions trip the anti-thrash
+/// breaker (hermes `_tripped`: `_ineffective_compression_count >= 2`).
+const INEFFECTIVE_COMPRESSION_LIMIT: usize = 2;
+
 pub struct ContextCompressor {
     /// Maximum context tokens before compression kicks in.
     pub max_context_tokens: usize,
@@ -42,6 +46,28 @@ pub struct ContextCompressor {
     /// IANA timezone for the summary's temporal anchoring (hermes
     /// compressor `Current date` line via hermes_time).
     pub timezone: Option<String>,
+    /// Provider-reported prompt tokens from the most recent response
+    /// (hermes `last_real_prompt_tokens`). `None` until the first reading.
+    last_real_prompt_tokens: Option<u32>,
+    /// `messages.len()` at the moment [`Self::last_real_prompt_tokens`] was
+    /// read, so a usage-anchored figure can add only what was appended since
+    /// (hermes: "real prompt count + delta of what was appended since").
+    anchor_len: usize,
+    /// A compaction just replaced history, so the last real reading describes a
+    /// transcript that no longer exists (hermes
+    /// `awaiting_real_usage_after_compression`). 🔴 Without this latch the stale
+    /// reading is still over threshold and the next iteration compresses again —
+    /// the death spiral hermes fixed in #4750/#2153.
+    awaiting_real_usage: bool,
+    /// A completed response carried no usage, so there is nothing to anchor on
+    /// (hermes `_provider_omits_usage`, set by `note_usage_less_response`).
+    provider_omits_usage: bool,
+    /// Armed when a compaction runs; judged on the next real reading.
+    verify_cleared_threshold: bool,
+    /// Provider-confirmed ineffective compactions in a row.
+    ineffective_count: usize,
+    /// Anti-thrash breaker tripped: stop compressing, it cannot help.
+    breaker_tripped: bool,
 }
 
 impl Default for ContextCompressor {
@@ -57,6 +83,13 @@ impl ContextCompressor {
             target_ratio: 0.5,
             keep_recent: 12,
             timezone: None,
+            last_real_prompt_tokens: None,
+            anchor_len: 0,
+            awaiting_real_usage: false,
+            provider_omits_usage: false,
+            verify_cleared_threshold: false,
+            ineffective_count: 0,
+            breaker_tripped: false,
         }
     }
 
@@ -83,8 +116,118 @@ impl ContextCompressor {
     }
 
     /// Check if compression is needed.
+    ///
+    /// 🔴 **Usage-anchored, not estimate-anchored** (hermes #104555: "Compaction
+    /// triggers on real token counts — provider-reported usage, not bytes/4").
+    /// [`Self::estimate_tokens`] counts only message content and tool-call
+    /// arguments, so it systematically **under-counts** the real prompt: the
+    /// system prompt and the tool *schemas* never appear in `messages` at all
+    /// (hermes #14695 puts that incompressible floor at 20–30K tokens with 50+
+    /// tools). Once a provider reading exists it is authoritative and the
+    /// estimate only covers what was appended since.
+    ///
+    /// Two guards make this safe rather than merely more accurate:
+    /// * `awaiting_real_usage` — right after a compaction the last reading
+    ///   describes a transcript that no longer exists. Compressing on it again is
+    ///   the death spiral hermes fixed in #4750/#2153.
+    /// * `breaker_tripped` — after two provider-confirmed *ineffective*
+    ///   compactions, stop. The incompressible floor alone exceeds the threshold,
+    ///   so shrinking messages can never help and every pass would be wasted
+    ///   money and lost context.
+    ///
+    /// **Deliberately not ported:** hermes' `should_defer_preflight_to_real_usage`
+    /// lets a rough over-estimate *wait one request* for the provider to
+    /// adjudicate, and its docstring says so explicitly — "Let the provider
+    /// adjudicate; its overflow error still triggers reactive recovery". ulnclaw
+    /// has **no reactive context-overflow recovery**, so deferring would turn a
+    /// preventive compaction into a hard 400. Without that recovery, the estimate
+    /// must keep its preventive role.
     pub fn needs_compression(&self, messages: &[Message]) -> bool {
-        Self::estimate_tokens(messages) > self.max_context_tokens
+        if self.breaker_tripped || self.awaiting_real_usage {
+            return false;
+        }
+        match self.last_real_prompt_tokens {
+            // Anchored: the provider's own count for the bulk, plus an estimate
+            // of only what was appended since that reading.
+            Some(real) => {
+                let from = self.anchor_len.min(messages.len());
+                let delta = Self::estimate_tokens(&messages[from..]);
+                real as usize + delta > self.max_context_tokens
+            }
+            // No reading yet (first request of the run, or a provider that omits
+            // usage): the rough estimate is the only signal available.
+            None => Self::estimate_tokens(messages) > self.max_context_tokens,
+        }
+    }
+
+    /// Feed the provider's real usage back in. Call once per **completed**
+    /// response, with `request_messages` = `messages.len()` as sent.
+    ///
+    /// Mirrors hermes `update_from_response` + `_apply_real_prompt_verdict`:
+    /// the latch is consumed on *every* completed response (even one without
+    /// usage) so it can never stay armed forever (#2153), and the
+    /// ineffective-compaction verdict is judged **here**, because this is the
+    /// only place that sees the provider's real count for a just-compacted
+    /// conversation. hermes is explicit that the verdict must not live in the
+    /// trigger check: that runs twice per turn against two different measures
+    /// (rough preflight vs real post-response, #36718) and the rough one can dip
+    /// below the threshold and reset the strike every turn, re-opening the loop.
+    pub fn note_response_usage(&mut self, usage: Option<&Usage>, request_messages: usize) {
+        match usage {
+            Some(u) if u.prompt_tokens > 0 => {
+                let real = u.prompt_tokens as usize;
+                self.last_real_prompt_tokens = Some(u.prompt_tokens);
+                self.anchor_len = request_messages;
+                // A real reading proves this provider does report usage.
+                self.provider_omits_usage = false;
+                if real < self.max_context_tokens {
+                    // Any real reading below the trigger proves the prompt fits.
+                    self.ineffective_count = 0;
+                    self.breaker_tripped = false;
+                } else if self.verify_cleared_threshold {
+                    // Compaction ran and the provider still reports over threshold.
+                    self.ineffective_count += 1;
+                    if self.ineffective_count >= INEFFECTIVE_COMPRESSION_LIMIT {
+                        self.breaker_tripped = true;
+                        tracing::warn!(
+                            "compaction did not clear the threshold {}/{} times: {} real prompt \
+                             tokens still >= {} budget — the incompressible prompt (system + tool \
+                             schemas) may already exceed it, so shrinking messages cannot help; \
+                             disabling auto-compression for this run",
+                            self.ineffective_count,
+                            INEFFECTIVE_COMPRESSION_LIMIT,
+                            real,
+                            self.max_context_tokens
+                        );
+                    }
+                }
+            }
+            // No usage in a completed response: nothing to anchor on, so rough
+            // estimates must decide instead of waiting forever (#2153).
+            _ => self.provider_omits_usage = true,
+        }
+        // Consume both flags on every completed response so neither can stay armed.
+        self.awaiting_real_usage = false;
+        self.verify_cleared_threshold = false;
+    }
+
+    /// A compaction just replaced the history. Arm the latch and discard the now
+    /// stale reading — it describes a transcript that no longer exists.
+    pub fn note_compaction_ran(&mut self) {
+        self.awaiting_real_usage = true;
+        self.verify_cleared_threshold = true;
+        self.last_real_prompt_tokens = None;
+        self.anchor_len = 0;
+    }
+
+    /// Whether the anti-thrash breaker has stopped auto-compression.
+    pub fn breaker_tripped(&self) -> bool {
+        self.breaker_tripped
+    }
+
+    /// Whether a completed response proved this provider omits `usage`.
+    pub fn provider_omits_usage(&self) -> bool {
+        self.provider_omits_usage
     }
 
     /// How many trailing messages to keep verbatim for this conversation.
@@ -427,5 +570,211 @@ mod tests {
                 .is_some_and(|c| c.contains("SUMMARY-OF-EARLIER-TURNS"))),
             "the summary must be present in the compressed output"
         );
+    }
+
+    // ---------------------------------------------------------------
+    // P3-5b: usage-anchored trigger + latch + anti-thrash breaker
+    // ---------------------------------------------------------------
+
+    fn usage(prompt: u32) -> crate::provider::Usage {
+        crate::provider::Usage {
+            prompt_tokens: prompt,
+            completion_tokens: 0,
+            total_tokens: prompt,
+        }
+    }
+
+    /// 🔴 The core fix: a conversation whose *content* is small but whose real
+    /// prompt is over budget (system prompt + tool schemas are an incompressible
+    /// floor that never appears in `messages`) MUST trigger. The old chars/4
+    /// estimate could never see this — hermes #104555/#14695.
+    #[test]
+    fn real_usage_triggers_where_the_estimate_could_not() {
+        let mut c = ContextCompressor::new(10_000);
+        let messages = convo(6, 40); // ~60 tokens of content: far under budget
+        assert!(
+            !c.needs_compression(&messages),
+            "sanity: without a reading, a tiny transcript must not trigger"
+        );
+        // Provider says the real prompt is 12k (schemas + system prompt included).
+        c.note_response_usage(Some(&usage(12_000)), messages.len());
+        assert!(
+            c.needs_compression(&messages),
+            "a real over-budget reading must trigger even though content is tiny"
+        );
+    }
+
+    /// The anchor must add only what was appended *since* the reading — not
+    /// re-count the whole transcript (that would double-count everything).
+    #[test]
+    fn anchor_counts_only_messages_appended_since_the_reading() {
+        let mut c = ContextCompressor::new(10_000);
+        let messages = convo(10, 400); // ~100 tokens each
+        c.note_response_usage(Some(&usage(9_000)), messages.len());
+        // Nothing appended: 9_000 + 0 <= 10_000.
+        assert!(!c.needs_compression(&messages));
+        // Append ~2 messages (~200 tokens): 9_200 <= 10_000 still fits.
+        let mut grown = messages.clone();
+        grown.push(user(&"y".repeat(400)));
+        grown.push(assistant(&"y".repeat(400)));
+        assert!(!c.needs_compression(&grown));
+        // Append enough to cross: 9_000 + ~1_200 > 10_000.
+        for _ in 0..10 {
+            grown.push(user(&"y".repeat(400)));
+        }
+        assert!(
+            c.needs_compression(&grown),
+            "delta since the anchor must be added to the real reading"
+        );
+    }
+
+    /// 🔴 The death spiral (hermes #4750/#2153): after a compaction the last
+    /// reading describes a transcript that no longer exists. Without the latch the
+    /// next iteration would compress again on stale numbers, forever.
+    #[test]
+    fn compaction_latch_suppresses_the_next_check_until_real_usage_arrives() {
+        let mut c = ContextCompressor::new(10_000);
+        let messages = convo(20, 400);
+        c.note_response_usage(Some(&usage(12_000)), messages.len());
+        assert!(c.needs_compression(&messages));
+
+        c.note_compaction_ran();
+        assert!(
+            !c.needs_compression(&messages),
+            "armed latch must suppress compression on the stale reading"
+        );
+
+        // A completed response consumes the latch — even one with no usage,
+        // otherwise it could stay armed forever (#2153).
+        c.note_response_usage(None, messages.len());
+        assert!(
+            c.provider_omits_usage(),
+            "a usage-less response must be recorded"
+        );
+        // Latch consumed → back to the estimate path (no reading was taken).
+        assert!(!c.needs_compression(&convo(2, 40)));
+    }
+
+    /// The latch is consumed by ANY completed response, including one that does
+    /// carry usage (hermes: "consume the flag once real usage arrives even
+    /// without prompt_tokens, so it can't stay armed").
+    #[test]
+    fn latch_is_consumed_by_a_response_that_carries_usage() {
+        let mut c = ContextCompressor::new(10_000);
+        c.note_compaction_ran();
+        assert!(!c.needs_compression(&convo(4, 40)));
+        c.note_response_usage(Some(&usage(500)), 4);
+        // Latch gone and a fresh under-budget reading anchors the next decision.
+        assert!(!c.needs_compression(&convo(4, 40)));
+        assert!(!c.breaker_tripped());
+    }
+
+    /// 🔴 Anti-thrash: two provider-confirmed *ineffective* compactions trip the
+    /// breaker. The incompressible floor (system prompt + tool schemas) alone
+    /// exceeds the threshold, so shrinking messages can never help (hermes #14695).
+    #[test]
+    fn breaker_trips_after_two_provider_confirmed_ineffective_compactions() {
+        let mut c = ContextCompressor::new(10_000);
+        let messages = convo(20, 400);
+
+        // Compaction 1: runs, provider still reports over threshold.
+        c.note_compaction_ran();
+        c.note_response_usage(Some(&usage(11_000)), messages.len());
+        assert!(!c.breaker_tripped(), "one strike is not enough");
+        assert!(c.needs_compression(&messages), "still compressible");
+
+        // Compaction 2: runs, provider STILL reports over threshold → trip.
+        c.note_compaction_ran();
+        c.note_response_usage(Some(&usage(10_500)), messages.len());
+        assert!(c.breaker_tripped(), "two confirmed strikes must trip");
+        assert!(
+            !c.needs_compression(&messages),
+            "a tripped breaker must stop compressing — it cannot help"
+        );
+    }
+
+    /// The breaker must reset when a real reading comes back under threshold,
+    /// otherwise one bad stretch would disable compression for the whole run.
+    #[test]
+    fn breaker_resets_when_a_real_reading_comes_back_under_threshold() {
+        let mut c = ContextCompressor::new(10_000);
+        let messages = convo(20, 400);
+        c.note_compaction_ran();
+        c.note_response_usage(Some(&usage(11_000)), messages.len());
+        c.note_compaction_ran();
+        c.note_response_usage(Some(&usage(10_500)), messages.len());
+        assert!(c.breaker_tripped());
+        // A later response finally under the budget clears it.
+        c.note_response_usage(Some(&usage(4_000)), messages.len());
+        assert!(
+            !c.breaker_tripped(),
+            "a good reading must clear the breaker"
+        );
+        assert!(!c.needs_compression(&convo(2, 40)));
+    }
+
+    /// The verdict must be judged on the REAL reading only, never on the rough
+    /// estimate: hermes is explicit that keying the strike on an estimate lets it
+    /// reset every turn and re-opens the loop (#36718).
+    #[test]
+    fn ineffective_strike_needs_the_verify_flag_armed_by_a_compaction() {
+        let mut c = ContextCompressor::new(10_000);
+        let messages = convo(20, 400);
+        // Two over-threshold readings WITHOUT any compaction in between must not
+        // trip: nothing was ineffective, compression simply has not run yet.
+        c.note_response_usage(Some(&usage(11_000)), messages.len());
+        c.note_response_usage(Some(&usage(11_000)), messages.len());
+        assert!(
+            !c.breaker_tripped(),
+            "strikes require a compaction to have actually run first"
+        );
+        assert!(
+            c.needs_compression(&messages),
+            "and it must still be willing to try"
+        );
+    }
+
+    /// A `prompt_tokens: 0` reading must not be mistaken for a real one — that
+    /// would anchor at 0 and disable compression entirely.
+    #[test]
+    fn zero_prompt_tokens_is_treated_as_no_reading() {
+        let mut c = ContextCompressor::new(10_000);
+        let messages = convo(4, 40);
+        c.note_response_usage(Some(&usage(0)), messages.len());
+        assert!(
+            c.provider_omits_usage(),
+            "0 prompt tokens = nothing to anchor on"
+        );
+        // Estimate path still decides.
+        assert!(!c.needs_compression(&messages));
+        let mut big = ContextCompressor::new(10);
+        big.note_response_usage(Some(&usage(0)), messages.len());
+        assert!(
+            big.needs_compression(&messages),
+            "with no usable reading the estimate must still be able to fire"
+        );
+    }
+
+    /// The anchor index must never exceed the current length (a compaction can
+    /// shrink the transcript below the recorded anchor).
+    #[test]
+    fn anchor_len_is_clamped_when_the_transcript_shrinks() {
+        let mut c = ContextCompressor::new(10_000);
+        c.note_response_usage(Some(&usage(9_000)), 50);
+        let short = convo(3, 40);
+        // 50 > 3: clamping must not panic on the slice.
+        assert!(!c.needs_compression(&short));
+    }
+
+    /// Default construction starts clean: no reading, no latch, no breaker.
+    #[test]
+    fn fresh_compressor_starts_on_the_estimate_path() {
+        let c = ContextCompressor::new(10_000);
+        assert!(!c.breaker_tripped());
+        assert!(!c.provider_omits_usage());
+        let messages = convo(4, 40);
+        assert!(!c.needs_compression(&messages));
+        let big = convo(4, 400_000); // ~400k tokens
+        assert!(c.needs_compression(&big), "estimate path must still fire");
     }
 }

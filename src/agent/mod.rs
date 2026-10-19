@@ -787,8 +787,9 @@ impl Agent {
             }
         }
 
-        let compressor = crate::context::ContextCompressor::new(self.config.context_budget_tokens)
-            .with_timezone(self.context.config.timezone.clone());
+        let mut compressor =
+            crate::context::ContextCompressor::new(self.config.context_budget_tokens)
+                .with_timezone(self.context.config.timezone.clone());
 
         // Main conversation loop
         for iteration in 0..self.config.max_iterations {
@@ -827,12 +828,21 @@ impl Agent {
                 };
                 if let Some(compressed) = compressed {
                     messages = compressed;
+                    // The last real usage reading described the transcript we just
+                    // replaced; arm the latch so the next iteration does not
+                    // compress again on stale numbers (hermes #4750 death spiral).
+                    compressor.note_compaction_ran();
                     debug!("Context compressed");
                 }
             }
 
             // Plugin hooks around every provider request (hermes
             // pre_api_request / post_api_request / api_request_error).
+            // 🔴 Capture the length of the request we are about to send: the
+            // provider's usage reports the prompt for THIS many messages, so it
+            // must pair with this snapshot and not with whatever the loop appends
+            // before the response arrives.
+            let request_len = messages.len();
             let api_started = std::time::Instant::now();
             if crate::plugins::has_hook("pre_api_request") {
                 let request_char_count: usize = messages
@@ -936,6 +946,13 @@ impl Agent {
                         .ok();
                 }
             }
+            // 🔴 Feed the provider's real prompt count back into the compression
+            // decision (hermes #104555: trigger on real token counts, not bytes/4).
+            // Called on EVERY completed response, not only when usage is present:
+            // a response without usage is itself the signal that this provider
+            // omits it, and it is what consumes the post-compaction latch so the
+            // latch can never stay armed forever (hermes #2153).
+            compressor.note_response_usage(response.usage.as_ref(), request_len);
 
             if !response.tool_calls.is_empty() {
                 messages.push(Message {
