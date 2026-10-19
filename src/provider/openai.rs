@@ -3,6 +3,7 @@
 //! Supports: OpenAI, Azure OpenAI, OpenRouter, DashScope (Alibaba), Ollama, llama.cpp,
 //! and any other provider implementing the OpenAI Chat Completions API.
 
+use super::reasoning_echo::{reasoning_replay, ReasoningReplay};
 use super::{
     FunctionCall, Message, Provider, ProviderRequest, ProviderResponse, ProviderStream, Role,
     ToolCall, Usage,
@@ -302,6 +303,13 @@ struct ApiMessage {
     /// are attached (P226 multimodal injection).
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<serde_json::Value>,
+    /// Replayed reasoning for this assistant turn — **only ever populated per the
+    /// per-provider echo policy** (`provider::reasoning_echo`). `None` for strict
+    /// and unknown routes, so those providers see exactly the wire they saw before
+    /// P3-1b (their schemas are `additionalProperties: false` and 400/422 on an
+    /// unexpected key — upstream #45655, #70233).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<ApiToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -532,10 +540,23 @@ fn attach_images(api_messages: &mut [ApiMessage], images: &[crate::provider::Mes
     api_messages[idx].content = Some(serde_json::Value::Array(parts));
 }
 
-fn message_to_api(msg: &Message) -> ApiMessage {
+/// Convert a domain message to its wire shape.
+///
+/// `replay` is the per-provider reasoning policy resolved once per request
+/// ([`crate::provider::reasoning_echo::reasoning_replay`]). It applies **only to
+/// assistant turns** — a stored `reasoning` on any other role is meaningless — and
+/// [`ReasoningReplay::Off`] omits the key entirely, which is what strict-schema and
+/// unknown providers require (see `reasoning_echo` module docs).
+fn message_to_api(msg: &Message, replay: ReasoningReplay) -> ApiMessage {
+    let reasoning_content = if msg.role == Role::Assistant {
+        replay.wire_value(msg.reasoning.as_deref())
+    } else {
+        None
+    };
     ApiMessage {
         role: msg.role.to_string(),
         content: msg.content.clone().map(serde_json::Value::String),
+        reasoning_content,
         tool_calls: msg.tool_calls.as_ref().map(|calls| {
             calls
                 .iter()
@@ -587,8 +608,15 @@ impl Provider for OpenAiProvider {
         let url = self.api_url();
         debug!("OpenAI API call to: {}", url);
 
-        let mut api_messages: Vec<ApiMessage> =
-            request.messages.iter().map(message_to_api).collect();
+        // Resolve the reasoning-replay route once per request (hermes
+        // `_reasoning_replay_route`): deterministic in (provider, model, endpoint), so the
+        // wire prefix stays byte-stable across turns.
+        let replay = reasoning_replay(&self.name, &self.model, &self.endpoint);
+        let mut api_messages: Vec<ApiMessage> = request
+            .messages
+            .iter()
+            .map(|m| message_to_api(m, replay))
+            .collect();
         if let Some(ref images) = request.images {
             attach_images(&mut api_messages, images);
         }
@@ -660,8 +688,14 @@ impl Provider for OpenAiProvider {
         let url = self.api_url();
         debug!("OpenAI streaming call to: {}", url);
 
-        let mut api_messages: Vec<ApiMessage> =
-            request.messages.iter().map(message_to_api).collect();
+        // Same route resolution as the non-streaming path — both must agree or a
+        // fallback switch mid-session would change the wire shape.
+        let replay = reasoning_replay(&self.name, &self.model, &self.endpoint);
+        let mut api_messages: Vec<ApiMessage> = request
+            .messages
+            .iter()
+            .map(|m| message_to_api(m, replay))
+            .collect();
         if let Some(ref images) = request.images {
             attach_images(&mut api_messages, images);
         }
@@ -858,56 +892,92 @@ mod streaming_tests {
     use super::*;
     use crate::provider::assemble_tool_calls;
 
-    /// 🔴 P3-1 安全护栏：reasoning 只落库，**绝不上 wire**。
-    ///
-    /// hermes v0.22.2 必须靠 per-provider echo policy 才能回放 reasoning——
-    /// must-echo provider（DeepSeek/Kimi/MiMo）缺 reasoning pad 会 400，而严格
-    /// provider（Mistral/Groq/Cerebras）带上它就 400/422。ulnclaw 没有该策略，
-    /// 所以无条件发送会**弄坏今天能正常工作的 provider**。此测试把该约束钉住：
-    /// 序列化后的请求体不得出现 reasoning / reasoning_content 任何形式。
-    #[test]
-    fn reasoning_never_reaches_the_wire() {
-        let msg = Message {
-            reasoning: Some("SECRET-CHAIN-OF-THOUGHT".to_string()),
+    fn assistant_msg(reasoning: Option<&str>) -> Message {
+        Message {
+            reasoning: reasoning.map(str::to_string),
             role: Role::Assistant,
             content: Some("answer".to_string()),
             tool_calls: None,
             tool_call_id: None,
             name: None,
-        };
-        let api = message_to_api(&msg);
-        let json = serde_json::to_string(&api).expect("ApiMessage serializes");
-
-        assert!(
-            !json.contains("reasoning"),
-            "reasoning leaked onto the provider wire: {json}"
-        );
-        assert!(
-            !json.contains("SECRET-CHAIN-OF-THOUGHT"),
-            "reasoning *content* leaked onto the wire: {json}"
-        );
-        // content 仍正常发送（护栏不能顺手把正文也丢掉）
-        assert!(json.contains("answer"), "content must still serialize: {json}");
-        assert!(json.contains("assistant"), "role must still serialize: {json}");
+        }
     }
 
-    /// ApiMessage 结构体本身不得有 reasoning 字段（防将来有人"顺手"加上）。
+    /// 🔴 P3-1b 护栏：strict / unknown 路线上 reasoning **绝不上 wire**。
+    ///
+    /// 这是 P3-1「绝不上 wire」护栏的收窄版——P3-1b 引入了 per-provider echo policy，
+    /// must-echo 路线（DeepSeek/Kimi/MiMo）现在**必须**发 pad，但 strict 路线
+    /// （Mistral/Groq/Cerebras 的 `additionalProperties:false` schema）和**未知路线**
+    /// 仍必须一个 reasoning 键都不发，否则 400/422 弄坏今天能正常工作的 provider
+    /// （upstream #45655/#70233）。ulnclaw 没有 hermes 的运行时 rejection 学习，
+    /// 所以未知路线刻意保持沉默（见 reasoning_echo 模块文档）。
     #[test]
-    fn api_message_has_no_reasoning_field() {
-        let api = message_to_api(&Message {
-            reasoning: Some("x".into()),
-            role: Role::Assistant,
-            content: Some("c".into()),
+    fn reasoning_never_reaches_the_wire_on_off_routes() {
+        for route in [ReasoningReplay::Off] {
+            let api = message_to_api(&assistant_msg(Some("SECRET-CHAIN-OF-THOUGHT")), route);
+            let json = serde_json::to_string(&api).expect("ApiMessage serializes");
+            assert!(
+                !json.contains("reasoning"),
+                "route {route}: reasoning key leaked onto the wire: {json}"
+            );
+            assert!(
+                !json.contains("SECRET-CHAIN-OF-THOUGHT"),
+                "route {route}: reasoning *content* leaked: {json}"
+            );
+            // content 仍正常发送（护栏不能顺手把正文也丢掉）
+            assert!(json.contains("answer"), "content must still serialize: {json}");
+            assert!(json.contains("assistant"), "role must still serialize: {json}");
+        }
+    }
+
+    /// must-echo 路线：每个 assistant turn 都带 reasoning_content；无文本时是 `" "`
+    /// 而非 `""`（DeepSeek V4 拒绝空串，upstream #17341）。
+    #[test]
+    fn must_echo_route_pads_reasoning_content() {
+        let api = message_to_api(&assistant_msg(Some("thought")), ReasoningReplay::MustEcho);
+        let v = serde_json::to_value(&api).unwrap();
+        assert_eq!(v["reasoning_content"], "thought");
+
+        // 无 reasoning 的 turn 也必须带 pad（否则该路线 tool-call turn 400）
+        let api = message_to_api(&assistant_msg(None), ReasoningReplay::MustEcho);
+        let v = serde_json::to_value(&api).unwrap();
+        assert_eq!(v["reasoning_content"], " ", "must pad with a single space, never empty");
+    }
+
+    /// content 路线：有文本才发 reasoning_content，空文本**不发**（不 pad）。
+    #[test]
+    fn content_route_sends_only_when_present() {
+        let api = message_to_api(&assistant_msg(Some("thought")), ReasoningReplay::Content);
+        assert_eq!(serde_json::to_value(&api).unwrap()["reasoning_content"], "thought");
+
+        let api = message_to_api(&assistant_msg(None), ReasoningReplay::Content);
+        let obj = serde_json::to_value(&api).unwrap();
+        assert!(
+            obj.get("reasoning_content").is_none(),
+            "content route must omit the key when there is no text (skip_serializing_if)"
+        );
+    }
+
+    /// reasoning 只对 assistant turn 生效；user/tool/system turn 即使存了 reasoning 也不发。
+    #[test]
+    fn reasoning_only_applies_to_assistant_turns() {
+        let user = Message {
+            reasoning: Some("should-not-leak".into()),
+            role: Role::User,
+            content: Some("hi".into()),
             tool_calls: None,
             tool_call_id: None,
             name: None,
-        });
-        let v = serde_json::to_value(&api).unwrap();
-        let obj = v.as_object().expect("ApiMessage serializes to an object");
-        for key in obj.keys() {
+        };
+        for route in [
+            ReasoningReplay::Off,
+            ReasoningReplay::Content,
+            ReasoningReplay::MustEcho,
+        ] {
+            let json = serde_json::to_string(&message_to_api(&user, route)).unwrap();
             assert!(
-                !key.contains("reasoning"),
-                "ApiMessage gained a reasoning-ish field {key:?} — replay needs                  hermes' per-provider echo policy first (see reasoning_never_reaches_the_wire)"
+                !json.contains("should-not-leak"),
+                "route {route}: non-assistant reasoning leaked: {json}"
             );
         }
     }
@@ -1128,6 +1198,7 @@ mod streaming_tests {
     fn attach_images_builds_content_parts_on_last_user_message() {
         let mut messages = vec![
             ApiMessage {
+                reasoning_content: None,
                 role: "system".to_string(),
                 content: Some(serde_json::Value::String("sys".to_string())),
                 tool_calls: None,
@@ -1135,6 +1206,7 @@ mod streaming_tests {
                 name: None,
             },
             ApiMessage {
+                reasoning_content: None,
                 role: "user".to_string(),
                 content: Some(serde_json::Value::String("what is this?".to_string())),
                 tool_calls: None,
@@ -1142,6 +1214,7 @@ mod streaming_tests {
                 name: None,
             },
             ApiMessage {
+                reasoning_content: None,
                 role: "assistant".to_string(),
                 content: Some(serde_json::Value::String("hmm".to_string())),
                 tool_calls: None,
@@ -1149,6 +1222,7 @@ mod streaming_tests {
                 name: None,
             },
             ApiMessage {
+                reasoning_content: None,
                 role: "user".to_string(),
                 content: Some(serde_json::Value::String("and this?".to_string())),
                 tool_calls: None,
@@ -1184,6 +1258,7 @@ mod streaming_tests {
     #[test]
     fn attach_images_noop_when_empty_or_no_user() {
         let mut messages = vec![ApiMessage {
+            reasoning_content: None,
             role: "assistant".to_string(),
             content: Some(serde_json::Value::String("hi".to_string())),
             tool_calls: None,
@@ -1201,6 +1276,7 @@ mod streaming_tests {
             Some(serde_json::Value::String("hi".to_string()))
         );
         let mut user = vec![ApiMessage {
+            reasoning_content: None,
             role: "user".to_string(),
             content: Some(serde_json::Value::String("hi".to_string())),
             tool_calls: None,

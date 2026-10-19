@@ -6,6 +6,7 @@
 pub mod anthropic;
 pub mod auxiliary;
 pub mod openai;
+pub mod reasoning_echo;
 
 use crate::error::{AgentError, Result};
 use crate::tools::ToolDefinition;
