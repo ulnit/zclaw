@@ -116,6 +116,39 @@ ulnclaw's provider layer sits *below* the session layer and holds no store handl
 threading persistence in would invert that dependency. A restart re-learns once.
 Tracked as P3-1e.
 
+### Compression tail capped at 20% of the budget (`0117e54`)
+
+Ports hermes' `TAIL_MAX_CONTEXT_FRACTION` (#104555, #117957). hermes documented the
+failure this fixes: on a small-window model the "protected" verbatim tail *was* the
+whole request, so every compaction summarised a few rows and reclaimed nothing.
+ulnclaw's `keep_recent: 12` had the same bug from the other side — a fixed *message
+count* is unbounded in tokens, so twelve tool-heavy turns can exceed any budget.
+
+- `TAIL_MAX_CONTEXT_FRACTION = 0.20`: the verbatim tail may occupy at most 20% of
+  `max_context_tokens`.
+- `TAIL_MIN_MESSAGES = 3` floor (hermes `compressible_tail_cap = max(3, …)`): even an
+  absurdly small budget keeps three messages, so the model never loses the turn it is
+  currently answering. `keep_recent = 0` stays 0 — a caller that deliberately wants no
+  tail isn't forced into the floor.
+- `effective_tail_len()` walks newest-first, accumulating tokens until the next
+  message would break the cap. `keep_recent` is now only the *requested* count.
+- 🔴 **All three call sites** use it, including the `gateway_ws` `/compress` and
+  gateway-slash `/compress` entry gates. Changing only the compressor's internals
+  would leave those gates stricter than the internal decision (`keep_recent + 2` vs
+  `effective_tail_len + 2`), so small-window sessions — the exact case the cap serves
+  — would be rejected as "nothing to compress" before the compressor ever ran. Both
+  pre-existing gateway tests pass unchanged.
+
+An end-to-end test asserts the actual bug is gone: a 40 × 1000-token conversation
+under a 10k budget must come back with **less than half** the tokens, fewer messages,
+and the summary present.
+
+**Not done here:** the other half of that same hermes release — triggering compaction
+on provider-reported usage (`last_real_prompt_tokens`) instead of the chars/4 estimate
+— needs the agent loop to feed real usage back into the compression decision, so it is
+a separate change. Anti-thrash cooldown and the ineffective-compaction breaker are
+likewise untouched.
+
 ## v0.6.5 — 2026-10-16
 
 ### Tool-naming alignment with hermes-agent v0.22.2 (P1 + P2a)
