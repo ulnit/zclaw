@@ -1674,6 +1674,8 @@ mod streaming_tests {
     }
 
     /// 没发过该字段就学不到：否则等于凭空把整条路线的 reasoning 永久关掉。
+    /// 用 strict 路线构造「确实没发过」——上游 `_DEFAULT_CARRIERS` 让未知路线
+    /// 也会发，所以这里不能再用未知路线当前提。
     #[tokio::test]
     async fn rejection_is_not_learned_when_the_field_was_never_sent() {
         let st = RejectMock::new(vec!["{REJECT}".into()]);
@@ -1681,7 +1683,7 @@ mod streaming_tests {
         let provider = OpenAiProvider::builder()
             .endpoint(&format!("http://{addr}/v1"))
             .model("m")
-            .name("brand-new-provider") // 未知路线 → Off，根本不发该字段
+            .name("mistral") // strict 路线 → Off，根本不发该字段
             .max_retries(2)
             .build()
             .unwrap();
@@ -1718,6 +1720,54 @@ mod streaming_tests {
         assert!(
             st.body(0).contains("reasoning_content"),
             "前提核对：这次确实发了该字段，只是错误没点名"
+        );
+    }
+
+    /// 🔴 上游完整闭环（此前被我用「刻意偏离」跳过的部分）：未知 provider 走
+    /// `_DEFAULT_CARRIERS = {reasoning_content}` 发出该字段；若它的 schema 拒绝，
+    /// 学习器当场剥离并重试，此后该路线降级为不发。没有学习器，这个默认就会
+    /// 弄坏今天能用的 provider —— 两半必须同时在场。
+    #[tokio::test]
+    async fn unknown_provider_sends_by_default_and_self_corrects_on_rejection() {
+        let st = RejectMock::new(vec!["{REJECT}".into(), OK_BODY.into(), OK_BODY.into()]);
+        let addr = reject_server(st.clone()).await;
+        let provider = OpenAiProvider::builder()
+            .endpoint(&format!("http://{addr}/v1"))
+            .model("m")
+            .name("brand-new-provider") // 未知路线
+            .max_retries(2)
+            .build()
+            .unwrap();
+
+        // 前提：未知路线默认发 reasoning_content（上游 _DEFAULT_CARRIERS）
+        assert_eq!(
+            provider.effective_replay(),
+            ReasoningReplay::Content,
+            "unknown routes must default to the de-facto carrier"
+        );
+
+        let resp = provider.chat_completion(req("m")).await.unwrap();
+        assert_eq!(resp.content.as_deref(), Some("ok"));
+
+        assert_eq!(st.hit_count(), 2, "恰好一次学习重试");
+        assert!(
+            st.body(0).contains("reasoning_content"),
+            "首次请求必须发出该字段（这才是上游默认）: {}",
+            st.body(0)
+        );
+        assert!(
+            !st.body(1).contains("reasoning_content"),
+            "重试必须已剥离: {}",
+            st.body(1)
+        );
+        // 学到之后该路线永久降级
+        assert_eq!(provider.effective_replay(), ReasoningReplay::Off);
+        provider.chat_completion(req("m")).await.unwrap();
+        assert_eq!(st.hit_count(), 3, "第三次调用不该再触发重试");
+        assert!(
+            !st.body(2).contains("reasoning_content"),
+            "已学习的路线不再发: {}",
+            st.body(2)
         );
     }
 }

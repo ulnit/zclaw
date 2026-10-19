@@ -10,19 +10,29 @@
 //! * **strict tier** (Mistral, Groq, Cerebras, SambaNova, Tencent Hunyuan) has
 //!   `additionalProperties: false` message schemas and returns **400/422** ("Extra inputs are not
 //!   permitted") if a reasoning key is present *at all* (upstream #45655, #70233).
-//! * everything else reads `reasoning_content`, the de-facto standard carrier.
+//! * everything else reads `reasoning_content`, the de-facto standard carrier —
+//!   including *unknown* routes, which is upstream's
+//!   `_DEFAULT_CARRIERS = frozenset({RC})`.
 //!
-//! # 🔴 Deliberate deviation from upstream
+//! # Fidelity to upstream
 //!
-//! hermes routes *unknown* providers to `_DEFAULT_CARRIERS = {reasoning_content}` and stays safe
-//! because it **learns** rejections at runtime (`record_reasoning_field_rejection` drops the field
-//! for that provider/host/model after a 4xx). ulnclaw has no runtime rejection learning, so an
-//! unknown route here resolves to [`ReasoningReplay::Off`] — i.e. it keeps today's behaviour
-//! (send nothing) rather than risk breaking a provider that currently works. The must-echo tier is
-//! still honoured, because there the omission is the *proven* failure.
+//! This module reproduces hermes' semantics rather than approximating them:
 //!
-//! Porting the runtime-rejection learner would let `Off` for unknown routes be relaxed to
-//! `Content`; until then, this is the safe default. See `references/ulnclaw-hermes-parity.md`.
+//! * **strict wins over must-echo.** `reasoning_replay_route` returns
+//!   `pad and RC in carriers`, and a strict route's carrier set is empty, so the
+//!   must-echo pad is withheld there too ("A strict route never gets a reasoning
+//!   key, not even the must-echo pad").
+//! * **unknown routes send `reasoning_content`.** That default is only safe
+//!   because the runtime rejection learner (`record_reasoning_field_rejection`,
+//!   ported as [`ReasoningRejectionLog`]) drops the field for a route after one
+//!   4xx. Both halves are upstream behaviour and both are implemented here.
+//! * **carrier widening is not representable.** hermes routes local endpoints onto
+//!   `_LOCAL_CARRIERS = {RC, R}` (llama.cpp/SGLang read `reasoning_content`,
+//!   vLLM/Ollama read `reasoning`) and widens some routes with `reasoning_details`.
+//!   ulnclaw's `ApiMessage` has exactly one reasoning field, so those extra
+//!   carriers have no wire representation and both cases collapse to
+//!   [`ReasoningReplay::Content`] — same observable outcome for the carriers this
+//!   port can actually send.
 
 use std::fmt;
 
@@ -193,7 +203,19 @@ pub fn reasoning_replay(provider: &str, model: &str, endpoint: &str) -> Reasonin
     let model_l = model.trim().to_ascii_lowercase();
     let host = host_of(endpoint);
 
-    // 1) must-echo tier wins: there the *omission* is the proven 400.
+    // 1) strict tier wins over everything, including must-echo.
+    // hermes `reasoning_replay_route`: `ReasoningReplayRoute(pad and RC in carriers, carriers)`
+    // — a strict route's carrier set is empty, so `RC in carriers` is false and even the
+    // must-echo pad is withheld ("A strict route never gets a reasoning key, not even the
+    // must-echo pad"). Their schemas are `additionalProperties: false` and 400/422 on any
+    // reasoning key (#45655, #70233).
+    if STRICT_PROVIDERS.contains(&provider_l.as_str())
+        || STRICT_HOSTS.iter().any(|h| host_matches(&host, h))
+    {
+        return ReasoningReplay::Off;
+    }
+
+    // 2) must-echo tier: there the *omission* is the proven 400.
     for (providers, model_subs, hosts) in MUST_ECHO {
         let hit = providers.contains(&provider_l.as_str())
             || model_subs.iter().any(|s| model_l.contains(s))
@@ -203,13 +225,6 @@ pub fn reasoning_replay(provider: &str, model: &str, endpoint: &str) -> Reasonin
         }
     }
 
-    // 2) strict tier: never gets a reasoning key, not even a must-echo pad.
-    if STRICT_PROVIDERS.contains(&provider_l.as_str())
-        || STRICT_HOSTS.iter().any(|h| host_matches(&host, h))
-    {
-        return ReasoningReplay::Off;
-    }
-
     // 3) routes known to read reasoning_content.
     if CONTENT_PROVIDERS.contains(&provider_l.as_str())
         || CONTENT_HOSTS.iter().any(|h| host_matches(&host, h))
@@ -217,8 +232,18 @@ pub fn reasoning_replay(provider: &str, model: &str, endpoint: &str) -> Reasonin
         return ReasoningReplay::Content;
     }
 
-    // 4) unknown → Off (deliberate deviation; see module docs).
-    ReasoningReplay::Off
+    // 4) unknown → Content. This is upstream's `_DEFAULT_CARRIERS = frozenset({RC})`:
+    // "Every other route defaults to `reasoning_content`, which is the de-facto
+    // standard". It is safe here *because* the runtime rejection learner (P3-1d)
+    // exists — a route whose schema actually refuses the field is learned after one
+    // 400 and downgraded to Off for the rest of the process.
+    //
+    // hermes additionally splits local endpoints onto `_LOCAL_CARRIERS = {RC, R}`
+    // (llama.cpp/SGLang read reasoning_content, vLLM/Ollama read `reasoning`) and
+    // widens some routes with `reasoning_details`. ulnclaw's `ApiMessage` carries
+    // exactly one reasoning field, so those extra carriers have no wire
+    // representation here and both cases collapse to Content.
+    ReasoningReplay::Content
 }
 
 #[cfg(test)]
@@ -314,15 +339,19 @@ mod tests {
 
     #[test]
     fn kimi_is_host_driven_not_model_driven() {
-        // upstream: aggregators re-exporting kimi models must NOT get the pad
+        // upstream: aggregators re-exporting kimi models must NOT get the *pad*.
+        // They still default to `reasoning_content` like every other unknown route
+        // (`_DEFAULT_CARRIERS = {RC}`) — the distinction is pad vs no-pad, not
+        // send vs don't-send.
         assert_eq!(
             reasoning_replay("some-aggregator", "kimi-k2", "https://api.example.com/v1"),
-            ReasoningReplay::Off,
+            ReasoningReplay::Content,
             "a kimi *model* via an unrelated host must not be padded"
         );
         assert_eq!(
             reasoning_replay("", "", "https://api.kimi.com/v1"),
-            ReasoningReplay::MustEcho
+            ReasoningReplay::MustEcho,
+            "the kimi host itself must pad"
         );
         assert_eq!(
             reasoning_replay("kimi-coding", "", "https://anything.test"),
@@ -389,18 +418,63 @@ mod tests {
     }
 
     #[test]
-    fn unknown_routes_stay_off_by_design() {
-        // 🔴 deliberate deviation: hermes would send reasoning_content here and rely on
-        // runtime rejection learning. ulnclaw has none, so unknown stays silent.
+    fn unknown_routes_send_reasoning_content_like_upstream() {
+        // Upstream `_DEFAULT_CARRIERS = frozenset({RC})`: "Every other route
+        // defaults to reasoning_content, which is the de-facto standard."
+        // Safety comes from the runtime rejection learner (P3-1d), not from
+        // withholding the field.
         assert_eq!(
             reasoning_replay(
                 "brand-new-provider",
                 "some-model",
                 "https://api.unknown.test/v1"
             ),
-            ReasoningReplay::Off
+            ReasoningReplay::Content
         );
-        assert_eq!(reasoning_replay("", "", ""), ReasoningReplay::Off);
+        // No route facts at all → still the de-facto standard carrier.
+        assert_eq!(reasoning_replay("", "", ""), ReasoningReplay::Content);
+    }
+
+    /// 🔴 strict beats must-echo: `reasoning_replay_route` returns
+    /// `pad and RC in carriers`, so a strict route withholds even the pad.
+    #[test]
+    fn strict_tier_wins_over_must_echo() {
+        // A deepseek *model* served through a strict host must not get the pad:
+        // the host's schema rejects any reasoning key outright.
+        assert_eq!(
+            reasoning_replay("", "deepseek-chat", "https://api.groq.com/openai/v1"),
+            ReasoningReplay::Off,
+            "strict host must override the must-echo model match"
+        );
+        assert_eq!(
+            reasoning_replay("mistral", "kimi-k2", ""),
+            ReasoningReplay::Off,
+            "strict provider must override the must-echo model match"
+        );
+        // Conversely the same model on its own host still must-echo.
+        assert_eq!(
+            reasoning_replay("", "deepseek-chat", "https://api.deepseek.com/v1"),
+            ReasoningReplay::MustEcho
+        );
+    }
+
+    /// Local endpoints in hermes read two carriers (`{RC, R}`); ulnclaw can only
+    /// send one, so the observable outcome is Content, not Off.
+    #[test]
+    fn local_endpoints_are_content_not_off() {
+        assert_eq!(
+            reasoning_replay("custom", "", "http://localhost:11434/v1"),
+            ReasoningReplay::Content
+        );
+        assert_eq!(
+            reasoning_replay("lmstudio", "", "http://127.0.0.1:1234/v1"),
+            ReasoningReplay::Content
+        );
+        // An unknown local endpoint likewise defaults to the de-facto carrier.
+        assert_eq!(
+            reasoning_replay("", "", "http://192.168.1.50:8000/v1"),
+            ReasoningReplay::Content
+        );
     }
 
     #[test]
