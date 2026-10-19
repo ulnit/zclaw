@@ -49,7 +49,9 @@ impl ReasoningReplay {
             ReasoningReplay::Off => None,
             ReasoningReplay::Content => text.map(str::to_string),
             // Never "" — DeepSeek V4 rejects an empty string (#17341); " " is the pad.
-            ReasoningReplay::MustEcho => Some(text.map(str::to_string).unwrap_or_else(|| " ".into())),
+            ReasoningReplay::MustEcho => {
+                Some(text.map(str::to_string).unwrap_or_else(|| " ".into()))
+            }
         }
     }
 }
@@ -94,7 +96,11 @@ const MUST_ECHO: &[(&[&str], &[&str], &[&str])] = &[
     // deepseek: any provider named deepseek, any deepseek model, or the deepseek host
     (&["deepseek"], &["deepseek"], &["api.deepseek.com"]),
     // Xiaomi MiMo
-    (&["xiaomi"], &["mimo"], &["api.xiaomimimo.com", "xiaomimimo.com"]),
+    (
+        &["xiaomi"],
+        &["mimo"],
+        &["api.xiaomimimo.com", "xiaomimimo.com"],
+    ),
     // Nous Portal stealth model that 400s on a tool-call turn without reasoning_content
     (&[], &["stealth/missingno"], &[]),
 ];
@@ -155,12 +161,19 @@ fn host_of(endpoint: &str) -> String {
     // strip path
     let host_port = after_scheme.split(['/', '?', '#']).next().unwrap_or("");
     // strip userinfo
-    let host_port = host_port.rsplit_once('@').map(|(_, h)| h).unwrap_or(host_port);
+    let host_port = host_port
+        .rsplit_once('@')
+        .map(|(_, h)| h)
+        .unwrap_or(host_port);
     // strip port (and handle IPv6 literals in brackets)
     if let Some(rest) = host_port.strip_prefix('[') {
         rest.split(']').next().unwrap_or("").to_string()
     } else {
-        host_port.rsplit_once(':').map(|(h, _)| h).unwrap_or(host_port).to_string()
+        host_port
+            .rsplit_once(':')
+            .map(|(h, _)| h)
+            .unwrap_or(host_port)
+            .to_string()
     }
 }
 
@@ -249,7 +262,11 @@ mod tests {
         let r = ReasoningReplay::Content;
         assert_eq!(r.wire_value(Some("thought")).as_deref(), Some("thought"));
         assert_eq!(r.wire_value(None), None);
-        assert_eq!(r.wire_value(Some("  ")), None, "blank must not become a pad");
+        assert_eq!(
+            r.wire_value(Some("  ")),
+            None,
+            "blank must not become a pad"
+        );
     }
 
     #[test]
@@ -263,7 +280,9 @@ mod tests {
     fn replayable_text_preserves_the_original_untrimmed_string() {
         // Trimming would silently edit the model's own output.
         assert_eq!(
-            ReasoningReplay::Content.wire_value(Some("  kept  ")).as_deref(),
+            ReasoningReplay::Content
+                .wire_value(Some("  kept  "))
+                .as_deref(),
             Some("  kept  ")
         );
     }
@@ -317,7 +336,10 @@ mod tests {
 
     #[test]
     fn mimo_and_missingno_are_must_echo() {
-        assert_eq!(reasoning_replay("xiaomi", "", ""), ReasoningReplay::MustEcho);
+        assert_eq!(
+            reasoning_replay("xiaomi", "", ""),
+            ReasoningReplay::MustEcho
+        );
         assert_eq!(
             reasoning_replay("", "MiMo-7B-RL", "https://api.xiaomimimo.com"),
             ReasoningReplay::MustEcho
@@ -348,13 +370,22 @@ mod tests {
             reasoning_replay("openrouter", "x", "https://openrouter.ai/api/v1"),
             ReasoningReplay::Content
         );
-        assert_eq!(reasoning_replay("fireworks", "", ""), ReasoningReplay::Content);
-        assert_eq!(reasoning_replay("minimax", "", ""), ReasoningReplay::Content);
+        assert_eq!(
+            reasoning_replay("fireworks", "", ""),
+            ReasoningReplay::Content
+        );
+        assert_eq!(
+            reasoning_replay("minimax", "", ""),
+            ReasoningReplay::Content
+        );
         assert_eq!(
             reasoning_replay("", "", "https://api.novita.ai/v3"),
             ReasoningReplay::Content
         );
-        assert_eq!(reasoning_replay("lmstudio", "", ""), ReasoningReplay::Content);
+        assert_eq!(
+            reasoning_replay("lmstudio", "", ""),
+            ReasoningReplay::Content
+        );
     }
 
     #[test]
@@ -362,7 +393,11 @@ mod tests {
         // 🔴 deliberate deviation: hermes would send reasoning_content here and rely on
         // runtime rejection learning. ulnclaw has none, so unknown stays silent.
         assert_eq!(
-            reasoning_replay("brand-new-provider", "some-model", "https://api.unknown.test/v1"),
+            reasoning_replay(
+                "brand-new-provider",
+                "some-model",
+                "https://api.unknown.test/v1"
+            ),
             ReasoningReplay::Off
         );
         assert_eq!(reasoning_replay("", "", ""), ReasoningReplay::Off);
@@ -375,6 +410,230 @@ mod tests {
             ReasoningReplay::MustEcho
         );
         assert_eq!(reasoning_replay("MISTRAL", "", ""), ReasoningReplay::Off);
-        assert_eq!(reasoning_replay("OpenRouter", "", ""), ReasoningReplay::Content);
+        assert_eq!(
+            reasoning_replay("OpenRouter", "", ""),
+            ReasoningReplay::Content
+        );
+    }
+}
+// ---------------------------------------------------------------------------
+// Runtime rejection learning (P3-1d) — hermes `record_reasoning_field_rejection`
+// ---------------------------------------------------------------------------
+
+/// Provider error bodies (lowercased) meaning "this request carries a key my
+/// schema does not know". Transcribed from hermes `_UNKNOWN_FIELD_PHRASES`.
+const UNKNOWN_FIELD_PHRASES: &[&str] = &[
+    "extra inputs are not permitted",
+    "is unsupported",
+    "no such field",
+    "unknown field",
+    "unrecognized request argument",
+    "unrecognized field",
+    "unknown parameter",
+    "unexpected field",
+    "additional propert", // hermes truncates "additional properties" this way on purpose
+    "unknown key",
+];
+
+/// The carrier ulnclaw actually puts on the wire. hermes tracks three
+/// (`reasoning_content`, `reasoning`, `reasoning_details`) and widens the drop
+/// when a non-standard one is named; ulnclaw's `ApiMessage` has exactly one, so
+/// only this name is ever learnable.
+const REASONING_CONTENT: &str = "reasoning_content";
+
+/// ASCII word-boundary substring search.
+///
+/// hermes uses `(?<![\w])reasoning_content(?![\w])`. The Rust `regex` crate has
+/// no lookbehind, and pulling in `regex` for one literal is not worth it — this
+/// reproduces the same semantics for an ASCII needle.
+fn contains_word(haystack: &str, needle: &str) -> bool {
+    let h = haystack.as_bytes();
+    let n = needle.as_bytes();
+    if n.is_empty() || h.len() < n.len() {
+        return false;
+    }
+    let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    h.windows(n.len()).enumerate().any(|(i, w)| {
+        w == n
+            && !i.checked_sub(1).map(|p| is_word(h[p])).unwrap_or(false)
+            && !h.get(i + n.len()).map(|b| is_word(*b)).unwrap_or(false)
+    })
+}
+
+/// Decide whether an error body is an unknown-field rejection of
+/// `reasoning_content` **that this request actually sent**.
+///
+/// `sent_reasoning_content` is the caller's own check that at least one assistant
+/// message carried the key — hermes' `rejected_reasoning_fields` does the same
+/// (`sent & ...`), because learning a field we never sent would be a lie that
+/// silently disables reasoning for the rest of the session.
+///
+/// Returns false for an unnamed/ unrelated error, so recovery can never fire on
+/// e.g. a 500 or an auth failure.
+pub fn body_rejects_reasoning_content(error_body: &str, sent_reasoning_content: bool) -> bool {
+    if !sent_reasoning_content {
+        return false;
+    }
+    let body = error_body.to_ascii_lowercase();
+    if !UNKNOWN_FIELD_PHRASES.iter().any(|p| body.contains(p)) {
+        return false;
+    }
+    // Only a *named* mention counts: an unnamed "extra inputs are not permitted"
+    // could be about any field, and guessing would disable reasoning for nothing.
+    contains_word(&body, REASONING_CONTENT)
+}
+
+/// Per-route memory of "this endpoint rejected `reasoning_content`".
+///
+/// # Why a flag and not hermes' set
+///
+/// hermes stores a `set` of carriers per `(provider, host, model)` because it can
+/// send three of them and widens the drop accordingly. ulnclaw sends exactly one,
+/// so the whole structure collapses to a boolean — and because an
+/// [`crate::provider::openai::OpenAiProvider`] instance *is* an immutable
+/// `(name, model, endpoint)` triple (the same tuple hermes uses as its route key),
+/// per-instance state **is** per-route state. No keying, no map.
+///
+/// # Scope: process-lifetime, not persisted
+///
+/// hermes additionally writes rejections into the session's `model_config` so a
+/// resumed process never re-learns with another 400. ulnclaw's provider layer sits
+/// *below* the session layer and has no store handle, so threading persistence in
+/// would invert that dependency. This log therefore lives as long as the provider
+/// instance (i.e. the process); a restart re-learns once. Tracked as P3-1e.
+#[derive(Debug, Default)]
+pub struct ReasoningRejectionLog {
+    rejected: std::sync::atomic::AtomicBool,
+}
+
+impl ReasoningRejectionLog {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Whether this route has already been learned to reject `reasoning_content`.
+    pub fn is_rejected(&self) -> bool {
+        self.rejected.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Record a rejection. Returns `true` **only if this is new** — mirroring
+    /// hermes' "empty frozenset = no retry" contract, which is what makes the
+    /// recovery unable to loop: a repeat rejection of an already-recorded key
+    /// returns false, so the caller surfaces the error instead of retrying.
+    pub fn record(&self) -> bool {
+        !self
+            .rejected
+            .swap(true, std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+#[cfg(test)]
+mod rejection_tests {
+    use super::*;
+
+    #[test]
+    fn word_boundary_matching_is_not_fooled_by_lookalikes() {
+        assert!(contains_word(
+            "field reasoning_content is bad",
+            "reasoning_content"
+        ));
+        assert!(contains_word("\"reasoning_content\"", "reasoning_content"));
+        // must not match a longer identifier that merely contains the needle
+        assert!(!contains_word(
+            "my_reasoning_content_v2",
+            "reasoning_content"
+        ));
+        assert!(!contains_word("reasoning_contents", "reasoning_content"));
+        assert!(!contains_word("no such thing", "reasoning_content"));
+        assert!(!contains_word("", "reasoning_content"));
+    }
+
+    #[test]
+    fn learns_from_a_named_unknown_field_rejection() {
+        // The real Mistral/Groq shape (upstream #45655: "Extra inputs are not permitted")
+        assert!(body_rejects_reasoning_content(
+            r#"{"error":{"message":"messages.2.reasoning_content: Extra inputs are not permitted"}}"#,
+            true
+        ));
+        assert!(body_rejects_reasoning_content(
+            "Unrecognized request argument supplied: reasoning_content",
+            true
+        ));
+        assert!(body_rejects_reasoning_content(
+            "unknown field `reasoning_content`",
+            true
+        ));
+        // hermes' truncated "additional propert" phrasing
+        assert!(body_rejects_reasoning_content(
+            "Additional Properties are not allowed: reasoning_content",
+            true
+        ));
+    }
+
+    #[test]
+    fn does_not_learn_when_we_never_sent_it() {
+        // 🔴 learning a field we did not send would silently disable reasoning
+        // for the rest of the session — the `sent` intersection in hermes exists
+        // for exactly this reason.
+        assert!(!body_rejects_reasoning_content(
+            "messages.2.reasoning_content: Extra inputs are not permitted",
+            false
+        ));
+    }
+
+    #[test]
+    fn does_not_learn_from_unrelated_or_unnamed_errors() {
+        // Unnamed: could be any field, guessing would be a lie.
+        assert!(!body_rejects_reasoning_content(
+            "Extra inputs are not permitted",
+            true
+        ));
+        // Named but not an unknown-field complaint (e.g. a value complaint).
+        assert!(!body_rejects_reasoning_content(
+            "reasoning_content must not be empty",
+            true
+        ));
+        // Plain transport/server/auth failures.
+        assert!(!body_rejects_reasoning_content(
+            "upstream connect error",
+            true
+        ));
+        assert!(!body_rejects_reasoning_content(
+            "429 Too Many Requests",
+            true
+        ));
+        assert!(!body_rejects_reasoning_content("invalid api key", true));
+        assert!(!body_rejects_reasoning_content("", true));
+    }
+
+    #[test]
+    fn log_records_once_so_recovery_cannot_loop() {
+        let log = ReasoningRejectionLog::new();
+        assert!(!log.is_rejected());
+        assert!(log.record(), "first rejection is new -> caller may retry");
+        assert!(log.is_rejected());
+        assert!(
+            !log.record(),
+            "repeat rejection is not new -> no retry, no loop"
+        );
+        assert!(log.is_rejected());
+    }
+
+    #[test]
+    fn must_echo_routes_are_never_learned_away() {
+        // hermes: `fields -= {RC}` when needs_reasoning_echo(...). A must-echo
+        // route 400s on a tool turn *without* reasoning_content, so a body naming
+        // it there is a VALUE complaint ("must not be empty"), never a schema that
+        // lacks the field. Downgrading such a route would guarantee a 400 forever.
+        let body = "messages.2.reasoning_content: must not be empty";
+        assert!(
+            !body_rejects_reasoning_content(body, true),
+            "a value complaint is not an unknown-field rejection"
+        );
+        // And the tier itself must be immune even if some body did name it:
+        assert_eq!(
+            reasoning_replay("deepseek", "", "https://api.deepseek.com/v1"),
+            ReasoningReplay::MustEcho
+        );
     }
 }

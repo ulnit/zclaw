@@ -3,7 +3,9 @@
 //! Supports: OpenAI, Azure OpenAI, OpenRouter, DashScope (Alibaba), Ollama, llama.cpp,
 //! and any other provider implementing the OpenAI Chat Completions API.
 
-use super::reasoning_echo::{reasoning_replay, ReasoningReplay};
+use super::reasoning_echo::{
+    body_rejects_reasoning_content, reasoning_replay, ReasoningRejectionLog, ReasoningReplay,
+};
 use super::{
     FunctionCall, Message, Provider, ProviderRequest, ProviderResponse, ProviderStream, Role,
     ToolCall, Usage,
@@ -15,7 +17,7 @@ use futures::TryStreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// OpenAI-compatible provider
 pub struct OpenAiProvider {
@@ -38,6 +40,11 @@ pub struct OpenAiProvider {
     /// P625: runtime override set by `/fast` / `PUT /api/fast`;
     /// `None` outer = use `service_tier`, `Some(inner)` = force inner.
     service_tier_override: Arc<std::sync::Mutex<Option<Option<String>>>>,
+    /// P3-1d: learned "this route rejects `reasoning_content`" (hermes
+    /// `record_reasoning_field_rejection`). The provider instance *is* the route
+    /// key — `name`/`model`/`endpoint` are immutable after `build()` — so
+    /// per-instance state is per-route state; no map needed.
+    reasoning_rejected: ReasoningRejectionLog,
 }
 
 impl OpenAiProvider {
@@ -97,61 +104,145 @@ impl OpenAiProvider {
     async fn send_api_request(
         &self,
         url: &str,
-        api_request: &ApiRequest,
+        api_request: &mut ApiRequest,
     ) -> Result<reqwest::Response> {
-        let mut last_error: Option<AgentError> = None;
-        for attempt in 0..=self.max_retries {
-            if attempt > 0 {
-                let delay = Self::retry_delay(attempt - 1);
-                debug!(
-                    "provider retry {}/{} after {:?} ({})",
-                    attempt,
-                    self.max_retries,
-                    delay,
-                    last_error
-                        .as_ref()
-                        .map(|e| e.to_string())
-                        .unwrap_or_default()
-                );
-                tokio::time::sleep(delay).await;
-            }
-            let mut req_builder = self
-                .client
-                .post(url)
-                .header("Content-Type", "application/json");
-            if let Some(ref key) = self.api_key {
-                req_builder = req_builder.bearer_auth(key);
-            }
-            let response = match req_builder.json(api_request).send().await {
-                Ok(response) => response,
-                Err(e) => {
-                    // Network-level failure are always retryable.
-                    last_error = Some(AgentError::Provider(format!("HTTP request failed: {}", e)));
+        // P3-1d: at most one learn-and-retry per call, so a repeated rejection
+        // surfaces the error instead of looping.
+        let mut learn_retried = false;
+        'outer: loop {
+            let mut last_error: Option<AgentError> = None;
+            for attempt in 0..=self.max_retries {
+                if attempt > 0 {
+                    let delay = Self::retry_delay(attempt - 1);
+                    debug!(
+                        "provider retry {}/{} after {:?} ({})",
+                        attempt,
+                        self.max_retries,
+                        delay,
+                        last_error
+                            .as_ref()
+                            .map(|e| e.to_string())
+                            .unwrap_or_default()
+                    );
+                    tokio::time::sleep(delay).await;
+                }
+                let mut req_builder = self
+                    .client
+                    .post(url)
+                    .header("Content-Type", "application/json");
+                if let Some(ref key) = self.api_key {
+                    req_builder = req_builder.bearer_auth(key);
+                }
+                let response = match req_builder.json(api_request).send().await {
+                    Ok(response) => response,
+                    Err(e) => {
+                        // Network-level failure are always retryable.
+                        last_error =
+                            Some(AgentError::Provider(format!("HTTP request failed: {}", e)));
+                        continue;
+                    }
+                };
+                let status = response.status();
+                if status.is_success() {
+                    return Ok(response);
+                }
+                let error_body = response.text().await.unwrap_or_default();
+                let message = serde_json::from_str::<ApiError>(&error_body)
+                    .map(|api_err| api_err.error.message)
+                    .unwrap_or_else(|_| error_body.chars().take(500).collect::<String>());
+                if Self::retriable_status(status) && attempt < self.max_retries {
+                    last_error = Some(AgentError::Provider(format!(
+                        "API error ({}): {}",
+                        status, message
+                    )));
                     continue;
                 }
-            };
-            let status = response.status();
-            if status.is_success() {
-                return Ok(response);
-            }
-            let error_body = response.text().await.unwrap_or_default();
-            let message = serde_json::from_str::<ApiError>(&error_body)
-                .map(|api_err| api_err.error.message)
-                .unwrap_or_else(|_| error_body.chars().take(500).collect::<String>());
-            if Self::retriable_status(status) && attempt < self.max_retries {
-                last_error = Some(AgentError::Provider(format!(
+                // P3-1d: a strict schema just told us, by name, that it does not take
+                // `reasoning_content`. Learn it, strip it (done inside), and restart the
+                // attempt budget with the corrected request — exactly hermes' "record it
+                // per (provider, host, model) and retry once; build_api_request re-shapes
+                // api_messages without it".
+                //
+                // 🔴 Restart via the `'outer` label rather than `continue`: an inner
+                // `continue` at `attempt == self.max_retries` would fall out of the for
+                // loop and return `last_error` = None, i.e. the generic "request failed
+                // after retries" — swallowing the real 400 we are trying to recover from.
+                if !learn_retried
+                    && self.learn_reasoning_rejection(status, &error_body, &mut *api_request)
+                {
+                    learn_retried = true;
+                    continue 'outer;
+                }
+                return Err(AgentError::Provider(format!(
                     "API error ({}): {}",
                     status, message
                 )));
-                continue;
             }
-            return Err(AgentError::Provider(format!(
-                "API error ({}): {}",
-                status, message
-            )));
+            return Err(last_error
+                .unwrap_or_else(|| AgentError::Provider("request failed after retries".into())));
         }
-        Err(last_error
-            .unwrap_or_else(|| AgentError::Provider("request failed after retries".into())))
+    }
+
+    /// The replay route for this provider, downgraded to [`ReasoningReplay::Off`]
+    /// once this route has been *learned* to reject `reasoning_content` (P3-1d).
+    ///
+    /// This is hermes' "the next `build_api_request` re-shapes `api_messages`
+    /// without them for this (provider, host, model) for the rest of the session".
+    /// must-echo routes are never downgraded — see `learn_reasoning_rejection`.
+    fn effective_replay(&self) -> ReasoningReplay {
+        if self.reasoning_rejected.is_rejected() {
+            return ReasoningReplay::Off;
+        }
+        reasoning_replay(&self.name, &self.model, &self.endpoint)
+    }
+
+    /// P3-1d: a 4xx that names `reasoning_content` as an unknown field means this
+    /// route's schema does not accept it. Remember that for the route, strip the
+    /// key from the outgoing request, and report `true` so the caller re-POSTs.
+    ///
+    /// Returns `false` (no retry) when any of these hold, each for a reason that
+    /// would otherwise break a working provider or loop forever:
+    /// * not a 4xx — hermes gates on `_status_ok` (400–499); 5xx/timeouts are
+    ///   transient and belong to the existing retry path;
+    /// * the route is **must-echo** — there a body naming `reasoning_content` is a
+    ///   *value* complaint ("must not be empty"), never a schema lacking the field,
+    ///   and dropping it would guarantee a 400 on every later tool turn
+    ///   (hermes: `fields -= {RC}`);
+    /// * we never actually sent the key — learning a field we did not send would
+    ///   silently disable reasoning for the rest of the session;
+    /// * the body names no such field, or is not an unknown-field rejection;
+    /// * the rejection was **already** recorded — `record()` returns false, so
+    ///   recovery can never loop (hermes returns an empty frozenset for this).
+    fn learn_reasoning_rejection(
+        &self,
+        status: reqwest::StatusCode,
+        error_body: &str,
+        api_request: &mut ApiRequest,
+    ) -> bool {
+        if !status.is_client_error() {
+            return false;
+        }
+        if reasoning_replay(&self.name, &self.model, &self.endpoint) == ReasoningReplay::MustEcho {
+            return false;
+        }
+        let sent = api_request
+            .messages
+            .iter()
+            .any(|m| m.reasoning_content.is_some());
+        if !body_rejects_reasoning_content(error_body, sent) {
+            return false;
+        }
+        if !self.reasoning_rejected.record() {
+            return false; // already known → surface the error, do not loop
+        }
+        for m in api_request.messages.iter_mut() {
+            m.reasoning_content = None;
+        }
+        warn!(
+            "{} rejected replayed reasoning_content — dropping it for this route for the rest of the process",
+            self.model
+        );
+        true
     }
 }
 
@@ -268,6 +359,7 @@ impl OpenAiProviderBuilder {
             reasoning_effort: self.reasoning_effort,
             service_tier: self.service_tier,
             service_tier_override: Arc::new(std::sync::Mutex::new(None)),
+            reasoning_rejected: ReasoningRejectionLog::new(),
         })
     }
 }
@@ -610,8 +702,9 @@ impl Provider for OpenAiProvider {
 
         // Resolve the reasoning-replay route once per request (hermes
         // `_reasoning_replay_route`): deterministic in (provider, model, endpoint), so the
-        // wire prefix stays byte-stable across turns.
-        let replay = reasoning_replay(&self.name, &self.model, &self.endpoint);
+        // wire prefix stays byte-stable across turns — unless this route has already
+        // been learned to reject the carrier (P3-1d), which downgrades it to Off.
+        let replay = self.effective_replay();
         let mut api_messages: Vec<ApiMessage> = request
             .messages
             .iter()
@@ -627,7 +720,7 @@ impl Provider for OpenAiProvider {
             Some(request.tools.iter().map(tool_def_to_api).collect())
         };
 
-        let api_request = ApiRequest {
+        let mut api_request = ApiRequest {
             model: request.model.clone(),
             messages: api_messages,
             tools: api_tools,
@@ -640,7 +733,7 @@ impl Provider for OpenAiProvider {
             stream_options: None,
         };
 
-        let response = self.send_api_request(&url, &api_request).await?;
+        let response = self.send_api_request(&url, &mut api_request).await?;
 
         let api_response: ApiResponse = response
             .json()
@@ -690,7 +783,7 @@ impl Provider for OpenAiProvider {
 
         // Same route resolution as the non-streaming path — both must agree or a
         // fallback switch mid-session would change the wire shape.
-        let replay = reasoning_replay(&self.name, &self.model, &self.endpoint);
+        let replay = self.effective_replay();
         let mut api_messages: Vec<ApiMessage> = request
             .messages
             .iter()
@@ -704,7 +797,7 @@ impl Provider for OpenAiProvider {
         } else {
             Some(request.tools.iter().map(tool_def_to_api).collect())
         };
-        let api_request = ApiRequest {
+        let mut api_request = ApiRequest {
             model: request.model.clone(),
             messages: api_messages,
             tools: api_tools,
@@ -717,7 +810,7 @@ impl Provider for OpenAiProvider {
             stream_options: Some(serde_json::json!({"include_usage": true})),
         };
 
-        let response = self.send_api_request(&url, &api_request).await?;
+        let response = self.send_api_request(&url, &mut api_request).await?;
 
         let byte_stream = response.bytes_stream();
         let reader = SseLineReader {
@@ -1341,5 +1434,290 @@ mod streaming_tests {
         };
         let value = serde_json::to_value(&request).expect("serializes");
         assert!(value.get("service_tier").is_none());
+    }
+
+    // -----------------------------------------------------------------
+    // P3-1d 端到端：运行时 rejection 学习（axum mock server）
+    // -----------------------------------------------------------------
+
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+
+    #[derive(Clone)]
+    struct RejectMock {
+        hits: Arc<AtomicUsize>,
+        bodies: Arc<Mutex<Vec<String>>>,
+        /// 每次响应体；元素含 "{REJECT}" 则回 400 点名，否则回 200。
+        script: Vec<String>,
+    }
+
+    impl RejectMock {
+        fn new(script: Vec<String>) -> Self {
+            Self {
+                hits: Arc::new(AtomicUsize::new(0)),
+                bodies: Arc::new(Mutex::new(Vec::new())),
+                script,
+            }
+        }
+        fn hit_count(&self) -> usize {
+            self.hits.load(Ordering::SeqCst)
+        }
+        fn body(&self, i: usize) -> String {
+            self.bodies
+                .lock()
+                .unwrap()
+                .get(i)
+                .cloned()
+                .unwrap_or_default()
+        }
+    }
+
+    /// Start the mock server and return its address.
+    ///
+    /// 🔴 Must be `async` and awaited — calling `Handle::block_on` from inside a
+    /// `#[tokio::test]` panics with "Cannot block the current thread from within a
+    /// runtime", which would make every test here fail for a reason unrelated to
+    /// the feature under test.
+    async fn reject_server(st: RejectMock) -> std::net::SocketAddr {
+        use axum::extract::State;
+        use axum::routing::post;
+        let app = axum::Router::new()
+            .route(
+                "/v1/chat/completions",
+                post(|State(st): State<RejectMock>, body: String| async move {
+                    let n = st.hits.fetch_add(1, Ordering::SeqCst);
+                    st.bodies.lock().unwrap().push(body);
+                    let item = st.script.get(n).cloned().unwrap_or_else(|| "{REJECT}".into());
+                    if item == "{REJECT}" {
+                        (
+                            axum::http::StatusCode::BAD_REQUEST,
+                            r#"{"error":{"message":"messages.1.reasoning_content: Extra inputs are not permitted"}}"#.to_string(),
+                        )
+                    } else if item == "{REJECT_UNNAMED}" {
+                        (
+                            axum::http::StatusCode::BAD_REQUEST,
+                            r#"{"error":{"message":"Extra inputs are not permitted"}}"#.to_string(),
+                        )
+                    } else {
+                        (axum::http::StatusCode::OK, item)
+                    }
+                }),
+            )
+            .with_state(st);
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(l, app).await.unwrap();
+        });
+        addr
+    }
+
+    const OK_BODY: &str = r#"{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"#;
+
+    /// 带 reasoning 的历史：assistant turn 存了推理文本，Content 路线会把它发出去。
+    fn reasoning_history() -> Vec<Message> {
+        vec![
+            Message {
+                reasoning: None,
+                role: Role::User,
+                content: Some("hi".into()),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+            Message {
+                reasoning: Some("PRIVATE-THOUGHT".into()),
+                role: Role::Assistant,
+                content: Some("prev".into()),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+            Message {
+                reasoning: None,
+                role: Role::User,
+                content: Some("again".into()),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+        ]
+    }
+
+    fn req(model: &str) -> crate::provider::ProviderRequest {
+        crate::provider::ProviderRequest {
+            messages: reasoning_history(),
+            tools: vec![],
+            model: model.into(),
+            max_tokens: None,
+            temperature: None,
+            stream: false,
+            stop: None,
+            images: None,
+        }
+    }
+
+    /// 🔴 P3-1d 主路径：Content 路线发出 reasoning_content → 400 点名 →
+    /// 学习 + 剥离 + 重试成功；此后该路线**永久**不再带该字段。
+    #[tokio::test]
+    async fn learned_rejection_strips_reasoning_and_retries() {
+        let st = RejectMock::new(vec!["{REJECT}".into(), OK_BODY.into(), OK_BODY.into()]);
+        let addr = reject_server(st.clone()).await;
+        let provider = OpenAiProvider::builder()
+            .endpoint(&format!("http://{addr}/v1"))
+            .model("m")
+            .name("openrouter") // Content 路线：确实会发 reasoning_content
+            .max_retries(2)
+            .build()
+            .unwrap();
+
+        // 前置断言：该路线在没学到 rejection 前确实发送 reasoning_content
+        assert_eq!(provider.effective_replay(), ReasoningReplay::Content);
+
+        let resp = provider.chat_completion(req("m")).await.unwrap();
+        assert_eq!(resp.content.as_deref(), Some("ok"));
+
+        assert_eq!(st.hit_count(), 2, "应恰好一次学习重试，不多不少");
+        assert!(
+            st.body(0).contains("reasoning_content"),
+            "第一次请求必须带该字段（否则这次测试什么都没证明）: {}",
+            st.body(0)
+        );
+        assert!(
+            !st.body(1).contains("reasoning_content"),
+            "重试请求必须已剥离: {}",
+            st.body(1)
+        );
+        assert!(
+            !st.body(1).contains("PRIVATE-THOUGHT"),
+            "推理文本不得残留在重试请求里: {}",
+            st.body(1)
+        );
+        assert!(provider.reasoning_rejected.is_rejected());
+
+        // 学到之后，effective_replay 整段降级为 Off —— 后续 turn 无需再吃一次 400
+        assert_eq!(provider.effective_replay(), ReasoningReplay::Off);
+        provider.chat_completion(req("m")).await.unwrap();
+        assert_eq!(st.hit_count(), 3, "第三次调用不应再触发重试");
+        assert!(
+            !st.body(2).contains("reasoning_content"),
+            "已学习的路线永久不再发该字段: {}",
+            st.body(2)
+        );
+    }
+
+    /// 🔴 不能死循环：服务端**每次**都拒绝时，恰好学习一次、重试一次，
+    /// 然后把**真实错误**抛出去——绝不能退化成 "request failed after retries"。
+    #[tokio::test]
+    async fn repeat_rejection_surfaces_the_real_error_without_looping() {
+        let st = RejectMock::new(vec![
+            "{REJECT}".into(),
+            "{REJECT}".into(),
+            "{REJECT}".into(),
+        ]);
+        let addr = reject_server(st.clone()).await;
+        let provider = OpenAiProvider::builder()
+            .endpoint(&format!("http://{addr}/v1"))
+            .model("m")
+            .name("openrouter")
+            .max_retries(2)
+            .build()
+            .unwrap();
+
+        let err = provider
+            .chat_completion(req("m"))
+            .await
+            .unwrap_err()
+            .to_string();
+        assert_eq!(st.hit_count(), 2, "只允许一次学习重试，不能循环");
+        assert!(
+            err.contains("Extra inputs are not permitted"),
+            "必须把真实 400 抛出去，不能被吞成通用重试耗尽文案: {err}"
+        );
+        assert!(
+            !err.contains("request failed after retries"),
+            "'outer 标签重启若写错就会退化成这句，真实错误被吞掉: {err}"
+        );
+    }
+
+    /// must-echo 路线**永不**被学习掉：那里点名 reasoning_content 是「值不能为空」
+    /// 之类的抱怨，不是 schema 缺字段；剥掉它会让后续每个 tool turn 都 400。
+    #[tokio::test]
+    async fn must_echo_route_is_never_learned_away() {
+        let st = RejectMock::new(vec!["{REJECT}".into()]);
+        let addr = reject_server(st.clone()).await;
+        let provider = OpenAiProvider::builder()
+            .endpoint(&format!("http://{addr}/v1"))
+            .model("m")
+            .name("deepseek") // MustEcho 路线
+            .max_retries(2)
+            .build()
+            .unwrap();
+        assert_eq!(provider.effective_replay(), ReasoningReplay::MustEcho);
+
+        let err = provider
+            .chat_completion(req("m"))
+            .await
+            .unwrap_err()
+            .to_string();
+        assert_eq!(st.hit_count(), 1, "must-echo 路线不重试");
+        assert!(
+            !provider.reasoning_rejected.is_rejected(),
+            "must-echo 路线不学习"
+        );
+        assert_eq!(
+            provider.effective_replay(),
+            ReasoningReplay::MustEcho,
+            "路线不得被降级"
+        );
+        assert!(err.contains("Extra inputs"), "真实错误应抛出: {err}");
+    }
+
+    /// 没发过该字段就学不到：否则等于凭空把整条路线的 reasoning 永久关掉。
+    #[tokio::test]
+    async fn rejection_is_not_learned_when_the_field_was_never_sent() {
+        let st = RejectMock::new(vec!["{REJECT}".into()]);
+        let addr = reject_server(st.clone()).await;
+        let provider = OpenAiProvider::builder()
+            .endpoint(&format!("http://{addr}/v1"))
+            .model("m")
+            .name("brand-new-provider") // 未知路线 → Off，根本不发该字段
+            .max_retries(2)
+            .build()
+            .unwrap();
+        assert_eq!(provider.effective_replay(), ReasoningReplay::Off);
+
+        provider.chat_completion(req("m")).await.unwrap_err();
+        assert_eq!(st.hit_count(), 1, "没发过就不该重试");
+        assert!(
+            !provider.reasoning_rejected.is_rejected(),
+            "学一个自己没发过的字段＝谎报，会永久关掉 reasoning"
+        );
+        assert!(
+            !st.body(0).contains("reasoning_content"),
+            "前提核对：确实没发"
+        );
+    }
+
+    /// 未点名的 unknown-field 错误不学习：那个字段可能是别的，猜错就白关 reasoning。
+    #[tokio::test]
+    async fn unnamed_rejection_is_not_learned() {
+        let st = RejectMock::new(vec!["{REJECT_UNNAMED}".into()]);
+        let addr = reject_server(st.clone()).await;
+        let provider = OpenAiProvider::builder()
+            .endpoint(&format!("http://{addr}/v1"))
+            .model("m")
+            .name("openrouter")
+            .max_retries(2)
+            .build()
+            .unwrap();
+
+        provider.chat_completion(req("m")).await.unwrap_err();
+        assert_eq!(st.hit_count(), 1, "未点名不重试");
+        assert!(!provider.reasoning_rejected.is_rejected());
+        assert!(
+            st.body(0).contains("reasoning_content"),
+            "前提核对：这次确实发了该字段，只是错误没点名"
+        );
     }
 }
