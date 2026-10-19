@@ -142,6 +142,20 @@ pub struct PruneFilters {
     pub max_tool_calls: Option<i64>,
     /// Tri-state archived filter (see struct docs).
     pub archived: Option<bool>,
+    /// Pinned is a durable "keep" flag: bulk prune/archive **exclude** pinned rows
+    /// unless this is set (hermes `_prune_filter_where`: `if not include_pinned:
+    /// clauses.append(_not_pinned_sql())`). Default `false` = spare pinned sessions.
+    /// 🔴 Without this clause a prune would delete the user's pinned sessions —
+    /// a live data-loss bug, since pinning is exactly the "never delete this" signal.
+    ///
+    /// Scope note: upstream's `_not_pinned_sql` also spares *unpinned continuations
+    /// of a pinned compression ancestor* via a recursive pinned-tail CTE. That
+    /// depends on the `whole_lineages` compression-lineage protection, which this
+    /// port does not implement yet (its `where_clause` has no lineage handling at
+    /// all). The pinned-tail refinement is therefore sequenced with that port, not
+    /// skipped; the `pinned = 0` clause here is the primary safety mechanism and
+    /// matches upstream's default behaviour for every non-lineage case.
+    pub include_pinned: bool,
 }
 
 /// Typed bind parameter for the generated WHERE clause.
@@ -243,6 +257,12 @@ impl PruneFilters {
             Some(true) => clauses.push("s.archived = 1".to_string()),
             Some(false) => clauses.push("s.archived = 0".to_string()),
             None => {}
+        }
+        // Pinned is a durable "keep" flag: bulk prune/archive exclude pinned rows
+        // unless explicitly opted in (hermes `_prune_filter_where`). COALESCE guards
+        // a legacy NULL even though the column is NOT NULL DEFAULT 0 today.
+        if !self.include_pinned {
+            clauses.push("COALESCE(s.pinned, 0) = 0".to_string());
         }
         (clauses.join(" AND "), params)
     }
@@ -384,7 +404,11 @@ mod tests {
     fn where_clause_base_and_filters() {
         let filters = PruneFilters::default();
         let (clause, params) = filters.where_clause();
-        assert_eq!(clause, "s.ended_at IS NOT NULL");
+        assert_eq!(
+            clause,
+            "s.ended_at IS NOT NULL AND COALESCE(s.pinned, 0) = 0",
+            "a bare prune must spare pinned sessions (hermes `_prune_filter_where`)"
+        );
         assert!(params.is_empty());
         assert!(filters.is_empty());
 
@@ -406,6 +430,27 @@ mod tests {
         assert!(params.contains(&FilterParam::Text("%fix%".into())));
         assert!(params.contains(&FilterParam::Int(10)));
         assert!(!filters.is_empty());
+    }
+
+    /// Pinned sessions are spared by default; `include_pinned` opts in (hermes
+    /// `include_pinned`). This is the data-loss guard the whole P3-3 hinges on.
+    #[test]
+    fn pinned_sessions_are_excluded_unless_opted_in() {
+        let (clause, _) = PruneFilters::default().where_clause();
+        assert!(
+            clause.contains("COALESCE(s.pinned, 0) = 0"),
+            "default prune must exclude pinned: {clause}"
+        );
+        let opted = PruneFilters {
+            include_pinned: true,
+            ..Default::default()
+        };
+        let (clause, _) = opted.where_clause();
+        assert!(
+            !clause.contains("pinned"),
+            "include_pinned must drop the guard so pinned rows are candidates: {clause}"
+        );
+        assert!(clause.contains("s.ended_at IS NOT NULL"), "ended guard stays");
     }
 
     #[test]
