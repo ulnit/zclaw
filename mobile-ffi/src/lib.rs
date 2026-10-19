@@ -482,8 +482,14 @@ async fn run_chat(st: Arc<State>, session_id: String, text: String) {
         let retry_prompt = prompt::bare_retry_prompt(&retry_base);
         let retry_fut = retry_agent.run(&retry_prompt, None);
         let outcome2 = stream_scope(emitter2, retry_fut).await;
+        // 重试 agent persist=false，故需手动落库；reasoning 从 RunResult.conversation
+        // 里取回（该 agent 不落库，但内存历史里有最后一条带 reasoning 的 assistant 消息）。
+        let mut retry_reasoning: Option<String> = None;
         match outcome2 {
-            Ok(r) => final_text = r.content,
+            Ok(r) => {
+                retry_reasoning = r.conversation.iter().rev().find_map(|m| m.reasoning.clone());
+                final_text = r.content
+            }
             Err(e) => push_chunk(&st, Chunk::error(&format!("重试失败: {}", e))),
         }
         // content 兜底（与主路径同理：非流式时 delta 回调不触发）
@@ -498,6 +504,7 @@ async fn run_chat(st: Arc<State>, session_id: String, text: String) {
                 .append_message(
                     &session_id,
                     &Message {
+                        reasoning: retry_reasoning.clone(),
                         role: Role::Assistant,
                         content: Some(final_text.clone()),
                         tool_calls: None,
@@ -915,7 +922,7 @@ mod tests {
         ];
         assert!(!no_progress(&progress));
         // 本地工具永不收口（todo/memory/files 反复调用正常）
-        for name in ["todo", "memory", "read_file", "session_search", "clarify", "skills"] {
+        for name in ["todo_list", "todo", "memory", "read_file", "session_search", "clarify", "skills"] {
             let v = vec![s(name, "a", "same"), s(name, "b", "same"), s(name, "c", "same")];
             assert!(!no_progress(&v), "{} 是本地工具不该收口", name);
         }
