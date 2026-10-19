@@ -8,6 +8,7 @@ use crate::error::{AgentError, Result};
 use crate::provider::{Message, Role, ToolCall};
 use crate::session::{Session, SessionMetadata, SessionStore};
 use rusqlite::{params, Connection, OptionalExtension};
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_activity_at REAL,
     archived INTEGER NOT NULL DEFAULT 0,
     pinned INTEGER NOT NULL DEFAULT 0,
+    model_config TEXT,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
 );
 
@@ -403,6 +405,52 @@ fn ensure_reasoning_column(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Tolerant `model_config` decode (hermes `_parse_model_config`,
+/// `hermes_state_sessions.py`): JSON text → object; anything else → empty.
+///
+/// Must never fail: a corrupt or legacy blob in one row has to degrade to "no
+/// durable state", not to a session-load error. Note the non-object cases —
+/// a JSON array, a bare number, or truncated text all yield `{}`.
+fn parse_model_config(raw: &str) -> Map<String, Value> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Map::new();
+    }
+    match serde_json::from_str::<Value>(trimmed) {
+        Ok(Value::Object(map)) => map,
+        _ => Map::new(),
+    }
+}
+
+/// Idempotent migration for the `sessions.model_config` JSON column
+/// (hermes `hermes_state_common.py:395 model_config TEXT`).
+///
+/// This is the per-session key/value store hermes hangs durable, cross-`--resume`
+/// state on — `get_session_model_config_value` / `patch_session_model_config`
+/// (`hermes_state_sessions.py:823,830`). ulnclaw needs the same substrate for two
+/// ports that are otherwise process-lifetime-only:
+/// * **P3-1e** — the reasoning-rejection learner, so a resumed process never
+///   re-learns a 400 (hermes `record_reasoning_field_rejection` persists here);
+/// * **P3-5d** — the compressor's usage anchor / anti-thrash strikes across turns.
+///
+/// Existing DBs (created before this column) get it added without touching rows,
+/// same pattern as `ensure_reasoning_column` / `ensure_display_metadata_column`.
+fn ensure_model_config_column(conn: &Connection) -> Result<()> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(sessions)")
+        .map_err(|e| AgentError::session(e.to_string()))?;
+    let has_column = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| AgentError::session(e.to_string()))?
+        .filter_map(|r| r.ok())
+        .any(|name| name == "model_config");
+    if !has_column {
+        conn.execute_batch("ALTER TABLE sessions ADD COLUMN model_config TEXT;")
+            .map_err(|e| AgentError::session(format!("add model_config: {}", e)))?;
+    }
+    Ok(())
+}
+
 impl SqliteSessionStore {
     /// Open (or create) the state database at `path`.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -417,6 +465,7 @@ impl SqliteSessionStore {
         let has_fts = initialize_schema(&conn)?;
         ensure_display_metadata_column(&conn)?;
         ensure_reasoning_column(&conn)?;
+        ensure_model_config_column(&conn)?;
         ensure_delegation_delivery_columns(&conn)?;
 
         let store = Self {
@@ -1629,6 +1678,95 @@ impl SqliteSessionStore {
                 tool_call_count = tool_call_count + ?4
              WHERE id = ?1",
             params![session_id, input_tokens, output_tokens, tool_calls],
+        )
+        .map_err(|e| AgentError::session(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Read one key out of a session's `model_config` JSON
+    /// (hermes `get_session_model_config_value`, `hermes_state_sessions.py:830`).
+    ///
+    /// Returns `None` when the session row is missing, the key is absent, the
+    /// column is NULL/empty, or the stored JSON does not parse — hermes'
+    /// `_parse_model_config` is deliberately tolerant ("JSON text or dict → dict
+    /// copy; anything else → {}"), because a corrupt blob must not break session
+    /// load. Callers supply their own default.
+    pub fn get_session_model_config_value(
+        &self,
+        session_id: &str,
+        key: &str,
+    ) -> Result<Option<Value>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
+        // 🔴 The column is nullable, so the row type must be Option<String>:
+        // reading NULL as String errors instead of yielding None. Outer Option =
+        // row missing; inner = column NULL. Both mean "no value".
+        let raw: Option<Option<String>> = conn
+            .query_row(
+                "SELECT model_config FROM sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map_err(|e| AgentError::session(e.to_string()))?;
+        let Some(raw) = raw.flatten() else {
+            return Ok(None);
+        };
+        Ok(parse_model_config(&raw).get(key).cloned())
+    }
+
+    /// Merge `patch` into a session's `model_config` JSON
+    /// (hermes `patch_session_model_config`, `hermes_state_sessions.py:823`).
+    ///
+    /// * A key mapped to [`Value::Null`] is **removed** (hermes: "`None` deletes
+    ///   a key"), which is how callers clear durable state such as an armed
+    ///   cooldown or a prune runway marker.
+    /// * The read-merge-write happens under the same connection guard, so a
+    ///   concurrent writer cannot publish a stale copy over this one — hermes
+    ///   wraps the identical sequence in `_execute_write` for the same reason.
+    /// * No-op when the session row does not exist or the patch is empty, again
+    ///   matching upstream. An empty merge writes NULL rather than `"{}"`.
+    pub fn patch_session_model_config(
+        &self,
+        session_id: &str,
+        patch: &Map<String, Value>,
+    ) -> Result<()> {
+        if session_id.is_empty() || patch.is_empty() {
+            return Ok(());
+        }
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
+        let raw: Option<Option<String>> = conn
+            .query_row(
+                "SELECT model_config FROM sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| AgentError::session(e.to_string()))?;
+        let Some(raw) = raw else {
+            return Ok(()); // row missing → no-op, never an error
+        };
+        let mut config = parse_model_config(raw.as_deref().unwrap_or(""));
+        for (key, value) in patch {
+            if value.is_null() {
+                config.remove(key);
+            } else {
+                config.insert(key.clone(), value.clone());
+            }
+        }
+        let serialized = if config.is_empty() {
+            None
+        } else {
+            serde_json::to_string(&Value::Object(config)).ok()
+        };
+        conn.execute(
+            "UPDATE sessions SET model_config = ?2 WHERE id = ?1",
+            params![session_id, serialized],
         )
         .map_err(|e| AgentError::session(e.to_string()))?;
         Ok(())
@@ -3684,5 +3822,226 @@ mod tests {
         assert!(logical > 0);
         // Store remains fully usable after VACUUM.
         assert_eq!(store.count_messages().unwrap(), 50);
+    }
+
+    // ---------------------------------------------------------------
+    // P3-kv: sessions.model_config JSON KV (hermes get/patch parity)
+    // ---------------------------------------------------------------
+
+    fn obj(pairs: &[(&str, Value)]) -> Map<String, Value> {
+        let mut m = Map::new();
+        for (k, v) in pairs {
+            m.insert((*k).to_string(), v.clone());
+        }
+        m
+    }
+
+    #[test]
+    fn model_config_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        assert_eq!(
+            store.get_session_model_config_value(&sid, "k").unwrap(),
+            None,
+            "fresh session has no keys"
+        );
+        store
+            .patch_session_model_config(&sid, &obj(&[("k", Value::from(42))]))
+            .unwrap();
+        assert_eq!(
+            store.get_session_model_config_value(&sid, "k").unwrap(),
+            Some(Value::from(42))
+        );
+    }
+
+    #[test]
+    fn model_config_patch_merges_not_replaces() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        store
+            .patch_session_model_config(&sid, &obj(&[("a", Value::from(1))]))
+            .unwrap();
+        store
+            .patch_session_model_config(&sid, &obj(&[("b", Value::from(2))]))
+            .unwrap();
+        assert_eq!(
+            store.get_session_model_config_value(&sid, "a").unwrap(),
+            Some(Value::from(1)),
+            "a second patch must not clobber the first key"
+        );
+        assert_eq!(
+            store.get_session_model_config_value(&sid, "b").unwrap(),
+            Some(Value::from(2))
+        );
+    }
+
+    /// hermes: a value of None deletes the key. Callers use this to clear armed
+    /// durable state (a cooldown, a prune runway marker).
+    #[test]
+    fn model_config_null_removes_a_key_but_keeps_siblings() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        store
+            .patch_session_model_config(
+                &sid,
+                &obj(&[("keep", Value::from("x")), ("drop", Value::from("y"))]),
+            )
+            .unwrap();
+        store
+            .patch_session_model_config(&sid, &obj(&[("drop", Value::Null)]))
+            .unwrap();
+        assert_eq!(
+            store.get_session_model_config_value(&sid, "drop").unwrap(),
+            None,
+            "a Null patch value removes the key"
+        );
+        assert_eq!(
+            store.get_session_model_config_value(&sid, "keep").unwrap(),
+            Some(Value::from("x")),
+            "removing one key must not disturb the others"
+        );
+    }
+
+    /// Removing the last key leaves the column NULL, not "{}" (hermes serializes
+    /// None when the merged dict is empty).
+    #[test]
+    fn model_config_emptying_writes_null_not_empty_object() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        store
+            .patch_session_model_config(&sid, &obj(&[("only", Value::from(1))]))
+            .unwrap();
+        store
+            .patch_session_model_config(&sid, &obj(&[("only", Value::Null)]))
+            .unwrap();
+        assert_eq!(
+            store.get_session_model_config_value(&sid, "only").unwrap(),
+            None
+        );
+        // Re-open and confirm the row still loads cleanly.
+        drop(store);
+        let store = store_with(dir.path());
+        assert_eq!(
+            store.get_session_model_config_value(&sid, "only").unwrap(),
+            None
+        );
+    }
+
+    /// hermes: patch/get on a missing row is a no-op, never an error.
+    #[test]
+    fn model_config_missing_session_is_noop_not_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        store
+            .patch_session_model_config("no-such-session", &obj(&[("k", Value::from(1))]))
+            .unwrap(); // must not Err
+        assert_eq!(
+            store
+                .get_session_model_config_value("no-such-session", "k")
+                .unwrap(),
+            None
+        );
+        // empty session id / empty patch are likewise no-ops
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        store
+            .patch_session_model_config("", &obj(&[("k", Value::from(1))]))
+            .unwrap();
+        store.patch_session_model_config(&sid, &Map::new()).unwrap();
+        assert_eq!(
+            store.get_session_model_config_value(&sid, "k").unwrap(),
+            None
+        );
+    }
+
+    /// Durability: the whole point of the store is surviving a reopen / --resume.
+    #[test]
+    fn model_config_survives_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let sid = {
+            let store = store_with(dir.path());
+            let sid = store.create_session("cli", Some("m"), None).unwrap();
+            store
+                .patch_session_model_config(
+                    &sid,
+                    &obj(&[("reasoning_rejected", Value::from(true))]),
+                )
+                .unwrap();
+            sid
+        };
+        let store = store_with(dir.path());
+        assert_eq!(
+            store
+                .get_session_model_config_value(&sid, "reasoning_rejected")
+                .unwrap(),
+            Some(Value::from(true)),
+            "value must persist across a fresh open"
+        );
+    }
+
+    /// The migration path: a DB created before the column existed gains it on
+    /// open, keeping existing rows (same fixture technique as the reasoning test —
+    /// build with the real store, then DROP COLUMN to simulate the old schema).
+    #[test]
+    fn model_config_column_migrates_from_pre_existing_db() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let sid = {
+            let store = SqliteSessionStore::open(&path).unwrap();
+            let sid = store.create_session("cli", Some("m"), None).unwrap();
+            store.append_message(&sid, &user_msg("kept")).unwrap();
+            sid
+        };
+        {
+            use rusqlite::Connection;
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch("ALTER TABLE sessions DROP COLUMN model_config")
+                .expect("DROP COLUMN model_config (simulate pre-migration DB)");
+            let cols: Vec<String> = {
+                let mut st = conn.prepare("PRAGMA table_info(sessions)").unwrap();
+                st.query_map([], |r| r.get::<_, String>(1))
+                    .unwrap()
+                    .filter_map(|r| r.ok())
+                    .collect()
+            };
+            assert!(
+                !cols.iter().any(|c| c == "model_config"),
+                "fixture must lack the column after DROP"
+            );
+        }
+        let store = SqliteSessionStore::open(&path).unwrap();
+        // Pre-existing row survived the migration.
+        let msgs = store.load_messages(&sid).unwrap();
+        assert_eq!(msgs.len(), 1, "pre-existing row must survive migration");
+        // And the column is usable post-migration.
+        store
+            .patch_session_model_config(&sid, &obj(&[("k", Value::from(7))]))
+            .unwrap();
+        assert_eq!(
+            store.get_session_model_config_value(&sid, "k").unwrap(),
+            Some(Value::from(7))
+        );
+    }
+
+    #[test]
+    fn parse_model_config_is_tolerant() {
+        // valid object
+        let m = parse_model_config(r#"{"a":1,"b":"x"}"#);
+        assert_eq!(m.get("a"), Some(&Value::from(1)));
+        assert_eq!(m.get("b"), Some(&Value::from("x")));
+        // empty / whitespace → {}
+        assert!(parse_model_config("").is_empty());
+        assert!(parse_model_config("   ").is_empty());
+        // non-object JSON → {} (array, number, string, bool, null)
+        assert!(parse_model_config("[1,2,3]").is_empty());
+        assert!(parse_model_config("42").is_empty());
+        assert!(parse_model_config("\"str\"").is_empty());
+        assert!(parse_model_config("null").is_empty());
+        // truncated / garbage → {} (must not panic or error)
+        assert!(parse_model_config("{not json").is_empty());
+        assert!(parse_model_config(r#"{"a":1,"#).is_empty());
     }
 }
