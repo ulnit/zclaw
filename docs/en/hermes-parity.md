@@ -25,11 +25,14 @@ performance and a single static binary.
 > "Unreleased"): 529 overloaded is now retried (P3-2), assistant reasoning is
 > persisted (P3-1), and a tiered per-provider reasoning replay policy lives in
 > `provider::reasoning_echo` (P3-1b). P3-1b has one **deliberate deviation** from
-> upstream — unknown provider routes do *not* send `reasoning_content`, because
-> hermes only tolerates that default via runtime rejection learning, which ulnclaw
-> does not have yet. Anthropic's **signed thinking replay** remains unimplemented
-> (`anthropic.rs` has no `signature` and builds no thinking blocks, so replaying
-> nothing there is currently correct).
+> upstream — unknown provider routes do *not* send `reasoning_content`. P3-1d added
+> hermes' **runtime rejection learner** (`ReasoningRejectionLog`: once a route 400s
+> naming that field it is downgraded to not sending it, and the field is stripped and
+> retried once), but the unknown-route default deliberately stays off — the learner
+> only helps *after* a provider has already eaten a 400, so opting unknown routes in
+> would make every new provider's first request fail. Anthropic's **signed thinking
+> replay** remains unimplemented (`anthropic.rs` has no `signature` and builds no
+> thinking blocks, so replaying nothing there is currently correct).
 
 <a id="tool-parity"></a>
 

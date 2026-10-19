@@ -50,10 +50,11 @@ three tiers resolved from `(provider name, model, endpoint)`:
 🔴 **Deliberate deviation from upstream:** *unknown* routes resolve to **off**, not
 to `reasoning_content`. hermes defaults unknown routes to sending it and stays safe
 only because it **learns** rejections at runtime
-(`record_reasoning_field_rejection`); ulnclaw has no such learner, so unknown
-routes stay silent — preserving today's working behaviour instead of risking a
-400/422 on a provider that currently works. Porting the runtime learner would
-allow relaxing this.
+(`record_reasoning_field_rejection`). ulnclaw now has that learner too — see
+"P3-1d" below — but the unknown-route default is still kept at **off**, because the
+learner only helps *after* a provider has already eaten one 400. Opting unknown
+routes in would trade a guaranteed first-request failure on every new provider for
+an unproven benefit.
 
 Applied to **assistant turns only**; the route is resolved once per request in both
 the streaming and non-streaming paths.
@@ -69,6 +70,51 @@ is derived at request time and follows the switch automatically.
 thinking blocks, so it replays nothing today and remains correct. hermes'
 `agent/anthropic_thinking_policy.py` (signed replay + durable suppression) is a
 separate, larger item.
+
+### Runtime rejection learner (P3-1d, `0a7e01c`)
+
+Completes P3-1b: a route whose schema actually rejects `reasoning_content` now
+self-corrects after one 400, instead of that provider being permanently silent.
+Ports hermes' `record_reasoning_field_rejection` /
+`rejected_reasoning_carriers`.
+
+Two things collapse versus upstream, both because of ulnclaw's shape rather than a
+shortcut:
+
+- **a `set` of carriers becomes one `AtomicBool`.** hermes can send three reasoning
+  carriers and widens the drop when a non-standard one is named; ulnclaw's
+  `ApiMessage` has exactly one (`reasoning_content`), so there is nothing to widen
+  across.
+- **no route map.** An `OpenAiProvider` instance *is* an immutable
+  `(name, model, endpoint)` triple — the same tuple hermes uses as its route key —
+  so per-instance state already is per-route state.
+
+Learning triggers only when **all** of these hold, each guarding a way this could
+otherwise break a working provider:
+
+| Gate | Why |
+|---|---|
+| 4xx only | hermes `_status_ok`; 5xx/timeouts belong to the transient retry path |
+| not a must-echo route | there a body naming the field is a *value* complaint ("must not be empty"), not a schema lacking it; dropping it would 400 every later tool turn (hermes: `fields -= {RC}`) |
+| the field was actually sent | learning a field we never sent would silently disable reasoning for the session |
+| the body **names** the field | an unnamed "extra inputs are not permitted" could be about any key |
+| not already recorded | `record()` returns false on repeats, so recovery cannot loop |
+
+Once learned, `effective_replay()` returns `Off` for that route, so later turns omit
+the field without eating another 400 — hermes' "re-shapes `api_messages` without
+them for the rest of the session".
+
+The retry restarts the attempt budget via a labelled `continue 'outer` rather than an
+inner `continue`: at `attempt == max_retries` an inner `continue` would fall out of
+the loop and return `last_error = None`, i.e. the generic *"request failed after
+retries"* — **swallowing the real 400** the recovery exists to fix. A test asserts
+that string never appears.
+
+**Scope: process-lifetime, not persisted.** hermes also writes rejections into the
+session's `model_config` so a resumed process never re-learns with another 400.
+ulnclaw's provider layer sits *below* the session layer and holds no store handle, so
+threading persistence in would invert that dependency. A restart re-learns once.
+Tracked as P3-1e.
 
 ## v0.6.5 — 2026-10-16
 
