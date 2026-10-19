@@ -516,6 +516,7 @@ mod tests {
                     session_index, message_index, session_index
                 );
                 let message = Message {
+                    reasoning: None,
                     role: crate::provider::Role::User,
                     content: Some(content),
                     tool_calls: None,

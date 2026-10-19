@@ -916,6 +916,7 @@ async fn run_estimate(state: &Arc<GatewayState>, title: &str, body: Option<&str>
     };
     let request = crate::provider::ProviderRequest {
         messages: vec![crate::provider::Message {
+            reasoning: None,
             role: crate::provider::Role::User,
             content: Some(user_msg),
             tool_calls: None,

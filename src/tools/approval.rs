@@ -388,6 +388,7 @@ pub async fn smart_assess(
     let request = crate::provider::ProviderRequest {
         messages: vec![
             crate::provider::Message {
+                reasoning: None,
                 role: crate::provider::Role::System,
                 content: Some(smart_system_prompt(policy)),
                 tool_calls: None,
@@ -395,6 +396,7 @@ pub async fn smart_assess(
                 name: None,
             },
             crate::provider::Message {
+                reasoning: None,
                 role: crate::provider::Role::User,
                 content: Some(smart_user_prompt(command, description)),
                 tool_calls: None,

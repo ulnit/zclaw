@@ -476,6 +476,7 @@ fn session_create(state: Arc<GatewayState>, params: Value) -> Result<Value, Stri
                         None => None,
                     };
                     Some(crate::provider::Message {
+                        reasoning: None,
                         role,
                         content,
                         tool_calls: None,
@@ -2568,6 +2569,7 @@ mod tests {
             .append_message(
                 "s-react",
                 &crate::provider::Message {
+                    reasoning: None,
                     role: crate::provider::Role::User,
                     content: Some("hello".into()),
                     tool_calls: None,
@@ -2782,6 +2784,7 @@ mod tests {
             .append_message(
                 session_id,
                 &crate::provider::Message {
+                    reasoning: None,
                     role,
                     content: Some(text.to_string()),
                     tool_calls: None,

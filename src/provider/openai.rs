@@ -4,8 +4,8 @@
 //! and any other provider implementing the OpenAI Chat Completions API.
 
 use super::{
-    FunctionCall, Message, Provider, ProviderRequest, ProviderResponse, ProviderStream, ToolCall,
-    Usage,
+    FunctionCall, Message, Provider, ProviderRequest, ProviderResponse, ProviderStream, Role,
+    ToolCall, Usage,
 };
 use crate::error::{AgentError, Result};
 use crate::tools::ToolDefinition;
@@ -858,6 +858,60 @@ mod streaming_tests {
     use super::*;
     use crate::provider::assemble_tool_calls;
 
+    /// 🔴 P3-1 安全护栏：reasoning 只落库，**绝不上 wire**。
+    ///
+    /// hermes v0.22.2 必须靠 per-provider echo policy 才能回放 reasoning——
+    /// must-echo provider（DeepSeek/Kimi/MiMo）缺 reasoning pad 会 400，而严格
+    /// provider（Mistral/Groq/Cerebras）带上它就 400/422。ulnclaw 没有该策略，
+    /// 所以无条件发送会**弄坏今天能正常工作的 provider**。此测试把该约束钉住：
+    /// 序列化后的请求体不得出现 reasoning / reasoning_content 任何形式。
+    #[test]
+    fn reasoning_never_reaches_the_wire() {
+        let msg = Message {
+            reasoning: Some("SECRET-CHAIN-OF-THOUGHT".to_string()),
+            role: Role::Assistant,
+            content: Some("answer".to_string()),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        };
+        let api = message_to_api(&msg);
+        let json = serde_json::to_string(&api).expect("ApiMessage serializes");
+
+        assert!(
+            !json.contains("reasoning"),
+            "reasoning leaked onto the provider wire: {json}"
+        );
+        assert!(
+            !json.contains("SECRET-CHAIN-OF-THOUGHT"),
+            "reasoning *content* leaked onto the wire: {json}"
+        );
+        // content 仍正常发送（护栏不能顺手把正文也丢掉）
+        assert!(json.contains("answer"), "content must still serialize: {json}");
+        assert!(json.contains("assistant"), "role must still serialize: {json}");
+    }
+
+    /// ApiMessage 结构体本身不得有 reasoning 字段（防将来有人"顺手"加上）。
+    #[test]
+    fn api_message_has_no_reasoning_field() {
+        let api = message_to_api(&Message {
+            reasoning: Some("x".into()),
+            role: Role::Assistant,
+            content: Some("c".into()),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        });
+        let v = serde_json::to_value(&api).unwrap();
+        let obj = v.as_object().expect("ApiMessage serializes to an object");
+        for key in obj.keys() {
+            assert!(
+                !key.contains("reasoning"),
+                "ApiMessage gained a reasoning-ish field {key:?} — replay needs                  hermes' per-provider echo policy first (see reasoning_never_reaches_the_wire)"
+            );
+        }
+    }
+
     #[test]
     fn test_parse_content_chunk() {
         let chunk = parse_stream_chunk(
@@ -978,6 +1032,7 @@ mod streaming_tests {
             .unwrap();
         let request = crate::provider::ProviderRequest {
             messages: vec![crate::provider::Message {
+                reasoning: None,
                 role: crate::provider::Role::User,
                 content: Some("hi".into()),
                 tool_calls: None,

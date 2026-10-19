@@ -64,6 +64,7 @@ pub fn mirror_to_session(
         return false;
     }
     let message = Message {
+        reasoning: None,
         role,
         content: Some(text.to_string()),
         tool_calls: None,

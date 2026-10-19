@@ -548,6 +548,7 @@ mod tests {
                 (
                     1_750_000_010.0,
                     Message {
+                        reasoning: None,
                         role: Role::User,
                         content: Some("hello".into()),
                         tool_calls: None,
@@ -558,6 +559,7 @@ mod tests {
                 (
                     1_750_000_020.0,
                     Message {
+                        reasoning: None,
                         role: Role::Assistant,
                         content: Some("running ls".into()),
                         tool_calls: Some(vec![ToolCall {
@@ -575,6 +577,7 @@ mod tests {
                 (
                     1_750_000_030.0,
                     Message {
+                        reasoning: None,
                         role: Role::Tool,
                         content: Some("file.txt".into()),
                         tool_calls: None,
@@ -666,6 +669,7 @@ mod tests {
         session.messages.push((
             1_750_000_040.0,
             Message {
+                reasoning: None,
                 role: Role::User,
                 content: Some("<script>alert('x')</script>".into()),
                 tool_calls: None,
@@ -710,6 +714,7 @@ mod tests {
             (
                 1770700000.0,
                 Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some("hello".into()),
                     tool_calls: None,
@@ -720,6 +725,7 @@ mod tests {
             (
                 1770700010.0,
                 Message {
+                    reasoning: None,
                     role: Role::Assistant,
                     content: Some("".into()),
                     tool_calls: Some(vec![ToolCall {
@@ -737,6 +743,7 @@ mod tests {
             (
                 1770700020.0,
                 Message {
+                    reasoning: None,
                     role: Role::Tool,
                     content: Some("results".into()),
                     tool_calls: None,
@@ -760,6 +767,7 @@ mod tests {
         let messages = vec![(
             1770700000.0,
             Message {
+                reasoning: None,
                 role: Role::User,
                 content: Some("hi".into()),
                 tool_calls: None,
@@ -778,6 +786,7 @@ mod tests {
     fn test_render_show_line_timestamp_toggle() {
         use crate::provider::{Message, Role};
         let message = Message {
+            reasoning: None,
             role: Role::User,
             content: Some("text".into()),
             tool_calls: None,

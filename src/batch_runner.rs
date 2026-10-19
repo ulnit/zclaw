@@ -703,6 +703,7 @@ mod tests {
 
     fn msg(role: Role, content: &str) -> Message {
         Message {
+            reasoning: None,
             role,
             content: Some(content.to_string()),
             tool_calls: None,
@@ -729,6 +730,7 @@ mod tests {
         let messages = vec![
             msg(Role::Assistant, ""),
             Message {
+                reasoning: None,
                 role: Role::Assistant,
                 content: None,
                 tool_calls: Some(vec![
@@ -753,6 +755,7 @@ mod tests {
                 name: None,
             },
             Message {
+                reasoning: None,
                 role: Role::Tool,
                 content: Some("{\"content\": {\"output\": \"ok\"}}".into()),
                 tool_calls: None,
@@ -760,6 +763,7 @@ mod tests {
                 name: None,
             },
             Message {
+                reasoning: None,
                 role: Role::Tool,
                 content: Some("{\"error\": \"boom\"}".into()),
                 tool_calls: None,
@@ -779,6 +783,7 @@ mod tests {
             msg(Role::System, "sys"),
             msg(Role::User, "do the thing"),
             Message {
+                reasoning: None,
                 role: Role::Assistant,
                 content: Some("on it".into()),
                 tool_calls: Some(vec![ToolCall {
@@ -793,6 +798,7 @@ mod tests {
                 name: None,
             },
             Message {
+                reasoning: None,
                 role: Role::Tool,
                 content: Some("file.txt".into()),
                 tool_calls: None,

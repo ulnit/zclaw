@@ -184,6 +184,7 @@ fn profile_author(fallback: &str) -> String {
 
 fn system_message(content: &str) -> Message {
     Message {
+        reasoning: None,
         role: Role::System,
         content: Some(content.to_string()),
         tool_calls: None,
@@ -194,6 +195,7 @@ fn system_message(content: &str) -> Message {
 
 fn user_message(content: String) -> Message {
     Message {
+        reasoning: None,
         role: Role::User,
         content: Some(content),
         tool_calls: None,

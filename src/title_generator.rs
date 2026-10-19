@@ -142,6 +142,7 @@ pub async fn generate_title_forced(
 
     let messages = vec![
         Message {
+            reasoning: None,
             role: Role::System,
             content: Some(prompt),
             tool_calls: None,
@@ -149,6 +150,7 @@ pub async fn generate_title_forced(
             name: None,
         },
         Message {
+            reasoning: None,
             role: Role::User,
             content: Some(format!(
                 "User: {}\n\nAssistant: {}",

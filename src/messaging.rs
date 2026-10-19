@@ -2234,6 +2234,7 @@ impl Dispatcher {
             change_parts.push("server list unchanged".to_string());
         }
         let note = crate::provider::Message {
+            reasoning: None,
             role: crate::provider::Role::User,
             content: Some(format!(
                 "[system note] MCP tools were just reloaded ({}). {} tool(s) now available.",

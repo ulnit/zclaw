@@ -1048,6 +1048,7 @@ mod tests {
             .append_message(
                 "platform-telegram-42",
                 &crate::provider::Message {
+                    reasoning: None,
                     role: crate::provider::Role::User,
                     content: Some("hello bot MEDIA: /tmp/a.png".into()),
                     tool_calls: None,
@@ -1060,6 +1061,7 @@ mod tests {
             .append_message(
                 "platform-telegram-42",
                 &crate::provider::Message {
+                    reasoning: None,
                     role: crate::provider::Role::Assistant,
                     content: Some("hi there".into()),
                     tool_calls: None,

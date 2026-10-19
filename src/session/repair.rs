@@ -272,6 +272,7 @@ mod tests {
             .append_message(
                 &sid,
                 &crate::provider::Message {
+                    reasoning: None,
                     role: crate::provider::Role::User,
                     content: Some("hello repair".into()),
                     tool_calls: None,

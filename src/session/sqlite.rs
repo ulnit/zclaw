@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS messages (
     token_count INTEGER,
     finish_reason TEXT,
     active INTEGER NOT NULL DEFAULT 1,
-    display_metadata TEXT
+    display_metadata TEXT,
+    reasoning TEXT
 );
 
 CREATE TABLE IF NOT EXISTS state_meta (
@@ -376,6 +377,32 @@ fn ensure_display_metadata_column(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Add `messages.reasoning` on pre-existing databases (idempotent).
+///
+/// Stores an assistant turn's reasoning/thinking text so it survives reload and
+/// export instead of being discarded after streaming (hermes v0.22.2 replays
+/// prior reasoning across resume/branch/compaction). 🔴 Storage only — the value
+/// is deliberately NOT sent back on the provider wire: must-echo providers
+/// (DeepSeek/Kimi/MiMo) 400 without a reasoning pad while strict ones
+/// (Mistral/Groq/Cerebras) 400/422 with it, so replay requires hermes'
+/// per-provider echo policy. Wiring it unconditionally would break providers
+/// that work today; see `message_to_api` in `provider/openai.rs`.
+fn ensure_reasoning_column(conn: &Connection) -> Result<()> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(messages)")
+        .map_err(|e| AgentError::session(e.to_string()))?;
+    let has_column = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| AgentError::session(e.to_string()))?
+        .filter_map(|r| r.ok())
+        .any(|name| name == "reasoning");
+    if !has_column {
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN reasoning TEXT;")
+            .map_err(|e| AgentError::session(format!("add reasoning: {}", e)))?;
+    }
+    Ok(())
+}
+
 impl SqliteSessionStore {
     /// Open (or create) the state database at `path`.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -389,6 +416,7 @@ impl SqliteSessionStore {
             .map_err(|e| AgentError::session(format!("pragmas: {}", e)))?;
         let has_fts = initialize_schema(&conn)?;
         ensure_display_metadata_column(&conn)?;
+        ensure_reasoning_column(&conn)?;
         ensure_delegation_delivery_columns(&conn)?;
 
         let store = Self {
@@ -593,8 +621,8 @@ impl SqliteSessionStore {
             .map_err(|e| AgentError::session(e.to_string()))?;
         let role = message.role.to_string();
         conn.execute(
-            "INSERT INTO messages (session_id, role, content, tool_call_id, tool_calls, tool_name, timestamp)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO messages (session_id, role, content, tool_call_id, tool_calls, tool_name, timestamp, reasoning)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 session_id,
                 role,
@@ -603,6 +631,7 @@ impl SqliteSessionStore {
                 tool_calls,
                 message.name,
                 timestamp,
+                message.reasoning,
             ],
         )
         .map_err(|e| AgentError::session(format!("append message: {}", e)))?;
@@ -1430,7 +1459,7 @@ impl SqliteSessionStore {
             .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT role, content, tool_call_id, tool_calls, tool_name
+                "SELECT role, content, tool_call_id, tool_calls, tool_name, reasoning
                  FROM messages WHERE session_id = ?1 AND active = 1 ORDER BY id",
             )
             .map_err(|e| AgentError::session(e.to_string()))?;
@@ -1442,12 +1471,13 @@ impl SqliteSessionStore {
                     row.get::<_, Option<String>>(2)?,
                     row.get::<_, Option<String>>(3)?,
                     row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
                 ))
             })
             .map_err(|e| AgentError::session(e.to_string()))?;
         let mut messages = Vec::new();
         for row in rows {
-            let (role, content, tool_call_id, tool_calls, name) =
+            let (role, content, tool_call_id, tool_calls, name, reasoning) =
                 row.map_err(|e| AgentError::session(e.to_string()))?;
             let role = match role.as_str() {
                 "system" => Role::System,
@@ -1460,6 +1490,7 @@ impl SqliteSessionStore {
                 .transpose()
                 .map_err(|e| AgentError::session(e.to_string()))?;
             messages.push(Message {
+                reasoning,
                 role,
                 content,
                 tool_calls,
@@ -1478,7 +1509,7 @@ impl SqliteSessionStore {
             .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT timestamp, role, content, tool_call_id, tool_calls, tool_name
+                "SELECT timestamp, role, content, tool_call_id, tool_calls, tool_name, reasoning
                  FROM messages WHERE session_id = ?1 AND active = 1 ORDER BY id",
             )
             .map_err(|e| AgentError::session(e.to_string()))?;
@@ -1491,12 +1522,13 @@ impl SqliteSessionStore {
                     row.get::<_, Option<String>>(3)?,
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
                 ))
             })
             .map_err(|e| AgentError::session(e.to_string()))?;
         let mut messages = Vec::new();
         for row in rows {
-            let (timestamp, role, content, tool_call_id, tool_calls, name) =
+            let (timestamp, role, content, tool_call_id, tool_calls, name, reasoning) =
                 row.map_err(|e| AgentError::session(e.to_string()))?;
             let role = match role.as_str() {
                 "system" => Role::System,
@@ -1511,6 +1543,7 @@ impl SqliteSessionStore {
             messages.push((
                 timestamp,
                 Message {
+                    reasoning,
                     role,
                     content,
                     tool_calls,
@@ -2791,6 +2824,7 @@ mod tests {
 
     fn user_msg(text: &str) -> Message {
         Message {
+            reasoning: None,
             role: Role::User,
             content: Some(text.into()),
             tool_calls: None,
@@ -2809,6 +2843,7 @@ mod tests {
             .append_message(
                 &sid,
                 &Message {
+                    reasoning: None,
                     role: Role::Assistant,
                     content: Some("reply".into()),
                     tool_calls: None,
@@ -2823,6 +2858,7 @@ mod tests {
             .append_message(
                 &sid,
                 &Message {
+                    reasoning: None,
                     role: Role::Assistant,
                     content: None,
                     tool_calls: None,
@@ -2913,6 +2949,118 @@ mod tests {
         assert!(store.message_role(&sid, row + 999).is_none());
     }
 
+    /// P3-1: assistant 的 reasoning 落库并在两条读回路径上都还原。
+    #[test]
+    fn reasoning_persists_and_reloads() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let sid = {
+            let store = SqliteSessionStore::open(&path).unwrap();
+            let sid = store.create_session("cli", Some("m"), None).unwrap();
+            store.append_message(&sid, &user_msg("think hard")).unwrap();
+            store
+                .append_message(
+                    &sid,
+                    &Message {
+                        reasoning: Some("step 1 -> step 2".to_string()),
+                        role: Role::Assistant,
+                        content: Some("done".into()),
+                        tool_calls: None,
+                        tool_call_id: None,
+                        name: None,
+                    },
+                )
+                .unwrap();
+            sid
+        };
+
+        // 重开（走真实读回路径，不是内存残留）
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let msgs = store.load_messages(&sid).unwrap();
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0].reasoning, None, "user turn carries no reasoning");
+        assert_eq!(
+            msgs[1].reasoning.as_deref(),
+            Some("step 1 -> step 2"),
+            "assistant reasoning must survive a reopen"
+        );
+
+        // 带时间戳的读回路径（导出/recap 用）同样要还原
+        let with_ts = store.load_messages_with_timestamps(&sid).unwrap();
+        assert_eq!(with_ts.len(), 2);
+        assert_eq!(with_ts[1].1.reasoning.as_deref(), Some("step 1 -> step 2"));
+    }
+
+    /// P3-1: 老库（messages 表无 reasoning 列）打开时幂等补列，且不丢既有行。
+    /// 这是升级路径——已装用户的 state.db 必须无损迁移。
+    ///
+    /// 造"旧库"的方式：先用真实 store 建库（拿到**当前完整 schema**，避免手写
+    /// 旧 schema 与真实结构漂移导致测试因无关原因失败），再 DROP reasoning 列
+    /// 模拟升级前的库，然后重开验证迁移补列 + 旧行无损。
+    #[test]
+    fn reasoning_column_migrates_from_pre_existing_db() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+
+        // 1) 用真实 store 建库并塞一行（此时 schema 已含 reasoning 列）
+        let sid = {
+            let store = SqliteSessionStore::open(&path).unwrap();
+            let sid = store.create_session("cli", Some("m"), None).unwrap();
+            store.append_message(&sid, &user_msg("kept")).unwrap();
+            sid
+        };
+
+        // 2) 模拟"升级前的旧库"：删掉 reasoning 列（SQLite 3.35+ 支持 DROP COLUMN；
+        //    reasoning 是普通可空 TEXT、无索引/约束/FTS 依赖，可安全删除）
+        {
+            use rusqlite::Connection;
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch("ALTER TABLE messages DROP COLUMN reasoning")
+                .expect("DROP COLUMN reasoning (simulate pre-migration DB)");
+            // 确认前提：此刻确实没有 reasoning 列
+            let cols: Vec<String> = {
+                let mut st = conn.prepare("PRAGMA table_info(messages)").unwrap();
+                st.query_map([], |r| r.get::<_, String>(1))
+                    .unwrap()
+                    .filter_map(|r| r.ok())
+                    .collect()
+            };
+            assert!(
+                !cols.iter().any(|c| c == "reasoning"),
+                "fixture must lack the column after DROP"
+            );
+        }
+
+        // 3) 用新版 store 打开 -> 迁移应补列并保留旧行
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let msgs = store.load_messages(&sid).unwrap();
+        assert_eq!(msgs.len(), 1, "pre-existing row must survive migration");
+        assert_eq!(msgs[0].content.as_deref(), Some("kept"));
+        assert_eq!(msgs[0].reasoning, None, "old rows have no reasoning");
+
+        // 4) 迁移后写入/读回 reasoning 正常
+        store
+            .append_message(
+                &sid,
+                &Message {
+                    reasoning: Some("post-migration".into()),
+                    role: Role::Assistant,
+                    content: Some("new".into()),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                },
+            )
+            .unwrap();
+        let msgs = store.load_messages(&sid).unwrap();
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[1].reasoning.as_deref(), Some("post-migration"));
+
+        // 5) 幂等：再开一次不报错、不重复加列
+        let store2 = SqliteSessionStore::open(&path).unwrap();
+        assert_eq!(store2.load_messages(&sid).unwrap().len(), 2);
+    }
+
     #[test]
     fn reactions_survive_reopen_and_migration() {
         let dir = tempfile::tempdir().unwrap();
@@ -2945,6 +3093,7 @@ mod tests {
             .append_message(
                 &sid,
                 &Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some("hello world from ulnclaw".into()),
                     tool_calls: None,
@@ -3229,6 +3378,7 @@ mod tests {
             .append_message(
                 &scaffolded,
                 &Message {
+                    reasoning: None,
                     role: Role::Assistant,
                     content: Some("done, leak fixed".into()),
                     tool_calls: None,
@@ -3305,6 +3455,7 @@ mod tests {
             .append_message(
                 &first,
                 &Message {
+                    reasoning: None,
                     role: Role::Assistant,
                     content: Some("reply".into()),
                     tool_calls: None,

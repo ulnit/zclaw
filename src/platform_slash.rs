@@ -448,6 +448,7 @@ mod tests {
             .append_message(
                 "platform-telegram-chat-ctx",
                 &crate::provider::Message {
+                    reasoning: None,
                     role: crate::provider::Role::User,
                     content: Some("hello world, this is a context probe".to_string()),
                     tool_calls: None,

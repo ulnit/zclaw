@@ -266,6 +266,7 @@ mod tests {
             (
                 1_750_000_010.0,
                 Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some("What is <b>2+2</b>?".into()),
                     tool_calls: None,
@@ -276,6 +277,7 @@ mod tests {
             (
                 1_750_000_020.0,
                 Message {
+                    reasoning: None,
                     role: Role::Assistant,
                     content: Some("Let me compute.".into()),
                     tool_calls: Some(vec![ToolCall {
@@ -293,6 +295,7 @@ mod tests {
             (
                 1_750_000_030.0,
                 Message {
+                    reasoning: None,
                     role: Role::Tool,
                     content: Some("4".into()),
                     tool_calls: None,

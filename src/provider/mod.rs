@@ -25,6 +25,18 @@ pub struct Message {
     /// Name of the tool (for tool role messages)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Reasoning/thinking text for an assistant turn (extended-thinking models).
+    ///
+    /// Persisted so a session's train of thought survives reload/export instead
+    /// of being discarded after streaming (hermes v0.22.2 replays prior
+    /// reasoning across resume/branch/compaction). 🔴 This is **storage only**:
+    /// it is deliberately NOT put on the provider wire — must-echo providers
+    /// (DeepSeek/Kimi/MiMo) 400 *without* a reasoning pad while strict ones
+    /// (Mistral/Groq/Cerebras) 400/422 *with* it, so replay needs hermes'
+    /// per-provider echo policy. Sending it unconditionally would break
+    /// providers that work today.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
 }
 
 /// Role in a conversation

@@ -290,6 +290,7 @@ mod tests {
 
     fn msg(role: Role, content: &str) -> Message {
         Message {
+            reasoning: None,
             role,
             content: Some(content.to_string()),
             tool_calls: None,
@@ -300,6 +301,7 @@ mod tests {
 
     fn assistant_with_tool(name: &str, args: &str) -> Message {
         Message {
+            reasoning: None,
             role: Role::Assistant,
             content: None,
             tool_calls: Some(vec![ToolCall {

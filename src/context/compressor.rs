@@ -120,6 +120,7 @@ impl ContextCompressor {
 
         let summary_request = crate::provider::ProviderRequest {
             messages: vec![Message {
+                reasoning: None,
                 role: Role::User,
                 content: Some(format!(
                     "Current date: {}\n\n{}{}",
@@ -160,6 +161,7 @@ impl ContextCompressor {
             compressed.push(first_user);
         }
         compressed.push(Message {
+            reasoning: None,
             role: Role::User,
             content: Some(format!(
                 "[CONTEXT SUMMARY — earlier turns compressed]\n{}",
@@ -170,6 +172,7 @@ impl ContextCompressor {
             name: None,
         });
         compressed.push(Message {
+            reasoning: None,
             role: Role::Assistant,
             content: Some("Understood — continuing from the summary.".to_string()),
             tool_calls: None,
@@ -189,6 +192,7 @@ mod tests {
     fn test_estimation_and_threshold() {
         let compressor = ContextCompressor::new(10);
         let messages = vec![Message {
+            reasoning: None,
             role: Role::User,
             content: Some("x".repeat(100)), // ~25 tokens
             tool_calls: None,

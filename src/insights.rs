@@ -1347,6 +1347,7 @@ mod tests {
         let store = seeded_store(dir.path());
         let session = store.list_sessions(10).unwrap()[0].id.clone();
         let message = crate::provider::Message {
+            reasoning: None,
             role: crate::provider::Role::Assistant,
             content: None,
             tool_calls: Some(vec![

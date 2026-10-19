@@ -141,6 +141,7 @@ mod tests {
                 .append_message(
                     &sid,
                     &Message {
+                        reasoning: None,
                         role: Role::User,
                         content: Some(text.into()),
                         tool_calls: None,

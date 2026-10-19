@@ -96,6 +96,7 @@ fn simple_user_request(
 ) -> ProviderRequest {
     ProviderRequest {
         messages: vec![Message {
+            reasoning: None,
             role: Role::User,
             content: Some(prompt.to_string()),
             tool_calls: None,
@@ -283,6 +284,7 @@ Proceeding without aggregated guidance.]\nReferences: {}\n\n{}",
         Ok(provider) => {
             let request = ProviderRequest {
                 messages: vec![Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some(aggregator_prompt(prompt, &joined_with_notice)),
                     tool_calls: None,
@@ -638,6 +640,7 @@ fn attach_reference_guidance(messages: &mut Vec<Message>, guidance: &str) {
         }
     }
     messages.push(Message {
+        reasoning: None,
         role: Role::User,
         content: Some(guidance.to_string()),
         tool_calls: None,
@@ -1058,6 +1061,7 @@ mod tests {
         let long = "x".repeat(REFERENCE_TOOL_RESULT_BUDGET + 50);
         let messages = vec![
             Message {
+                reasoning: None,
                 role: Role::System,
                 content: Some("be brief".into()),
                 tool_calls: None,
@@ -1065,6 +1069,7 @@ mod tests {
                 name: None,
             },
             Message {
+                reasoning: None,
                 role: Role::User,
                 content: Some("do it".into()),
                 tool_calls: None,
@@ -1072,6 +1077,7 @@ mod tests {
                 name: None,
             },
             Message {
+                reasoning: None,
                 role: Role::Tool,
                 content: Some(long),
                 tool_calls: None,
@@ -1098,6 +1104,7 @@ mod tests {
     fn facade_request(text: &str) -> ProviderRequest {
         ProviderRequest {
             messages: vec![Message {
+                reasoning: None,
                 role: Role::User,
                 content: Some(text.to_string()),
                 tool_calls: None,
@@ -1142,6 +1149,7 @@ mod tests {
         // references are cached — only the aggregator runs.
         let mut messages = facade_request("task").messages;
         messages.push(Message {
+            reasoning: None,
             role: Role::Assistant,
             content: Some("thinking".into()),
             tool_calls: None,
@@ -1149,6 +1157,7 @@ mod tests {
             name: None,
         });
         messages.push(Message {
+            reasoning: None,
             role: Role::Tool,
             content: Some("tool output".into()),
             tool_calls: None,

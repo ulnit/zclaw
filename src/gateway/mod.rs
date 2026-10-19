@@ -14279,6 +14279,7 @@ async fn chat_completions(
                 "user" => {
                     if !prompt.is_empty() {
                         history.push(Message {
+                            reasoning: None,
                             role: Role::User,
                             content: Some(std::mem::take(&mut prompt)),
                             tool_calls: None,
@@ -14289,6 +14290,7 @@ async fn chat_completions(
                     prompt = text;
                 }
                 "assistant" => history.push(Message {
+                    reasoning: None,
                     role: Role::Assistant,
                     content: Some(text),
                     tool_calls: None,
@@ -14296,6 +14298,7 @@ async fn chat_completions(
                     name: None,
                 }),
                 "tool" => history.push(Message {
+                    reasoning: None,
                     role: Role::Tool,
                     content: Some(text),
                     tool_calls: None,
@@ -15956,6 +15959,7 @@ async fn import_sessions(
             parsed_messages.push((
                 message.timestamp.unwrap_or(0.0),
                 crate::provider::Message {
+                    reasoning: None,
                     role,
                     content: message.content.clone(),
                     tool_calls: message.tool_calls.clone(),
@@ -18667,6 +18671,7 @@ fn direct_sse_response(
     text: String,
 ) -> Response {
     let user_msg = Message {
+        reasoning: None,
         role: Role::User,
         content: Some(request.to_string()),
         tool_calls: None,
@@ -18674,6 +18679,7 @@ fn direct_sse_response(
         name: None,
     };
     let assistant_msg = Message {
+        reasoning: None,
         role: Role::Assistant,
         content: Some(text.clone()),
         tool_calls: None,
@@ -18722,6 +18728,7 @@ fn drain_delegations_into_session(state: &GatewayState, session_id: &str) {
     let key = state.agent.context().session_id.clone();
     for completion in crate::async_delegation::drain_completions(Some(&state.store), &key) {
         let message = crate::provider::Message {
+            reasoning: None,
             role: crate::provider::Role::User,
             content: Some(completion.message),
             tool_calls: None,
@@ -18750,6 +18757,7 @@ async fn session_chat(
         match slash {
             GatewaySlash::Direct(text) => {
                 let user_msg = Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some(message.clone()),
                     tool_calls: None,
@@ -18757,6 +18765,7 @@ async fn session_chat(
                     name: None,
                 };
                 let assistant_msg = Message {
+                    reasoning: None,
                     role: Role::Assistant,
                     content: Some(text.clone()),
                     tool_calls: None,
@@ -21627,6 +21636,7 @@ mod tests {
             .append_message(
                 &sid,
                 &Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some(scaffold.to_string()),
                     tool_calls: None,
@@ -21734,6 +21744,7 @@ mod tests {
             .create_session("gateway", Some("test-model"), None)
             .unwrap();
         let user_msg = Message {
+            reasoning: None,
             role: Role::User,
             content: Some("first question".to_string()),
             tool_calls: None,
@@ -21741,6 +21752,7 @@ mod tests {
             name: None,
         };
         let assistant_msg = Message {
+            reasoning: None,
             role: Role::Assistant,
             content: Some("  final  answer\nover   two lines ".to_string()),
             tool_calls: None,
@@ -21784,6 +21796,7 @@ mod tests {
             .create_session("gateway", Some("test-model"), None)
             .unwrap();
         let long_msg = Message {
+            reasoning: None,
             role: Role::Assistant,
             content: Some("x".repeat(200)),
             tool_calls: None,
@@ -25609,6 +25622,7 @@ mod tests {
             .create_named_session(sid, "test", None, None)
             .unwrap();
         let mk = |role: Role, content: &str| Message {
+            reasoning: None,
             role,
             content: Some(content.to_string()),
             tool_calls: None,
@@ -25624,6 +25638,7 @@ mod tests {
             .append_message(
                 sid,
                 &Message {
+                    reasoning: None,
                     role: Role::Assistant,
                     content: None,
                     tool_calls: Some(vec![]),
@@ -29659,6 +29674,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .append_message(
                 &id,
                 &Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some("hello fork".into()),
                     tool_calls: None,
@@ -30036,6 +30052,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .append_message(
                 &id,
                 &Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some("what changed?".into()),
                     tool_calls: None,
@@ -30049,6 +30066,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .append_message(
                 &id,
                 &Message {
+                    reasoning: None,
                     role: Role::Assistant,
                     content: Some("I updated the parser.".into()),
                     tool_calls: None,
@@ -30278,6 +30296,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .append_message(
                 &id,
                 &Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some("hello <world>".into()),
                     tool_calls: None,
@@ -30567,6 +30586,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &id,
                     &crate::provider::Message {
+                        reasoning: None,
                         role: crate::provider::Role::User,
                         content: Some("hello".into()),
                         tool_calls: None,
@@ -30611,6 +30631,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .append_message(
                 &id,
                 &crate::provider::Message {
+                    reasoning: None,
                     role: crate::provider::Role::User,
                     content: Some("storage panel".into()),
                     tool_calls: None,
@@ -30676,6 +30697,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .append_message(
                 &id,
                 &crate::provider::Message {
+                    reasoning: None,
                     role: crate::provider::Role::User,
                     content: Some("the quick brown fox jumps over the lazy dog".into()),
                     tool_calls: None,
@@ -30741,6 +30763,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     id,
                     &crate::provider::Message {
+                        reasoning: None,
                         role: crate::provider::Role::User,
                         content: Some("hello".into()),
                         tool_calls: None,
@@ -34344,6 +34367,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .append_message(
                 &id,
                 &Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some("hello".into()),
                     tool_calls: None,
@@ -34357,6 +34381,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .append_message(
                 &id,
                 &Message {
+                    reasoning: None,
                     role: Role::Assistant,
                     content: Some("hi there".into()),
                     tool_calls: None,
@@ -34828,6 +34853,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         let session_id = body["id"].as_str().unwrap().to_string();
 
         let message = |content: &str| Message {
+            reasoning: None,
             role: Role::User,
             content: Some(content.to_string()),
             tool_calls: None,
@@ -35032,6 +35058,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .append_message(
                 &parent,
                 &Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some("hello".to_string()),
                     tool_calls: None,
@@ -35275,6 +35302,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .append_message(
                 &session_id,
                 &Message {
+                    reasoning: None,
                     role: Role::User,
                     content: Some("hello".to_string()),
                     tool_calls: None,
@@ -35373,6 +35401,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
+                        reasoning: None,
                         role: if i % 2 == 0 {
                             Role::User
                         } else {
@@ -35401,6 +35430,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
+                        reasoning: None,
                         role: if i % 2 == 0 {
                             Role::User
                         } else {
@@ -35437,6 +35467,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
+                        reasoning: None,
                         role: if i % 2 == 0 {
                             Role::User
                         } else {
@@ -35498,6 +35529,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
+                        reasoning: None,
                         role: if i % 2 == 0 {
                             Role::User
                         } else {
@@ -35570,6 +35602,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
+                        reasoning: None,
                         role: if i % 2 == 0 {
                             Role::User
                         } else {
@@ -35640,6 +35673,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 .append_message(
                     &session_id,
                     &Message {
+                        reasoning: None,
                         role: if i % 2 == 0 {
                             Role::User
                         } else {
@@ -35655,6 +35689,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
         }
         let replacement: Vec<Message> = (0..2)
             .map(|i| Message {
+                reasoning: None,
                 role: if i == 0 { Role::User } else { Role::Assistant },
                 content: Some(format!("new {i}")),
                 tool_calls: None,
@@ -37307,6 +37342,7 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             .append_message(
                 &id,
                 &crate::provider::Message {
+                    reasoning: None,
                     role: crate::provider::Role::User,
                     content: Some("hello".into()),
                     tool_calls: None,

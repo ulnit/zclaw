@@ -652,6 +652,7 @@ impl Agent {
         // System prompt (with memory injection)
         if let Some(prompt) = self.effective_system_prompt() {
             messages.push(Message {
+                reasoning: None,
                 role: Role::System,
                 content: Some(prompt),
                 tool_calls: None,
@@ -665,6 +666,7 @@ impl Agent {
         }
 
         messages.push(Message {
+            reasoning: None,
             role: Role::User,
             content: Some(user_message.to_string()),
             tool_calls: None,
@@ -937,6 +939,7 @@ impl Agent {
 
             if !response.tool_calls.is_empty() {
                 messages.push(Message {
+                    reasoning: response.reasoning.clone(),
                     role: Role::Assistant,
                     content: response.content.clone(),
                     tool_calls: Some(response.tool_calls.clone()),
@@ -997,6 +1000,7 @@ impl Agent {
                     .zip(result_contents.into_iter())
                 {
                     let tool_message = Message {
+                        reasoning: None,
                         role: Role::Tool,
                         content: Some(content),
                         tool_calls: None,
@@ -1032,6 +1036,7 @@ impl Agent {
                 if let Some(sid) = session_id.as_deref() {
                     for steered in self.drain_steer_messages(sid).await {
                         let steer_turn = Message {
+                            reasoning: None,
                             role: Role::User,
                             content: Some(steered),
                             tool_calls: None,
@@ -1055,12 +1060,16 @@ impl Agent {
                 continue;
             }
 
+            // Capture the reasoning *before* `response.content` is partially moved
+            // (`response` is an immutable binding, hence clone rather than take).
+            let reasoning_for_turn = response.reasoning.clone();
             let mut content = response.content.unwrap_or_default();
             if self.config.strip_thinking_blocks {
                 content = strip_thinking_blocks(&content);
             }
 
             messages.push(Message {
+                reasoning: reasoning_for_turn,
                 role: Role::Assistant,
                 content: Some(content.clone()),
                 tool_calls: None,
@@ -1797,6 +1806,7 @@ impl SubAgentRunner for Agent {
                 .append_message(
                     &sid,
                     &Message {
+                        reasoning: None,
                         role: Role::Assistant,
                         content: Some(result.content.clone()),
                         tool_calls: None,

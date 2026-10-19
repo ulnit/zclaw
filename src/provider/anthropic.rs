@@ -828,6 +828,7 @@ mod tests {
 
     fn msg(role: Role, content: &str) -> Message {
         Message {
+            reasoning: None,
             role,
             content: Some(content.to_string()),
             tool_calls: None,
