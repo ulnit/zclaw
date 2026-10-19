@@ -237,6 +237,103 @@ pub const MAX_TITLE_LENGTH: usize = 100;
 /// multi-GB database never triggers a full rewrite (#54189).
 pub const AUTO_VACUUM_MIN_FREELIST_RATIO: f64 = 0.25;
 
+/// Sources that join automatic stale-open reconciliation (hermes
+/// `_AUTO_PRUNE_STALE_OPEN_SOURCES`, `hermes_state.py:472`, #60609). Only
+/// state-owned producers: messaging/UI sources have their own lifecycle owners,
+/// and ending one of those triggers a routing loop. Unknown sources fail
+/// closed (they are simply not swept).
+///
+/// `recovered` covers placeholders synthesized for orphaned messages (no live
+/// owner, never stamped `ended_at`); without it they would be immortal.
+pub const AUTO_PRUNE_STALE_OPEN_SOURCES: &[&str] = &[
+    "cli",
+    "cron",
+    "kanban",
+    "acp",
+    "api_server",
+    "subagent",
+    "tool",
+    "recovered",
+];
+
+/// Outcome of one `maybe_auto_prune_and_vacuum` pass (hermes returns the same
+/// keys: `skipped`, `pruned`, `closed`, `vacuumed`, plus `freelist_ratio` when
+/// a VACUUM was considered and `error` on failure). Never raised — callers on
+/// the startup path log and continue.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AutoMaintenanceReport {
+    /// A throttle/lock/guard decided not to run this pass.
+    pub skipped: bool,
+    /// ENDED sessions deleted.
+    pub pruned: usize,
+    /// Stale open rows closed (`startup_orphan_reap`), not deleted.
+    pub closed: usize,
+    /// Whether a VACUUM actually ran.
+    pub vacuumed: bool,
+    /// Freelist fraction observed when a VACUUM was considered.
+    pub freelist_ratio: Option<f64>,
+    /// Why the VACUUM leg did not run even though its gates passed.
+    pub vacuum_skipped_reason: Option<String>,
+    /// First failure message, if any (the pass still returns normally).
+    pub error: Option<String>,
+}
+
+/// Age of a `state_meta` timestamp in seconds; `None` when unset **or corrupt**
+/// (= no prior run → proceed). Mirrors hermes `_seconds_since`, which returns
+/// None on any parse failure rather than skipping maintenance forever because
+/// of one garbage row.
+fn seconds_since(now: f64, raw: Option<String>) -> Option<f64> {
+    let raw = raw?;
+    if raw.is_empty() {
+        return None;
+    }
+    raw.trim().parse::<f64>().ok().map(|ts| now - ts)
+}
+
+/// File name component as `&str`, falling back to an empty name.
+fn file_name_str(path: &Path) -> &str {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+}
+
+/// Non-blocking cross-process advisory lock on `<db>.auto-maintenance.lock`
+/// (hermes `_try_acquire_auto_maintenance_lock`). Rationale upstream: without
+/// it two concurrent startups both pass the interval check and the second
+/// prunes a row the first has only just closed recoverably.
+///
+/// `Ok(Some(guard))` = held (guard releases on drop); `Ok(None)` = another
+/// process holds it (skip the pass); `Err` = the lock file could not even be
+/// opened (skip the pass, warn).
+struct MaintenanceLock {
+    file: std::fs::File,
+}
+
+impl MaintenanceLock {
+    fn try_acquire(path: &Path) -> std::io::Result<Option<Self>> {
+        use std::fs::OpenOptions;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(path)?;
+        match crate::process_ctl::try_lock_exclusive(&file) {
+            Ok(()) => Ok(Some(Self { file })),
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl Drop for MaintenanceLock {
+    fn drop(&mut self) {
+        let _ = crate::process_ctl::unlock(&self.file);
+    }
+}
+
 /// Clean a user-supplied session title (hermes `sanitize_title`): strip
 /// ASCII/Unicode control characters, collapse whitespace runs, trim, and
 /// normalize empty input to `None`. Errors when the cleaned title exceeds
@@ -1918,6 +2015,214 @@ impl SqliteSessionStore {
             return None;
         }
         Some(freelist as f64 / pages as f64)
+    }
+
+    /// Idempotent startup auto-maintenance, **never fails the caller**
+    /// (hermes `maybe_auto_prune_and_vacuum`, `hermes_state_maintenance.py:421`).
+    ///
+    /// Prune ENDED sessions inactive for `retention_days`, then close stale open
+    /// state-owned rows, then optionally VACUUM. Runs at most once per
+    /// `min_interval_hours` (throttle lives in `state_meta`, shared across
+    /// processes); VACUUM has its own `min_vacuum_interval_days` throttle plus
+    /// the freelist-ratio gate. Designed to be called once at startup from
+    /// long-lived entrypoints (CLI, gateway, cron scheduler). See #54189.
+    ///
+    /// Faithful upstream semantics kept here:
+    /// - Negative `retention_days` **skips** (it would build a future cutoff and
+    ///   match every ended session; `auto_prune = false` is the disable switch,
+    ///   not a negative bound).
+    /// - A non-blocking cross-process lock (`<db>.auto-maintenance.lock`) gates
+    ///   the whole pass: two concurrent startups would otherwise both pass the
+    ///   interval check and the second would prune a row the first had only just
+    ///   closed recoverably. Lock unavailable → skip the pass.
+    /// - Corrupt/absent `state_meta` timestamps mean "no prior run" → proceed
+    ///   (hermes `_seconds_since` returns None on garbage).
+    /// - **Prune FIRST, sweep SECOND**: an orphan closed by the sweep must get a
+    ///   full retention window before it is ever prunable.
+    /// - `last_auto_prune` is recorded even when nothing was pruned, so the
+    ///   throttle holds.
+    /// - Any error is captured in the report and logged; maintenance must never
+    ///   block startup or refuse a turn.
+    ///
+    /// 🔴 VACUUM leg — NOT YET PORTED, fail-closed: upstream only VACUUMs after
+    /// proving no *other* process or in-process DB generation holds the store or
+    /// a WAL sidecar (`hermes_state_holders`: Linux /proc fd scan, Windows
+    /// Restart Manager, in-process generation registry). VACUUM + TRUNCATE
+    /// checkpoint retire a WAL generation a sibling writer still holds, and that
+    /// is exactly the state where every agent then refuses turns (#110054).
+    /// Upstream treats an unprovable scan as "holders present" and SKIPS — this
+    /// port has no scan at all, so it can never prove quiescence and therefore
+    /// always skips the VACUUM leg, recording why. The gate structure
+    /// (`vacuum` flag, pruned>0, interval throttle, freelist ratio) is fully
+    /// wired; porting the holders scan activates it. Manual `optimize_storage`
+    /// remains the explicit VACUUM path. Pruning itself reclaims nothing on
+    /// disk (SQLite reuses freed pages), so the file stays large until a manual
+    /// optimize — the same tradeoff upstream makes when it cannot prove
+    /// quiescence.
+    pub fn maybe_auto_prune_and_vacuum(
+        &self,
+        retention_days: i64,
+        min_interval_hours: u64,
+        vacuum: bool,
+        min_vacuum_interval_days: u64,
+        min_vacuum_freelist_ratio: f64,
+    ) -> AutoMaintenanceReport {
+        let mut report = AutoMaintenanceReport::default();
+        // Negative retention would build a future cutoff matching every ended
+        // session; auto_prune=false is the disable switch, not a negative bound.
+        if retention_days < 0 {
+            tracing::warn!(
+                retention_days,
+                "state.db auto-maintenance skipped: sessions.retention_days is outside the \
+                 allowed range (a whole number of days >= 0); set sessions.auto_prune = false \
+                 to disable pruning"
+            );
+            report.skipped = true;
+            return report;
+        }
+
+        // Non-blocking cross-process lock for one pass. WouldBlock = another
+        // startup is mid-maintenance → skip (never wait: this is startup-path).
+        let lock_path = self.path.with_file_name(format!(
+            "{}.auto-maintenance.lock",
+            file_name_str(&self.path)
+        ));
+        let _guard = match MaintenanceLock::try_acquire(&lock_path) {
+            Ok(Some(g)) => g,
+            Ok(None) => {
+                report.skipped = true;
+                return report;
+            }
+            Err(e) => {
+                // Upstream warns and proceeds without the lock only when the lock
+                // file itself cannot be opened; a failed *lock attempt* skips.
+                tracing::warn!(?lock_path, error = %e, "could not open auto-maintenance lock; skipping pass");
+                report.skipped = true;
+                return report;
+            }
+        };
+
+        // Everything below must never propagate an error: maintenance failures
+        // are logged and reported, startup continues.
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.auto_maintenance_inner(
+                &mut report,
+                retention_days,
+                min_interval_hours,
+                vacuum,
+                min_vacuum_interval_days,
+                min_vacuum_freelist_ratio,
+            )
+        }));
+        if outcome.is_err() {
+            report.error = Some("auto-maintenance panicked".to_string());
+            tracing::warn!("state.db auto-maintenance failed: internal panic");
+        }
+        report
+    }
+
+    /// Body of `maybe_auto_prune_and_vacuum` after the retention guard and the
+    /// cross-process lock; errors land in `report.error` (never raised).
+    fn auto_maintenance_inner(
+        &self,
+        report: &mut AutoMaintenanceReport,
+        retention_days: i64,
+        min_interval_hours: u64,
+        vacuum: bool,
+        min_vacuum_interval_days: u64,
+        min_vacuum_freelist_ratio: f64,
+    ) {
+        let now = now_secs();
+        // Throttle: at most one pass per min_interval_hours, tracked in
+        // state_meta so it holds across processes. Corrupt/absent = no prior
+        // run = proceed (hermes _seconds_since).
+        let since_prune = seconds_since(now, self.get_meta("last_auto_prune").ok().flatten());
+        if let Some(s) = since_prune {
+            if s < min_interval_hours as f64 * 3600.0 {
+                report.skipped = true;
+                return;
+            }
+        }
+
+        // Prune FIRST: orphans closed by the sweep below must get a full
+        // retention window before they are ever prunable.
+        let cutoff = now - retention_days as f64 * 86400.0;
+        let filters = crate::session::filters::PruneFilters {
+            last_active_before: Some(cutoff),
+            // include_pinned defaults false → pinned sessions are spared (①).
+            ..Default::default()
+        };
+        let pruned = match self.prune_sessions(&filters) {
+            Ok(n) => n,
+            Err(e) => {
+                report.error = Some(format!("prune: {e}"));
+                tracing::warn!(error = %e, "state.db auto-maintenance: prune failed");
+                return;
+            }
+        };
+        report.pruned = pruned;
+
+        // Then close stale open rows from state-owned sources (cron/kanban/
+        // subagent/one-shot CLI never stamp ended_at when their process dies).
+        match self.sweep_orphaned_sessions(
+            retention_days as f64 * 86400.0,
+            AUTO_PRUNE_STALE_OPEN_SOURCES,
+            true,
+        ) {
+            Ok(closed) => report.closed = closed.len(),
+            Err(e) => {
+                // A failed sweep must not lose the prune that already happened.
+                report.error = Some(format!("sweep: {e}"));
+                tracing::warn!(error = %e, "state.db auto-maintenance: sweep failed");
+            }
+        }
+
+        // VACUUM triple gate: enabled + rows actually freed + interval elapsed,
+        // then the freelist-ratio admission, then the holders proof.
+        if vacuum && pruned > 0 {
+            let since_vacuum = seconds_since(now, self.get_meta("last_vacuum").ok().flatten());
+            let vacuum_due = since_vacuum.is_none()
+                || since_vacuum.unwrap() >= min_vacuum_interval_days as f64 * 86400.0;
+            if vacuum_due {
+                let ratio = self.freelist_ratio();
+                report.freelist_ratio = ratio;
+                // 🔴 NOT YET PORTED (fail-closed): the holders scan
+                // (hermes_state_holders) that proves no sibling process or
+                // in-process DB generation holds this store or its WAL sidecar.
+                // Upstream skips VACUUM whenever quiescence is unproven
+                // (#110054); with no scan, it is always unproven here.
+                report.vacuum_skipped_reason = Some(
+                    "holder scan not ported; quiescence unproven (#110054 fail-closed)".into(),
+                );
+                if ratio.is_none() || ratio.unwrap() > min_vacuum_freelist_ratio {
+                    // Ratio gate passed — would VACUUM here once the holders
+                    // scan exists. Left unreachable-by-design, see above.
+                    tracing::debug!(
+                        ?ratio,
+                        "state.db auto-maintenance: VACUUM eligible but skipped (no holders scan)"
+                    );
+                } else {
+                    tracing::debug!(
+                        ratio = ratio.unwrap_or(0.0) * 100.0,
+                        threshold = min_vacuum_freelist_ratio * 100.0,
+                        "state.db auto-maintenance: skipping VACUUM, too few pages reclaimable"
+                    );
+                }
+            }
+        }
+
+        // Record even when pruned == 0 so the throttle holds.
+        if let Err(e) = self.set_meta("last_auto_prune", &now.to_string()) {
+            tracing::warn!(error = %e, "could not record last_auto_prune");
+        }
+        if report.closed > 0 || pruned > 0 {
+            tracing::info!(
+                closed = report.closed,
+                pruned,
+                retention_days,
+                "state.db auto-maintenance: closed stale open sessions and pruned inactive ones"
+            );
+        }
     }
 
     /// Durable list of reasoning-echo routes that have rejected
@@ -4477,6 +4782,167 @@ mod tests {
         assert!(ratio.is_some(), "pragmas must resolve on a real DB");
         let r = ratio.unwrap();
         assert!((0.0..=1.0).contains(&r), "ratio out of range: {}", r);
+    }
+
+    // ---- maybe_auto_prune_and_vacuum (P3-3 ⑥ orchestration) ---------------
+
+    /// One pass prunes an old ENDED row, closes a stale OPEN whitelisted row,
+    /// records the throttle even on success, and a second immediate call skips.
+    #[test]
+    fn auto_maintenance_prunes_sweeps_and_throttles() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let ended_old = store.create_session("cli", Some("m"), None).unwrap();
+        let open_stale = store.create_session("cron", Some("m"), None).unwrap();
+        let open_fresh = store.create_session("cli", Some("m"), None).unwrap();
+        backdate(&path, &ended_old, 100.0 * 86400.0);
+        backdate(&path, &open_stale, 100.0 * 86400.0);
+        store.end_session(&ended_old, "user_exit").unwrap();
+
+        let report = store.maybe_auto_prune_and_vacuum(90, 24, true, 30, 0.25);
+        assert!(!report.skipped);
+        assert_eq!(report.pruned, 1, "the old ended row is deleted");
+        assert!(store.get_session_row(&ended_old).unwrap().is_none());
+        assert_eq!(report.closed, 1, "the stale cron row is closed");
+        assert_eq!(
+            store
+                .get_session_row(&open_stale)
+                .unwrap()
+                .unwrap()
+                .end_reason
+                .as_deref(),
+            Some("startup_orphan_reap")
+        );
+        assert!(
+            store
+                .get_session_row(&open_fresh)
+                .unwrap()
+                .unwrap()
+                .ended_at
+                .is_none(),
+            "a fresh open session is untouched"
+        );
+        assert!(report.error.is_none());
+        // Throttle recorded even though this pass did work.
+        assert!(store.get_meta("last_auto_prune").unwrap().is_some());
+
+        // Second immediate call: inside the 24h window → skip, no further work.
+        let again = store.maybe_auto_prune_and_vacuum(90, 24, true, 30, 0.25);
+        assert!(again.skipped);
+        assert_eq!(again.pruned, 0);
+    }
+
+    /// 🔴 The sweep runs AFTER the prune: a just-closed orphan must get a full
+    /// retention window, so it is never deleted in the same pass that closed it.
+    #[test]
+    fn auto_maintenance_never_deletes_a_row_it_just_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let orphan = store.create_session("kanban", Some("m"), None).unwrap();
+        backdate(&path, &orphan, 400.0 * 86400.0);
+
+        let report = store.maybe_auto_prune_and_vacuum(90, 24, false, 30, 0.25);
+        assert_eq!(report.closed, 1);
+        assert_eq!(report.pruned, 0, "the prune ran before the sweep closed it");
+        let row = store.get_session_row(&orphan).unwrap().unwrap();
+        assert!(row.ended_at.is_some(), "row survives, resumable");
+    }
+
+    /// Pinned sessions and messaging-source rows are never touched by a pass.
+    #[test]
+    fn auto_maintenance_spares_pinned_and_non_whitelisted() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let pinned_ended = store.create_session("cli", Some("m"), None).unwrap();
+        let telegram_open = store.create_session("telegram", Some("m"), None).unwrap();
+        backdate(&path, &pinned_ended, 100.0 * 86400.0);
+        backdate(&path, &telegram_open, 100.0 * 86400.0);
+        pin_via_sql(&path, &pinned_ended);
+        store.end_session(&pinned_ended, "user_exit").unwrap();
+
+        let report = store.maybe_auto_prune_and_vacuum(90, 24, true, 30, 0.25);
+        assert_eq!(report.pruned, 0, "pinned ended row survives the prune");
+        assert_eq!(report.closed, 0, "telegram is not a state-owned source");
+        assert!(store.get_session_row(&pinned_ended).unwrap().is_some());
+        assert!(store
+            .get_session_row(&telegram_open)
+            .unwrap()
+            .unwrap()
+            .ended_at
+            .is_none());
+    }
+
+    /// Negative retention skips (future cutoff would match every ended row);
+    /// corrupt throttle meta is treated as "no prior run" and proceeds.
+    #[test]
+    fn auto_maintenance_guards_negative_retention_and_corrupt_meta() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        backdate(&path, &sid, 100.0 * 86400.0);
+        store.end_session(&sid, "user_exit").unwrap();
+
+        let report = store.maybe_auto_prune_and_vacuum(-1, 24, true, 30, 0.25);
+        assert!(report.skipped);
+        assert_eq!(report.pruned, 0);
+        assert!(store.get_session_row(&sid).unwrap().is_some());
+
+        // Corrupt throttle: proceeds rather than skipping forever.
+        store.set_meta("last_auto_prune", "not-a-number").unwrap();
+        let report = store.maybe_auto_prune_and_vacuum(90, 24, false, 30, 0.25);
+        assert!(!report.skipped);
+        assert_eq!(report.pruned, 1);
+    }
+
+    /// 🔴 The VACUUM leg fails closed while the holders scan is unported: even
+    /// with every gate passing (vacuum=true, pruned>0, no prior vacuum), no
+    /// rewrite happens and the report says why.
+    #[test]
+    fn auto_maintenance_vacuum_leg_fails_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        backdate(&path, &sid, 100.0 * 86400.0);
+        store.end_session(&sid, "user_exit").unwrap();
+
+        let report = store.maybe_auto_prune_and_vacuum(90, 24, true, 30, 0.25);
+        assert_eq!(report.pruned, 1);
+        assert!(
+            !report.vacuumed,
+            "VACUUM must not run without a holders proof"
+        );
+        assert!(
+            report.vacuum_skipped_reason.is_some(),
+            "the skip must be recorded, not silent"
+        );
+        assert!(store.get_meta("last_vacuum").unwrap().is_none());
+    }
+
+    /// A held lock makes a concurrent pass skip instead of waiting or pruning
+    /// concurrently (two startups racing the same interval check).
+    #[test]
+    fn auto_maintenance_skips_while_the_lock_is_held() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let lock_path =
+            path.with_file_name(format!("{}.auto-maintenance.lock", file_name_str(&path)));
+        let _held = MaintenanceLock::try_acquire(&lock_path)
+            .unwrap()
+            .expect("first acquisition succeeds");
+        let report = store.maybe_auto_prune_and_vacuum(90, 24, true, 30, 0.25);
+        assert!(report.skipped);
+        assert_eq!(report.pruned, 0);
+        assert!(store.get_meta("last_auto_prune").unwrap().is_none());
+        drop(_held);
+        // After release the pass runs.
+        let report = store.maybe_auto_prune_and_vacuum(90, 24, true, 30, 0.25);
+        assert!(!report.skipped);
     }
 
     #[test]
