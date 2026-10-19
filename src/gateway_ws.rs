@@ -1804,7 +1804,13 @@ async fn session_compress(state: Arc<GatewayState>, params: Value) -> Result<Val
     let compressor = crate::context::ContextCompressor::new(state.agent.context_budget_tokens())
         .with_timezone(state.agent.context().config.timezone.clone());
     let before_messages = history.len();
-    if before_messages <= compressor.keep_recent + 2 {
+    // 🔴 Gate on the SAME token-aware tail the compressor uses internally.
+    // `keep_recent + 2` is stricter than `effective_tail_len(&history) + 2` on
+    // small windows (where the 20% token cap shrinks the tail), which would
+    // report "nothing to compress" for conversations that ARE compressible —
+    // exactly the small-window case the cap exists to serve.
+    let min_to_compress = compressor.effective_tail_len(&history) + 2;
+    if before_messages <= min_to_compress {
         return Ok(json!({
             "status": "aborted",
             "before_messages": before_messages,
@@ -1813,8 +1819,7 @@ async fn session_compress(state: Arc<GatewayState>, params: Value) -> Result<Val
             "after_tokens": 0,
             "summary": {
                 "headline": format!(
-                    "nothing to compress — only {before_messages} message(s); needs more than {}",
-                    compressor.keep_recent + 2
+                    "nothing to compress — only {before_messages} message(s); needs more than {min_to_compress}"
                 ),
                 "aborted": true,
             },

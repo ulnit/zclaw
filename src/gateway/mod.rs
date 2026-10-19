@@ -16998,10 +16998,12 @@ async fn resolve_gateway_slash(
                 crate::context::ContextCompressor::new(state.agent.context_budget_tokens())
                     .with_timezone(state.agent.context().config.timezone.clone());
             let before_messages = history.len();
-            if before_messages <= compressor.keep_recent + 2 {
+            // Same gate as gateway_ws /compress: token-aware tail, not the raw
+            // keep_recent count (see the comment there).
+            let min_to_compress = compressor.effective_tail_len(&history) + 2;
+            if before_messages <= min_to_compress {
                 return Some(GatewaySlash::Direct(format!(
-                    "nothing to compress — only {before_messages} message(s); needs more than {}.",
-                    compressor.keep_recent + 2
+                    "nothing to compress — only {before_messages} message(s); needs more than {min_to_compress}."
                 )));
             }
             let before_tokens = crate::context::ContextCompressor::estimate_tokens(&history);
