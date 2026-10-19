@@ -1804,6 +1804,114 @@ impl SqliteSessionStore {
         Ok(())
     }
 
+    /// Close session rows orphaned by a dead process
+    /// (hermes `sweep_orphaned_sessions`, `hermes_state_maintenance.py:155`).
+    ///
+    /// cron/kanban/subagent/one-shot CLI rows never set `ended_at` when their
+    /// process dies, and `prune_sessions` only deletes **ended** rows — so without
+    /// this sweep those rows are immortal and accumulate forever. This closes them
+    /// (`end_reason = 'startup_orphan_reap'`); it is **non-destructive**: messages
+    /// are kept, the row stays resumable, and because the UPDATE re-asserts
+    /// `ended_at IS NULL` an existing reason always wins (hermes: "first-reason-wins").
+    ///
+    /// 🔴 Both `started_at` and last-activity must be older than the cutoff. The
+    /// `started_at` predicate is what protects a freshly created branch/compression
+    /// child, whose copied activity timestamp is old (hermes calls this out
+    /// explicitly). Dropping it would close brand-new sessions.
+    ///
+    /// `sources` is a **whitelist**: only state-owned producers join automatic
+    /// reconciliation, because messaging/UI sources have their own lifecycle owners
+    /// and ending one of those triggers a routing loop. Unknown sources fail closed
+    /// (hermes `_AUTO_PRUNE_STALE_OPEN_SOURCES`, #60609).
+    pub fn sweep_orphaned_sessions(
+        &self,
+        max_idle_seconds: f64,
+        sources: &[&str],
+        exclude_pinned: bool,
+    ) -> Result<Vec<String>> {
+        // Upstream returns [] on a non-positive window or an empty source list.
+        if max_idle_seconds <= 0.0 || sources.is_empty() {
+            return Ok(Vec::new());
+        }
+        let cutoff = now_secs() - max_idle_seconds;
+        let placeholders: Vec<String> = (0..sources.len()).map(|i| format!("?{}", i + 1)).collect();
+        let pin_clause = if exclude_pinned {
+            " AND COALESCE(s.pinned, 0) = 0"
+        } else {
+            ""
+        };
+        // 🔴 The last-active expression is inlined rather than reusing
+        // filters::LAST_ACTIVE_EXPR because that constant is written against the
+        // alias `s` in a FROM-less context; here the same alias is bound, so the
+        // text is identical and stays consistent with the prune path.
+        let sql = format!(
+            "SELECT s.id FROM sessions s
+              WHERE s.ended_at IS NULL
+                AND s.started_at < ?{n}
+                AND {last_active} < ?{n}
+                AND s.source IN ({ph}){pin}",
+            n = sources.len() + 1,
+            last_active = crate::session::filters::LAST_ACTIVE_EXPR,
+            ph = placeholders.join(", "),
+            pin = pin_clause
+        );
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        for s in sources {
+            params.push(Box::new((*s).to_string()));
+        }
+        params.push(Box::new(cutoff));
+        let refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| AgentError::session(e.to_string()))?;
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| AgentError::session(e.to_string()))?;
+        let ids: Vec<String> = stmt
+            .query_map(refs.as_slice(), |row| row.get::<_, String>(0))
+            .map_err(|e| AgentError::session(e.to_string()))?
+            .filter_map(|r| r.ok())
+            .collect();
+        drop(stmt);
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut closed = Vec::with_capacity(ids.len());
+        for id in &ids {
+            // Re-assert `ended_at IS NULL` per row so a reason set concurrently (or
+            // by an earlier pass) is never overwritten.
+            let n = conn
+                .execute(
+                    "UPDATE sessions SET ended_at = ?2, end_reason = 'startup_orphan_reap'
+                      WHERE id = ?1 AND ended_at IS NULL",
+                    params![id, now_secs()],
+                )
+                .map_err(|e| AgentError::session(e.to_string()))?;
+            if n > 0 {
+                closed.push(id.clone());
+            }
+        }
+        Ok(closed)
+    }
+
+    /// Reclaimable fraction of the database, `freelist_count / page_count`
+    /// (hermes `_freelist_ratio`). Gates VACUUM in auto-maintenance so a small
+    /// prune on a dense multi-GB database never triggers a full rewrite (#54189).
+    /// `None` when either pragma fails — callers then fall back to the time throttle.
+    pub fn freelist_ratio(&self) -> Option<f64> {
+        let conn = self.conn.lock().ok()?;
+        let freelist: i64 = conn
+            .query_row("PRAGMA freelist_count", [], |r| r.get(0))
+            .ok()?;
+        let pages: i64 = conn.query_row("PRAGMA page_count", [], |r| r.get(0)).ok()?;
+        if pages <= 0 || freelist < 0 {
+            return None;
+        }
+        Some(freelist as f64 / pages as f64)
+    }
+
     /// Durable list of reasoning-echo routes that have rejected
     /// `reasoning_content` (hermes `_REJECTION_MODEL_CONFIG_KEY`, read by
     /// `rejected_reasoning_carriers` / written by
@@ -4156,6 +4264,211 @@ mod tests {
             store.get_session_model_config_value(&sid, "k").unwrap(),
             Some(Value::from(7))
         );
+    }
+
+    /// Backdate a session's started_at + last_activity so sweep/prune cutoffs
+    /// can see it as old. Uses a separate connection on the same file (the same
+    /// technique the migration tests use) because `create_session` stamps now().
+    fn backdate(path: &std::path::Path, session_id: &str, seconds_ago: f64) {
+        use rusqlite::Connection;
+        let conn = Connection::open(path).unwrap();
+        let ts = now_secs() - seconds_ago;
+        conn.execute(
+            "UPDATE sessions SET started_at = ?2, last_activity_at = ?2 WHERE id = ?1",
+            rusqlite::params![session_id, ts],
+        )
+        .unwrap();
+    }
+
+    /// Set `pinned = 1` directly. There is no session-level pin setter in this
+    /// port yet (the `sessions.pinned` column is written only by paths that have
+    /// not been ported), so the sweep tests stamp the flag the same way `backdate`
+    /// stamps timestamps.
+    fn pin_via_sql(path: &std::path::Path, session_id: &str) {
+        use rusqlite::Connection;
+        let conn = Connection::open(path).unwrap();
+        conn.execute(
+            "UPDATE sessions SET pinned = 1 WHERE id = ?1",
+            rusqlite::params![session_id],
+        )
+        .unwrap();
+    }
+
+    /// The core P3-3 need: open rows from state-owned sources whose process died
+    /// get CLOSED (not deleted) so they can age out and be pruned later.
+    #[test]
+    fn sweep_closes_stale_open_rows_from_whitelisted_sources() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let cli_old = store.create_session("cli", Some("m"), None).unwrap();
+        let cli_new = store.create_session("cli", Some("m"), None).unwrap();
+        backdate(&path, &cli_old, 100.0 * 86400.0);
+
+        let closed = store
+            .sweep_orphaned_sessions(90.0 * 86400.0, &["cli"], true)
+            .unwrap();
+        assert_eq!(closed, vec![cli_old.clone()], "only the stale row closes");
+
+        let row = store.get_session_row(&cli_old).unwrap().unwrap();
+        assert!(row.ended_at.is_some(), "row is closed, not deleted");
+        assert_eq!(row.end_reason.as_deref(), Some("startup_orphan_reap"));
+        // Non-destructive: the row and its messages survive.
+        assert!(store.get_session_row(&cli_new).unwrap().is_some());
+        assert!(
+            store
+                .get_session_row(&cli_new)
+                .unwrap()
+                .unwrap()
+                .ended_at
+                .is_none(),
+            "a fresh session must not be swept"
+        );
+    }
+
+    /// 🔴 `started_at` must gate the sweep, not just last-activity: a freshly
+    /// created branch/compression child carries a COPIED (old) activity timestamp.
+    /// Without this predicate the sweep would close brand-new sessions.
+    #[test]
+    fn sweep_spares_a_fresh_row_whose_activity_timestamp_is_old() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        // started_at stays NOW, but last_activity_at is backdated — the branch-child
+        // shape upstream warns about.
+        {
+            use rusqlite::Connection;
+            let conn = Connection::open(&path).unwrap();
+            conn.execute(
+                "UPDATE sessions SET last_activity_at = ?2 WHERE id = ?1",
+                rusqlite::params![sid, now_secs() - 200.0 * 86400.0],
+            )
+            .unwrap();
+        }
+        let closed = store
+            .sweep_orphaned_sessions(90.0 * 86400.0, &["cli"], true)
+            .unwrap();
+        assert!(closed.is_empty(), "a fresh started_at must protect the row");
+        assert!(store
+            .get_session_row(&sid)
+            .unwrap()
+            .unwrap()
+            .ended_at
+            .is_none());
+    }
+
+    /// sources is a WHITELIST: messaging/UI sources own their lifecycle and
+    /// closing one triggers a routing loop, so they must never be swept.
+    #[test]
+    fn sweep_only_touches_whitelisted_sources() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let tg = store.create_session("telegram", Some("m"), None).unwrap();
+        let cli = store.create_session("cli", Some("m"), None).unwrap();
+        backdate(&path, &tg, 100.0 * 86400.0);
+        backdate(&path, &cli, 100.0 * 86400.0);
+
+        let closed = store
+            .sweep_orphaned_sessions(90.0 * 86400.0, &["cli", "cron"], true)
+            .unwrap();
+        assert_eq!(closed, vec![cli.clone()]);
+        assert!(
+            store
+                .get_session_row(&tg)
+                .unwrap()
+                .unwrap()
+                .ended_at
+                .is_none(),
+            "a non-whitelisted source must fail closed (untouched)"
+        );
+    }
+
+    /// Never destructive to pinned rows, and first-reason-wins: an already-ended
+    /// row keeps its original reason even if it also matches the sweep.
+    #[test]
+    fn sweep_spares_pinned_and_preserves_an_existing_end_reason() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let pinned = store.create_session("cli", Some("m"), None).unwrap();
+        let ended = store.create_session("cli", Some("m"), None).unwrap();
+        backdate(&path, &pinned, 100.0 * 86400.0);
+        backdate(&path, &ended, 100.0 * 86400.0);
+        pin_via_sql(&path, &pinned);
+        store.end_session(&ended, "user_exit").unwrap();
+
+        let closed = store
+            .sweep_orphaned_sessions(90.0 * 86400.0, &["cli"], true)
+            .unwrap();
+        assert!(
+            closed.is_empty(),
+            "pinned and already-ended rows are not swept"
+        );
+        assert!(
+            store
+                .get_session_row(&pinned)
+                .unwrap()
+                .unwrap()
+                .ended_at
+                .is_none(),
+            "pinned stays open"
+        );
+        assert_eq!(
+            store
+                .get_session_row(&ended)
+                .unwrap()
+                .unwrap()
+                .end_reason
+                .as_deref(),
+            Some("user_exit"),
+            "the original reason must win (first-reason-wins)"
+        );
+
+        // With exclude_pinned = false the pinned row IS eligible.
+        let closed = store
+            .sweep_orphaned_sessions(90.0 * 86400.0, &["cli"], false)
+            .unwrap();
+        assert_eq!(closed, vec![pinned.clone()]);
+    }
+
+    /// Empty source list / non-positive window are no-ops (upstream returns []).
+    #[test]
+    fn sweep_noops_on_empty_sources_or_nonpositive_window() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        backdate(&path, &sid, 100.0 * 86400.0);
+        assert!(store
+            .sweep_orphaned_sessions(90.0 * 86400.0, &[], true)
+            .unwrap()
+            .is_empty());
+        assert!(store
+            .sweep_orphaned_sessions(0.0, &["cli"], true)
+            .unwrap()
+            .is_empty());
+        assert!(store
+            .sweep_orphaned_sessions(-5.0, &["cli"], true)
+            .unwrap()
+            .is_empty());
+        assert!(store
+            .get_session_row(&sid)
+            .unwrap()
+            .unwrap()
+            .ended_at
+            .is_none());
+    }
+
+    #[test]
+    fn freelist_ratio_is_a_fraction_between_zero_and_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        let ratio = store.freelist_ratio();
+        assert!(ratio.is_some(), "pragmas must resolve on a real DB");
+        let r = ratio.unwrap();
+        assert!((0.0..=1.0).contains(&r), "ratio out of range: {}", r);
     }
 
     #[test]
