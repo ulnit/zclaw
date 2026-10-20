@@ -1783,6 +1783,19 @@ Nous-Portal-specific subscription features and org proposal approval flows are n
   1500-char preview + path the model can `read_file`
 - layer 3 enforces the 200K-char per-turn aggregate budget, spilling the largest non-persisted results first
 - failed writes degrade to an inline truncation notice, never silent loss
+- P3-5 series: tail window capped at 20% of the budget (`TAIL_MAX_CONTEXT_FRACTION=0.20`); triggers anchor on
+  the provider's real usage (P3-5b — the estimate only covers what was appended since the anchor); compression
+  state survives across turns per session (P3-5d registry); anti-thrash breaker trips after two
+  provider-confirmed ineffective compactions with a 5-minute wall-clock recovery window (P3-5c, durable in the
+  `sessions` table — a restart or rebuild never disarms it)
+- 🔴 P3-6 reactive context-overflow recovery (`1671507`+`a59e230`+`01b914f`+`24959ec`): when the provider says
+  the context does not fit (`error_class.rs` ports `error_classifier.py`; order is the contract — memory
+  ceiling, request validation, rate limit and empty-response rules all run before the overflow patterns) the
+  error reaches the loop as `AgentError::ContextOverflow`, which compacts and retries ONCE (bypassing the
+  preflight gate and the anti-thrash clock — upstream's overflow handler "compacts reactively in every case";
+  a second overflow surfaces as-is). Preflight rough estimates over threshold now wait one request for the
+  provider's real usage (`defer_preflight`, a gate-layer predicate, never folded into `needs_compression`;
+  usage-anchored figures and `provider_omits_usage` never defer, #2153).
 
 <a id="persistent-goals-the-ralph-loop-hermes-cli-goals-py"></a>
 

@@ -192,14 +192,16 @@ could sit under budget while the provider was already at its limit.
   different measures (rough preflight vs real post-response, #36718), and the rough one
   can dip below the threshold and clear the strike every turn, re-opening the loop.
 
-**Not yet ported — prerequisite to be built:** hermes'
+**Preflight deferral — ported by P3-6 (`24959ec`).** hermes'
 `should_defer_preflight_to_real_usage` lets a rough over-estimate wait one request for
 the provider to adjudicate, and its docstring states the prerequisite — *"its overflow
-error still triggers reactive recovery"*. ulnclaw has **no reactive context-overflow
-recovery** yet (no `error_classifier` overflow class, no "maximum context length is N"
-parsing, no step-down), so deferring today would turn a preventive compaction into a
-hard 400. That recovery is therefore the prerequisite and is being built (P3-6);
-the estimate keeps its preventive role only until it lands.
+error still triggers reactive recovery"*. That prerequisite is now built (P3-6 slices
+1-3 below), so deferral is safe and lands with upstream's structure intact:
+`needs_compression` keeps its original contract, the deferral is asked by the gate
+layer (hermes `turn_preflight_gate.py:97`) via the new `defer_preflight`, and
+usage-anchored figures never defer. While the estimate was still the only preventive
+signal (before P3-6), deferring would have turned a preventive compaction into a hard
+400 — which is exactly why it stayed unported until reactive recovery existed.
 
 **Scope limit — cleared by P3-5d (`b567f76`).** `ContextCompressor` used to be constructed
 inside `run()`, and `run_with_session` is called once per user turn, so the usage anchor
@@ -449,6 +451,59 @@ flakies `reload_mcp_cancel_keeps_everything`, `test_x_search_settings_editor`)
 + 1 ignored; `session::sqlite` 47/47, `session::filters` 7/7, `config::` 17/17,
 `auto_maintenance` 6/6 + 1 wiring test; `cargo check --bins [--profile test]`
 0 errors; mobile-ffi 0 errors; rustfmt 0 new regions; every diff pure addition.
+
+### Reactive context-overflow recovery (P3-6, `1671507` + `a59e230` + `01b914f` + `24959ec`)
+
+A provider verdict of "your context does not fit" used to be indistinguishable from any
+other failure: `AgentError` flattened everything into `Provider(String)` and the agent
+loop fed every error into `failover()`, burning a fallback provider on a problem that
+only compression can fix. Four slices, in dependency order:
+
+1. **Detection (`1671507`, `src/provider/error_class.rs`).** Port of hermes
+   `agent/error_classifier.py`, scoped to the compress-vs-failover decision. 🔴 The
+   pattern lists are not the contract — the ORDER is: `max_tokens` loads both ways
+   (GPT-5's "Unsupported parameter: 'max_tokens'" is a request-shape rejection,
+   hermes:1186); oMLX memory ceilings say "reduce context length" but measure bytes —
+   compression cannot lower a prefill peak (#52261) → Overloaded; empty-response
+   advisories and encrypted-reasoning replay rejections never compact (:377, :1157);
+   Bedrock's 429 "Too many tokens" is a rate limit (:144). The two upstream chains
+   differ — HTTP 400 (`_400_TAIL_RULES`) puts overflow BEFORE rate-limit/billing,
+   status-less (`_MESSAGE_TAIL_RULES`) after — and are implemented separately rather
+   than flattened. Matching semantics verbatim: lowercase once + substring.
+   NOT YET PORTED (recorded, not silently trimmed): the large-session heuristic
+   (needs approx_tokens/context_length/num_messages context), provider-scoped native
+   code tables (#70414), plugin/profile/MoA verdict hooks, the other ~20
+   `FailoverReason` variants, `_FREE_TIER_REFUSAL_PATTERNS` (unread lists are not
+   invented; free-tier refusals fall to Other). 19 table tests.
+2. **The verdict stays on the type (`a59e230`).** `AgentError::ContextOverflow(String)`
+   + `is_context_overflow()`; the openai terminal-error path classifies with the
+   structured `code` preserved (`ApiErrorDetail.code`, previously `dead_code` — a proxy
+   may flatten the wording away but `context_length_exceeded` still means overflow).
+   Non-overflow errors keep their exact shape and text. 4 mock-server e2e prove the
+   WIRING (retry loop → learner → terminal path → variant), not the classifier.
+3. **The loop uses it (`01b914f`).** `run`'s Err branch: overflow → reactive
+   compaction → `continue` (retry recomputes `request_len`/`api_started` for the NEW
+   transcript, or the usage report would pair with the pre-compaction snapshot and
+   poison the P3-5b anchor). Deliberately bypasses `needs_compression`, the latch and
+   the anti-thrash clock — upstream's overflow handler "compacts reactively in every
+   case" — but is bounded to ONE attempt per run: a second overflow means compression
+   cannot satisfy this provider, and the real error surfaces. Preflight and reactive
+   paths share one `compact_messages` so both arm the same #4750 latch.
+   `api_request_error` hook still fires first. 3 agent e2e: call sequence is exactly
+   [conversation, summary, retry]; second overflow surfaces as-is; 🔴 a plain 500
+   triggers ZERO compaction (without this guard the branch could destroy context on
+   every failure).
+4. **Preflight deferral (`24959ec`).** With recovery in place, a rough over-estimate
+   waits one request for the provider's real usage — upstream's structure: the
+   deferral lives in the GATE (`defer_preflight`, hermes `turn_preflight_gate.py:97`),
+   never folded into `should_compress`/`needs_compression` (folding it broke 3
+   pre-existing tests — restored verbatim by restoring the structure, and
+   `p36_deferral_is_not_folded_into_needs_compression` pins the separation). Anchored
+   figures never defer; `provider_omits_usage` never defers (#2153). 7 tests.
+
+Verification: 29 new tests (19+4+3+7 → p36_/error_class suites 10+19); full suite
+2583 passed / 1 failed (known flaky) +1 ignored; lib+bins+mobile-ffi 0 errors;
+rustfmt: all touched leaf files 0 new regions (openai.rs 5 == HEAD 5).
 
 ## v0.6.5 — 2026-10-16
 

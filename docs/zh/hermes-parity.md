@@ -1449,6 +1449,15 @@ upstream_url`），取代 hermes 的 Nous 门户订阅解析器与 xAI 凭证池
   `<persisted-output>` 1500 字符预览 + 路径（模型可用 read_file 读取全文）
 - 第 3 层强制单轮 20 万字符聚合预算，优先溢出最大的未持久化结果
 - 写入失败降级为行内截断说明，绝不静默丢失
+- P3-5 系列：压缩尾窗封顶预算 20%（`TAIL_MAX_CONTEXT_FRACTION=0.20`）；触发以 provider 真实 usage 为锚
+  （P3-5b，估算只覆盖锚点后追加的增量）；压缩状态按会话跨轮存活（P3-5d per-session registry）；anti-thrash
+  两次无效压缩熔断 + 5 分钟墙钟恢复窗（P3-5c，durable 于 `sessions` 表，重启/重建不解除）
+- 🔴 P3-6 反应式 context 溢出恢复（`1671507`+`a59e230`+`01b914f`+`24959ec`）：provider 报「上下文放不下」
+  （`error_class.rs` 移植 `error_classifier.py`，顺序即契约：memory ceiling/请求校验/限流/空响应都先于溢出
+  pattern）→ `AgentError::ContextOverflow` → agent 循环压缩并重试一次（绕过 preflight 门与 anti-thrash，
+  上游「overflow handler compacts reactively in every case」；第二次溢出如实上浮）；preflight 的 rough 估算
+  超限改为等一个请求的真实 usage（`defer_preflight`，gate 层谓词，不折进 `needs_compression`；
+  usage-anchored 与 provider_omits_usage 永不推迟，#2153）
 
 <a id="持久化目标-ralph-循环-hermes-cli-goals-py"></a>
 
