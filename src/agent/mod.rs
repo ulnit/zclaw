@@ -245,6 +245,100 @@ pub struct Agent {
     /// across them, so this is deliberately NOT the persistence key itself —
     /// it only routes reads/writes to the right session row.
     active_session: std::sync::Mutex<Option<String>>,
+    /// P3-5d: per-session compression state — `(last-used wall clock,
+    /// compressor)`, LRU-evicted past [`COMPRESSOR_REGISTRY_CAP`].
+    ///
+    /// hermes keeps `agent.context_compressor`, so its usage anchor and
+    /// anti-thrash strikes survive from turn to turn. ulnclaw's `Agent` is
+    /// **shared across sessions** (the gateway serves every session id through
+    /// one runner), so a single field would leak one session's anchor — and its
+    /// tripped breaker — into another's turns. Keying by session id is the
+    /// faithful mapping, on the `steer_inboxes` precedent.
+    ///
+    /// Arc'd so a run can hold a [`CompressorGuard`] whose `Drop` returns the
+    /// state on *every* exit path (`run()` has several `return Err`s).
+    compressors: Arc<std::sync::Mutex<CompressorRegistry>>,
+}
+
+/// Session id → (last-used epoch seconds, compressor).
+type CompressorRegistry =
+    std::collections::HashMap<String, (f64, crate::context::ContextCompressor)>;
+
+/// Bound on [`CompressorRegistry`]. An Agent is long-lived (a gateway process
+/// runs for weeks) and sessions are unbounded, so without a cap the registry
+/// grows forever — the exact unbounded-growth class of bug P3-3 exists to fix.
+/// Eviction drops the least-recently-used entry, which only costs that session
+/// a fresh usage anchor on its next turn (hermes' gateway likewise rebinds a
+/// fresh compressor on cache eviction).
+const COMPRESSOR_REGISTRY_CAP: usize = 64;
+
+/// Owns one session's compressor for the duration of a run and returns it to
+/// the registry on drop, so cross-turn state survives every exit path.
+///
+/// The registry lock is only ever held for the map operations themselves —
+/// never across an await — so the summarization call cannot block another
+/// session's compression.
+struct CompressorGuard {
+    registry: Arc<std::sync::Mutex<CompressorRegistry>>,
+    key: Option<String>,
+    compressor: crate::context::ContextCompressor,
+}
+
+impl CompressorGuard {
+    fn lock(
+        registry: &Arc<std::sync::Mutex<CompressorRegistry>>,
+    ) -> std::sync::MutexGuard<'_, CompressorRegistry> {
+        registry
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn now() -> f64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0)
+    }
+}
+
+impl std::ops::Deref for CompressorGuard {
+    type Target = crate::context::ContextCompressor;
+    fn deref(&self) -> &Self::Target {
+        &self.compressor
+    }
+}
+
+impl std::ops::DerefMut for CompressorGuard {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.compressor
+    }
+}
+
+impl Drop for CompressorGuard {
+    fn drop(&mut self) {
+        // `key == None` means an ephemeral run (no session row) — there is
+        // nothing to bind the state to, so it is dropped rather than parked
+        // under a shared key where it would leak across unrelated runs.
+        let Some(key) = self.key.take() else { return };
+        let mut map = Self::lock(&self.registry);
+        // Swap the live compressor out, leaving a cheap default behind (Drop
+        // gives us `&mut self`, and the guard is dying anyway).
+        let compressor = std::mem::replace(
+            &mut self.compressor,
+            crate::context::ContextCompressor::default(),
+        );
+        map.insert(key, (Self::now(), compressor));
+        // LRU-evict the overflow so a weeks-long gateway process serving
+        // unbounded sessions cannot grow this map without end.
+        if map.len() > COMPRESSOR_REGISTRY_CAP {
+            let mut by_age: Vec<(String, f64)> =
+                map.iter().map(|(k, (ts, _))| (k.clone(), *ts)).collect();
+            by_age.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            for (victim, _) in by_age.into_iter().take(map.len() - COMPRESSOR_REGISTRY_CAP) {
+                map.remove(&victim);
+            }
+        }
+    }
 }
 
 /// One fallback provider slot (hermes `fallback_providers` entry).
@@ -290,6 +384,7 @@ impl Agent {
             smart_denial_streak: std::sync::atomic::AtomicU64::new(0),
             steer_inboxes: tokio::sync::Mutex::new(std::collections::HashMap::new()),
             active_session: std::sync::Mutex::new(None),
+            compressors: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         }
     }
 
@@ -363,6 +458,35 @@ impl Agent {
     pub async fn has_pending_fallback(&self) -> bool {
         let index = *self.fallback_active.lock().await;
         index.map(|i| i + 1).unwrap_or(0) < self.fallback_chain.len()
+    }
+
+    /// P3-5d: take this session's compressor out of the registry (or build a
+    /// fresh one) for the duration of a run. Its cross-turn state — the real
+    /// usage anchor, the post-compaction latch, the anti-thrash strikes — is
+    /// returned to the registry when the guard drops, so turn *N+1* continues
+    /// where turn *N* left off instead of restarting from zero estimates
+    /// (hermes keeps `agent.context_compressor` across turns for exactly this).
+    ///
+    /// `session_id == None` (a non-persisting run) gets an unkeyed guard: the
+    /// state lives for that run only and is dropped, never parked under a
+    /// shared key where unrelated runs would inherit it.
+    fn acquire_compressor(&self, session_id: Option<&str>) -> CompressorGuard {
+        let budget = self.config.context_budget_tokens;
+        let timezone = self.context.config.timezone.clone();
+        let compressor = session_id
+            .and_then(|sid| {
+                CompressorGuard::lock(&self.compressors)
+                    .remove(sid)
+                    .map(|(_, c)| c)
+            })
+            .unwrap_or_else(|| {
+                crate::context::ContextCompressor::new(budget).with_timezone(timezone.clone())
+            });
+        CompressorGuard {
+            registry: self.compressors.clone(),
+            key: session_id.map(str::to_string),
+            compressor,
+        }
     }
 
     /// P3-1e: after a successful call, if the provider's learner fired during
@@ -913,9 +1037,12 @@ impl Agent {
             }
         }
 
-        let mut compressor =
-            crate::context::ContextCompressor::new(self.config.context_budget_tokens)
-                .with_timezone(self.context.config.timezone.clone());
+        // P3-5d: bind this session's compressor for the run. Cross-turn state
+        // (real usage anchor, post-compaction latch, anti-thrash strikes)
+        // returns to the registry when the guard drops — including on every
+        // `return Err` below — so the next turn continues instead of restarting
+        // from zero estimates.
+        let mut compressor = self.acquire_compressor(session_id.as_deref());
 
         // Main conversation loop
         for iteration in 0..self.config.max_iterations {
@@ -1946,6 +2073,7 @@ impl SubAgentRunner for Agent {
             smart_denial_streak: std::sync::atomic::AtomicU64::new(0),
             steer_inboxes: tokio::sync::Mutex::new(std::collections::HashMap::new()),
             active_session: std::sync::Mutex::new(None),
+            compressors: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         };
         // Children inherit the fallback chain configuration.
         let child = child.with_fallback_specs(&self.fallback_specs());
@@ -2020,6 +2148,7 @@ impl CronRunner for Agent {
             smart_denial_streak: std::sync::atomic::AtomicU64::new(0),
             steer_inboxes: tokio::sync::Mutex::new(std::collections::HashMap::new()),
             active_session: std::sync::Mutex::new(None),
+            compressors: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         };
         let cron_agent = cron_agent.with_fallback_specs(&self.fallback_specs());
         // Hermes cron approval context: unattended run — the approval gate
@@ -2609,5 +2738,95 @@ mod tests {
         let healthy = openai_like("https://api.example.com/v1", "gpt-x");
         agent.persist_reasoning_rejection(&sid, healthy.as_ref());
         assert!(store.rejected_reasoning_routes(&sid).unwrap().is_empty());
+    }
+
+    // ---- P3-5d: per-session compressor registry ---------------------------
+
+    /// Cross-turn survival: state mutated during one guard's lifetime is seen
+    /// by the next acquire for the SAME session (hermes keeps
+    /// `agent.context_compressor` across turns; that is the whole point).
+    #[test]
+    fn p35d_compressor_state_survives_across_runs_for_a_session() {
+        let (provider, _) = counting(Some("ok"));
+        let agent = Agent::new(provider, ToolRegistry::new());
+
+        // Run 1: arm the post-compaction latch (proves cross-run survival).
+        {
+            let mut guard = agent.acquire_compressor(Some("s1"));
+            guard.note_compaction_ran();
+        } // guard drops -> state returns to registry
+
+        // Run 2 (same session): a fresh acquire sees the armed latch — a
+        // brand-new compressor would have it false and would happily compress.
+        {
+            let guard = agent.acquire_compressor(Some("s1"));
+            assert!(
+                !guard.needs_compression(std::slice::from_ref(&over_budget_message())),
+                "awaiting_real_usage latch must survive into the next run"
+            );
+        }
+    }
+
+    /// One message far past any plausible budget, so `needs_compression` is
+    /// decided by state rather than by size.
+    fn over_budget_message() -> Message {
+        Message {
+            reasoning: None,
+            role: Role::User,
+            content: Some("x".repeat(2_000_000)),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    /// 🔴 Session isolation: the Agent is SHARED across sessions (one gateway
+    /// runner serves many session ids). State from s1 must never leak into s2
+    /// — that was the whole reason for keying the registry.
+    #[test]
+    fn p35d_sessions_do_not_share_compressor_state() {
+        let (provider, _) = counting(Some("ok"));
+        let agent = Agent::new(provider, ToolRegistry::new());
+        {
+            let mut g1 = agent.acquire_compressor(Some("s1"));
+            g1.note_compaction_ran(); // arms s1's latch
+        }
+        let g2 = agent.acquire_compressor(Some("s2"));
+        assert!(
+            g2.needs_compression(std::slice::from_ref(&over_budget_message())),
+            "s2 got a fresh compressor; s1's latch must not suppress it"
+        );
+    }
+
+    /// Ephemeral runs (no session) neither read nor write the registry: their
+    /// state dies with the guard and never parks under a shared key.
+    #[test]
+    fn p35d_unkeyed_runs_do_not_pollute_the_registry() {
+        let (provider, _) = counting(Some("ok"));
+        let agent = Agent::new(provider, ToolRegistry::new());
+        {
+            let mut g = agent.acquire_compressor(None);
+            g.note_compaction_ran();
+        }
+        let reg = CompressorGuard::lock(&agent.compressors);
+        assert!(reg.is_empty(), "an unkeyed guard must store nothing");
+    }
+
+    /// The registry is bounded: a weeks-long gateway serving unbounded
+    /// sessions must not grow it without end (LRU eviction past the cap).
+    #[test]
+    fn p35d_registry_evicts_least_recently_used_past_the_cap() {
+        let (provider, _) = counting(Some("ok"));
+        let agent = Agent::new(provider, ToolRegistry::new());
+        for i in 0..(COMPRESSOR_REGISTRY_CAP + 10) {
+            let sid = format!("sess-{i}");
+            let g = agent.acquire_compressor(Some(&sid));
+            drop(g);
+        }
+        let reg = CompressorGuard::lock(&agent.compressors);
+        assert_eq!(reg.len(), COMPRESSOR_REGISTRY_CAP);
+        // The newest survived; the oldest were evicted.
+        assert!(reg.contains_key(&format!("sess-{}", COMPRESSOR_REGISTRY_CAP + 9)));
+        assert!(!reg.contains_key("sess-0"));
     }
 }
