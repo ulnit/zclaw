@@ -64,11 +64,22 @@ async fn serve_socket(socket: WebSocket, state: Arc<GatewayState>) {
     }
     // hermes parity: the renderer seeds live-sync (and demotes its legacy
     // polls) only after a `gateway.ready` event; advertise change events.
+    //
+    // 🔴 `skin` rides along because the renderer seeds its theme baseline from
+    // this event (`gateway-event.ts:290` → `ingestBackendSkin(payload.skin,
+    // {apply:false})`). Seeding never paints, so a fresh connect cannot stomp the
+    // user's persisted desktop theme; only a genuine name change on `skin.changed`
+    // repaints. Without it the renderer had no backend skin at all — `config.get`
+    // does not carry one either.
     let ready = json!({
         "method": "event",
         "params": {
             "type": "gateway.ready",
-            "payload": {"change_events": true, "server": "ulnclaw"},
+            "payload": {
+                "change_events": true,
+                "server": "ulnclaw",
+                "skin": crate::skin::get_active_skin(),
+            },
         },
     });
     if !send_frame(&sink, ready).await {

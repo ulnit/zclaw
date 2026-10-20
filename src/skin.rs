@@ -548,7 +548,16 @@ const BUILTIN_SKINS: &[BuiltinSkin] = &[
 ];
 /// Resolved skin — colors/branding merged over the default skin (hermes
 /// `SkinConfig`).
-#[derive(Debug, Clone, Default)]
+///
+/// 🔴 `Serialize` is what lets the desktop renderer receive the active skin: it
+/// seeds from `gateway.ready`'s `payload.skin` (`gateway-event.ts:290`) and
+/// repaints on `skin.changed`, folding the payload through `ingestBackendSkin` as
+/// an `ulnclawSkin`. The field names are already the snake_case the renderer's
+/// optional fields expect (`name`/`description`/`colors`/`light_colors`/`branding`/
+/// `tool_prefix`), so no `#[serde(rename)]` is needed; the `spinner_*` fields are
+/// TUI-only and the renderer simply ignores them (every `ulnclawSkin` field is
+/// optional).
+#[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct SkinConfig {
     pub name: String,
     pub description: String,
