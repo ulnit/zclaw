@@ -264,6 +264,40 @@ pub struct Agent {
 type CompressorRegistry =
     std::collections::HashMap<String, (f64, crate::context::ContextCompressor)>;
 
+/// P3-5c: binds one session's durable anti-thrash columns to the compressor's
+/// [`crate::context::CompressionGuardStore`] contract (hermes reaches them via
+/// `_durable_read`/`_durable_write` on its bound `_session_db` + `_session_id`).
+///
+/// This adapter is what keeps `context/` from depending on `session/`: the
+/// compressor knows only the trait, and the agent — which already holds both
+/// halves — supplies the binding.
+struct SessionCompressionGuard {
+    store: Arc<SqliteSessionStore>,
+    session_id: String,
+}
+
+impl crate::context::compressor::CompressionGuardStore for SessionCompressionGuard {
+    fn ineffective_count(&self) -> i64 {
+        self.store
+            .get_compression_ineffective_count(&self.session_id)
+    }
+
+    fn set_ineffective_count(&self, count: i64) {
+        self.store
+            .set_compression_ineffective_count(&self.session_id, count);
+    }
+
+    fn recovery_deadline(&self) -> f64 {
+        self.store
+            .get_compression_recovery_deadline(&self.session_id)
+    }
+
+    fn set_recovery_deadline(&self, deadline: f64) {
+        self.store
+            .set_compression_recovery_deadline(&self.session_id, deadline);
+    }
+}
+
 /// Bound on [`CompressorRegistry`]. An Agent is long-lived (a gateway process
 /// runs for weeks) and sessions are unbounded, so without a cap the registry
 /// grows forever — the exact unbounded-growth class of bug P3-3 exists to fix.
@@ -470,10 +504,13 @@ impl Agent {
     /// `session_id == None` (a non-persisting run) gets an unkeyed guard: the
     /// state lives for that run only and is dropped, never parked under a
     /// shared key where unrelated runs would inherit it.
+    /// P3-5c: bind the session's durable anti-thrash state so a rebuilt
+    /// compressor (P3-5d LRU eviction, or a restart) inherits the armed/tripped
+    /// guard instead of disarming it — #54923 / #69872 / #100185.
     fn acquire_compressor(&self, session_id: Option<&str>) -> CompressorGuard {
         let budget = self.config.context_budget_tokens;
         let timezone = self.context.config.timezone.clone();
-        let compressor = session_id
+        let mut compressor = session_id
             .and_then(|sid| {
                 CompressorGuard::lock(&self.compressors)
                     .remove(sid)
@@ -482,6 +519,15 @@ impl Agent {
             .unwrap_or_else(|| {
                 crate::context::ContextCompressor::new(budget).with_timezone(timezone.clone())
             });
+        // Bind (and load) the durable guard state when both halves exist: a
+        // persisting run with a store. Without either there is nothing durable
+        // to read, and the in-memory clock still works for this run.
+        if let (Some(store), Some(sid)) = (self.store.as_ref(), session_id) {
+            compressor.bind_guard(Arc::new(SessionCompressionGuard {
+                store: store.clone(),
+                session_id: sid.to_string(),
+            }));
+        }
         CompressorGuard {
             registry: self.compressors.clone(),
             key: session_id.map(str::to_string),
@@ -1054,7 +1100,13 @@ impl Agent {
             // Context compression when over budget. Auxiliary model routing:
             // hermes resolves `auxiliary.compression.{provider,model}` and
             // falls back to the main runtime when unset.
-            if compressor.needs_compression(&messages) {
+            //
+            // 🔴 The anti-thrash clock must be evaluated BEFORE
+            // `needs_compression`: while tripped, `needs_compression` returns
+            // false immediately, so only the clock can clear the breaker once
+            // its recovery window elapses and let the probation probe through
+            // (hermes `_automatic_compression_blocked`, P3-5c).
+            if !compressor.anti_thrash_blocked() && compressor.needs_compression(&messages) {
                 let compressed = match crate::provider::auxiliary::resolve_aux_task(
                     &self.context.config,
                     crate::provider::auxiliary::TASK_COMPRESSION,

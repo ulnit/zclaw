@@ -5,7 +5,7 @@
 
 pub mod breakdown;
 pub mod compressor;
-pub use compressor::ContextCompressor;
+pub use compressor::{CompressionGuardStore, ContextCompressor};
 
 /// Prompt builder - assembles system prompts from multiple layers
 ///

@@ -6,6 +6,7 @@
 //! message, and the most recent turns intact.
 
 use crate::provider::{Message, Provider, Role, Usage};
+use std::sync::Arc;
 
 /// Hard share of the context budget the verbatim tail may occupy
 /// (hermes `TAIL_MAX_CONTEXT_FRACTION`, `agent/context_compressor.py`).
@@ -35,6 +36,53 @@ user — this summary is injected back into the model's context.\n\nCONVERSATION
 /// How many provider-confirmed *ineffective* compactions trip the anti-thrash
 /// breaker (hermes `_tripped`: `_ineffective_compression_count >= 2`).
 const INEFFECTIVE_COMPRESSION_LIMIT: usize = 2;
+
+/// How long the tripped breaker stays closed before it allows ONE probe
+/// (hermes `_ANTI_THRASH_RECOVERY_SECONDS = 300.0`, `context_compressor.py:2726`).
+///
+/// 🔴 The back-off must not be permanent (#14694): the tripped verdict was made
+/// against the transcript *as it existed then*, but the conversation keeps
+/// growing and can accumulate plenty of compressible material later. Without a
+/// recovery path the session never auto-compacts again and rides into the
+/// provider's hard context limit. Recovery is a *probation probe*, not a reset:
+/// the count drops to 1 strike, so if the probe is ineffective again the very
+/// next verdict re-trips — at most one compaction attempt per window, bounded
+/// rather than thrashing.
+pub const ANTI_THRASH_RECOVERY_SECONDS: f64 = 300.0;
+
+/// Durable per-session anti-thrash state, bound to one session row.
+///
+/// hermes gives its compressor `_session_db` + `_session_id` and reaches the
+/// columns through `_durable_read`/`_durable_write`. This trait is the same
+/// contract expressed the Rust-natural way, so `context/` does not have to
+/// depend on `session/` (the agent, which holds both, supplies the impl).
+///
+/// 🔴 Why durable at all: the compressor is **rebuilt** — P3-5d's registry
+/// LRU-evicts past 64 sessions, and any restart rebuilds it. A process-local
+/// deadline restarts the wait on every rebuild, so a tripped session never
+/// earns its probe and "stayed blocked forever" (hermes #100185). The strike
+/// count is durable for the same reason and for #54923 "restart must not
+/// disarm" / #69872.
+pub trait CompressionGuardStore: Send + Sync {
+    /// Persisted strike count; 0 when absent.
+    fn ineffective_count(&self) -> i64;
+    /// Persist the strike count (best-effort; must not fail a turn).
+    fn set_ineffective_count(&self, count: i64);
+    /// Persisted wall-clock recovery deadline (epoch seconds); 0.0 = unarmed.
+    fn recovery_deadline(&self) -> f64;
+    /// Persist (or with 0.0, disarm) the recovery deadline.
+    fn set_recovery_deadline(&self, deadline: f64);
+}
+
+/// Wall clock in epoch seconds. A free function so tests can reason about the
+/// values they store; the deadline is wall clock by requirement, never
+/// monotonic (it is compared across process/compressor rebuilds).
+fn wall_now() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
+}
 
 pub struct ContextCompressor {
     /// Maximum context tokens before compression kicks in.
@@ -68,6 +116,16 @@ pub struct ContextCompressor {
     ineffective_count: usize,
     /// Anti-thrash breaker tripped: stop compressing, it cannot help.
     breaker_tripped: bool,
+    /// Wall-clock epoch when the tripped breaker next allows one probe
+    /// (hermes `_anti_thrash_recovery_deadline`). `0.0` = unarmed. Mirrors the
+    /// durable column so the value survives a compressor rebuild — see
+    /// [`CompressionGuardStore`].
+    recovery_deadline: f64,
+    /// Durable per-session anti-thrash state, bound when the agent knows which
+    /// session this compressor serves (hermes `_session_db` + `_session_id`).
+    /// `None` = an ephemeral run: the clock still works in memory, it just
+    /// cannot survive a rebuild.
+    guard: Option<Arc<dyn CompressionGuardStore>>,
 }
 
 impl Default for ContextCompressor {
@@ -90,6 +148,8 @@ impl ContextCompressor {
             verify_cleared_threshold: false,
             ineffective_count: 0,
             breaker_tripped: false,
+            recovery_deadline: 0.0,
+            guard: None,
         }
     }
 
@@ -181,14 +241,15 @@ impl ContextCompressor {
                 // A real reading proves this provider does report usage.
                 self.provider_omits_usage = false;
                 if real < self.max_context_tokens {
-                    // Any real reading below the trigger proves the prompt fits.
-                    self.ineffective_count = 0;
-                    self.breaker_tripped = false;
+                    // Any real reading below the trigger proves the prompt fits,
+                    // so the strikes clear — durably, because a sibling agent or
+                    // a rebuilt compressor reads that row to decide whether it is
+                    // still blocked (hermes `_refresh_durable_guards`).
+                    self.record_ineffective_verdict(0);
                 } else if self.verify_cleared_threshold {
                     // Compaction ran and the provider still reports over threshold.
-                    self.ineffective_count += 1;
-                    if self.ineffective_count >= INEFFECTIVE_COMPRESSION_LIMIT {
-                        self.breaker_tripped = true;
+                    self.record_ineffective_verdict(self.ineffective_count + 1);
+                    if self.breaker_tripped {
                         tracing::warn!(
                             "compaction did not clear the threshold {}/{} times: {} real prompt \
                              tokens still >= {} budget — the incompressible prompt (system + tool \
@@ -223,6 +284,125 @@ impl ContextCompressor {
     /// Whether the anti-thrash breaker has stopped auto-compression.
     pub fn breaker_tripped(&self) -> bool {
         self.breaker_tripped
+    }
+
+    /// Bind this compressor to a session's durable guard state and load it
+    /// (hermes binds `_session_db`/`_session_id` then calls
+    /// `_load_anti_thrash_recovery_deadline` + `_load_ineffective_compression_count`
+    /// during construction).
+    ///
+    /// 🔴 This is what makes #54923 "restart must not disarm" hold: a rebuilt
+    /// compressor inherits the armed/tripped guard instead of starting clean.
+    pub fn bind_guard(&mut self, guard: Arc<dyn CompressionGuardStore>) {
+        self.guard = Some(guard);
+        self.load_durable_guard_state();
+    }
+
+    /// Re-read the durable guard state into memory. Also used as upstream's
+    /// `_refresh_durable_guards`: when a gate is about to block, a sibling agent
+    /// on the same session row may already have cleared it.
+    fn load_durable_guard_state(&mut self) {
+        let Some(guard) = self.guard.as_ref() else {
+            return;
+        };
+        let count = guard.ineffective_count().max(0) as usize;
+        self.ineffective_count = count;
+        self.breaker_tripped = count >= INEFFECTIVE_COMPRESSION_LIMIT;
+        self.recovery_deadline = guard.recovery_deadline().max(0.0);
+    }
+
+    /// Set the strike count, persisting **only on change** (hermes
+    /// `_record_ineffective_compression_verdict`: "persists only on change").
+    fn record_ineffective_verdict(&mut self, count: usize) {
+        if count == self.ineffective_count {
+            return;
+        }
+        self.ineffective_count = count;
+        self.breaker_tripped = count >= INEFFECTIVE_COMPRESSION_LIMIT;
+        if let Some(guard) = self.guard.as_ref() {
+            guard.set_ineffective_count(count as i64);
+        }
+    }
+
+    /// Arm/disarm the recovery clock, persisting only on change (hermes
+    /// `_set_anti_thrash_recovery_deadline`'s early return keeps an unarmed
+    /// evaluation from writing the row on every turn).
+    fn set_recovery_deadline(&mut self, deadline: f64) {
+        if (deadline - self.recovery_deadline).abs() < f64::EPSILON {
+            return;
+        }
+        self.recovery_deadline = deadline;
+        if let Some(guard) = self.guard.as_ref() {
+            guard.set_recovery_deadline(deadline);
+        }
+    }
+
+    /// The recovery clock on in-memory state only (hermes
+    /// `_automatic_compression_blocked_locally`).
+    fn anti_thrash_blocked_locally(&mut self) -> bool {
+        if !self.breaker_tripped {
+            // Guard not tripped: disarm any pending clock so a later trip
+            // starts a full window.
+            self.set_recovery_deadline(0.0);
+            return false;
+        }
+        let now = wall_now();
+        if self.recovery_deadline <= 0.0
+            || self.recovery_deadline - now > ANTI_THRASH_RECOVERY_SECONDS
+        {
+            // Unarmed → arm lazily on the first blocked evaluation. The second
+            // leg is a backwards clock jump: never wait longer than one window.
+            self.set_recovery_deadline(now + ANTI_THRASH_RECOVERY_SECONDS);
+        } else if now >= self.recovery_deadline {
+            // Window elapsed → allow ONE probation probe by dropping to a
+            // single strike, persisted so sibling agents on the same row
+            // unblock too. If the probe is ineffective again the very next
+            // verdict re-trips, so the worst case is one attempt per window.
+            self.set_recovery_deadline(0.0);
+            if self.ineffective_count >= INEFFECTIVE_COMPRESSION_LIMIT {
+                self.record_ineffective_verdict(1);
+            }
+            tracing::info!(
+                "anti-thrash recovery: {:.0}s elapsed since the guard tripped — allowing one \
+                 compaction probe (ineffective={})",
+                ANTI_THRASH_RECOVERY_SECONDS,
+                self.ineffective_count
+            );
+            return false;
+        }
+        tracing::warn!(
+            "compression skipped — repeated compaction attempts did not restore healthy context \
+             (ineffective={}); auto-compaction will retry once in {:.0}s",
+            self.ineffective_count,
+            (self.recovery_deadline - now).max(0.0)
+        );
+        true
+    }
+
+    /// Whether auto-compaction is blocked by the anti-thrash guard, running the
+    /// recovery clock (hermes `_automatic_compression_blocked`).
+    ///
+    /// 🔴 Call this **before** [`Self::needs_compression`] each iteration: it is
+    /// what clears `breaker_tripped` once the window elapses, so the probe can
+    /// actually be taken. Blocked-then-refresh mirrors upstream: durable rows
+    /// may have been cleared by another agent since the local read.
+    pub fn anti_thrash_blocked(&mut self) -> bool {
+        if !self.anti_thrash_blocked_locally() {
+            return false;
+        }
+        self.load_durable_guard_state();
+        self.anti_thrash_blocked_locally()
+    }
+
+    /// The persisted strike count (test/inspection aid).
+    pub fn ineffective_count(&self) -> usize {
+        self.ineffective_count
+    }
+
+    /// The armed recovery deadline as a wall-clock epoch, `0.0` when unarmed
+    /// (test/inspection aid).
+    pub fn recovery_deadline(&self) -> f64 {
+        self.recovery_deadline
     }
 
     /// Whether a completed response proved this provider omits `usage`.
@@ -776,5 +956,215 @@ mod tests {
         assert!(!c.needs_compression(&messages));
         let big = convo(4, 400_000); // ~400k tokens
         assert!(c.needs_compression(&big), "estimate path must still fire");
+    }
+
+    // ---- P3-5c: anti-thrash recovery clock + durable guard -----------------
+
+    /// In-memory [`CompressionGuardStore`] so the clock is tested without
+    /// SQLite or real wall-clock waits — tests pre-seed a past/future deadline.
+    /// Mutex (not Cell) because the trait bound is Send + Sync.
+    #[derive(Default)]
+    struct MockGuard(std::sync::Mutex<(i64, f64)>);
+
+    impl CompressionGuardStore for MockGuard {
+        fn ineffective_count(&self) -> i64 {
+            self.0.lock().unwrap().0
+        }
+        fn set_ineffective_count(&self, count: i64) {
+            self.0.lock().unwrap().0 = count;
+        }
+        fn recovery_deadline(&self) -> f64 {
+            self.0.lock().unwrap().1
+        }
+        fn set_recovery_deadline(&self, deadline: f64) {
+            self.0.lock().unwrap().1 = deadline;
+        }
+    }
+
+    /// Trip the breaker the honest way: two provider-confirmed ineffective
+    /// compactions (the same setup the existing breaker tests use).
+    fn tripped_compressor() -> ContextCompressor {
+        let mut c = ContextCompressor::new(10_000);
+        let messages = convo(20, 400);
+        c.note_compaction_ran();
+        c.note_response_usage(Some(&usage(11_000)), messages.len());
+        c.note_compaction_ran();
+        c.note_response_usage(Some(&usage(10_500)), messages.len());
+        assert!(c.breaker_tripped());
+        c
+    }
+
+    /// A tripped breaker blocks, and the first blocked evaluation arms a
+    /// wall-clock deadline ~one window out (hermes arms it lazily).
+    #[test]
+    fn p35c_tripped_breaker_blocks_and_arms_the_recovery_clock() {
+        // 🔴 Seed the DURABLE row first, then bind — production order: the row
+        // is already tripped and a (re)built compressor inherits it. Tripping
+        // in memory before binding an empty row would let the bind correctly
+        // overwrite memory with the durable 0 (#54923 makes the row the
+        // authority), which is the behaviour under test, not a setup step.
+        let guard = Arc::new(MockGuard::default());
+        guard.set_ineffective_count(2);
+        let mut c = ContextCompressor::new(10_000);
+        c.bind_guard(guard.clone());
+        assert!(
+            c.breaker_tripped(),
+            "the durable tripped state is inherited"
+        );
+
+        assert!(c.anti_thrash_blocked(), "tripped => blocked");
+        let deadline = guard.recovery_deadline();
+        let now = wall_now();
+        assert!(deadline > now, "the clock must be armed into the future");
+        assert!(
+            (deadline - now - ANTI_THRASH_RECOVERY_SECONDS).abs() < 5.0,
+            "armed ~one window out, got {:+.1}s",
+            deadline - now - ANTI_THRASH_RECOVERY_SECONDS
+        );
+        // Still blocked while the window is open.
+        assert!(c.anti_thrash_blocked());
+    }
+
+    /// 🔴 The whole point of #14694: the back-off is NOT permanent. Once the
+    /// window elapses, exactly ONE probe is allowed by dropping to a single
+    /// strike and disarming the clock — so the next ineffective verdict re-trips
+    /// (bounded: one attempt per window, not a thrash).
+    #[test]
+    fn p35c_elapsed_window_allows_one_probe_and_re_arms_on_failure() {
+        let mut c = tripped_compressor();
+        let guard = Arc::new(MockGuard::default());
+        // Pre-seed a deadline already in the past: the window has elapsed.
+        guard.set_recovery_deadline(wall_now() - 1.0);
+        guard.set_ineffective_count(2);
+        c.bind_guard(guard.clone());
+
+        // Probe allowed (not blocked); strike count dropped to 1; clock disarmed.
+        assert!(
+            !c.anti_thrash_blocked(),
+            "elapsed window must allow a probe"
+        );
+        assert_eq!(c.ineffective_count(), 1, "one probation strike remains");
+        assert_eq!(guard.ineffective_count(), 1, "drop is persisted");
+        assert_eq!(c.recovery_deadline(), 0.0, "clock disarmed after the probe");
+        assert!(
+            !c.breaker_tripped(),
+            "a single strike does not hold the breaker"
+        );
+
+        // The probe compacts but is ineffective again -> one more strike re-trips.
+        let messages = convo(20, 400);
+        c.note_compaction_ran();
+        c.note_response_usage(Some(&usage(10_500)), messages.len());
+        assert!(
+            c.breaker_tripped(),
+            "an ineffective probe re-trips immediately"
+        );
+        assert_eq!(guard.ineffective_count(), 2);
+    }
+
+    /// 🔴 #54923 "restart must not disarm" + #69872: a rebuilt compressor bound
+    /// to the same row inherits the tripped guard. This is what P3-5d's LRU
+    /// eviction and any process restart must not undo.
+    #[test]
+    fn p35d_rebuilt_compressor_inherits_the_durable_tripped_guard() {
+        let guard = Arc::new(MockGuard::default());
+        guard.set_ineffective_count(2); // durable tripped state
+        {
+            let mut c = ContextCompressor::new(10_000);
+            c.bind_guard(guard.clone());
+            assert!(c.breaker_tripped(), "bind inherits the tripped guard");
+            assert!(c.anti_thrash_blocked()); // arms the clock durably
+        } // c dropped (simulating eviction / restart)
+        assert!(guard.ineffective_count() >= 2, "tripped state is durable");
+        assert!(guard.recovery_deadline() > 0.0, "deadline is durable");
+
+        // A brand-new compressor on the same row starts blocked, inheriting the
+        // SAME armed window rather than restarting it.
+        let mut c2 = ContextCompressor::new(10_000);
+        c2.bind_guard(guard.clone());
+        assert!(c2.breaker_tripped(), "guard survives the rebuild");
+        assert!(c2.anti_thrash_blocked());
+        assert_eq!(
+            c2.recovery_deadline(),
+            guard.recovery_deadline(),
+            "the rebuilt compressor resumes the same window, not a fresh one"
+        );
+    }
+
+    /// #100185: a durable deadline already in the past lets a rebuilt compressor
+    /// earn its probe immediately — the exact "blocked forever" bug upstream
+    /// fixed, which a process-local (monotonic) clock would reintroduce.
+    #[test]
+    fn p35c_durable_past_deadline_lets_a_rebuilt_compressor_probe() {
+        let guard = Arc::new(MockGuard::default());
+        guard.set_ineffective_count(2);
+        guard.set_recovery_deadline(wall_now() - 10.0); // armed long ago, elapsed
+
+        let mut c = ContextCompressor::new(10_000); // fresh, e.g. after restart
+        c.bind_guard(guard.clone());
+        assert!(c.breaker_tripped(), "durable tripped state loaded");
+        assert!(
+            !c.anti_thrash_blocked(),
+            "an elapsed durable window must grant the probe after a rebuild"
+        );
+        assert_eq!(c.ineffective_count(), 1);
+    }
+
+    /// Blocked-then-refresh (hermes `_refresh_durable_guards`): when the local
+    /// state would block but a sibling agent already cleared the durable row,
+    /// the re-read unblocks this compressor too.
+    #[test]
+    fn p35c_blocked_then_refresh_honours_a_sibling_clearing_the_row() {
+        let guard = Arc::new(MockGuard::default());
+        guard.set_ineffective_count(2); // durable tripped state
+        let mut c = ContextCompressor::new(10_000);
+        c.bind_guard(guard.clone());
+        // First evaluation arms the clock and blocks.
+        assert!(c.anti_thrash_blocked());
+        assert!(c.breaker_tripped());
+
+        // A sibling agent on the same session row clears the strikes durably.
+        guard.set_ineffective_count(0);
+        guard.set_recovery_deadline(0.0);
+
+        // Now blocked-then-refresh re-reads the row and unblocks.
+        assert!(
+            !c.anti_thrash_blocked(),
+            "a sibling clearing the durable row must unblock this compressor"
+        );
+        assert!(
+            !c.breaker_tripped(),
+            "the refresh adopted the cleared count"
+        );
+    }
+
+    /// A backwards clock jump must never make the wait exceed one window
+    /// (hermes re-arms when `deadline - now > window`).
+    #[test]
+    fn p35c_backwards_clock_jump_rearms_to_at_most_one_window() {
+        let guard = Arc::new(MockGuard::default());
+        guard.set_ineffective_count(2); // durable tripped state
+                                        // A deadline absurdly far in the future, as if the wall clock jumped back.
+        guard.set_recovery_deadline(wall_now() + 10.0 * ANTI_THRASH_RECOVERY_SECONDS);
+        let mut c = ContextCompressor::new(10_000);
+        c.bind_guard(guard.clone());
+        assert!(c.breaker_tripped(), "bind inherits the tripped guard");
+        assert!(c.anti_thrash_blocked());
+        let now = wall_now();
+        assert!(
+            c.recovery_deadline() - now <= ANTI_THRASH_RECOVERY_SECONDS + 5.0,
+            "the clock must be clamped to one window, got {:.0}s",
+            c.recovery_deadline() - now
+        );
+    }
+
+    /// With no guard bound (an ephemeral run) the clock still works in memory;
+    /// it simply cannot survive a rebuild, which is the correct degraded mode.
+    #[test]
+    fn p35c_unbound_compressor_runs_the_clock_in_memory_only() {
+        let mut c = tripped_compressor(); // no bind_guard
+        assert!(c.anti_thrash_blocked(), "still blocks in memory");
+        assert!(c.recovery_deadline() > 0.0, "armed in memory");
+        assert_eq!(c.ineffective_count(), 2, "count is local-only");
     }
 }
