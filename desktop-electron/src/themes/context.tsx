@@ -20,6 +20,7 @@ import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import { $backendThemes, $pendingSkinApply } from './backend-sync'
 import { hexToRgb, mix, readableOn } from './color'
 import { BUILTIN_THEME_LIST, DEFAULT_SKIN_NAME, DEFAULT_TYPOGRAPHY, nousTheme } from './presets'
+import { $pendingModeApply } from './request'
 import type { DesktopTheme, DesktopThemeColors } from './types'
 import { $userThemes, listAllThemes, resolveTheme } from './user-themes'
 
@@ -398,6 +399,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       $pendingSkinApply.set(null)
     }
   }, [pendingSkin, setTheme])
+
+  // Same door for light/dark/system (set_theme from the agent): a one-shot
+  // `requestMode` write drained here through `setMode`, which persists per
+  // profile exactly like a manual pick (upstream context.tsx:666-673). Without
+  // this drain `$pendingModeApply` is never consumed and `requestMode` is a
+  // silent no-op — the mode leg of set_theme would do nothing.
+  const pendingMode = useStore($pendingModeApply)
+
+  useEffect(() => {
+    if (pendingMode) {
+      setMode(pendingMode)
+      $pendingModeApply.set(null)
+    }
+  }, [pendingMode, setMode])
 
   // The light/dark toggle (Shift+X by default) is owned by the keybind runtime
   // (`appearance.toggleMode`) so it shows up in the hotkey map and is rebindable.
