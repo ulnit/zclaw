@@ -4,6 +4,7 @@
 //! to (api_mode, api_key, base_url).
 
 pub mod anthropic;
+pub mod anthropic_thinking;
 pub mod auxiliary;
 pub mod error_class;
 pub mod openai;
