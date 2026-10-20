@@ -195,13 +195,12 @@ impl ContextCompressor {
     ///   so shrinking messages can never help and every pass would be wasted
     ///   money and lost context.
     ///
-    /// **Deliberately not ported:** hermes' `should_defer_preflight_to_real_usage`
-    /// lets a rough over-estimate *wait one request* for the provider to
-    /// adjudicate, and its docstring says so explicitly — "Let the provider
-    /// adjudicate; its overflow error still triggers reactive recovery". ulnclaw
-    /// has **no reactive context-overflow recovery**, so deferring would turn a
-    /// preventive compaction into a hard 400. Without that recovery, the estimate
-    /// must keep its preventive role.
+    /// **Deliberately not the place for hermes' preflight deferral:** upstream
+    /// keeps `should_compress_info` (`context_compressor.py:2994`) free of
+    /// `should_defer_preflight_to_real_usage` — the gate layer
+    /// (`turn_preflight_gate.py:97`, `context_engine.py:192`) asks that question
+    /// separately. Folding it in here would silently change this predicate's
+    /// contract for every caller. See [`Self::defer_preflight`].
     pub fn needs_compression(&self, messages: &[Message]) -> bool {
         if self.breaker_tripped || self.awaiting_real_usage {
             return false;
@@ -218,6 +217,63 @@ impl ContextCompressor {
             // usage): the rough estimate is the only signal available.
             None => Self::estimate_tokens(messages) > self.max_context_tokens,
         }
+    }
+
+    /// The preflight gate's question: should preventive compression for THIS
+    /// request wait one round for the provider's real usage instead of trusting
+    /// the rough estimate?
+    ///
+    /// hermes asks this in the gate layer, not inside `should_compress`
+    /// (`turn_preflight_gate.py:97`, `context_engine.py:192`), so it lives here as
+    /// a separate predicate and [`Self::needs_compression`] keeps its contract.
+    ///
+    /// Usage-anchored figures never defer: the bulk of that number is the
+    /// provider's own count, not a guess, so there is nothing to wait for.
+    ///
+    /// 🔴 **P3-6 is what makes deferring safe.** Until the agent loop recovered
+    /// from a provider overflow verdict, skipping a preventive compaction would
+    /// have turned it into a hard 400 that failed the turn — which is exactly why
+    /// the estimate kept its preventive role before. With reactive recovery in
+    /// place (P3-6 slices 1-3) the provider adjudicates: if the rough estimate was
+    /// right, the overflow error triggers compaction and a retry anyway.
+    pub fn defer_preflight(&self, messages: &[Message]) -> bool {
+        if self.last_real_prompt_tokens.is_some() {
+            return false;
+        }
+        self.should_defer_preflight_to_real_usage(Self::estimate_tokens(messages))
+    }
+
+    /// True when a whole-context ROUGH estimate over threshold must wait ONE
+    /// request for the provider's real usage.
+    ///
+    /// Port of hermes `should_defer_preflight_to_real_usage`
+    /// (`agent/context_compressor.py:2975`), verbatim in order and in each
+    /// condition. Callers skip this for usage-anchored figures (real prompt count
+    /// + delta of what was appended since), which never defer. A rough figure
+    /// defers right after a local or native compaction (the last real reading is
+    /// stale — the latch) and on any transcript the anchor does not cover (first
+    /// request, rewind/edit-resend, reloaded history): the next response
+    /// re-anchors it. It never defers once the provider has proven it omits
+    /// usage, or the estimate would be the only signal and compression could
+    /// never fire (#2153); the overflow handler compacts reactively in every
+    /// case.
+    pub fn should_defer_preflight_to_real_usage(&self, rough_tokens: usize) -> bool {
+        if rough_tokens < self.max_context_tokens {
+            return false;
+        }
+        if self.awaiting_real_usage {
+            return true;
+        }
+        // Estimate magnitude is not evidence of overflow, even past the full window.
+        // Let the provider adjudicate; its overflow error still triggers reactive recovery.
+        let anchored = self
+            .last_real_prompt_tokens
+            .map(|t| t as usize)
+            .unwrap_or(0);
+        if anchored >= self.max_context_tokens {
+            return false;
+        }
+        !self.provider_omits_usage
     }
 
     /// Feed the provider's real usage back in. Call once per **completed**
@@ -1166,5 +1222,109 @@ mod tests {
         assert!(c.anti_thrash_blocked(), "still blocks in memory");
         assert!(c.recovery_deadline() > 0.0, "armed in memory");
         assert_eq!(c.ineffective_count(), 2, "count is local-only");
+    }
+
+    // ---- P3-6 slice 4: preflight deferral to real usage ---------------------
+    //
+    // hermes `should_defer_preflight_to_real_usage` (context_compressor.py:2975).
+    // Four conditions, in upstream's order — each one tested separately because
+    // getting any of them wrong either wastes a summarization call on a
+    // transcript that fits, or lets the estimate become the only signal so
+    // compression can never fire (#2153).
+
+    /// Below the threshold there is nothing to defer: the estimate alone says
+    /// the request fits.
+    #[test]
+    fn p36_defer_is_false_below_threshold() {
+        let c = ContextCompressor::new(10_000);
+        assert!(!c.should_defer_preflight_to_real_usage(9_999));
+        // And `defer_preflight` agrees on the same transcript.
+        assert!(!c.defer_preflight(&convo(4, 40)));
+    }
+
+    /// 🔴 Right after a compaction the latch is armed and the last real reading
+    /// describes a transcript that no longer exists — the rough figure must wait
+    /// one request (#4750 death spiral).
+    #[test]
+    fn p36_defer_is_true_while_the_compaction_latch_is_armed() {
+        let mut c = ContextCompressor::new(10_000);
+        c.note_compaction_ran();
+        assert!(c.should_defer_preflight_to_real_usage(20_000));
+    }
+
+    /// 🔴 Estimate magnitude is not evidence of overflow, even far past the full
+    /// window: with no latch armed, let the provider adjudicate. If it really
+    /// does not fit, the overflow error drives reactive compaction (slice 3).
+    #[test]
+    fn p36_defer_lets_the_provider_adjudicate_a_huge_estimate() {
+        let c = ContextCompressor::new(10_000);
+        // One million tokens of rough estimate — still deferred, by design.
+        assert!(c.should_defer_preflight_to_real_usage(1_000_000));
+        // And the gate-level predicate agrees on a real over-budget transcript.
+        let big = convo(4, 400_000); // ~400k tokens
+        assert!(c.needs_compression(&big), "estimate path still fires");
+        assert!(
+            c.defer_preflight(&big),
+            "but the gate must defer it to real usage"
+        );
+    }
+
+    /// 🔴 Once the provider has proven it omits usage, the estimate is the ONLY
+    /// signal there will ever be — deferring would mean compression can never
+    /// fire (#2153).
+    #[test]
+    fn p36_defer_is_false_when_the_provider_omits_usage() {
+        let mut c = ContextCompressor::new(10_000);
+        // A completed response with no usage proves the omission.
+        c.note_response_usage(None, 4);
+        assert!(c.provider_omits_usage());
+        assert!(!c.should_defer_preflight_to_real_usage(20_000));
+        assert!(!c.defer_preflight(&convo(4, 400_000)));
+    }
+
+    /// 🔴 A real reading at or above the threshold already proves the context
+    /// does not fit — there is nothing left to wait for, so the estimate-based
+    /// deferral must not suppress compression.
+    #[test]
+    fn p36_defer_is_false_once_a_real_reading_is_over_threshold() {
+        let mut c = ContextCompressor::new(10_000);
+        c.note_response_usage(Some(&usage(12_000)), 4);
+        assert!(!c.should_defer_preflight_to_real_usage(20_000));
+        // And the gate predicate short-circuits on any anchored transcript,
+        // because an anchored figure is not a rough estimate at all.
+        assert!(!c.defer_preflight(&convo(4, 400_000)));
+    }
+
+    /// 🔴 Usage-anchored figures NEVER defer — hermes is explicit that callers
+    /// skip the deferral for (real prompt count + delta appended since), because
+    /// the bulk of that number is the provider's own count, not a guess.
+    #[test]
+    fn p36_anchored_transcripts_never_defer() {
+        let mut c = ContextCompressor::new(10_000);
+        // A small real reading anchors the compressor.
+        c.note_response_usage(Some(&usage(1_000)), 4);
+        // The transcript then grows far past the budget, but the figure is
+        // anchored: the gate must not defer, and compression must fire.
+        let big = convo(40, 400_000);
+        assert!(c.needs_compression(&big));
+        assert!(!c.defer_preflight(&big));
+    }
+
+    /// 🔴 `needs_compression` keeps its original contract — the deferral is
+    /// asked by the gate layer (`turn_preflight_gate.py:97`), NOT folded into the
+    /// predicate. Folding it in silently changed behaviour for every caller and
+    /// broke three pre-existing tests; this pins the separation.
+    #[test]
+    fn p36_deferral_is_not_folded_into_needs_compression() {
+        let c = ContextCompressor::new(10_000);
+        let big = convo(4, 400_000);
+        assert!(
+            c.needs_compression(&big),
+            "the predicate itself must not defer"
+        );
+        assert!(
+            c.defer_preflight(&big),
+            "the gate predicate does defer — they are separate questions"
+        );
     }
 }

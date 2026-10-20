@@ -1165,7 +1165,18 @@ impl Agent {
             // false immediately, so only the clock can clear the breaker once
             // its recovery window elapses and let the probation probe through
             // (hermes `_automatic_compression_blocked`, P3-5c).
-            if !compressor.anti_thrash_blocked() && compressor.needs_compression(&messages) {
+            //
+            // P3-6: the preflight deferral is asked HERE, not inside
+            // `needs_compression` — exactly where hermes asks it
+            // (`turn_preflight_gate.py:97`). When the only figure available is a
+            // rough whole-transcript estimate, let the provider adjudicate: if it
+            // really does not fit, the overflow error drives reactive compaction
+            // and a retry (slice 3) instead of spending a summarization call on a
+            // transcript that may well fit.
+            if !compressor.anti_thrash_blocked()
+                && compressor.needs_compression(&messages)
+                && !compressor.defer_preflight(&messages)
+            {
                 if self.compact_messages(&mut compressor, &mut messages).await {
                     debug!("Context compressed");
                 }
