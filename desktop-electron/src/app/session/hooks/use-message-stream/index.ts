@@ -447,7 +447,10 @@ export function useMessageStream({
 
       // The composer status stack owns todo display now (no inline panel) —
       // mirror every todo state the tool reports into its session store.
-      if (isTodoToolName(payload?.name)) {
+      // 🔴 `payload &&` (not `payload?.`): behaviorally identical — an undefined
+      // payload never names a todo tool — but it narrows the type for the three
+      // dereferences below (pre-existing TS18048 debt from the vendored fork).
+      if (payload && isTodoToolName(payload.name)) {
         const todos = parseTodos(payload.todos) ?? parseTodos(payload.result) ?? parseTodos(payload.args)
 
         if (todos) {
