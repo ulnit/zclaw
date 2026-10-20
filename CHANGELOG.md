@@ -182,9 +182,11 @@ could sit under budget while the provider was already at its limit.
   transcript that was just replaced. 🔴 Without it the next iteration re-compresses on
   stale numbers — the death spiral hermes fixed in #4750/#2153.
 - **Anti-thrash breaker**: two provider-confirmed *ineffective* compactions stop
-  auto-compression for the run. When the incompressible floor alone exceeds the
-  threshold, shrinking messages can never help and every pass is wasted money and lost
-  context (#14695). A real reading back under the threshold resets it.
+  auto-compression (at landing: for the rest of the run — since superseded by P3-5c's
+  recovery window below, and by P3-5d the state also survives across turns). When the
+  incompressible floor alone exceeds the threshold, shrinking messages can never help and
+  every pass is wasted money and lost context (#14695). A real reading back under the
+  threshold resets it.
 - The ineffective verdict is judged **only** in `note_response_usage`, never in the
   trigger check: hermes is explicit that the trigger runs twice per turn against two
   different measures (rough preflight vs real post-response, #36718), and the rough one
@@ -242,6 +244,65 @@ Verification (WSL/Linux): lib+bins `--profile test` 0 errors; the 4 new tests pa
 `reload_mcp_cancel_keeps_everything`) + 1 ignored; mobile-ffi 0 errors; rustfmt 0 regions
 (HEAD baseline 0; the 2 pre-edit regions were both in the new code). `agent/mod.rs` is a
 leaf file, so a whole-file fmt is safe here — module roots recurse into submodules.
+
+### Anti-thrash breaker recovers instead of blocking forever (P3-5c, `7259b9d` + `d3741c9`)
+
+Ports hermes #14694 in full. Until now a tripped breaker disabled auto-compression
+permanently — but the tripped verdict was made against the transcript *as it existed
+then*, and the conversation keeps growing. Without a recovery path the session never
+auto-compacts again and rides into the provider's hard context limit.
+
+**Storage half (`7259b9d`)** — two durable `sessions` columns, byte-for-byte upstream's
+shape (`hermes_state_common.py:433-434`, accessed via `_write_session_column`, **not**
+`model_config`): `compression_ineffective_count INTEGER NOT NULL DEFAULT 0` and
+`compression_recovery_deadline REAL` (NULL = unarmed; disarming writes NULL, per
+upstream's `normalized or None`). Clamped at both write and read (`max(0, …)`), empty
+session id never writes, store failures are logged not raised (`_durable_write`
+semantics), idempotent migration in `open()`.
+
+**Recovery clock (`d3741c9`)** — `ANTI_THRASH_RECOVERY_SECONDS = 300.0` (upstream
+`_ANTI_THRASH_RECOVERY_SECONDS`). After a tripped breaker stays blocked for one window it
+allows **one probation probe** by dropping the strike count to 1; if that probe is
+ineffective the very next verdict re-trips, so the worst case is one compaction attempt
+per window — bounded, not thrashing. Faithful details:
+
+- 🔴 **Wall clock, never monotonic, and durable.** The compressor gets rebuilt (P3-5d's
+  LRU eviction past 64 sessions, or any restart). A process-local deadline restarts the
+  wait on every rebuild, so a tripped session never earns its probe — the exact bug hermes
+  fixed in #100185 ("a blocked messaging session never earned its probe and stayed blocked
+  forever"). Tests pin this directly.
+- `bind_guard` makes the **durable row authoritative** (#54923 "restart must not disarm",
+  #69872): a rebuilt compressor inherits the armed/tripped guard instead of starting clean.
+- Lazy arming on the first BLOCKED evaluation; a backwards clock jump re-arms so the wait
+  never exceeds one window; an untripped guard disarms any pending clock.
+- Blocked-then-refresh mirrors `_refresh_durable_guards`: when about to block, re-read the
+  row, because a sibling agent on the same session may already have cleared it.
+- Strike changes go through `record_ineffective_verdict` (persists only on change), so
+  every trip/reset path in `note_response_usage` keeps the durable row in sync.
+- In the agent loop `anti_thrash_blocked()` is evaluated **before** `needs_compression()` —
+  while tripped, `needs_compression` returns false immediately, so only the clock can clear
+  the breaker to let the probe through.
+- `CompressionGuardStore` is a trait so `context/` does not depend on `session/`; the agent
+  supplies `SessionCompressionGuard` (store + session id → the two columns).
+
+Tests: 4 storage (round-trip incl. disarm-writes-NULL verified through the raw column,
+clamping incl. a hand-edited negative row, empty/unknown session, lossless migration from a
+DB stripped of the columns) + 7 clock (trip blocks and arms ~300s out / elapsed window
+grants one probe and re-trips on failure / 🔴 rebuilt compressor inherits the guard and
+resumes the SAME window / 🔴 a durable past deadline lets a rebuilt compressor probe
+immediately / sibling clearing the row unblocks via refresh / backwards clock jump clamped
+/ unbound compressor runs the clock in memory only — the correct degraded mode).
+
+Verification (WSL/Linux): lib+bins `--profile test` 0 errors; `context::compressor` 24/24,
+`context::` 34/34, `agent::` 20/20, `session::sqlite` 51/51; full suite 2550 passed /
+1 failed (known flaky) + 1 ignored, count 2545+7=2552 ✓; mobile-ffi 0 errors; rustfmt 0
+regions (HEAD baseline 0).
+
+⚠️ Process note: the first four clock tests failed because the fixtures tripped the breaker
+in memory and *then* bound an empty mock — `bind_guard` correctly overwrote memory with the
+durable 0. The bug was in the fixtures, not the implementation (the durable row being
+authoritative is the behaviour under test); fixed by seeding the durable row first, which
+is production order.
 
 ### Session-level `model_config` JSON KV (`6662a6e`)
 
