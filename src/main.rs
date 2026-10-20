@@ -2479,6 +2479,13 @@ async fn main() {
         eprintln!("[plugins] {warning}");
     }
 
+    // Startup session-store auto-maintenance (hermes `_housekeeping_state_db_
+    // maintenance`): once per process, before serving any command. Idempotent +
+    // 24h-throttled via state_meta, cross-process-locked, and never fatal —
+    // gated on sessions.auto_prune inside. This is what makes the
+    // `sessions.auto_prune = true` default actually take effect.
+    run_session_auto_maintenance(&ulnclaw::config::ulnclaw_home(), &config).await;
+
     let result = dispatch(cli, config).await;
     // Hermes atexit parity: release any cloud browser session so paid
     // backends do not leak orphaned sessions after a clean exit.
@@ -2498,6 +2505,13 @@ async fn build_gateway_stack(
     gateway_key: Option<String>,
 ) -> Result<Arc<ulnclaw::gateway::GatewayState>, String> {
     std::fs::create_dir_all(home).ok();
+    // Per-served-profile store maintenance (hermes `_for_each_served_profile` +
+    // `_housekeeping_state_db_maintenance`, `gateway/run.py:3675`): a multiplexed
+    // secondary profile has its own state.db AND its own `sessions` config —
+    // maintaining only the launch home left secondary profiles unpruned by
+    // anybody. Idempotent + throttled, so the canonical-home stack re-entering
+    // after main()'s call is a cheap skip.
+    run_session_auto_maintenance(home, config).await;
     let router = ulnclaw::gateway::ApprovalRouter::with_options(
         std::time::Duration::from_secs(config.approvals.timeout),
         Some(home.join("approvals.json")),
@@ -3096,6 +3110,54 @@ fn init_logging(verbose: bool) {
         .with(stderr_layer)
         .with(file_layers)
         .init();
+}
+
+/// Startup session-store auto-maintenance (hermes
+/// `_housekeeping_state_db_maintenance`, `gateway/run.py:4659`). Idempotent and
+/// never fatal: opens its OWN store (SQLite connections are thread-bound), runs
+/// at most once per `min_interval_hours` (throttle in `state_meta`, shared
+/// across processes), and only ever SKIPS — housekeeping must never block
+/// startup or refuse a turn.
+///
+/// Early-returns unless `sessions.auto_prune` is on (upstream gates on
+/// `auto_archive or auto_prune`; auto_archive is not ported). `home` is a
+/// parameter so a multiplexed gateway can maintain each profile's store the
+/// same way; the default startup path passes the canonical home.
+async fn run_session_auto_maintenance(home: &std::path::Path, config: &UlncLawConfig) {
+    if !config.sessions.auto_prune {
+        return;
+    }
+    let sessions = config.sessions.clone();
+    let home = home.to_path_buf();
+    // Off the async worker: prune+sweep on a large store is synchronous I/O, and
+    // a rusqlite connection must not be held across awaits.
+    let _ = tokio::task::spawn_blocking(move || {
+        let store = match SqliteSessionStore::open(home.join("state.db")) {
+            Ok(store) => store,
+            Err(e) => {
+                tracing::debug!(error = %e, "auto-maintenance: no session store to maintain");
+                return;
+            }
+        };
+        let report = store.maybe_auto_prune_and_vacuum(
+            sessions.retention_days,
+            sessions.min_interval_hours,
+            sessions.vacuum_after_prune,
+            sessions.min_vacuum_interval_days,
+            ulnclaw::session::sqlite::AUTO_VACUUM_MIN_FREELIST_RATIO,
+        );
+        if report.pruned > 0 || report.closed > 0 {
+            tracing::info!(
+                pruned = report.pruned,
+                closed = report.closed,
+                "startup session auto-maintenance completed"
+            );
+        }
+        if let Some(err) = report.error {
+            tracing::warn!(error = %err, "startup session auto-maintenance reported an error");
+        }
+    })
+    .await;
 }
 
 async fn dispatch(cli: Cli, config: UlncLawConfig) -> Result<(), String> {
@@ -13608,4 +13670,50 @@ async fn cron_cmd(config: &UlncLawConfig, action: CronAction) -> Result<(), Stri
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 🔴 The startup wiring must actually consume `config.sessions.*`. Without
+    /// this test the `[sessions]` block (④) stays inert — nothing would prove
+    /// the config reaches `maybe_auto_prune_and_vacuum`. Asserts both legs of
+    /// the upstream gate (`_housekeeping_state_db_maintenance` early-returns
+    /// unless auto_prune is on):
+    /// - `auto_prune = false` → the store is never opened, no state.db appears;
+    /// - `auto_prune = true`  → the store is maintained and the cross-process
+    ///   throttle stamp (`last_auto_prune`) is recorded.
+    #[tokio::test]
+    async fn auto_maintenance_honours_the_sessions_config_block() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().to_path_buf();
+
+        let mut config = UlncLawConfig::default();
+        config.sessions.auto_prune = false;
+        run_session_auto_maintenance(&home, &config).await;
+        assert!(
+            !home.join("state.db").exists(),
+            "a disabled config must not open or create a store"
+        );
+
+        config.sessions.auto_prune = true;
+        run_session_auto_maintenance(&home, &config).await;
+        assert!(
+            home.join("state.db").exists(),
+            "an enabled config must maintain the store"
+        );
+        let store = SqliteSessionStore::open(home.join("state.db")).unwrap();
+        assert!(
+            store.get_meta("last_auto_prune").unwrap().is_some(),
+            "a completed pass must record its throttle stamp"
+        );
+
+        // Idempotent: a second call inside the window is a cheap skip and must
+        // not disturb the stamp.
+        let first = store.get_meta("last_auto_prune").unwrap();
+        run_session_auto_maintenance(&home, &config).await;
+        let store = SqliteSessionStore::open(home.join("state.db")).unwrap();
+        assert_eq!(store.get_meta("last_auto_prune").unwrap(), first);
+    }
 }
