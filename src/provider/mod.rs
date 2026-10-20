@@ -295,6 +295,29 @@ pub trait Provider: Send + Sync {
             "this provider does not support video analysis (analyze_video)",
         ))
     }
+
+    /// The base URL this provider talks to (hermes route key component).
+    /// Default: empty — providers that participate in reasoning-echo route
+    /// resolution must override it, because the P3-1e persistence layer keys
+    /// stored rejections by `(name, host_of(endpoint), model)` and an empty
+    /// endpoint would make every default-impl provider share one bogus route.
+    fn endpoint(&self) -> &str {
+        ""
+    }
+
+    /// P3-1e: whether this route has *learned* (this process) that the wire
+    /// rejects replayed reasoning. The agent reads it after a call to persist
+    /// the rejection into the session's `model_config` (hermes
+    /// `record_reasoning_field_rejection` → session KV). Default: never learns.
+    fn learned_reasoning_rejection(&self) -> bool {
+        false
+    }
+
+    /// P3-1e: seed a previously persisted rejection so a resumed session
+    /// starts with the route already downgraded — hermes' "a resumed process
+    /// never re-learns with another 400". Default: no-op (providers without
+    /// the learner have nothing to seed).
+    fn seed_reasoning_rejection(&self) {}
 }
 
 /// Provider configuration for dynamic instantiation

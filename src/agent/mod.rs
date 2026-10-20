@@ -238,6 +238,13 @@ pub struct Agent {
     /// batch (hermes `/steer` parity).
     steer_inboxes:
         tokio::sync::Mutex<std::collections::HashMap<String, std::collections::VecDeque<String>>>,
+    /// P3-1e: the session whose `model_config` persists learned reasoning
+    /// rejections for the current run. Set at the top of `run()` (the session
+    /// id is a run-local), read by `build_fallback_provider` so a fallback
+    /// built mid-run is seeded too. Providers outlive sessions and are shared
+    /// across them, so this is deliberately NOT the persistence key itself —
+    /// it only routes reads/writes to the right session row.
+    active_session: std::sync::Mutex<Option<String>>,
 }
 
 /// One fallback provider slot (hermes `fallback_providers` entry).
@@ -282,6 +289,7 @@ impl Agent {
             fallback_active: tokio::sync::Mutex::new(None),
             smart_denial_streak: std::sync::atomic::AtomicU64::new(0),
             steer_inboxes: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+            active_session: std::sync::Mutex::new(None),
         }
     }
 
@@ -357,8 +365,107 @@ impl Agent {
         index.map(|i| i + 1).unwrap_or(0) < self.fallback_chain.len()
     }
 
+    /// P3-1e: after a successful call, if the provider's learner fired during
+    /// it, write the rejection into the active session's `model_config`.
+    /// Cheap on the hot path: one relaxed atomic load before anything else.
+    fn persist_learned_rejection(&self, provider: &dyn Provider) {
+        if !provider.learned_reasoning_rejection() {
+            return;
+        }
+        let sid = self
+            .active_session
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        if let Some(sid) = sid {
+            self.persist_reasoning_rejection(&sid, provider);
+        }
+    }
+
+    /// P3-1e: seed one provider from the session's persisted rejections
+    /// (hermes: a resumed process never re-learns with another 400). The
+    /// stored route list is keyed `(provider, host, model)` exactly like
+    /// upstream; only an exact match on this provider's own route seeds it —
+    /// a rejection learned on one model must not silence reasoning on another.
+    fn seed_provider_from_session(&self, session_id: &str, provider: &dyn Provider) {
+        if provider.learned_reasoning_rejection() {
+            return; // already armed this process; nothing to gain
+        }
+        let Some(store) = self.store.as_ref() else {
+            return;
+        };
+        let Ok(routes) = store.rejected_reasoning_routes(session_id) else {
+            return;
+        };
+        let host = crate::provider::reasoning_echo::host_of(provider.endpoint());
+        let matched = routes.iter().any(|r| {
+            r.provider.eq_ignore_ascii_case(provider.name())
+                && r.host == host
+                && r.model == provider.model()
+                && !r.carriers.is_empty()
+        });
+        if matched {
+            provider.seed_reasoning_rejection();
+            debug!(
+                session = session_id,
+                provider = provider.name(),
+                model = provider.model(),
+                "seeded persisted reasoning rejection into provider"
+            );
+        }
+    }
+
+    /// P3-1e: persist a newly learned rejection into the session's
+    /// `model_config` (hermes `patch_session_model_config` under
+    /// `reasoning_rejected_carriers`). Merge-not-replace: other routes'
+    /// entries survive; an entry for this exact route is updated in place.
+    /// Best-effort — a store failure must never fail the turn.
+    fn persist_reasoning_rejection(&self, session_id: &str, provider: &dyn Provider) {
+        if !provider.learned_reasoning_rejection() {
+            return;
+        }
+        let Some(store) = self.store.as_ref() else {
+            return;
+        };
+        let host = crate::provider::reasoning_echo::host_of(provider.endpoint());
+        let Ok(mut routes) = store.rejected_reasoning_routes(session_id) else {
+            return;
+        };
+        let route = crate::session::sqlite::RejectedReasoningRoute {
+            provider: provider.name().to_string(),
+            host: host.clone(),
+            model: provider.model().to_string(),
+            // ulnclaw's wire has exactly one carrier; the vec keeps upstream's
+            // shape (storage already whitelists on read).
+            carriers: vec!["reasoning_content".to_string()],
+        };
+        let existing = routes.iter_mut().find(|r| {
+            r.provider.eq_ignore_ascii_case(&route.provider)
+                && r.host == route.host
+                && r.model == route.model
+        });
+        match existing {
+            Some(r) => r.carriers = route.carriers,
+            None => routes.push(route),
+        }
+        if let Err(e) = store.set_rejected_reasoning_routes(session_id, &routes) {
+            warn!(session = session_id, error = %e, "could not persist reasoning rejection");
+        } else {
+            debug!(
+                session = session_id,
+                provider = provider.name(),
+                model = provider.model(),
+                "persisted learned reasoning rejection"
+            );
+        }
+    }
+
     /// Build (lazily) the provider instance for a fallback entry, with
     /// credential fallback to the main runtime key.
+    ///
+    /// P3-1e: a freshly built fallback is seeded from the active session's
+    /// persisted rejections, so a fallback route that rejected
+    /// `reasoning_content` in an earlier process starts downgraded.
     async fn build_fallback_provider(&self, entry: &FallbackEntry) -> Result<Arc<dyn Provider>> {
         let config = &self.context.config;
         let api_key = config.resolve_api_key();
@@ -369,13 +476,23 @@ impl Agent {
             )));
         }
         let base_url = crate::config::default_base_url(&entry.provider_name);
-        crate::provider::auxiliary::build_task_provider(
+        let provider = crate::provider::auxiliary::build_task_provider(
             &entry.provider_name,
             &entry.model,
             &base_url,
             api_key.as_deref(),
             config.model.max_retries,
-        )
+        )?;
+        // P3-1e: seed from the active session's persisted rejections (if any).
+        let sid = self
+            .active_session
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        if let Some(sid) = sid {
+            self.seed_provider_from_session(&sid, provider.as_ref());
+        }
+        Ok(provider)
     }
 
     /// Set agent configuration
@@ -709,6 +826,15 @@ impl Agent {
             None
         };
         if let Some(ref sid) = session_id {
+            // P3-1e: this session is now the persistence target for reasoning
+            // rejections, and the primary provider is seeded from what an
+            // earlier process stored (hermes: a resumed session never
+            // re-learns a known-bad carrier with another 400).
+            *self
+                .active_session
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()) = Some(sid.clone());
+            self.seed_provider_from_session(sid, self.provider.as_ref());
             // When resuming, history rows already exist in the store — only
             // append the new user message (system prompt + history are known).
             let start = if resuming {
@@ -1305,13 +1431,24 @@ impl Agent {
         // Non-streaming path (no active stream consumer, or provider
         // doesn't support streaming).
         if !request.stream || !provider.supports_streaming() {
-            return provider.chat_completion(request).await;
+            let response = provider.chat_completion(request).await;
+            if response.is_ok() {
+                // P3-1e: the provider's internal retry loop may have learned
+                // "this route rejects reasoning_content" while producing this
+                // very response — persist it so a later process starts seeded.
+                self.persist_learned_rejection(provider);
+            }
+            return response;
         }
 
         // Streaming path: accumulate chunks into a ProviderResponse while
         // emitting content deltas to the stream consumer.
         use futures::TryStreamExt;
         let mut stream = provider.chat_completion_stream(request).await?;
+        // P3-1e: same hook as the non-streaming path — the provider's POST
+        // retry loop may have learned a rejection while establishing this
+        // stream (the learner lives in the shared outer retry loop).
+        self.persist_learned_rejection(provider);
         let mut content = String::new();
         let mut reasoning = String::new();
         let mut tool_deltas: Vec<crate::provider::ToolCallDelta> = Vec::new();
@@ -1808,6 +1945,7 @@ impl SubAgentRunner for Agent {
             fallback_active: tokio::sync::Mutex::new(None),
             smart_denial_streak: std::sync::atomic::AtomicU64::new(0),
             steer_inboxes: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+            active_session: std::sync::Mutex::new(None),
         };
         // Children inherit the fallback chain configuration.
         let child = child.with_fallback_specs(&self.fallback_specs());
@@ -1881,6 +2019,7 @@ impl CronRunner for Agent {
             fallback_active: tokio::sync::Mutex::new(None),
             smart_denial_streak: std::sync::atomic::AtomicU64::new(0),
             steer_inboxes: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+            active_session: std::sync::Mutex::new(None),
         };
         let cron_agent = cron_agent.with_fallback_specs(&self.fallback_specs());
         // Hermes cron approval context: unattended run — the approval gate
@@ -2356,5 +2495,119 @@ mod tests {
             )
             .await;
         assert!(blocked.is_some());
+    }
+
+    // ---- P3-1e wiring: persistence <-> provider seeding ------------------
+
+    fn openai_like(endpoint: &str, model: &str) -> Arc<crate::provider::openai::OpenAiProvider> {
+        Arc::new(
+            crate::provider::openai::OpenAiProvider::builder()
+                .endpoint(endpoint)
+                .name("openai")
+                .model(model)
+                .api_key("test-key")
+                .build()
+                .unwrap(),
+        )
+    }
+
+    fn agent_with_store(dir: &std::path::Path) -> (Agent, Arc<SqliteSessionStore>, String) {
+        let store = Arc::new(SqliteSessionStore::open(dir.join("state.db")).unwrap());
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        let (provider, _) = counting(Some("ok"));
+        let agent = Agent::new(provider, ToolRegistry::new()).with_store(store.clone());
+        (agent, store, sid)
+    }
+
+    /// Persist writes the route key hermes uses — (provider, host, model) +
+    /// carriers — and seed on a FRESH provider instance (a new process) picks
+    /// it up, so a resumed session never re-learns with another 400.
+    #[test]
+    fn p31e_persist_and_seed_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let (agent, store, sid) = agent_with_store(dir.path());
+        let endpoint = "https://api.example.com/v1";
+
+        // Simulate "the learner fired during a call" by arming the log.
+        let provider = openai_like(endpoint, "gpt-x");
+        provider.seed_reasoning_rejection();
+        assert!(provider.learned_reasoning_rejection());
+
+        agent.persist_reasoning_rejection(&sid, provider.as_ref());
+
+        // Storage contract: exact hermes key shape.
+        let routes = store.rejected_reasoning_routes(&sid).unwrap();
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].provider, "openai");
+        assert_eq!(routes[0].host, "api.example.com", "host_of(endpoint)");
+        assert_eq!(routes[0].model, "gpt-x");
+        assert_eq!(routes[0].carriers, vec!["reasoning_content".to_string()]);
+
+        // A fresh instance (restart) gets seeded from the session row.
+        let fresh = openai_like(endpoint, "gpt-x");
+        assert!(!fresh.learned_reasoning_rejection(), "fresh = unlearned");
+        agent.seed_provider_from_session(&sid, fresh.as_ref());
+        assert!(
+            fresh.learned_reasoning_rejection(),
+            "seeded from persisted route"
+        );
+    }
+
+    /// Route keys are exact: a different model (or provider/host) must NOT
+    /// seed — a rejection learned on one route must not silence reasoning on
+    /// another.
+    #[test]
+    fn p31e_seed_only_matches_the_exact_route() {
+        let dir = tempfile::tempdir().unwrap();
+        let (agent, _store, sid) = agent_with_store(dir.path());
+        let endpoint = "https://api.example.com/v1";
+
+        let learner = openai_like(endpoint, "gpt-x");
+        learner.seed_reasoning_rejection();
+        agent.persist_reasoning_rejection(&sid, learner.as_ref());
+
+        let other_model = openai_like(endpoint, "gpt-y");
+        agent.seed_provider_from_session(&sid, other_model.as_ref());
+        assert!(
+            !other_model.learned_reasoning_rejection(),
+            "different model must stay armed with reasoning"
+        );
+
+        let other_host = openai_like("https://other.example.com/v1", "gpt-x");
+        agent.seed_provider_from_session(&sid, other_host.as_ref());
+        assert!(!other_host.learned_reasoning_rejection());
+    }
+
+    /// Merge-not-replace: persisting a second route keeps the first (hermes'
+    /// `patch_session_model_config` semantics — other entries survive).
+    #[test]
+    fn p31e_persist_merges_routes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (agent, store, sid) = agent_with_store(dir.path());
+
+        let a = openai_like("https://a.example.com/v1", "model-a");
+        a.seed_reasoning_rejection();
+        agent.persist_reasoning_rejection(&sid, a.as_ref());
+        let b = openai_like("https://b.example.com/v1", "model-b");
+        b.seed_reasoning_rejection();
+        agent.persist_reasoning_rejection(&sid, b.as_ref());
+
+        let routes = store.rejected_reasoning_routes(&sid).unwrap();
+        assert_eq!(routes.len(), 2);
+        // Re-persisting the same route updates in place, no duplicate.
+        agent.persist_reasoning_rejection(&sid, a.as_ref());
+        let routes = store.rejected_reasoning_routes(&sid).unwrap();
+        assert_eq!(routes.len(), 2, "same route must merge, not duplicate");
+    }
+
+    /// An unlearned provider never writes: persist is a no-op (no phantom
+    /// route rows for healthy providers).
+    #[test]
+    fn p31e_persist_is_noop_for_unlearned_provider() {
+        let dir = tempfile::tempdir().unwrap();
+        let (agent, store, sid) = agent_with_store(dir.path());
+        let healthy = openai_like("https://api.example.com/v1", "gpt-x");
+        agent.persist_reasoning_rejection(&sid, healthy.as_ref());
+        assert!(store.rejected_reasoning_routes(&sid).unwrap().is_empty());
     }
 }

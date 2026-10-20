@@ -161,7 +161,11 @@ const CONTENT_HOSTS: &[&str] = &[
 /// Extract the host from a base URL / endpoint for suffix matching.
 ///
 /// Accepts a bare host, a host:port, or a full URL. Returns the lowercased host without port.
-fn host_of(endpoint: &str) -> String {
+///
+/// Public because the P3-1e persistence layer keys routes by `(provider, host,
+/// model)` exactly as hermes does — the agent must derive the same host string
+/// the echo rules match on, or a stored rejection would never be found again.
+pub fn host_of(endpoint: &str) -> String {
     let s = endpoint.trim().to_ascii_lowercase();
     // strip scheme
     let after_scheme = match s.find("://") {
@@ -568,13 +572,17 @@ pub fn body_rejects_reasoning_content(error_body: &str, sent_reasoning_content: 
 /// `(name, model, endpoint)` triple (the same tuple hermes uses as its route key),
 /// per-instance state **is** per-route state. No keying, no map.
 ///
-/// # Scope: process-lifetime, not persisted
+/// # Scope: process-lifetime, seeded and persisted by the agent (P3-1e)
 ///
-/// hermes additionally writes rejections into the session's `model_config` so a
-/// resumed process never re-learns with another 400. ulnclaw's provider layer sits
-/// *below* the session layer and has no store handle, so threading persistence in
-/// would invert that dependency. This log therefore lives as long as the provider
-/// instance (i.e. the process); a restart re-learns once. Tracked as P3-1e.
+/// hermes writes rejections into the session's `model_config` so a resumed
+/// process never re-learns with another 400. ulnclaw's provider layer sits
+/// *below* the session layer and has no store handle, so persistence is NOT
+/// done here — threading a store in would invert that dependency. Instead the
+/// log exposes `is_rejected()`/`record()` and the provider exposes
+/// `learned_reasoning_rejection()`/`seed_reasoning_rejection()`; the **agent**
+/// (which already holds both the store and the session id) reads the session's
+/// stored routes at run start to seed, and writes back when a route newly
+/// learns. See `agent::persist_reasoning_rejections`.
 #[derive(Debug, Default)]
 pub struct ReasoningRejectionLog {
     rejected: std::sync::atomic::AtomicBool,
@@ -598,6 +606,16 @@ impl ReasoningRejectionLog {
         !self
             .rejected
             .swap(true, std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// P3-1e: seed a rejection persisted from an earlier process. Distinct
+    /// from `record()` because seeding must never look like "a new rejection
+    /// was learned this call" — `record()` returns true-on-first-write and the
+    /// retry loop keys off that; seeding returns nothing and simply pre-arms
+    /// the flag so the next `build_api_request` skips the carrier.
+    pub fn seed(&self) {
+        self.rejected
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

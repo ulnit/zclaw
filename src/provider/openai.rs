@@ -853,6 +853,24 @@ impl Provider for OpenAiProvider {
         &self.name
     }
 
+    fn endpoint(&self) -> &str {
+        &self.endpoint
+    }
+
+    /// P3-1e: expose the process-lifetime learner state to the agent layer
+    /// (which owns the store + session id) for persistence into
+    /// `model_config` under `reasoning_rejected_carriers`.
+    fn learned_reasoning_rejection(&self) -> bool {
+        self.reasoning_rejected.is_rejected()
+    }
+
+    /// P3-1e: pre-arm from a persisted rejection so a resumed session never
+    /// re-learns with another 400 (hermes `get_session_model_config_value` →
+    /// `rejected_reasoning_carriers` seeding at request-build time).
+    fn seed_reasoning_rejection(&self) {
+        self.reasoning_rejected.seed();
+    }
+
     async fn analyze_image(&self, prompt: &str, image_url: &str) -> Result<String> {
         let body = serde_json::json!({
             "model": self.model,
