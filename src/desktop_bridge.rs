@@ -11,9 +11,17 @@
 //!   out to a process-wide broadcast bus consumed by the
 //!   `GET /api/desktop/events` SSE endpoint;
 //! - a **read_terminal callback** that performs a blocking
-//!   request/response round-trip: emit a `terminal.read` request event
-//!   carrying a unique id, then wait (20 s cap) for the webview's
-//!   `POST /api/desktop/read-response` answer.
+//!   request/response round-trip: emit a `terminal.read.request` event
+//!   carrying a unique id, then wait (20 s cap) for the webview's answer
+//!   (`POST /api/desktop/read-response`, or the WS `terminal.read.respond`
+//!   method — both resolve the same pending id).
+//! - a **set_theme callback** (`theme.set`, 320 s cap — a picker waits for a
+//!   human) with its own pending map and `theme.set.respond` method.
+//!
+//! 🔴 Event names are a cross-process contract with the vendored renderer and
+//! the WS mirror passes them through verbatim, so every name here is pinned by a
+//! test — an untested string is exactly how `terminal.read` drifted from
+//! `terminal.read.request` and silently broke the round-trip.
 //!
 //! Install is automatic at gateway serve time when `ULNCLAW_DESKTOP`
 //! is truthy; everywhere else this module stays inert.
@@ -26,6 +34,21 @@ use tokio::sync::broadcast;
 
 /// How long a blocking terminal read waits for the webview answer.
 pub const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Event name the renderer listens for to answer a `read_terminal` call
+/// (`gateway-event.ts:1001`).
+pub const EVENT_TERMINAL_READ: &str = "terminal.read.request";
+
+/// Event name carrying a `set_theme` request to the renderer (P2b).
+///
+/// 🔴 As of this commit the vendored renderer has **no** `theme.set` listener —
+/// its 40 `event.type` literals do not include it — so this round-trip cannot
+/// complete until either the renderer learns the name or the accent leg is
+/// re-routed onto the existing `skin.changed` pipeline (`gateway-event.ts:303`,
+/// which calls `ingestBackendSkin(payload, { apply: true })`). Kept as a named
+/// constant so the pending wiring is one edit, and so the test below fails
+/// loudly if anyone renames it without deciding that.
+pub const EVENT_THEME_SET: &str = "theme.set";
 
 /// One desktop event envelope on the bus.
 #[derive(Debug, Clone)]
@@ -71,9 +94,17 @@ fn read_terminal_roundtrip(start_line: Option<u64>, count: Option<u64>) -> Resul
     let id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
     let (tx, rx) = channel();
     pending_reads().lock().unwrap().insert(id.clone(), tx);
+    // 🔴 The renderer matches `terminal.read.request`
+    // (desktop-electron/src/app/session/hooks/use-message-stream/gateway-event.ts:1001),
+    // and the gateway WS mirror passes `event` through verbatim as the RpcEvent
+    // `type` (gateway_ws.rs:98). Publishing `terminal.read` here meant the request
+    // reached the wire under a name nothing listened for, so the renderer never
+    // answered and every `read_terminal` call blocked for READ_TIMEOUT and then
+    // failed. `.request`/`.respond` also matches the existing convention in the WS
+    // dispatch table (approval./clarify./sudo./secret.request + .respond).
     publish(
         "",
-        "terminal.read",
+        EVENT_TERMINAL_READ,
         &json!({
             "id": id,
             "start_line": start_line,
@@ -134,7 +165,7 @@ fn set_theme_roundtrip(session_id: &str, payload: Value) -> Result<String, Strin
     // pop up in an unrelated window.
     publish(
         session_id,
-        "theme.set",
+        EVENT_THEME_SET,
         &json!({ "id": id, "payload": payload }),
     );
     match rx.recv_timeout(THEME_TIMEOUT) {
@@ -204,6 +235,56 @@ mod tests {
     #[test]
     fn resolve_unknown_id_is_false() {
         assert!(!resolve_read("no-such-read", Err("x".into())));
+    }
+
+    /// 🔴 Cross-process contract test: the event names this bridge publishes must
+    /// be the exact strings the vendored renderer listens for. The WS mirror
+    /// passes `event` through verbatim (`gateway_ws.rs:98`), so a one-character
+    /// drift here silently breaks the round-trip — the request goes out, nothing
+    /// answers, and the tool blocks for the full timeout before failing. That is
+    /// precisely how `terminal.read` (published) vs `terminal.read.request`
+    /// (listened) broke `read_terminal`.
+    ///
+    /// Reads the renderer source directly so BOTH sides are pinned by one test.
+    /// Skips (does not fail) when the desktop tree is absent, e.g. an
+    /// engine-only checkout.
+    #[test]
+    fn published_event_names_match_the_renderer_listeners() {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let renderer = std::path::Path::new(manifest)
+            .join("desktop-electron/src/app/session/hooks/use-message-stream/gateway-event.ts");
+        let Ok(source) = std::fs::read_to_string(&renderer) else {
+            eprintln!(
+                "skipping: renderer source not found at {} (engine-only checkout)",
+                renderer.display()
+            );
+            return;
+        };
+        // The renderer's switch matches `event.type === '<name>'`.
+        let listens = |name: &str| source.contains(&format!("event.type === '{name}'"));
+
+        assert!(
+            listens(EVENT_TERMINAL_READ),
+            "renderer must listen for {EVENT_TERMINAL_READ:?} — the bridge publishes it and \
+             read_terminal blocks until the renderer answers"
+        );
+
+        // 🔴 `theme.set` has NO renderer listener yet (P2b's remaining work), so it
+        // is asserted the other way round: if this ever starts failing, the
+        // renderer learned the name and the round-trip is now live — update this
+        // test rather than deleting it.
+        assert!(
+            !listens(EVENT_THEME_SET),
+            "the renderer now listens for {EVENT_THEME_SET:?} — the set_theme round-trip is \
+             live; delete this stale expectation and add a positive assertion"
+        );
+        // …and the names it DOES listen for that this bridge drives must stay in sync.
+        for name in ["terminal.close", "pane.reveal", "message.reaction"] {
+            assert!(
+                listens(name),
+                "renderer listens for {name:?} — keep the publisher aligned"
+            );
+        }
     }
 
     /// 🔴 P2b `set_theme`: the theme round-trip has its own pending map and its
