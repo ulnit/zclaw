@@ -4632,6 +4632,7 @@ async fn chat_repl(
                 completion.delegation_id
             );
             history.push(Message {
+                reasoning: None,
                 role: Role::User,
                 content: Some(completion.message),
                 tool_calls: None,
@@ -5071,6 +5072,7 @@ async fn handle_slash(
                         change_parts.push("server list unchanged".to_string());
                     }
                     history.push(Message {
+                        reasoning: None,
                         role: Role::User,
                         content: Some(format!(
                             "[system note] MCP tools were just reloaded ({}). {} tool(s) now available.",
@@ -5198,6 +5200,7 @@ async fn handle_slash(
                                     println!("   Endpoint: {found}");
                                     println!();
                                     history.push(Message {
+                                        reasoning: None,
                                         role: Role::User,
                                         content: Some(BROWSER_CONNECT_NOTE.to_string()),
                                         tool_calls: None,
@@ -5215,6 +5218,7 @@ async fn handle_slash(
                                     "browser endpoint set to {url} (live until disconnect/exit)"
                                 );
                                 history.push(Message {
+                                    reasoning: None,
                                     role: Role::User,
                                     content: Some(BROWSER_CONNECT_NOTE.to_string()),
                                     tool_calls: None,
@@ -5230,6 +5234,7 @@ async fn handle_slash(
                     ulnclaw::browser::clear_cdp_override();
                     println!("browser endpoint override cleared");
                     history.push(Message {
+                        reasoning: None,
                         role: Role::User,
                         content: Some(
                             "[System note: The user has disconnected the browser tools from their                              live Chromium-family browser. Browser tools are back to default mode                              (managed local browser or configured endpoint).]"
@@ -10213,6 +10218,7 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                         }
                     };
                     let msg = ulnclaw::provider::Message {
+                        reasoning: None,
                         role,
                         content: message
                             .get("content")
