@@ -483,6 +483,24 @@ performance and a single static binary.
 - CLI `ulnclaw sessions prune|archive` (hermes semantics: bare prune = older than 90 days, any
   filter suppresses the implicit cutoff, bare archive refused, preview + y/N confirm + `--dry-run`,
   `--include-archived`) and `sessions stats` (totals, per-source counts, db size)
+- 🔴 **Prune excludes pinned by default** (hermes `_prune_filter_where`: appends
+  `COALESCE(s.pinned,0)=0` unless `include_pinned`). `PruneFilters.include_pinned` defaults false —
+  this fixed a pre-existing data-loss bug: even manual `sessions prune` could delete pinned sessions.
+- 🔴 **Startup auto-maintenance** (P3-3, hermes #54189 `maybe_auto_prune_and_vacuum`, default ON
+  after explicit user sign-off): the `[sessions]` config block (`auto_prune=true`/`retention_days=90`/
+  `vacuum_after_prune`/`min_vacuum_interval_days=30`/`min_interval_hours=24`, transcribed from
+  `config_defaults.py:2264`) is consumed once per process from `main()` and once per profile from
+  `build_gateway_stack` (hermes `_for_each_served_profile`). Semantics: 24h `state_meta` throttle
+  (corrupt stamp = proceed), non-blocking cross-process lock `<db>.auto-maintenance.lock`, **prune
+  first then sweep** (a just-closed orphan gets a full retention window), negative retention skips,
+  never raises. `sweep_orphaned_sessions` *closes* (never deletes; resumable, `startup_orphan_reap`)
+  stale open rows from the whitelist (cli/cron/kanban/acp/api_server/subagent/tool/recovered,
+  verbatim `hermes_state.py:472`); both `started_at` and last-activity must precede the cutoff
+  (protects fresh branch/compression children). 🔴 The VACUUM leg fails closed: upstream rewrites
+  only after proving no sibling process holds the store/WAL (`hermes_state_holders`, #110054); this
+  port has no holders scan, so it never VACUUMs and records why — manual `sessions optimize` stays
+  the explicit path. The pinned-tail CTE (unpinned continuations of a pinned compression ancestor)
+  is sequenced with the compression-lineage port, not skipped.
 - hermes' billing/chat/branch/cost filters map to columns ulnclaw doesn't track and stay unported
 
 <a id="welcome-banner-update-check-banner-py"></a>

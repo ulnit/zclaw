@@ -437,6 +437,18 @@ hermes-agent v2026.8.3 对标兼容 —— 原生性能，单一静态二进制�
   FTS）、`archive_sessions`（软隐藏、幂等）、`set_session_archived`、`session_count_by_source`
 - CLI `ulnclaw sessions prune|archive`（hermes 语义：裸 prune = 90 天以上，任一过滤器抑制隐式截断，裸 archive 拒绝执行，预览 +
   y/N 确认 + `--dry-run`、`--include-archived`）与 `sessions stats`（总量、按源计数、库大小）
+- 🔴 **prune 默认排除 pinned**（hermes `_prune_filter_where`：`include_pinned=false` 时追加 `COALESCE(s.pinned,0)=0`）。
+  `PruneFilters.include_pinned` 默认 false；这是既存数据丢失缺陷的修复——此前手动 `sessions prune` 也会删掉钉住的会话
+- 🔴 **启动自动维护**（P3-3，hermes #54189 `maybe_auto_prune_and_vacuum`，用户授权后默认开）：`[sessions]` 配置块
+  （`auto_prune=true`/`retention_days=90`/`vacuum_after_prune`/`min_vacuum_interval_days=30`/`min_interval_hours=24`，
+  逐字对齐 `config_defaults.py:2264`）→ `main()` 每进程一次 + `build_gateway_stack` 每 profile 一次（hermes
+  `_for_each_served_profile`）。语义：24h `state_meta` 节流（垃圾值=继续）、跨进程非阻塞锁
+  `<db>.auto-maintenance.lock`、**先 prune 后 sweep**（刚关闭的孤儿须享满保留窗口）、负 retention 跳过、never raises。
+  `sweep_orphaned_sessions` 关闭白名单源（cli/cron/kanban/acp/api_server/subagent/tool/recovered，逐字
+  `hermes_state.py:472`）的陈旧 open 行（`startup_orphan_reap`，非删除、可 resume）；`started_at` 与 last-active
+  须双双早于 cutoff（保护新建 branch/compression 子会话）。🔴 VACUUM 腿 fail-closed：上游须先证明无兄弟进程持有
+  store/WAL（`hermes_state_holders`，#110054），port 无该扫描 → 永不 VACUUM 并记录原因；手动 `sessions optimize`
+  仍是显式路径。pinned-tail CTE（已 pin 压缩祖先的未 pin 续段）随压缩血缘移植排期，非跳过。
 - hermes 的计费/聊天/分支/成本过滤器对应 ulnclaw 未跟踪的列，不实现
 
 <a id="皮肤-主题引擎-skin-engine-py"></a>

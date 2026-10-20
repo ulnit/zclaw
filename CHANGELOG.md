@@ -205,6 +205,104 @@ within a single run — it does not survive across turns. hermes keeps it on the
 and persists it across `--resume`. Lifting the compressor to `Agent` and binding it to
 the session lifetime is tracked as P3-5d.
 
+### Session-level `model_config` JSON KV (`6662a6e`)
+
+Prerequisite infrastructure, no behaviour change. `sessions.model_config TEXT`
+column (idempotent migration) + `get_model_config` / `patch_model_config`
+helpers, mirroring hermes `get_session_model_config_value` /
+`patch_session_model_config`. Two consumers were blocked on this: P3-1e
+(rejected-carrier persistence) and P3-5d (compressor cross-turn state).
+
+### Rejected reasoning-route persistence — storage half (P3-1e, `e3e9830`)
+
+`sessions.model_config` gains a typed reader/writer for the
+`reasoning_rejected_carriers` key, byte-for-byte the hermes format:
+`[[provider, host, model, [carriers]], ...]`. Read-back filters carriers
+against a `KNOWN_REASONING_CARRIERS` whitelist and drops malformed rows
+entirely (a corrupt blob can never inject an arbitrary carrier or a phantom
+empty route). **Storage only — not yet wired**: the runtime learner (P3-1d)
+still learns per-process; seeding from / persisting to the store is the
+remaining half.
+
+### Session-store auto-maintenance: `auto_prune` on by default (P3-3, `75b1dcb` + `cac43d5` + `13f91d8` + `257f57c` + `b4242f9`)
+
+Ports hermes #54189 in full: without automatic cleanup `state.db` grows without
+bound (multi-GB installs reported within weeks upstream). User-authorized —
+the default is destructive by nature, so it was flipped only after every
+safety clause upstream has was ported and test-pinned first.
+
+- **① Pinned exclusion (`75b1dcb`) — fixed a pre-existing data-loss bug.**
+  Upstream `_prune_filter_where` excludes pinned rows by default ("Pinned is a
+  durable keep flag"); ulnclaw's `where_clause()` had no pinned clause at all,
+  so even the *manual* `sessions prune` could delete pinned sessions.
+  `PruneFilters.include_pinned` (default false) now appends
+  `COALESCE(s.pinned, 0) = 0`. The upstream pinned-tail CTE (unpinned
+  continuations of a pinned compression ancestor) rides with the
+  compression-lineage port — the port has no lineage handling at all yet;
+  `pinned = 0` matches upstream default for every non-lineage case.
+- **③+⑤ `sweep_orphaned_sessions` + `freelist_ratio` (`cac43d5`).**
+  cron/kanban/subagent/one-shot CLI rows never stamp `ended_at` when their
+  process dies, and prune only deletes ended rows — without the sweep they are
+  immortal. Sweep *closes* them (`end_reason = 'startup_orphan_reap'`,
+  resumable, messages kept). Faithful details: `started_at` AND last-activity
+  must both precede the cutoff (`started_at` protects fresh branch/compression
+  children with copied-old activity timestamps); sources are a whitelist
+  (`AUTO_PRUNE_STALE_OPEN_SOURCES` = cli/cron/kanban/acp/api_server/subagent/
+  tool/recovered, verbatim from `hermes_state.py:472` — messaging/UI sources
+  have their own lifecycle owners, unknown sources fail closed, #60609);
+  first-reason-wins (the UPDATE re-asserts `ended_at IS NULL`).
+  `respect_gateway_heartbeats` is not ported because upstream's auto-prune
+  call site passes `False` and this port has no heartbeat table — no gap.
+  `freelist_ratio()` = `freelist_count/page_count` for the VACUUM gate.
+- **④ `[sessions]` config block (`13f91d8`).** Keys and defaults transcribed
+  from `config_defaults.py:2264`: `auto_prune = true` (🔴 NOT the `False` in
+  `gateway/run.py`'s `.get(...)` — that is only a missing-key fallback),
+  `retention_days = 90` (i64; negative skips maintenance — a future cutoff
+  would match every ended session), `vacuum_after_prune = true`,
+  `min_vacuum_interval_days = 30`, `min_interval_hours = 24`.
+  `min_vacuum_freelist_ratio` stays a module constant
+  (`AUTO_VACUUM_MIN_FREELIST_RATIO = 0.25`) — upstream never exposes it as a
+  key. `auto_archive`/`auto_archive_days`/`show_subagents` are separate
+  unwired features, NOT YET PORTED (documented in-code). 🔴 Distinct from
+  `CheckpointsConfig`, which has same-named `retention_days` (7) for
+  filesystem checkpoints; both structs cross-reference each other in docs.
+- **⑥ `maybe_auto_prune_and_vacuum` orchestrator (`257f57c`).** Idempotent,
+  never raises (errors land in `AutoMaintenanceReport`, panics caught):
+  negative retention skips; a non-blocking cross-process lock
+  (`<db>.auto-maintenance.lock`, `process_ctl::try_lock_exclusive` =
+  flock/LockFileEx) makes concurrent startups skip instead of racing the
+  interval check; 24h throttle in `state_meta` (`last_auto_prune`/`last_vacuum`,
+  corrupt stamp = proceed, hermes `_seconds_since`); **prune first, sweep
+  second** so a just-closed orphan gets a full retention window (test-pinned);
+  throttle recorded even when nothing was pruned. VACUUM triple gate fully
+  wired (`vacuum` + pruned>0 + interval + freelist ratio). 🔴 The VACUUM leg
+  itself **fails closed**: upstream only rewrites after proving no sibling
+  process or in-process generation holds the store/WAL (`hermes_state_holders`:
+  /proc scan + Windows Restart Manager, #110054); this port has no holders
+  scan, so quiescence is never provable and the leg always skips with
+  `vacuum_skipped_reason` recorded. Manual `optimize_storage()` remains the
+  explicit path; porting the holders scan activates the leg.
+- **Startup wiring (`b4242f9`).** `run_session_auto_maintenance(home, config)`
+  runs once per process from `main()` before dispatch (covers every
+  subcommand) and again per profile inside `build_gateway_stack` (hermes
+  `_for_each_served_profile`: a multiplexed secondary profile has its own
+  state.db AND its own `sessions` config). `spawn_blocking` + its own store
+  open (thread-bound connections), gated on `config.sessions.auto_prune`,
+  never fatal. A bin-level test proves the config is consumed: off → no store
+  is even opened; on → maintained + throttled + idempotent.
+- **🔴 Also fixed: the bin target was broken on the branch since P3-1
+  (`6953d17`).** Six `Message` literals in `main.rs` lacked the `reasoning`
+  field (`cargo check --bins` = 6× E0063). Invisible because every P3-1
+  verification ran `--lib`, which never compiles the bin. All six are locally
+  synthesized system notes → `reasoning: None`; the import path stays
+  symmetric with export.rs (which never writes the key).
+
+Verification (WSL/Linux): full lib suite 2531 passed / 1-2 failed (known
+flakies `reload_mcp_cancel_keeps_everything`, `test_x_search_settings_editor`)
++ 1 ignored; `session::sqlite` 47/47, `session::filters` 7/7, `config::` 17/17,
+`auto_maintenance` 6/6 + 1 wiring test; `cargo check --bins [--profile test]`
+0 errors; mobile-ffi 0 errors; rustfmt 0 new regions; every diff pure addition.
+
 ## v0.6.5 — 2026-10-16
 
 ### Tool-naming alignment with hermes-agent v0.22.2 (P1 + P2a)
