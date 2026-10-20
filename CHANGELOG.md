@@ -199,11 +199,49 @@ parsing, no step-down), so deferring today would turn a preventive compaction in
 hard 400. That recovery is therefore the prerequisite and is being built (P3-6);
 the estimate keeps its preventive role only until it lands.
 
-**Scope limit still owed:** `ContextCompressor` is constructed inside `run()`, and
-`run_with_session` is called once per user turn, so the usage anchor accumulates only
-within a single run — it does not survive across turns. hermes keeps it on the session
-and persists it across `--resume`. Lifting the compressor to `Agent` and binding it to
-the session lifetime is tracked as P3-5d.
+**Scope limit — cleared by P3-5d (`b567f76`).** `ContextCompressor` used to be constructed
+inside `run()`, and `run_with_session` is called once per user turn, so the usage anchor
+accumulated only within a single run and never survived across turns. hermes keeps it on
+`agent.context_compressor`. The next section lifts the state to a per-session registry.
+
+### Compression state now survives across turns (P3-5d, `b567f76`)
+
+hermes keeps `agent.context_compressor` so the real-usage anchor, the post-compaction
+latch and the anti-thrash strikes carry from turn to turn. ulnclaw rebuilt the compressor
+inside every `run()`, so all three reset each turn — the usage anchor never accumulated
+past one turn, and a breaker tripped in turn *N* was forgotten by turn *N+1*.
+
+🔴 The faithful port is **not** "one compressor field on `Agent`": ulnclaw's `Agent` is
+shared across sessions (one gateway runner serves every session id), so a single field
+would leak one session's anchor — and its tripped breaker — into another session's turns.
+The state is therefore keyed by session id, on the `steer_inboxes` precedent.
+
+- `CompressorRegistry` = `HashMap<session_id, (last_used_epoch, compressor)>`, LRU-capped
+  at 64. An `Agent` is long-lived (a gateway process runs for weeks) while sessions are
+  unbounded, so an uncapped registry would be exactly the unbounded-growth class of bug
+  P3-3 exists to fix. Eviction only costs that session a fresh anchor next turn — hermes'
+  gateway likewise rebinds a fresh compressor on cache eviction.
+- `CompressorGuard` returns the state on `Drop`, so every one of `run()`'s several
+  `return Err` paths preserves it. The registry lock is held only for the map operations
+  and **never across an await**, so one session's summarization call cannot block another
+  session's compression.
+- `acquire_compressor(None)` (a non-persisting run) neither reads nor writes the registry:
+  its state dies with the guard instead of parking under a shared key where unrelated runs
+  would inherit it.
+- Cross-run safety reuses the existing `anchor_len.min(messages.len())` clamp: `messages`
+  is rebuilt each run so a restored `anchor_len` can exceed the new length, and the clamp
+  keeps the slice in bounds. `note_response_usage(…, request_len)` re-anchors on the real
+  reading every turn, so any skew self-corrects within one turn.
+
+Tests (4): state survives across runs for one session; 🔴 sessions do not share state
+(s1's latch must not suppress s2's over-budget message); unkeyed runs leave the registry
+empty; the registry LRU-evicts past the cap (oldest gone, newest kept, length == cap).
+
+Verification (WSL/Linux): lib+bins `--profile test` 0 errors; the 4 new tests pass;
+`agent::` 20/20, `context::` 27/27; full suite 2539 passed / 1 failed (known flaky
+`reload_mcp_cancel_keeps_everything`) + 1 ignored; mobile-ffi 0 errors; rustfmt 0 regions
+(HEAD baseline 0; the 2 pre-edit regions were both in the new code). `agent/mod.rs` is a
+leaf file, so a whole-file fmt is safe here — module roots recurse into submodules.
 
 ### Session-level `model_config` JSON KV (`6662a6e`)
 
