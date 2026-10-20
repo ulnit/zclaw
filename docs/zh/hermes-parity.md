@@ -24,7 +24,10 @@ hermes-agent v2026.8.3 对标兼容 —— 原生性能，单一静态二进制�
 > rejection 学习器**（`ReasoningRejectionLog`）兜底——某路线 400 点名该字段后即整段降级为
 > 不发、并当场剥离重试一次。上游把「默认发 + 学习兜底」当作一套完整设计，两半缺一不可。
 > tier 次序亦同上游：**strict 压倒 must-echo**（`pad and RC in carriers`，strict 路线
-> 连 pad 都不给）。
+> 连 pad 都不给）。学习结果现已**按会话持久化**（P3-1e：`sessions.model_config` 的
+> `reasoning_rejected_carriers` 键，hermes 格式逐字对齐；run 开始播种、
+> `call_with` 边界写回，fallback provider 同样覆盖）——「恢复的进程不再用又一次
+> 400 重新学习」与上游一致。
 > Anthropic 的**签名 thinking 回放**仍未实现
 > （`anthropic.rs` 无 `signature`，也不构造 thinking block，因此当前不回放＝正确）。
 

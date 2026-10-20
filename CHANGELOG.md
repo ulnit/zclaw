@@ -117,14 +117,14 @@ the loop and return `last_error = None`, i.e. the generic *"request failed after
 retries"* — **swallowing the real 400** the recovery exists to fix. A test asserts
 that string never appears.
 
-**Scope: process-lifetime, not persisted — still owed.** hermes also writes rejections
-into the session's `model_config` so a resumed process never re-learns with another
-400. ulnclaw's provider layer sits *below* the session layer and holds no store
-handle, and ulnclaw has no session-level JSON KV store at all yet (hermes'
-`patch_session_model_config` / `get_session_model_config_value`). So this port
-currently re-learns once per process restart. That is unfinished upstream parity, not
-an accepted scope cut: the prerequisite is a `sessions.model_config` column plus
-get/patch helpers, which P3-1e adds and the compressor's cross-turn state needs too.
+**Scope: process-lifetime at landing; persistence added by P3-1e (`e5ad870`).**
+hermes also writes rejections into the session's `model_config` so a resumed process
+never re-learns with another 400. When this learner landed, ulnclaw's provider layer
+sat *below* the session layer with no store handle and no session-level JSON KV
+existed yet — recorded as owed, not scope-cut. The prerequisite
+(`sessions.model_config` column + get/patch helpers, `6662a6e`) and the typed
+storage (`e3e9830`) have since landed, and the wiring section below closes the
+loop: learned rejections are persisted per session and seeded back on resume.
 
 With this learner in place, unknown routes now send `reasoning_content` as upstream
 does (`d5080e6`) — the learner is exactly what makes that default safe.
@@ -220,9 +220,57 @@ helpers, mirroring hermes `get_session_model_config_value` /
 `[[provider, host, model, [carriers]], ...]`. Read-back filters carriers
 against a `KNOWN_REASONING_CARRIERS` whitelist and drops malformed rows
 entirely (a corrupt blob can never inject an arbitrary carrier or a phantom
-empty route). **Storage only — not yet wired**: the runtime learner (P3-1d)
-still learns per-process; seeding from / persisting to the store is the
-remaining half.
+empty route). Storage only at landing — the wiring half is the next section
+(`e5ad870`).
+
+### Rejected reasoning-route persistence — wiring half (P3-1e, `e5ad870`)
+
+Connects the P3-1d runtime learner to the storage above, completing hermes'
+"a resumed process never re-learns with another 400" contract. The provider
+layer sits *below* the session layer and holds no store handle, so the wiring
+lives in the agent (which already holds both the store and the session id):
+
+- `Provider` trait gains three defaulted methods (the `service_tier`
+  precedent — every existing provider and mock compiles untouched):
+  `endpoint()` (the route key's third component), `learned_reasoning_rejection()`,
+  `seed_reasoning_rejection()`. `OpenAiProvider` implements all three;
+  `ReasoningRejectionLog` gains `seed()` — deliberately distinct from
+  `record()`, because seeding must never look like "newly learned this call"
+  (`record()`'s true-on-first-write is the retry loop's gate).
+- `reasoning_echo::host_of` is now public: the persisted route key must use
+  the exact host normalization the echo rules match on, or a stored rejection
+  could never be found again.
+- `Agent.active_session` (set in `run()` when the session row is created)
+  routes reads/writes to the right session — providers outlive sessions and
+  are shared across them, so this is a pointer, not the persistence key.
+- **Seeding**: the primary provider at session start, and every lazily built
+  fallback via `build_fallback_provider` (both `get_or_try_init` call sites go
+  through it). Match is the exact `(provider, host, model)` triple — a
+  rejection learned on one model never silences reasoning on another.
+- **Persisting**: hooked at the `call_with` boundary on both paths
+  (non-streaming success, stream establishment) — the learner fires inside the
+  provider's retry loop, so the call boundary is where the agent can observe
+  it. Hot-path cost is one relaxed atomic load. Merge-not-replace (same route
+  updates in place, other routes survive, hermes `patch_session_model_config`
+  semantics); unlearned providers never write; store failures warn and never
+  fail the turn.
+
+Tests (4): persist→seed round-trip asserting the stored key shape field by
+field; exact-route matching (different model/host stays armed); merge
+semantics (two routes coexist, re-persist doesn't duplicate); unlearned
+provider writes nothing.
+
+Verification (WSL/Linux): lib+bins `--profile test` 0 errors; the 4 new tests
+pass; provider 63/63, agent 16/16, session 81/81, anthropic 12/12; full suite
+2535 passed / 1 failed (known flaky) + 1 ignored; mobile-ffi 0 errors; rustfmt
+0 new regions (openai.rs keeps its 5 pre-existing ones — no whole-file fmt,
+per the standing rule).
+
+⚠️ Process note: a stray recursive `rustfmt` on the module root
+(`provider/mod.rs`) reformatted two files this change never touched
+(`anthropic.rs`, `openai.rs` — fmt recurses through `pub mod` children). Caught
+by the numstat audit (unexpected-file count ≠ 0), reverted, and the openai.rs
+edit re-applied. Lesson recorded in the parity skill: only fmt leaf files.
 
 ### Session-store auto-maintenance: `auto_prune` on by default (P3-3, `75b1dcb` + `cac43d5` + `13f91d8` + `257f57c` + `b4242f9`)
 

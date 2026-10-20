@@ -31,7 +31,11 @@ performance and a single static binary.
 > sending it, and the field is stripped and retried once). Upstream treats "send by
 > default + learn on rejection" as one design; both halves are required. Tier precedence
 > also matches: **strict beats must-echo** (`pad and RC in carriers` — a strict route
-> gets no reasoning key, not even the pad). Anthropic's **signed thinking
+> gets no reasoning key, not even the pad). Learned rejections are now **persisted per
+> session** (P3-1e: the `reasoning_rejected_carriers` key in `sessions.model_config`,
+> byte-for-byte the hermes format; seeded at run start, written back at the `call_with`
+> boundary, fallback providers covered too) — upstream's "a resumed process never
+> re-learns with another 400" now holds. Anthropic's **signed thinking
 > replay** remains unimplemented (`anthropic.rs` has no `signature` and builds no
 > thinking blocks, so replaying nothing there is currently correct).
 
