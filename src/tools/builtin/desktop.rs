@@ -30,6 +30,10 @@ const PICKERS: &[&str] = &["accent", "layout"];
 const SIMPLE_LAYOUTS: &[&str] = &["sidebar-left", "sidebar-right"];
 const ADVANCED_LAYOUTS: &[&str] = &["default", "basic", "focus", "terminal-deck", "quad"];
 
+/// The `custom:` prefix a non-swatch colour is reported back under
+/// (upstream `accents.ts` `CUSTOM_ACCENT_PREFIX`).
+const CUSTOM_ACCENT_PREFIX: &str = "custom:";
+
 /// `^#[0-9a-fA-F]{6}$` (hermes `_HEX`).
 fn is_hex_accent(value: &str) -> bool {
     let bytes = value.as_bytes();
@@ -41,9 +45,27 @@ fn is_hex_accent(value: &str) -> bool {
         .all(|b| b.is_ascii_digit() || (b"abcdef".contains(&b.to_ascii_lowercase())))
 }
 
+/// Whether `accent` names a colour the renderer can paint.
+///
+/// 🔴 Accepts **both** spellings a hex accent can arrive in, because the two
+/// directions of the picker round-trip use different ones:
+/// * `#rrggbb` — what the model passes on a fresh pick (upstream `_HEX`);
+/// * `custom:#rrggbb` — what the renderer **reports back** as the settled accent
+///   id (`resolveAccentPick` returns `id: \`${CUSTOM_ACCENT_PREFIX}${hex}\``).
+///
+/// Rejecting the second form breaks the obvious follow-up turn: the user picks a
+/// colour in the card, the tool result names it `custom:#1a2b3c`, the user says
+/// "keep that one", and the model re-passes the id it was just told — which would
+/// fail with "Unknown accent". Upstream's resolver strips the prefix and validates
+/// the remainder, so accepting it here is the faithful behaviour.
+fn is_valid_accent(value: &str) -> bool {
+    let hex = value.strip_prefix(CUSTOM_ACCENT_PREFIX).unwrap_or(value);
+    is_hex_accent(hex)
+}
+
 /// hermes `_accent_error`: `None` when the accent is acceptable.
 fn accent_error(accent: &str) -> Option<serde_json::Value> {
-    if ACCENT_SWATCHES.contains(&accent) || accent == THEME_ACCENT || is_hex_accent(accent) {
+    if ACCENT_SWATCHES.contains(&accent) || accent == THEME_ACCENT || is_valid_accent(accent) {
         return None;
     }
     let mut available: Vec<serde_json::Value> = ACCENT_SWATCHES
@@ -655,6 +677,22 @@ mod tests {
         }
         assert!(accent_error("#1a2b3c").is_none());
         assert!(accent_error("#ABCDEF").is_none());
+        // 🔴 The picker reports a settled accent back as `custom:#rrggbb`; the model
+        // then re-passes that exact id on a follow-up turn, so it must validate.
+        assert!(
+            accent_error("custom:#1a2b3c").is_none(),
+            "the renderer-reported custom id must round-trip"
+        );
+        assert!(accent_error("custom:#ABCDEF").is_none());
+        // A malformed custom id is still rejected (prefix does not launder a bad hex).
+        assert!(
+            accent_error("custom:#abc").is_some(),
+            "3-digit hex is not #rrggbb"
+        );
+        assert!(
+            accent_error("custom:1a2b3c").is_some(),
+            "custom: needs a #rrggbb tail"
+        );
         assert!(accent_error("#abc").is_some(), "3-digit hex is not #rrggbb");
         assert!(accent_error("#12345678").is_some());
         assert!(accent_error("1a2b3c").is_some(), "a bare hex needs the #");
