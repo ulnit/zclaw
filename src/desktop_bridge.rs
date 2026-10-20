@@ -103,6 +103,62 @@ pub fn resolve_read(id: &str, answer: Result<String, String>) -> bool {
     }
 }
 
+// ── theme.set round-trip ────────────────────────────────────────────────
+
+/// How long a blocking `set_theme` waits for the webview answer.
+///
+/// 🔴 Deliberately much longer than [`READ_TIMEOUT`]: a `picker` request shows a
+/// card and waits for the *user* to choose, which upstream bounds at 5 minutes
+/// ("wait for the user (up to 5 minutes)"). 20 s would fail every picker before a
+/// human could click. The slack over 300 s is for the renderer to apply and answer.
+pub const THEME_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(320);
+
+fn pending_themes() -> &'static Mutex<HashMap<String, Sender<Result<String, String>>>> {
+    static PENDING: OnceLock<Mutex<HashMap<String, Sender<Result<String, String>>>>> =
+        OnceLock::new();
+    PENDING.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Blocking `set_theme` callback: emit a `theme.set` request and wait for the
+/// webview's answer. The renderer applies the values — or shows the picker card
+/// and waits for the user — then reports **what it actually applied**, which is
+/// the whole point: the model must describe what the user sees, so an unknown
+/// layout preset or an off-screen session comes back as an error rather than a
+/// silent success.
+fn set_theme_roundtrip(session_id: &str, payload: Value) -> Result<String, String> {
+    let id = uuid::Uuid::new_v4().simple().to_string()[..12].to_string();
+    let (tx, rx) = channel();
+    pending_themes().lock().unwrap().insert(id.clone(), tx);
+    // 🔴 The session id rides on the envelope (not inside the payload) so the SSE
+    // fan-out can route this to the window that owns the turn — a picker must not
+    // pop up in an unrelated window.
+    publish(
+        session_id,
+        "theme.set",
+        &json!({ "id": id, "payload": payload }),
+    );
+    match rx.recv_timeout(THEME_TIMEOUT) {
+        Ok(answer) => answer,
+        Err(_) => {
+            pending_themes().lock().unwrap().remove(&id);
+            Err(format!(
+                "desktop set_theme timed out after {}s (no renderer answer)",
+                THEME_TIMEOUT.as_secs()
+            ))
+        }
+    }
+}
+
+/// Resolve a pending `theme.set` (gateway `theme.set.respond`). Returns `false`
+/// when the id is unknown or already resolved.
+pub fn resolve_theme(id: &str, answer: Result<String, String>) -> bool {
+    let sender = pending_themes().lock().unwrap().remove(id);
+    match sender {
+        Some(tx) => tx.send(answer).is_ok(),
+        None => false,
+    }
+}
+
 /// Install the bridge when running under a desktop host
 /// (`ULNCLAW_DESKTOP` truthy). No-op otherwise. Called once at gateway
 /// serve time.
@@ -114,6 +170,7 @@ pub fn install() {
         publish(session_id, event, payload);
     })));
     crate::desktop::set_read_terminal_callback(Some(Box::new(read_terminal_roundtrip)));
+    crate::desktop::set_theme_callback(Some(Box::new(set_theme_roundtrip)));
     tracing::info!("desktop bridge active: events on /api/desktop/events");
 }
 
@@ -147,5 +204,62 @@ mod tests {
     #[test]
     fn resolve_unknown_id_is_false() {
         assert!(!resolve_read("no-such-read", Err("x".into())));
+    }
+
+    /// 🔴 P2b `set_theme`: the theme round-trip has its own pending map and its
+    /// own resolve path, and — unlike the terminal read — must deliver a real
+    /// failure, because the renderer is the authority on preset ids.
+    #[test]
+    fn resolve_theme_delivers_answer_and_error() {
+        let id = "test-theme-1";
+        let (tx, rx) = channel();
+        pending_themes().lock().unwrap().insert(id.to_string(), tx);
+        let applied = r#"{"success": true, "applied": {"accent": "nous"}}"#;
+        assert!(resolve_theme(id, Ok(applied.into())));
+        assert_eq!(rx.recv().unwrap(), Ok(applied.to_string()));
+        // Consumed: a second resolve no longer finds it.
+        assert!(!resolve_theme(id, Ok("late".into())));
+
+        // The failure channel round-trips too.
+        let id2 = "test-theme-2";
+        let (tx2, rx2) = channel();
+        pending_themes()
+            .lock()
+            .unwrap()
+            .insert(id2.to_string(), tx2);
+        assert!(resolve_theme(
+            id2,
+            Err("unknown layout preset 'nope'".into())
+        ));
+        assert_eq!(
+            rx2.recv().unwrap(),
+            Err("unknown layout preset 'nope'".to_string())
+        );
+    }
+
+    /// Theme and terminal pending maps must not cross-talk: a `theme.set.respond`
+    /// for an unknown id is false, and a read id never resolves as a theme.
+    #[test]
+    fn theme_and_read_pending_maps_are_separate() {
+        assert!(!resolve_theme("no-such-theme", Ok("x".into())));
+        let read_id = "test-read-sep";
+        let (tx, _rx) = channel();
+        pending_reads()
+            .lock()
+            .unwrap()
+            .insert(read_id.to_string(), tx);
+        // Same id string, wrong map → not resolved, and the read stays pending.
+        assert!(!resolve_theme(read_id, Ok("x".into())));
+        assert!(pending_reads().lock().unwrap().contains_key(read_id));
+        assert!(resolve_read(read_id, Ok("screen".into())));
+    }
+
+    /// 🔴 A picker waits for a human, so the theme timeout must be far longer
+    /// than the terminal read's — 20 s would fail every picker before a click.
+    #[test]
+    fn theme_timeout_outlasts_the_terminal_read_timeout() {
+        assert!(THEME_TIMEOUT > READ_TIMEOUT);
+        // Upstream bounds the picker wait at 5 minutes.
+        assert!(THEME_TIMEOUT.as_secs() >= 300);
     }
 }

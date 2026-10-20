@@ -185,6 +185,7 @@ async fn dispatch(state: Arc<GatewayState>, method: &str, params: Value) -> Resu
         "sudo.respond" => prompt_respond(params, "password"),
         "secret.respond" => prompt_respond(params, "value"),
         "terminal.read.respond" => terminal_read_respond(params),
+        "theme.set.respond" => theme_set_respond(params),
         "process.list" => Ok(process_list()),
         "process.kill" => process_kill(params),
         "model.options" => model_options(state).await,
@@ -762,6 +763,42 @@ fn terminal_read_respond(params: Value) -> Result<Value, String> {
         .unwrap_or_default()
         .to_string();
     let ok = crate::desktop_bridge::resolve_read(id, Ok(answer));
+    Ok(json!({"ok": ok}))
+}
+
+/// The renderer's answer to a `theme.set` request (P2b `set_theme`).
+///
+/// 🔴 Unlike [`terminal_read_respond`], this carries a real failure channel: the
+/// renderer is the authority on swatch/preset ids and on whether the session is
+/// on screen, so it answers either `result` (what it applied — the tool passes a
+/// JSON object through verbatim so the model reports what the user sees) or
+/// `error` (unknown preset, off-screen session, no window). Accepting only a
+/// success string would let a rejected layout read as "applied".
+fn theme_set_respond(params: Value) -> Result<Value, String> {
+    let id = params
+        .get("request_id")
+        .or_else(|| params.get("id"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    // An explicit error from the renderer wins over any result body.
+    let error = params
+        .get("error")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let answer = if !error.is_empty() {
+        Err(error)
+    } else {
+        // `result` may arrive as an object (preferred) or a pre-serialized string;
+        // the tool passes JSON objects through and wraps anything else as text.
+        let result = params.get("result").or_else(|| params.get("text"));
+        Ok(match result {
+            Some(Value::String(s)) => s.clone(),
+            Some(v) => v.to_string(),
+            None => String::new(),
+        })
+    };
+    let ok = crate::desktop_bridge::resolve_theme(id, answer);
     Ok(json!({"ok": ok}))
 }
 
