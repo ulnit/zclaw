@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     archived INTEGER NOT NULL DEFAULT 0,
     pinned INTEGER NOT NULL DEFAULT 0,
     model_config TEXT,
+    compression_ineffective_count INTEGER NOT NULL DEFAULT 0,
+    compression_recovery_deadline REAL,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
 );
 
@@ -588,6 +590,49 @@ fn ensure_model_config_column(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Idempotent migration for the two durable anti-thrash columns (P3-5c,
+/// hermes `hermes_state_common.py:433-434`).
+///
+/// These are **table columns**, not `model_config` keys — upstream stores them
+/// as columns (`_write_session_column("compression_ineffective_count", …)`) and
+/// they are read/written on every blocked evaluation, so a JSON blob would be
+/// the wrong shape.
+///
+/// Both exist because the compressor is rebuilt (P3-5d's LRU eviction past 64
+/// sessions, or a process restart) while the guard must NOT be disarmed by that
+/// rebuild — #54923 "restart must not disarm", #69872 durable tripped counter,
+/// #100185 durable recovery deadline.
+fn ensure_compression_columns(conn: &Connection) -> Result<()> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(sessions)")
+        .map_err(|e| AgentError::session(e.to_string()))?;
+    let existing: Vec<String> = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| AgentError::session(e.to_string()))?
+        .filter_map(|r| r.ok())
+        .collect();
+    drop(stmt);
+    if !existing
+        .iter()
+        .any(|n| n == "compression_ineffective_count")
+    {
+        conn.execute_batch(
+            "ALTER TABLE sessions ADD COLUMN compression_ineffective_count INTEGER NOT NULL DEFAULT 0;",
+        )
+        .map_err(|e| AgentError::session(format!("add compression_ineffective_count: {}", e)))?;
+    }
+    if !existing
+        .iter()
+        .any(|n| n == "compression_recovery_deadline")
+    {
+        conn.execute_batch("ALTER TABLE sessions ADD COLUMN compression_recovery_deadline REAL;")
+            .map_err(|e| {
+                AgentError::session(format!("add compression_recovery_deadline: {}", e))
+            })?;
+    }
+    Ok(())
+}
+
 impl SqliteSessionStore {
     /// Open (or create) the state database at `path`.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -603,6 +648,7 @@ impl SqliteSessionStore {
         ensure_display_metadata_column(&conn)?;
         ensure_reasoning_column(&conn)?;
         ensure_model_config_column(&conn)?;
+        ensure_compression_columns(&conn)?;
         ensure_delegation_delivery_columns(&conn)?;
 
         let store = Self {
@@ -2222,6 +2268,95 @@ impl SqliteSessionStore {
                 retention_days,
                 "state.db auto-maintenance: closed stale open sessions and pruned inactive ones"
             );
+        }
+    }
+
+    /// Persisted ineffective-compaction strike count for one session (P3-5c,
+    /// hermes `get_compression_ineffective_count`,
+    /// `hermes_state_compression.py:463`).
+    ///
+    /// The durable half of the anti-thrash guard: a fresh compressor bound to a
+    /// resumed session inherits an armed/tripped guard across restarts, so a
+    /// rebuild never disarms it (#69872, #54923 "restart must not disarm").
+    /// A missing row or a NULL/absent column reads as 0.
+    pub fn get_compression_ineffective_count(&self, session_id: &str) -> i64 {
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(_) => return 0,
+        };
+        conn.query_row(
+            "SELECT compression_ineffective_count FROM sessions WHERE id = ?1",
+            params![session_id],
+            |row| row.get::<_, Option<i64>>(0),
+        )
+        .ok()
+        .flatten()
+        // Upstream clamps at write time (`max(0, int(count))`); clamp on read
+        // too so a hand-edited negative row can never lower the trip threshold.
+        .map(|n| n.max(0))
+        .unwrap_or(0)
+    }
+
+    /// Persist the strike count (hermes `set_compression_ineffective_count`).
+    /// Best-effort: a store failure must never fail a turn, so errors are
+    /// logged rather than returned — upstream's `_durable_write` likewise only
+    /// reports success/failure.
+    pub fn set_compression_ineffective_count(&self, session_id: &str, count: i64) {
+        if session_id.is_empty() {
+            return;
+        }
+        let Ok(conn) = self.conn.lock() else { return };
+        if let Err(e) = conn.execute(
+            "UPDATE sessions SET compression_ineffective_count = ?2 WHERE id = ?1",
+            params![session_id, count.max(0)],
+        ) {
+            tracing::debug!(error = %e, "could not persist compression ineffective count");
+        }
+    }
+
+    /// Persisted anti-thrash recovery deadline as a **wall-clock epoch**
+    /// (P3-5c, hermes `get_compression_recovery_deadline`,
+    /// `hermes_state_compression.py:474`). `0.0` = not armed.
+    ///
+    /// 🔴 Wall clock, never monotonic, and durable: the compressor is rebuilt
+    /// (P3-5d LRU eviction, or a restart), and a process-local deadline would
+    /// restart the wait on every rebuild so a tripped session never earned its
+    /// probe — the exact bug hermes fixed in #100185 ("a blocked messaging
+    /// session never earned its probe and stayed blocked forever").
+    pub fn get_compression_recovery_deadline(&self, session_id: &str) -> f64 {
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(_) => return 0.0,
+        };
+        conn.query_row(
+            "SELECT compression_recovery_deadline FROM sessions WHERE id = ?1",
+            params![session_id],
+            |row| row.get::<_, Option<f64>>(0),
+        )
+        .ok()
+        .flatten()
+        .unwrap_or(0.0)
+        .max(0.0)
+    }
+
+    /// Persist (or disarm) the recovery deadline. `0.0` writes **NULL**, not
+    /// zero — hermes `_write_session_column(…, normalized or None)` — so an
+    /// unarmed state is indistinguishable from "never armed" on read.
+    pub fn set_compression_recovery_deadline(&self, session_id: &str, deadline: f64) {
+        if session_id.is_empty() {
+            return;
+        }
+        let normalized = if deadline.is_finite() && deadline > 0.0 {
+            Some(deadline)
+        } else {
+            None
+        };
+        let Ok(conn) = self.conn.lock() else { return };
+        if let Err(e) = conn.execute(
+            "UPDATE sessions SET compression_recovery_deadline = ?2 WHERE id = ?1",
+            params![session_id, normalized],
+        ) {
+            tracing::debug!(error = %e, "could not persist compression recovery deadline");
         }
     }
 
@@ -4943,6 +5078,113 @@ mod tests {
         // After release the pass runs.
         let report = store.maybe_auto_prune_and_vacuum(90, 24, true, 30, 0.25);
         assert!(!report.skipped);
+    }
+
+    /// The two durable anti-thrash columns round-trip, and the deadline's
+    /// disarm semantics match upstream (`normalized or None` → NULL, not 0).
+    #[test]
+    fn compression_guards_roundtrip_and_disarm_to_null() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+
+        // Defaults: 0 strikes, disarmed deadline.
+        assert_eq!(store.get_compression_ineffective_count(&sid), 0);
+        assert_eq!(store.get_compression_recovery_deadline(&sid), 0.0);
+
+        store.set_compression_ineffective_count(&sid, 2);
+        assert_eq!(store.get_compression_ineffective_count(&sid), 2);
+
+        store.set_compression_recovery_deadline(&sid, 1_800_000_000.5);
+        assert_eq!(
+            store.get_compression_recovery_deadline(&sid),
+            1_800_000_000.5
+        );
+
+        // Disarm, then 🔴 verify it stored NULL rather than 0.0 — checked
+        // through the raw column so the assertion is about storage, not about
+        // the getter's `unwrap_or(0.0)` masking the difference.
+        store.set_compression_recovery_deadline(&sid, 0.0);
+        assert_eq!(store.get_compression_recovery_deadline(&sid), 0.0);
+        {
+            use rusqlite::Connection;
+            let conn = Connection::open(&path).unwrap();
+            let is_null: bool = conn
+                .query_row(
+                    "SELECT compression_recovery_deadline IS NULL FROM sessions WHERE id = ?1",
+                    rusqlite::params![sid],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(is_null, "disarm must store NULL (hermes `or None`)");
+        }
+    }
+
+    /// Negative counts are clamped (upstream `max(0, int(count))`) on both
+    /// write and read, so a bad row can never lower the trip threshold.
+    #[test]
+    fn compression_ineffective_count_is_clamped() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        let sid = store.create_session("cli", Some("m"), None).unwrap();
+        store.set_compression_ineffective_count(&sid, -5);
+        assert_eq!(store.get_compression_ineffective_count(&sid), 0);
+        // A hand-edited negative row also reads back clamped.
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute(
+                "UPDATE sessions SET compression_ineffective_count = -3 WHERE id = ?1",
+                params![sid],
+            )
+            .unwrap();
+        assert_eq!(store.get_compression_ineffective_count(&sid), 0);
+    }
+
+    /// An empty session id never writes (upstream `if session_id:` guards), and
+    /// reads of an unknown session degrade to the defaults instead of failing.
+    #[test]
+    fn compression_guards_ignore_empty_and_unknown_sessions() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_with(dir.path());
+        store.set_compression_ineffective_count("", 5);
+        store.set_compression_recovery_deadline("", 1.0);
+        assert_eq!(store.get_compression_ineffective_count("nope"), 0);
+        assert_eq!(store.get_compression_recovery_deadline("nope"), 0.0);
+    }
+
+    /// 🔴 A DB created before these columns existed gains them losslessly —
+    /// existing rows read as 0/disarmed rather than erroring.
+    #[test]
+    fn compression_columns_migrate_from_pre_existing_db() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        // Build a real DB, keep a row, then strip the columns to simulate an
+        // older schema (the technique used for the reasoning-column migration).
+        {
+            let store = SqliteSessionStore::open(&path).unwrap();
+            store.create_session("cli", Some("m"), None).unwrap();
+        }
+        {
+            use rusqlite::Connection;
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "ALTER TABLE sessions DROP COLUMN compression_ineffective_count;
+                 ALTER TABLE sessions DROP COLUMN compression_recovery_deadline;",
+            )
+            .unwrap();
+        }
+        let store = SqliteSessionStore::open(&path).unwrap();
+        let rows = store.list_sessions(8).unwrap();
+        assert!(!rows.is_empty(), "the pre-existing row survived");
+        let sid = rows[0].id.clone();
+        assert_eq!(store.get_compression_ineffective_count(&sid), 0);
+        assert_eq!(store.get_compression_recovery_deadline(&sid), 0.0);
+        // And they are writable after migration.
+        store.set_compression_ineffective_count(&sid, 2);
+        assert_eq!(store.get_compression_ineffective_count(&sid), 2);
     }
 
     #[test]
