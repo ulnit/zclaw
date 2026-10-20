@@ -827,4 +827,41 @@ mod tests {
         let colored = format!("\x1b[38;2;255;215;0mhi\x1b[0m");
         assert!(colored.contains("38;2;255;215;0"));
     }
+
+    /// 🔴 Cross-process contract: the desktop renderer folds this JSON into its
+    /// `ulnclawSkin` type (`desktop-electron/shared/src/skin.ts`) via
+    /// `ingestBackendSkin`, reading `payload.skin` off `gateway.ready`
+    /// (`gateway-event.ts:290`) and `skin.changed` (`:303`). Its fields are
+    /// `name?`/`description?`/`colors?`/`light_colors?`/`branding?`/`tool_prefix?` —
+    /// snake_case, all optional. A future `#[serde(rename_all = "camelCase")]` on
+    /// `SkinConfig` would compile, pass every Rust test, and silently stop the
+    /// renderer from ever seeing a colour. This test fails loudly instead.
+    #[test]
+    fn skin_config_serializes_with_renderer_contract_keys() {
+        let skin = load_skin("default");
+        let value = serde_json::to_value(&skin).expect("SkinConfig must serialize");
+        let obj = value.as_object().expect("top level must be an object");
+        for key in [
+            "name",
+            "description",
+            "tool_prefix",
+            "colors",
+            "light_colors",
+            "branding",
+        ] {
+            assert!(
+                obj.contains_key(key),
+                "renderer reads `{key}` — it must stay snake_case and present: {obj:?}"
+            );
+        }
+        assert_eq!(obj["name"], serde_json::json!("default"));
+        assert!(
+            obj["colors"].is_object(),
+            "colors must be a map of name→hex"
+        );
+        assert!(obj["branding"].is_object());
+        // The TUI-only spinner fields ride along; the renderer ignores unknown
+        // keys (every `ulnclawSkin` field is optional), so they need no pinning.
+        assert!(obj.contains_key("spinner_waiting_faces"));
+    }
 }
