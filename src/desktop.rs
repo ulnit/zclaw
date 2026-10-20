@@ -30,6 +30,20 @@ pub type UiEmitter = Box<dyn Fn(&str, &str, &Value) + Send + Sync>;
 pub type ReadTerminalFn =
     Box<dyn Fn(Option<u64>, Option<u64>) -> Result<String, String> + Send + Sync>;
 
+/// Blocking appearance request: `(ui_session_id, payload)` → raw renderer answer.
+///
+/// `payload` is either the values to apply (`{"accent": …, "mode": …, "layout": …}`)
+/// or a picker request (`{"picker": "accent"|"layout"}`). The renderer applies the
+/// values — or shows the card and waits for the user's pick — and answers with what
+/// it did, so the model reports what the user actually sees: an unknown layout
+/// preset, a session that is not on screen and an absent desktop window all come
+/// back as errors (hermes `set_theme_tool`'s `callback`).
+///
+/// 🔴 The session id rides along even though upstream's callback takes only the
+/// payload: this bridge routes per turn, so the host can hand the request to the
+/// window that owns it (see the module docs).
+pub type SetThemeFn = Box<dyn Fn(&str, Value) -> Result<String, String> + Send + Sync>;
+
 fn emitter_slot() -> &'static Mutex<Option<Arc<dyn Fn(&str, &str, &Value) + Send + Sync>>> {
     static EMITTER: OnceLock<Mutex<Option<Arc<dyn Fn(&str, &str, &Value) + Send + Sync>>>> =
         OnceLock::new();
@@ -39,6 +53,11 @@ fn emitter_slot() -> &'static Mutex<Option<Arc<dyn Fn(&str, &str, &Value) + Send
 fn read_terminal_slot() -> &'static Mutex<Option<ReadTerminalFn>> {
     static READER: OnceLock<Mutex<Option<ReadTerminalFn>>> = OnceLock::new();
     READER.get_or_init(|| Mutex::new(None))
+}
+
+fn set_theme_slot() -> &'static Mutex<Option<SetThemeFn>> {
+    static SETTER: OnceLock<Mutex<Option<SetThemeFn>>> = OnceLock::new();
+    SETTER.get_or_init(|| Mutex::new(None))
 }
 
 /// Install (or clear) the renderer-event sink. Called by a desktop host.
@@ -66,6 +85,11 @@ pub fn set_emitter(emitter: Option<UiEmitter>) {
 /// Install (or clear) the blocking in-app terminal reader.
 pub fn set_read_terminal_callback(callback: Option<ReadTerminalFn>) {
     *read_terminal_slot().lock().unwrap() = callback;
+}
+
+/// Install (or clear) the blocking appearance setter (`set_theme`).
+pub fn set_theme_callback(callback: Option<SetThemeFn>) {
+    *set_theme_slot().lock().unwrap() = callback;
 }
 
 /// True when running under a desktop host (an emitter is wired).
@@ -111,6 +135,17 @@ pub fn read_terminal_window(
 ) -> Option<Result<String, String>> {
     let guard = read_terminal_slot().lock().unwrap();
     guard.as_ref().map(|f| f(start_line, count))
+}
+
+/// Dispatch a blocking appearance request to the host callback.
+///
+/// `None` means no setter is wired (not a desktop host) — the tool then reports
+/// "desktop only". Like [`read_terminal_window`], the call runs while holding the
+/// slot lock: one appearance request in flight per process, which matches the
+/// single-focused-window model (a `picker` request can block for minutes).
+pub fn set_theme(ui_session_id: &str, payload: Value) -> Option<Result<String, String>> {
+    let guard = set_theme_slot().lock().unwrap();
+    guard.as_ref().map(|f| f(ui_session_id, payload))
 }
 
 /// Coax a bare host/domain into a fetchable URL; leave paths + schemes

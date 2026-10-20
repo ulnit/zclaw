@@ -14,6 +14,52 @@ use serde_json::json;
 
 const PANES: &[&str] = &["chat", "files", "terminal", "review", "sessions"];
 
+/// Accent swatch ids the renderer knows (hermes `ACCENT_SWATCHES`).
+const ACCENT_SWATCHES: &[&str] = &[
+    "mono", "green", "cyan", "nous", "violet", "pink", "red", "orange",
+];
+/// The theme's own accent; the renderer stores it as "no accent pick".
+const THEME_ACCENT: &str = "theme";
+/// hermes `MODES`.
+const MODES: &[&str] = &["light", "dark", "system"];
+/// hermes `PICKERS`.
+const PICKERS: &[&str] = &["accent", "layout"];
+/// The bundled presets (`apps/desktop/src/app/contrib/layout-presets.ts`). Simple
+/// mode shows only the first two; applying an Advanced preset switches the app to
+/// Advanced mode.
+const SIMPLE_LAYOUTS: &[&str] = &["sidebar-left", "sidebar-right"];
+const ADVANCED_LAYOUTS: &[&str] = &["default", "basic", "focus", "terminal-deck", "quad"];
+
+/// `^#[0-9a-fA-F]{6}$` (hermes `_HEX`).
+fn is_hex_accent(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 7 || bytes[0] != b'#' {
+        return false;
+    }
+    bytes[1..]
+        .iter()
+        .all(|b| b.is_ascii_digit() || (b"abcdef".contains(&b.to_ascii_lowercase())))
+}
+
+/// hermes `_accent_error`: `None` when the accent is acceptable.
+fn accent_error(accent: &str) -> Option<serde_json::Value> {
+    if ACCENT_SWATCHES.contains(&accent) || accent == THEME_ACCENT || is_hex_accent(accent) {
+        return None;
+    }
+    let mut available: Vec<serde_json::Value> = ACCENT_SWATCHES
+        .iter()
+        .map(|s| serde_json::Value::String((*s).to_string()))
+        .collect();
+    available.push(serde_json::Value::String(THEME_ACCENT.to_string()));
+    Some(json!({
+        "success": false,
+        "error": format!(
+            "Unknown accent {accent:?}: use a swatch id, 'theme' or #rrggbb."
+        ),
+        "available": available,
+    }))
+}
+
 /// Desktop GUI only — `ULNCLAW_DESKTOP` is set on the agent a host app spawns.
 fn check_desktop_requirements() -> ToolAvailability {
     if crate::desktop::desktop_env_enabled() {
@@ -28,7 +74,142 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(read_terminal_tool());
     registry.register(focus_pane_tool());
     registry.register(desktop_preview_tool());
+    registry.register(set_theme_tool());
     registry.register(react_to_message_tool());
+}
+
+/// Change the desktop app's appearance — accent colour, light/dark mode, layout —
+/// or show a picker card and wait for the user's pick.
+///
+/// Port of hermes `tools/set_theme_tool.py` (97 lines). 🔴 The renderer applies the
+/// values and **answers with what it applied**, so the model reports what the user
+/// sees: an unknown layout preset, a session that is not on screen and an absent
+/// desktop window all come back as errors. Swatch ids and preset ids are validated
+/// again in the renderer, which also knows the user's own saved layouts — so the
+/// checks here exist to fail fast on the cases upstream fails fast on, not to be the
+/// authority.
+///
+/// 🔴 **Toolset deviation, recorded not hidden:** upstream registers this (and
+/// `focus_pane`, `desktop_preview`, `read_terminal`, `close_terminal`) under
+/// `toolset="desktop_ui"`, one of `CLIENT_SURFACE_TOOLSETS` (`toolsets.py:71,139`).
+/// The port has **no `desktop_ui` toolset at all** (0 hits) and its five existing
+/// desktop tools all declare `.toolset("terminal")`. This follows the port's
+/// existing convention for consistency; introducing `desktop_ui` is a separate
+/// toolset-surface port that must move all five together, not one tool alone.
+fn set_theme_tool() -> crate::tools::Tool {
+    tool("set_theme")
+        .description(
+            "Change how the ulnclaw desktop app looks: accent colour, light/dark mode, layout. \
+             Pass the values to apply them now; the result says what was applied. Pass picker \
+             instead to show the user an accent or layout picker card in the chat and wait for \
+             their pick. To reveal ONE pane, use focus_pane instead.",
+        )
+        .parameters(json!({
+            "type": "object",
+            "properties": {
+                "accent": {
+                    "type": "string",
+                    "description": format!(
+                        "A swatch id ({}), 'theme' for the theme's own accent, or a hex colour '#rrggbb'.",
+                        ACCENT_SWATCHES.join(", ")
+                    ),
+                },
+                "mode": {"type": "string", "enum": MODES},
+                "layout": {
+                    "type": "string",
+                    "description": format!(
+                        "Layout preset id. Simple mode: {}. Advanced mode: {}. The user's saved layouts by id.",
+                        SIMPLE_LAYOUTS.join(", "),
+                        ADVANCED_LAYOUTS.join(", ")
+                    ),
+                },
+                "picker": {
+                    "type": "string",
+                    "enum": PICKERS,
+                    "description": "Show that picker card and wait for the user (up to 5 minutes). Pass it alone.",
+                },
+            },
+        }))
+        .handler(|args, ctx| async move {
+            // hermes: `values = {k: v.strip() for k, v in (…) if isinstance(v, str) and v.strip()}`
+            let mut values = serde_json::Map::new();
+            for key in ["accent", "mode", "layout"] {
+                if let Some(raw) = args.get(key).and_then(|v| v.as_str()) {
+                    let trimmed = raw.trim();
+                    if !trimmed.is_empty() {
+                        values.insert(key.to_string(), json!(trimmed));
+                    }
+                }
+            }
+            let picker = args.get("picker").and_then(|v| v.as_str());
+
+            let payload = match picker {
+                Some(picker) => {
+                    if !PICKERS.contains(&picker) {
+                        return Ok(json!({
+                            "error": format!("picker must be one of: {}.", PICKERS.join(", "))
+                        }));
+                    }
+                    // 🔴 A picker shows a card for the user to choose; values
+                    // would be silently discarded by that card, so upstream
+                    // refuses the combination rather than picking a winner.
+                    if !values.is_empty() {
+                        return Ok(json!({
+                            "error": "picker shows a card for the user to choose; pass picker alone, without values."
+                        }));
+                    }
+                    json!({"picker": picker})
+                }
+                None => {
+                    if values.is_empty() {
+                        return Ok(json!({
+                            "error": "Pass at least one of accent, mode or layout, or picker to let the user choose."
+                        }));
+                    }
+                    // 🔴 mode is checked BEFORE accent, matching upstream's order.
+                    if let Some(mode) = values.get("mode").and_then(|v| v.as_str()) {
+                        if !MODES.contains(&mode) {
+                            return Ok(json!({
+                                "success": false,
+                                "error": format!("Unknown mode {mode:?}."),
+                                "available": MODES,
+                            }));
+                        }
+                    }
+                    if let Some(accent) = values.get("accent").and_then(|v| v.as_str()) {
+                        if let Some(error) = accent_error(accent) {
+                            return Ok(error);
+                        }
+                    }
+                    serde_json::Value::Object(values)
+                }
+            };
+
+            // The renderer applies it (or shows the card and waits) and answers
+            // with what it did — `None` means no host wired the bridge.
+            let Some(result) = crate::desktop::set_theme(&ctx.session_id, payload) else {
+                return Ok(json!({
+                    "error": "set_theme is only available in the ulnclaw desktop app."
+                }));
+            };
+            match result {
+                Err(exc) => Ok(json!({"error": format!("Failed to set theme: {exc}")})),
+                Ok(raw) if raw.trim().is_empty() => Ok(json!({
+                    "error": "The desktop app did not answer (window closed, or the picker timed out)."
+                })),
+                // The renderer answers with a JSON object; pass it through so the
+                // model sees exactly what was applied, else wrap the raw text.
+                Ok(raw) => match serde_json::from_str::<serde_json::Value>(&raw) {
+                    Ok(v) if v.is_object() => Ok(v),
+                    _ => Ok(json!({"text": raw})),
+                },
+            }
+        })
+        .toolset("terminal")
+        .emoji("🎨")
+        .check_fn(check_desktop_requirements)
+        .build()
+        .expect("set_theme builds")
 }
 
 fn react_to_message_tool() -> crate::tools::Tool {
@@ -413,6 +594,138 @@ mod tests {
         let out = call(&tool, json!({})).await;
         assert_eq!(out["text"], json!("plain screen"));
         crate::desktop::set_read_terminal_callback(None);
+    }
+
+    /// 🔴 P2b `set_theme`: validation order + the blocking bridge contract.
+    /// The renderer is the authority on presets/swatches; these checks exist to
+    /// fail fast exactly where upstream does.
+    #[tokio::test]
+    async fn set_theme_validates_and_roundtrips() {
+        let _guard = BRIDGE_TEST_LOCK.lock().unwrap();
+        let tool = set_theme_tool();
+        crate::desktop::set_theme_callback(None);
+
+        // No bridge wired (CLI context) → desktop-only error, for BOTH shapes.
+        let out = call(&tool, json!({"accent": "nous"})).await;
+        assert!(out["error"].as_str().unwrap().contains("desktop"), "{out}");
+        let out = call(&tool, json!({"picker": "accent"})).await;
+        assert!(out["error"].as_str().unwrap().contains("desktop"), "{out}");
+
+        // Argument validation fires BEFORE the bridge, so it needs no callback.
+        let out = call(&tool, json!({})).await;
+        assert!(
+            out["error"].as_str().unwrap().contains("at least one"),
+            "{out}"
+        );
+        let out = call(&tool, json!({"picker": "nope"})).await;
+        assert!(
+            out["error"]
+                .as_str()
+                .unwrap()
+                .contains("picker must be one of"),
+            "{out}"
+        );
+        // 🔴 picker + values is refused rather than silently discarding values.
+        let out = call(&tool, json!({"picker": "accent", "mode": "dark"})).await;
+        assert!(
+            out["error"].as_str().unwrap().contains("pass picker alone"),
+            "{out}"
+        );
+        // 🔴 mode is checked before accent (upstream order): an invalid mode wins.
+        let out = call(&tool, json!({"mode": "neon", "accent": "nope"})).await;
+        assert!(
+            out["error"].as_str().unwrap().contains("Unknown mode"),
+            "{out}"
+        );
+        assert_eq!(out["available"], json!(MODES));
+        // Invalid accent lists what IS accepted.
+        let out = call(&tool, json!({"accent": "chartreuse"})).await;
+        assert!(
+            out["error"].as_str().unwrap().contains("Unknown accent"),
+            "{out}"
+        );
+        assert_eq!(out["success"], json!(false));
+        assert_eq!(
+            out["available"].as_array().unwrap().len(),
+            ACCENT_SWATCHES.len() + 1
+        );
+        // Accepted accents: every swatch, `theme`, and #rrggbb (not #rgb, not 8 digits).
+        for accent in ACCENT_SWATCHES.iter().chain(std::iter::once(&THEME_ACCENT)) {
+            assert!(accent_error(accent).is_none(), "{accent} must be accepted");
+        }
+        assert!(accent_error("#1a2b3c").is_none());
+        assert!(accent_error("#ABCDEF").is_none());
+        assert!(accent_error("#abc").is_some(), "3-digit hex is not #rrggbb");
+        assert!(accent_error("#12345678").is_some());
+        assert!(accent_error("1a2b3c").is_some(), "a bare hex needs the #");
+
+        // Wired callback: values pass through, and the answer is passed back
+        // verbatim when it is a JSON object (the model must see what was applied).
+        let seen: Arc<Mutex<Vec<(String, serde_json::Value)>>> = Arc::new(Mutex::new(Vec::new()));
+        let recorder = seen.clone();
+        crate::desktop::set_theme_callback(Some(Box::new(move |sid, payload| {
+            recorder.lock().unwrap().push((sid.to_string(), payload));
+            Ok(r#"{"success": true, "applied": {"accent": "nous"}}"#.to_string())
+        })));
+        let out = call(&tool, json!({"accent": "  nous  ", "mode": "dark"})).await;
+        assert_eq!(out["applied"]["accent"], json!("nous"));
+        {
+            let calls = seen.lock().unwrap();
+            assert_eq!(calls.len(), 1);
+            assert_eq!(
+                calls[0].0, "ui-test",
+                "the turn's ui session id must ride along"
+            );
+            // 🔴 Whitespace is stripped (upstream `.strip()`), and only non-empty
+            // values are forwarded — no `layout` key was passed, none appears.
+            assert_eq!(calls[0].1, json!({"accent": "nous", "mode": "dark"}));
+        }
+        // A picker reaches the renderer as {"picker": …} alone.
+        let out = call(&tool, json!({"picker": "layout"})).await;
+        assert_eq!(out["success"], json!(true));
+        assert_eq!(seen.lock().unwrap()[1].1, json!({"picker": "layout"}));
+
+        // Renderer errors surface as errors; a non-JSON answer is wrapped.
+        crate::desktop::set_theme_callback(Some(Box::new(|_s, _p| Err("no window".into()))));
+        let out = call(&tool, json!({"mode": "light"})).await;
+        assert!(
+            out["error"].as_str().unwrap().contains("no window"),
+            "{out}"
+        );
+        crate::desktop::set_theme_callback(Some(Box::new(|_s, _p| Ok("   ".into()))));
+        let out = call(&tool, json!({"mode": "light"})).await;
+        assert!(
+            out["error"].as_str().unwrap().contains("did not answer"),
+            "{out}"
+        );
+        crate::desktop::set_theme_callback(Some(Box::new(|_s, _p| Ok("applied".into()))));
+        let out = call(&tool, json!({"mode": "light"})).await;
+        assert_eq!(out["text"], json!("applied"));
+        crate::desktop::set_theme_callback(None);
+    }
+
+    /// The schema advertises the enums the renderer validates against, and the
+    /// tool is desktop-gated like its four siblings.
+    #[test]
+    fn set_theme_schema_and_gating() {
+        let tool = set_theme_tool();
+        assert_eq!(tool.definition.name, "set_theme");
+        let props = &tool.definition.parameters["properties"];
+        assert_eq!(props["mode"]["enum"], json!(MODES));
+        assert_eq!(props["picker"]["enum"], json!(PICKERS));
+        assert!(props["accent"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("mono, green"));
+        assert!(props["layout"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("terminal-deck"));
+        // 🔴 Same gate as the other desktop tools: never registered outside a host.
+        assert_eq!(
+            (check_desktop_requirements)().is_available(),
+            crate::desktop::desktop_env_enabled()
+        );
     }
 
     #[tokio::test]
