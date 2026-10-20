@@ -147,9 +147,17 @@ impl OpenAiProvider {
                     return Ok(response);
                 }
                 let error_body = response.text().await.unwrap_or_default();
-                let message = serde_json::from_str::<ApiError>(&error_body)
-                    .map(|api_err| api_err.error.message)
-                    .unwrap_or_else(|_| error_body.chars().take(500).collect::<String>());
+                // Keep the structured code: a proxy may flatten the wording away,
+                // and `context_length_exceeded` / `max_tokens_exceeded` still mean
+                // overflow (hermes `_ERROR_CODE_VERDICTS`).
+                let parsed = serde_json::from_str::<ApiError>(&error_body).ok();
+                let message = parsed
+                    .as_ref()
+                    .map(|api_err| api_err.error.message.clone())
+                    .unwrap_or_else(|| error_body.chars().take(500).collect::<String>());
+                let error_code = parsed
+                    .as_ref()
+                    .and_then(|api_err| api_err.error.code.clone());
                 if Self::retriable_status(status) && attempt < self.max_retries {
                     last_error = Some(AgentError::Provider(format!(
                         "API error ({}): {}",
@@ -173,10 +181,23 @@ impl OpenAiProvider {
                     learn_retried = true;
                     continue 'outer;
                 }
-                return Err(AgentError::Provider(format!(
-                    "API error ({}): {}",
-                    status, message
-                )));
+                // P3-6: classify the terminal error — an overflow must reach the
+                // agent loop as `ContextOverflow` so it compacts and retries
+                // instead of burning a fallback provider. Everything else keeps
+                // the exact shape it has always had.
+                let text = format!("API error ({}): {}", status, message);
+                let class = super::error_class::classify_provider_error(
+                    Some(status.as_u16()),
+                    &text,
+                    error_code.as_deref(),
+                );
+                return Err(
+                    if class == super::error_class::ProviderErrorClass::ContextOverflow {
+                        AgentError::ContextOverflow(text)
+                    } else {
+                        AgentError::Provider(text)
+                    },
+                );
             }
             return Err(last_error
                 .unwrap_or_else(|| AgentError::Provider("request failed after retries".into())));
@@ -1516,6 +1537,30 @@ mod streaming_tests {
                             axum::http::StatusCode::BAD_REQUEST,
                             r#"{"error":{"message":"Extra inputs are not permitted"}}"#.to_string(),
                         )
+                    } else if item == "{OVERFLOW}" {
+                        (
+                            axum::http::StatusCode::BAD_REQUEST,
+                            r#"{"error":{"message":"This model's maximum context length is 8192 tokens. However, you requested 9000 tokens."}}"#.to_string(),
+                        )
+                    } else if item == "{OVERFLOW_CODE}" {
+                        // A proxy flattened the wording away; only the code says overflow.
+                        (
+                            axum::http::StatusCode::BAD_REQUEST,
+                            r#"{"error":{"message":"Error","code":"context_length_exceeded"}}"#.to_string(),
+                        )
+                    } else if item == "{VALIDATION_MAX_TOKENS}" {
+                        // 🔴 Contains the overflow pattern "max_tokens" but is a
+                        // request-shape rejection: compression cannot fix it.
+                        (
+                            axum::http::StatusCode::BAD_REQUEST,
+                            r#"{"error":{"message":"Unsupported parameter: 'max_tokens' is not supported with this model."}}"#.to_string(),
+                        )
+                    } else if item == "{THROTTLE_TOKENS}" {
+                        // 🔴 Bedrock's throttle body names tokens; status settles it.
+                        (
+                            axum::http::StatusCode::TOO_MANY_REQUESTS,
+                            r#"{"error":{"message":"Throttling error: Too many tokens, please retry"}}"#.to_string(),
+                        )
                     } else {
                         (axum::http::StatusCode::OK, item)
                     }
@@ -1787,5 +1832,103 @@ mod streaming_tests {
             "已学习的路线不再发: {}",
             st.body(2)
         );
+    }
+
+    // -----------------------------------------------------------------
+    // P3-6 端到端：终态 provider 错误的分类接线（axum mock server）
+    // -----------------------------------------------------------------
+    //
+    // 🔴 These are wiring tests, not unit tests of the classifier: the classifier
+    // has its own table-driven suite in `provider/error_class.rs`. What must be
+    // proven *here* is that a real HTTP failure travelling through the retry loop,
+    // the P3-1d learner and the terminal-error path actually arrives at the caller
+    // as `AgentError::ContextOverflow` — the only shape the agent loop can branch on
+    // (P3-6 slice 3). A green classifier with a wrong call site would otherwise pass.
+
+    async fn overflow_provider(
+        script: Vec<&str>,
+        max_retries: usize,
+    ) -> (RejectMock, OpenAiProvider) {
+        let st = RejectMock::new(script.into_iter().map(String::from).collect());
+        let addr = reject_server(st.clone()).await;
+        let provider = OpenAiProvider::builder()
+            .endpoint(&format!("http://{addr}/v1"))
+            .model("m")
+            .name("openrouter")
+            .max_retries(max_retries)
+            .build()
+            .unwrap();
+        (st, provider)
+    }
+
+    /// 🔴 真溢出必须以 `ContextOverflow` 抵达调用方 —— 这是压缩分支的唯一依据。
+    #[tokio::test]
+    async fn context_overflow_surfaces_as_context_overflow_error() {
+        let (st, provider) = overflow_provider(vec!["{OVERFLOW}"], 2).await;
+
+        let err = provider
+            .chat_completion(req("m"))
+            .await
+            .expect_err("400 必须报错");
+
+        assert!(
+            err.is_context_overflow(),
+            "上下文溢出必须分类为 ContextOverflow（压缩而非 failover）: {err}"
+        );
+        // 400 不在 retriable_status 里：一次命中即终态，不该烧重试预算。
+        assert_eq!(st.hit_count(), 1, "400 不该重试: hits={}", st.hit_count());
+    }
+
+    /// 🔴 代理把措辞抹平后，结构化 code 仍要认出溢出（`_ERROR_CODE_VERDICTS`）。
+    /// 这也是保留 `ApiErrorDetail.code`（此前 dead_code）的理由。
+    #[tokio::test]
+    async fn structured_code_still_classifies_overflow_when_wording_is_flattened() {
+        let (_st, provider) = overflow_provider(vec!["{OVERFLOW_CODE}"], 2).await;
+
+        let err = provider
+            .chat_completion(req("m"))
+            .await
+            .expect_err("400 必须报错");
+        assert!(
+            err.is_context_overflow(),
+            "code=context_length_exceeded 必须分类为溢出（消息只是 'Error'）: {err}"
+        );
+    }
+
+    /// 🔴 守卫：`Unsupported parameter: 'max_tokens'` 含 overflow pattern
+    /// "max_tokens"，但压缩修不了请求形状 —— 误分类会丢弃用户上下文（hermes:1186）。
+    #[tokio::test]
+    async fn request_validation_is_not_misclassified_as_overflow() {
+        let (_st, provider) = overflow_provider(vec!["{VALIDATION_MAX_TOKENS}"], 2).await;
+
+        let err = provider
+            .chat_completion(req("m"))
+            .await
+            .expect_err("400 必须报错");
+        assert!(
+            !err.is_context_overflow(),
+            "请求校验拒绝绝不能进压缩分支: {err}"
+        );
+        assert!(
+            matches!(err, AgentError::Provider(_)),
+            "应保持原有的 Provider 形状: {err}"
+        );
+    }
+
+    /// 🔴 守卫：Bedrock 限流文案含 "Too many tokens"（overflow 短语），但 429 就是
+    /// 429 —— 限流先匹配所以限流胜（hermes:144）。把限流当溢出会压缩掉上下文，
+    /// 而限流只需要退避。
+    #[tokio::test]
+    async fn rate_limit_naming_tokens_is_not_misclassified_as_overflow() {
+        // max_retries(0)：429 是 retriable，零重试预算让它在分类点之前直接终态，
+        // 且不会越出脚本长度（越界会回落到 {REJECT}，与本测试无关）。
+        let (st, provider) = overflow_provider(vec!["{THROTTLE_TOKENS}"], 0).await;
+
+        let err = provider
+            .chat_completion(req("m"))
+            .await
+            .expect_err("429 必须报错");
+        assert!(!err.is_context_overflow(), "限流绝不能进压缩分支: {err}");
+        assert_eq!(st.hit_count(), 1, "零重试预算应只打一次");
     }
 }

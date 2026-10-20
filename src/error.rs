@@ -12,6 +12,17 @@ pub enum AgentError {
     #[error("Provider error: {0}")]
     Provider(String),
 
+    /// The provider rejected the request because the context is too large
+    /// (hermes `FailoverReason.context_overflow` — "Context too large —
+    /// compress, not failover").
+    ///
+    /// 🔴 A distinct variant rather than a `Provider(String)` that the agent
+    /// would have to string-match: the recovery is **compact and retry**, not
+    /// burning a fallback provider. Keeping the classification on the error type
+    /// is what lets the loop branch on it without re-parsing prose (P3-6).
+    #[error("Context overflow: {0}")]
+    ContextOverflow(String),
+
     /// Tool execution errors
     #[error("Tool error: {0}")]
     Tool(String),
@@ -64,6 +75,13 @@ impl AgentError {
 
     pub fn config(msg: impl Into<String>) -> Self {
         Self::Config(msg.into())
+    }
+
+    /// Whether this error means "the context was too large — compact and retry",
+    /// i.e. hermes `FailoverReason.context_overflow` (`should_compress=True`).
+    /// The agent loop branches on this instead of failing over (P3-6).
+    pub fn is_context_overflow(&self) -> bool {
+        matches!(self, Self::ContextOverflow(_))
     }
 }
 
