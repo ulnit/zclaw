@@ -5,6 +5,7 @@
 
 pub mod anthropic;
 pub mod auxiliary;
+pub mod error_class;
 pub mod openai;
 pub mod reasoning_echo;
 
