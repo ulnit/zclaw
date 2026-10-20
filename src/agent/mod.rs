@@ -494,6 +494,56 @@ impl Agent {
         index.map(|i| i + 1).unwrap_or(0) < self.fallback_chain.len()
     }
 
+    /// Compact `messages` in place and report whether the transcript changed.
+    ///
+    /// Auxiliary model routing: hermes resolves `auxiliary.compression.{provider,
+    /// model}` and falls back to the main runtime when unset.
+    ///
+    /// Shared by the preflight path (over budget → compact before sending) and
+    /// the reactive path (P3-6: the provider already rejected the request as
+    /// context overflow → compact and retry). 🔴 One implementation on purpose:
+    /// the reactive path must arm the same post-compaction latch as the
+    /// preflight path, or the next iteration re-compresses on the stale usage
+    /// reading that described the transcript we just replaced (hermes #4750
+    /// death spiral).
+    async fn compact_messages(
+        &self,
+        compressor: &mut CompressorGuard,
+        messages: &mut Vec<Message>,
+    ) -> bool {
+        let compressed = match crate::provider::auxiliary::resolve_aux_task(
+            &self.context.config,
+            crate::provider::auxiliary::TASK_COMPRESSION,
+            self.provider.clone(),
+        ) {
+            Ok(aux) => {
+                compressor
+                    .compress_with_model(messages.clone(), aux.provider.as_ref(), &aux.model)
+                    .await
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "auxiliary compression routing failed: {}; using main provider",
+                    e
+                );
+                compressor
+                    .compress_with_provider(messages.clone(), self.provider.as_ref())
+                    .await
+            }
+        };
+        match compressed {
+            Some(compressed) => {
+                // The last real usage reading described the transcript we just
+                // replaced; arm the latch so the next iteration does not
+                // compress again on stale numbers (hermes #4750 death spiral).
+                compressor.note_compaction_ran();
+                *messages = compressed;
+                true
+            }
+            None => false,
+        }
+    }
+
     /// P3-5d: take this session's compressor out of the registry (or build a
     /// fresh one) for the duration of a run. Its cross-turn state — the real
     /// usage anchor, the post-compaction latch, the anti-thrash strikes — is
@@ -1090,6 +1140,15 @@ impl Agent {
         // from zero estimates.
         let mut compressor = self.acquire_compressor(session_id.as_deref());
 
+        // P3-6: at most ONE reactive compaction per run. A second overflow after
+        // we already shrank the transcript means compression cannot satisfy this
+        // provider — retrying would just burn the remaining iteration budget
+        // (each attempt re-sends a still-too-large context) and lose the real
+        // error. hermes bounds it the same way: the overflow handler compacts and
+        // retries, and the anti-thrash breaker (P3-5c) is what stops a repeated
+        // ineffective compaction from looping.
+        let mut overflow_retry_done = false;
+
         // Main conversation loop
         for iteration in 0..self.config.max_iterations {
             debug!("Agent iteration {}", iteration);
@@ -1107,36 +1166,7 @@ impl Agent {
             // its recovery window elapses and let the probation probe through
             // (hermes `_automatic_compression_blocked`, P3-5c).
             if !compressor.anti_thrash_blocked() && compressor.needs_compression(&messages) {
-                let compressed = match crate::provider::auxiliary::resolve_aux_task(
-                    &self.context.config,
-                    crate::provider::auxiliary::TASK_COMPRESSION,
-                    self.provider.clone(),
-                ) {
-                    Ok(aux) => {
-                        compressor
-                            .compress_with_model(
-                                messages.clone(),
-                                aux.provider.as_ref(),
-                                &aux.model,
-                            )
-                            .await
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "auxiliary compression routing failed: {}; using main provider",
-                            e
-                        );
-                        compressor
-                            .compress_with_provider(messages.clone(), self.provider.as_ref())
-                            .await
-                    }
-                };
-                if let Some(compressed) = compressed {
-                    messages = compressed;
-                    // The last real usage reading described the transcript we just
-                    // replaced; arm the latch so the next iteration does not
-                    // compress again on stale numbers (hermes #4750 death spiral).
-                    compressor.note_compaction_ran();
+                if self.compact_messages(&mut compressor, &mut messages).await {
                     debug!("Context compressed");
                 }
             }
@@ -1199,6 +1229,50 @@ impl Agent {
                             serde_json::json!({}),
                         );
                         let _ = crate::plugins::invoke_hook("api_request_error", payload).await;
+                    }
+                    // P3-6: reactive context-overflow recovery. The provider
+                    // itself told us the context does not fit, so the preflight
+                    // budget estimate was wrong (or the provider's limit is
+                    // smaller than configured) — compact and retry the same
+                    // iteration's work instead of failing the turn.
+                    //
+                    // 🔴 This deliberately bypasses `needs_compression`, the
+                    // post-compaction latch and `anti_thrash_blocked`: hermes'
+                    // overflow handler "compacts reactively in every case",
+                    // because the provider's verdict is ground truth about the
+                    // real prompt size and the estimate-driven preflight gate
+                    // demonstrably let this request through.
+                    //
+                    // 🔴 Bounded to one attempt per run: `compress_with_model`
+                    // returns `None` when there is too little to compress, and a
+                    // second overflow after a real compaction means shrinking
+                    // cannot satisfy this provider. Either way we fall through to
+                    // the original behaviour and surface the real error rather
+                    // than looping on a context that will never fit.
+                    if error.is_context_overflow() && !overflow_retry_done {
+                        overflow_retry_done = true;
+                        let before = messages.len();
+                        tracing::warn!(
+                            "context overflow ({}); compacting reactively and retrying",
+                            error
+                        );
+                        if self.compact_messages(&mut compressor, &mut messages).await {
+                            debug!(
+                                "Context compressed after provider overflow ({} -> {} messages)",
+                                before,
+                                messages.len()
+                            );
+                            // `continue` rather than re-calling the provider
+                            // here: the retry must recompute `request_len` and
+                            // `api_started` for the NEW transcript, or the
+                            // provider's usage report would be paired with the
+                            // pre-compaction snapshot length and poison the real
+                            // usage anchor (P3-5b).
+                            continue;
+                        }
+                        tracing::warn!(
+                            "reactive compaction could not shrink the context further; surfacing the overflow error"
+                        );
                     }
                     return Err(error);
                 }
@@ -2880,5 +2954,200 @@ mod tests {
         // The newest survived; the oldest were evicted.
         assert!(reg.contains_key(&format!("sess-{}", COMPRESSOR_REGISTRY_CAP + 9)));
         assert!(!reg.contains_key("sess-0"));
+    }
+
+    // ---- P3-6: reactive context-overflow recovery --------------------------
+    //
+    // 🔴 These test the WIRING in `run`, not the classifier (19 table tests in
+    // `provider/error_class.rs`) nor the compressor (34 in `context::`). What
+    // must hold here: a provider verdict of "your context does not fit" makes the
+    // agent compact and retry the same turn, instead of failing over to another
+    // provider or failing the turn outright.
+
+    /// Returns `AgentError::ContextOverflow` on the calls listed in
+    /// `overflow_on`, and a normal reply otherwise.
+    struct OverflowScriptProvider {
+        calls: Arc<AtomicUsize>,
+        overflow_on: Vec<usize>,
+    }
+
+    #[async_trait::async_trait]
+    impl Provider for OverflowScriptProvider {
+        async fn chat_completion(
+            &self,
+            _request: crate::provider::ProviderRequest,
+        ) -> Result<crate::provider::ProviderResponse> {
+            let n = self.calls.fetch_add(1, Ordering::SeqCst);
+            if self.overflow_on.contains(&n) {
+                return Err(AgentError::ContextOverflow(format!(
+                    "API error (400 Bad Request): This model's maximum context length is 8192 \
+                     tokens. However, you requested 9000 tokens. (call {n})"
+                )));
+            }
+            Ok(crate::provider::ProviderResponse {
+                content: Some("recovered".into()),
+                tool_calls: vec![],
+                usage: None,
+                model: "overflow-script".into(),
+                reasoning: None,
+                finish_reason: Some("stop".into()),
+            })
+        }
+        fn model(&self) -> &str {
+            "overflow-script-model"
+        }
+        fn name(&self) -> &str {
+            "overflow-script"
+        }
+    }
+
+    /// A transcript long enough that `compress_with_model` has a middle to
+    /// summarize: system + first user are kept, a recent tail is kept, and the
+    /// rest becomes the summary.
+    ///
+    /// 🔴 The count matters, not just the size: the compressor bails out with
+    /// `None` when `messages.len() <= effective_tail_len + 2`, and
+    /// `keep_recent = 12`. Ten history messages (12 total with system + the new
+    /// user message) sit exactly at that threshold and would make the reactive
+    /// path look broken when it is really un-compressible. Forty alternations
+    /// leave a wide middle (~29 messages) to summarize.
+    fn compressible_history() -> Vec<Message> {
+        let mut history = Vec::new();
+        for i in 0..40 {
+            history.push(Message {
+                reasoning: None,
+                role: if i % 2 == 0 {
+                    Role::User
+                } else {
+                    Role::Assistant
+                },
+                content: Some(format!("history message {i} with enough text to summarize")),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            });
+        }
+        history
+    }
+
+    /// 🔴 The provider says the context does not fit. The agent must compact and
+    /// retry, producing a successful turn — call sequence is exactly
+    /// [conversation → summary → retry].
+    #[tokio::test]
+    async fn p36_overflow_compacts_and_retries_instead_of_failing() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let provider = Arc::new(OverflowScriptProvider {
+            calls: calls.clone(),
+            // Only the very first conversation call overflows; the summarization
+            // call (index 1) and the retry (index 2) succeed.
+            overflow_on: vec![0],
+        });
+        let agent = Agent::new(provider, ToolRegistry::new());
+
+        let result = agent
+            .run_with_session_images("next question", vec![], Some(compressible_history()), None)
+            .await
+            .expect("overflow must be recovered by compaction, not surfaced");
+
+        assert_eq!(
+            result.content, "recovered",
+            "the retry after compaction must produce the answer"
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            3,
+            "expected exactly [overflow, summary, retry]; got {} calls",
+            calls.load(Ordering::SeqCst)
+        );
+    }
+
+    /// 🔴 Bounded to ONE reactive compaction per run: if the transcript still
+    /// does not fit after we shrank it, compression cannot satisfy this provider
+    /// and the real error must surface instead of looping through the iteration
+    /// budget (each retry would re-send a context that will never fit).
+    #[tokio::test]
+    async fn p36_second_overflow_surfaces_the_real_error() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let provider = Arc::new(OverflowScriptProvider {
+            calls: calls.clone(),
+            // Conversation call overflows, summarization succeeds, and the retry
+            // overflows again.
+            overflow_on: vec![0, 2],
+        });
+        let agent = Agent::new(provider, ToolRegistry::new());
+
+        let err = agent
+            .run_with_session_images("next question", vec![], Some(compressible_history()), None)
+            .await
+            .expect_err("a second overflow must not be silently retried");
+
+        assert!(
+            err.is_context_overflow(),
+            "the surfaced error must still be the real overflow: {err}"
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            3,
+            "must not retry a second time: got {} calls",
+            calls.load(Ordering::SeqCst)
+        );
+    }
+
+    /// 🔴 Guard: a NON-overflow provider error must keep today's behaviour —
+    /// no compaction, no extra calls, the error surfaces as-is. Without this the
+    /// branch above could be firing on every failure and destroying context.
+    #[tokio::test]
+    async fn p36_non_overflow_error_does_not_compact() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let provider = Arc::new(OverflowScriptProvider {
+            calls: calls.clone(),
+            overflow_on: vec![], // nothing overflows; first call replies "recovered"
+        });
+        // Wrap in a provider that fails with a plain Provider error once.
+        struct FailsOnce {
+            inner: Arc<OverflowScriptProvider>,
+            failed: Arc<AtomicUsize>,
+        }
+        #[async_trait::async_trait]
+        impl Provider for FailsOnce {
+            async fn chat_completion(
+                &self,
+                request: crate::provider::ProviderRequest,
+            ) -> Result<crate::provider::ProviderResponse> {
+                if self.failed.fetch_add(1, Ordering::SeqCst) == 0 {
+                    return Err(AgentError::provider("upstream 500: internal server error"));
+                }
+                self.inner.chat_completion(request).await
+            }
+            fn model(&self) -> &str {
+                self.inner.model()
+            }
+            fn name(&self) -> &str {
+                self.inner.name()
+            }
+        }
+        let agent = Agent::new(
+            Arc::new(FailsOnce {
+                inner: provider,
+                failed: Arc::new(AtomicUsize::new(0)),
+            }),
+            ToolRegistry::new(),
+        );
+
+        let err = agent
+            .run_with_session_images("next question", vec![], Some(compressible_history()), None)
+            .await
+            .expect_err("a non-overflow provider failure must still fail the turn");
+
+        assert!(
+            !err.is_context_overflow(),
+            "must remain a plain provider error: {err}"
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "no compaction/summarization must have been attempted: {} calls",
+            calls.load(Ordering::SeqCst)
+        );
     }
 }
