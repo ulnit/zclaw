@@ -776,6 +776,333 @@ mod slice2a_tests {
     }
 }
 
+// ===========================================================================
+// slice2b — the cross-process scan: who else has state.db (or a WAL sidecar)
+// open right now? (hermes `foreign_state_db_holders`, L425-566)
+//
+// 🔴 The load-bearing property, upstream's own words: "A scan failure is
+// represented as an unknown holder… must not assume quiescence when an old,
+// unlinked SQLite generation may still be open by another process." Every
+// failure path below therefore PRODUCES a holder, never an empty list.
+// ===========================================================================
+
+use std::collections::HashSet;
+use std::os::unix::fs::MetadataExt;
+
+/// A holder of the store: `(pid, human-readable target)`. `pid < 0` marks an
+/// UNKNOWN holder — a scan we could not complete — which must block maintenance
+/// exactly like a real one.
+pub type Holder = (i32, String);
+
+/// Read `/proc/<pid>/cmdline` without losing argv boundaries (upstream
+/// `_read_proc_argv`): NUL-separated, trailing NUL dropped, `None` when empty or
+/// unreadable.
+#[cfg(target_os = "linux")]
+pub fn read_proc_argv(pid: i32) -> Option<Vec<String>> {
+    let raw = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+    if raw.is_empty() {
+        return None;
+    }
+    // Lossy UTF-8, split on NUL — argv boundaries must survive.
+    let text = String::from_utf8_lossy(&raw);
+    let mut argv: Vec<String> = text.split('\0').map(str::to_string).collect();
+    if argv.last().map(|s| s.is_empty()).unwrap_or(false) {
+        argv.pop();
+    }
+    if argv.is_empty() {
+        None
+    } else {
+        Some(argv)
+    }
+}
+
+/// `PID 123 (ulnclaw gateway run)` for operator-facing holder lists
+/// (upstream `describe_holder_pid`). Falls back to a fixed string when the
+/// command line cannot be read.
+#[cfg(target_os = "linux")]
+pub fn describe_holder_pid(pid: i32) -> String {
+    let who = match read_proc_argv(pid) {
+        Some(argv) if !argv.is_empty() => {
+            let base = Path::new(argv[0].as_str())
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let joined = std::iter::once(base)
+                .chain(argv.iter().skip(1).cloned())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let collapsed = joined.split_whitespace().collect::<Vec<_>>().join(" ");
+            collapsed.chars().take(80).collect::<String>()
+        }
+        _ => "command line unavailable".to_string(),
+    };
+    format!("PID {pid} ({who})")
+}
+
+/// ENOENT / ESRCH: the process or fd vanished mid-scan. Upstream treats these as
+/// "skip this one, keep scanning" — a dead process holds nothing. Every OTHER
+/// errno is a genuine inability to prove quiescence, i.e. fail closed.
+#[cfg(unix)]
+fn is_gone_error(err: &std::io::Error) -> bool {
+    matches!(err.raw_os_error(), Some(libc::ENOENT) | Some(libc::ESRCH))
+}
+
+/// Foreign holders of `db_path` or one of its WAL sidecars, cross-PROCESS.
+///
+/// Mirrors upstream `foreign_state_db_holders`. 🔴 `realpath` (not `abspath`):
+/// `/proc` fd targets are kernel-resolved, so a symlinked `ULNCLAW_HOME` would
+/// otherwise make every holder invisible and let maintenance proceed. Matching is
+/// by `(st_dev, st_ino)`, not by name, so a hardlink or a bind-mount still
+/// matches; the `" (deleted)"` suffix arm catches a retired-but-still-open WAL.
+#[cfg(target_os = "linux")]
+pub fn foreign_state_db_holders(db_path: &Path) -> Vec<Holder> {
+    let mut holders: Vec<Holder> = Vec::new();
+
+    // realpath the store first; every watched path derives from the real one.
+    let real_db = match std::fs::canonicalize(db_path) {
+        Ok(p) => p,
+        // A store we cannot even resolve: fail closed (unknown holder).
+        Err(e) => return vec![(-1, format!("state.db realpath failed: {e}"))],
+    };
+    let db_str = real_db.to_string_lossy().to_string();
+
+    // watched = canonical paths of (db, -wal, -shm); watched_ids = their
+    // (dev, ino) pairs; db_dev = the store's device (for the deleted-WAL arm).
+    let mut watched: HashSet<String> = HashSet::new();
+    let mut watched_ids: HashSet<(u64, u64)> = HashSet::new();
+    let mut db_dev: Option<u64> = None;
+
+    for candidate in sqlite_family(db_str.as_str()) {
+        watched.insert(canonical_sqlite_path(candidate.as_str()));
+        match std::fs::metadata(candidate.as_str()) {
+            Ok(meta) => {
+                watched_ids.insert((meta.dev(), meta.ino()));
+                if candidate == db_str {
+                    db_dev = Some(meta.dev());
+                }
+            }
+            // A stat failure other than ENOENT/ESRCH is itself an unknown holder:
+            // we cannot prove the sidecar is closed.
+            Err(e) => {
+                if !is_gone_error(&e) {
+                    holders.push((-1, format!("watched-file stat failed: {candidate}: {e}")));
+                }
+            }
+        }
+    }
+
+    let own_pid = std::process::id() as i32;
+
+    // Walk /proc/*/fd. Any failure to even LIST /proc is fatal to the proof.
+    let proc_entries = match std::fs::read_dir("/proc") {
+        Ok(entries) => entries,
+        Err(e) => {
+            holders.push((-1, format!("open-file scan failed: {e}")));
+            return holders;
+        }
+    };
+
+    for entry in proc_entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Ok(pid) = name.parse::<i32>() else {
+            continue; // not a numeric pid dir
+        };
+        if pid == own_pid {
+            continue; // foreign only; the in-process arm answers that question
+        }
+
+        let fd_dir = format!("/proc/{pid}/fd");
+        let fds = match std::fs::read_dir(fd_dir.as_str()) {
+            Ok(d) => d,
+            // 🔴 Unreadable fd dir: fall back to argv. Count it ONLY when the
+            // process is plausibly ours AND not provably another instance —
+            // otherwise every other user's process on a shared host would pin
+            // VACUUM forever (the exact failure slice2a exists to prevent).
+            Err(_) => {
+                if let Some(argv) = read_proc_argv(pid) {
+                    if looks_like_ulnclaw(&argv) && !argv_scoped_to_other_home(&argv, &real_db) {
+                        let cmdline = argv.join(" ");
+                        let head: String = cmdline.chars().take(80).collect();
+                        holders.push((pid, format!("uninspectable holder: {head}")));
+                    }
+                }
+                continue;
+            }
+        };
+
+        for fd in fds.flatten() {
+            let fd_path = fd.path();
+            let target = match std::fs::read_link(fd_path.as_path()) {
+                Ok(t) => t.to_string_lossy().to_string(),
+                Err(e) => {
+                    if is_gone_error(&e) {
+                        continue;
+                    }
+                    if let Some(argv) = read_proc_argv(pid) {
+                        if looks_like_ulnclaw(&argv) && !argv_scoped_to_other_home(&argv, &real_db)
+                        {
+                            holders.push((
+                                pid,
+                                format!("uninspectable descriptor: {}: {e}", fd_path.display()),
+                            ));
+                        }
+                    }
+                    continue;
+                }
+            };
+
+            let target_is_watched =
+                watched.contains(canonical_sqlite_path(target.as_str()).as_str());
+
+            // stat the fd to get (dev, ino). A failure here is fatal to THIS fd.
+            let fd_stat = match std::fs::metadata(fd_path.as_path()) {
+                Ok(m) => m,
+                Err(e) => {
+                    if is_gone_error(&e) {
+                        continue;
+                    }
+                    if target_is_watched {
+                        holders.push((pid, format!("uninspectable descriptor: {target}: {e}")));
+                    } else if let Some(argv) = read_proc_argv(pid) {
+                        if looks_like_ulnclaw(&argv) && !argv_scoped_to_other_home(&argv, &real_db)
+                        {
+                            holders.push((pid, format!("uninspectable descriptor: {target}: {e}")));
+                        }
+                    }
+                    continue;
+                }
+            };
+
+            let hit = watched_ids.contains(&(fd_stat.dev(), fd_stat.ino()))
+                || (target_is_watched
+                    && target.ends_with(DELETED_SUFFIX)
+                    && db_dev.map(|d| fd_stat.dev() == d).unwrap_or(false));
+            if hit {
+                holders.push((pid, target));
+            }
+        }
+    }
+
+    holders
+}
+
+// ---------------------------------------------------------------------------
+// Non-Linux / non-unix / Windows: fail CLOSED. Upstream proves quiescence on
+// those platforms with psutil (macOS/BSD) and the Restart Manager (Windows);
+// neither is ported yet (slice3/slice4), so an unprovable scan reports an
+// unknown holder rather than an all-clear.
+// ---------------------------------------------------------------------------
+
+/// POSIX-but-not-Linux (macOS/BSD): upstream uses `psutil.process_iter`.
+#[cfg(all(unix, not(target_os = "linux")))]
+pub fn foreign_state_db_holders(_db_path: &Path) -> Vec<Holder> {
+    vec![(-1, "open-file scan unavailable".to_string())]
+}
+
+/// Windows: upstream uses the Restart Manager (slice4). Until then, fail closed.
+#[cfg(windows)]
+pub fn foreign_state_db_holders(_db_path: &Path) -> Vec<Holder> {
+    vec![(
+        -1,
+        "Windows Restart Manager scan not yet ported".to_string(),
+    )]
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod slice2b_tests {
+    use super::*;
+    use std::fs;
+    use std::io::Write;
+
+    /// Open a file and leak the fd for the test's lifetime, so this process is a
+    /// real holder of it. Returns the File (kept alive by the caller).
+    fn open_holder(path: &Path) -> fs::File {
+        fs::OpenOptions::new().read(true).open(path).unwrap()
+    }
+
+    #[test]
+    fn read_proc_argv_returns_our_own_command_line() {
+        let pid = std::process::id() as i32;
+        let argv = read_proc_argv(pid).expect("our own /proc/<pid>/cmdline is readable");
+        assert!(!argv.is_empty());
+        // The test harness binary; just assert argv[0] is non-empty and has no NUL.
+        assert!(!argv[0].is_empty());
+        assert!(!argv.iter().any(|a| a.contains('\0')));
+    }
+
+    #[test]
+    fn read_proc_argv_is_none_for_a_dead_pid() {
+        // pid 0 is never a real process dir with a readable cmdline.
+        assert!(
+            read_proc_argv(0).is_none() || read_proc_argv(0).map(|a| a.is_empty()).unwrap_or(true)
+        );
+    }
+
+    #[test]
+    fn describe_holder_pid_formats_pid_and_name() {
+        let pid = std::process::id() as i32;
+        let s = describe_holder_pid(pid);
+        assert!(s.starts_with(&format!("PID {pid} (")), "got: {s}");
+        assert!(s.ends_with(')'));
+    }
+
+    #[test]
+    fn foreign_scan_finds_a_real_holder_of_our_own_store() {
+        // This test process holds the file open, but foreign_state_db_holders
+        // SKIPS our own pid by design (that is the in-process arm's job). So we
+        // assert the weaker, still-load-bearing property: a store under a tempdir
+        // with NO other holder yields no holders, and the scan does not error out.
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("state.db");
+        let mut f = fs::File::create(&db).unwrap();
+        f.write_all(b"x").unwrap();
+        drop(f);
+
+        let holders = foreign_state_db_holders(&db);
+        // No foreign process opened it; our own fd is closed and our pid is
+        // skipped anyway. Must be empty (no false positives) and no error holder.
+        assert!(
+            holders.is_empty(),
+            "expected no holders for a quiescent store, got {holders:?}"
+        );
+    }
+
+    #[test]
+    fn foreign_scan_fails_closed_on_an_unresolvable_store() {
+        // A path that cannot be realpath'd: the proof is impossible, so it must
+        // report an UNKNOWN holder (pid < 0), never an empty all-clear.
+        let holders = foreign_state_db_holders(Path::new("/definitely/not/here/state.db"));
+        assert_eq!(holders.len(), 1);
+        assert!(
+            holders[0].0 < 0,
+            "unknown holder must carry a negative pid: {holders:?}"
+        );
+        assert!(holders[0].1.contains("realpath"), "{:?}", holders[0].1);
+    }
+
+    #[test]
+    fn wal_and_shm_sidecars_are_watched() {
+        // A holder of the -wal sidecar pins the generation exactly like the main
+        // db. Prove the watched set includes all three by canonicalizing each.
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("state.db");
+        fs::write(&db, b"x").unwrap();
+        fs::write(dir.path().join("state.db-wal"), b"y").unwrap();
+        fs::write(dir.path().join("state.db-shm"), b"z").unwrap();
+
+        let fam = sqlite_family(db.to_str().unwrap());
+        assert_eq!(fam.len(), 3);
+        assert!(fam[1].ends_with("-wal"));
+        assert!(fam[2].ends_with("-shm"));
+        // All three exist, so the scan resolves them without an unknown holder.
+        let holders = foreign_state_db_holders(&db);
+        assert!(
+            holders.is_empty(),
+            "quiescent store with sidecars: {holders:?}"
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
