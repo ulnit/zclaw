@@ -35,7 +35,7 @@ import { classifyActiveRuntime } from './active-runtime-state'
 import { stopBackendChild as stopBackendChildImpl } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
-import { buildDesktopBackendEnv, ulnclawManagedNodePathEntries, normalizeulnclawHomeRoot } from './backend-env'
+import { buildDesktopBackendEnv, normalizeulnclawHomeRoot, ulnclawManagedNodePathEntries } from './backend-env'
 import { isReauthRequiredError, waitForulnclawReady } from './backend-health'
 import {
   canImportulnclawCli,
@@ -175,6 +175,7 @@ import {
   SESSION_WINDOW_MIN_HEIGHT,
   SESSION_WINDOW_MIN_WIDTH
 } from './session-windows'
+import { startShellUpdater } from './shell-updater'
 import { ensureSpawnHelperExecutable } from './spawn-helper-perms'
 import { createBootstrapCoordinator, sshConfigFingerprint } from './ssh-bootstrap-coordinator'
 import { collectSshConfigHosts, parseSshGOutput } from './ssh-config'
@@ -218,12 +219,6 @@ import {
 } from './window-state'
 import { hiddenWindowsChildOptions } from './windows-child-options'
 import {
-  buildPathExtCandidates,
-  chooseUpdaterArgs,
-  getVenvSitePackagesEntries,
-  resolveVenvulnclawCommand
-} from './windows-ulnclaw-path'
-import {
   buildWindowsInteractiveCommand,
   connectWindowsRemote,
   detectRemotePlatform,
@@ -244,11 +239,16 @@ import {
   writeSandboxMarker
 } from './windows-sandbox-fallback'
 import { installWindowsSystemCaTrust } from './windows-system-ca'
+import {
+  buildPathExtCandidates,
+  chooseUpdaterArgs,
+  getVenvSitePackagesEntries,
+  resolveVenvulnclawCommand
+} from './windows-ulnclaw-path'
 import { readWindowsUserEnvVar } from './windows-user-env'
 import { isPackagedInstallPath as isPackagedInstallPathUnderRoots } from './workspace-cwd'
 import { readWslWindowsClipboardImage } from './wsl-clipboard-image'
 import { resolvePickerDefaultPath } from './wsl-path-bridge'
-import { startShellUpdater } from './shell-updater'
 
 const USER_DATA_OVERRIDE = process.env.ULNCLAW_DESKTOP_USER_DATA_DIR
 
@@ -1814,18 +1814,21 @@ function unpackedPathFor(filePath) {
 }
 
 function bundledulnclawBinary(): string | null {
-  if (!process.resourcesPath) return null
+  if (!process.resourcesPath) {return null}
+
   const candidates = [
     path.join(process.resourcesPath, 'binaries', 'ulnclaw'),
     path.join(process.resourcesPath, 'binaries', 'ulnclaw.exe'),
   ]
+
   for (const candidate of candidates) {
     try {
-      if (fs.existsSync(candidate)) return candidate
+      if (fs.existsSync(candidate)) {return candidate}
     } catch {
       // ignore
     }
   }
+
   return null
 }
 

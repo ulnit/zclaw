@@ -1,5 +1,5 @@
 import { asText, normalize } from '@/lib/text'
-import type { ConfigFieldSchema, ulnclawConfigRecord, ToolsetInfo } from '@/types/ulnclaw'
+import type { ConfigFieldSchema, ToolsetInfo, ulnclawConfigRecord } from '@/types/ulnclaw'
 
 import { BUILTIN_PERSONALITIES, ENUM_OPTIONS, PROVIDER_GROUPS, SECTIONS } from './constants'
 

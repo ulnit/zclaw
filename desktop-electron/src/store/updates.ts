@@ -13,12 +13,12 @@ import type {
   DesktopUpdateStatus,
   DesktopVersionInfo
 } from '@/global'
-import { checkulnclawUpdate, getActionStatus, updateulnclaw } from '@/ulnclaw'
 import { translateNow } from '@/i18n'
 import { persistString, storedString } from '@/lib/storage'
 import { dismissNotification, notify } from '@/store/notifications'
 import { $connection } from '@/store/session'
 import type { BackendUpdateCheckResponse } from '@/types/ulnclaw'
+import { checkulnclawUpdate, getActionStatus, updateulnclaw } from '@/ulnclaw'
 
 export interface UpdateApplyState {
   applying: boolean

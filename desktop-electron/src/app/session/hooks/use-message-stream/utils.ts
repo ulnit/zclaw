@@ -1,6 +1,6 @@
 import type { GatewayEventPayload } from '@/lib/chat-messages'
-import { isTodoToolName } from '@/lib/todos'
 import { normalizePersonalityValue } from '@/lib/chat-runtime'
+import { isTodoToolName } from '@/lib/todos'
 
 import type { ClientSessionState } from '../../../types'
 

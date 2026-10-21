@@ -14,7 +14,6 @@ import './kanban.css'
 import {
   cn,
   Codicon,
-  type ulnclawPlugin,
   host,
   type KeybindContribution,
   KEYBINDS_AREA,
@@ -26,6 +25,7 @@ import {
   type SidebarNavContribution,
   STATUSBAR_AREAS,
   Tip,
+  type ulnclawPlugin,
   useQuery,
   useValue
 } from '@ulnclaw/plugin-sdk'

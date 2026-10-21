@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
-import { getulnclawConfigRecord, type ulnclawConfigRecord, saveulnclawConfig } from '@/ulnclaw'
+import { getulnclawConfigRecord, saveulnclawConfig, type ulnclawConfigRecord } from '@/ulnclaw'
 
 import { TRANSLATIONS } from './catalog'
 import { DEFAULT_LOCALE, localeConfigValue, normalizeLocale } from './languages'

@@ -6,7 +6,6 @@ import {
   type SidebarProjectTree
 } from '@/app/chat/sidebar/projects/workspace-groups'
 import type { ulnclawGitBaseBranch, ulnclawGitBranch } from '@/global'
-import { getulnclawConfig, type ulnclawGateway } from '@/ulnclaw'
 import { translateNow } from '@/i18n'
 import { desktopDefaultCwd, isDesktopFsRemoteMode, selectDesktopPaths, writeDesktopFileText } from '@/lib/desktop-fs'
 import { desktopGit } from '@/lib/desktop-git'
@@ -26,6 +25,7 @@ import {
 } from '@/store/session'
 import { $focusedSessionState, $focusedStoredSessionId } from '@/store/session-states'
 import type { ProjectInfo, ProjectsPayload } from '@/types/ulnclaw'
+import { getulnclawConfig, type ulnclawGateway } from '@/ulnclaw'
 
 // First-class, per-profile Projects (named, multi-folder workspaces). State is
 // served by the live gateway's `projects.*` JSON-RPC methods, which wrap the

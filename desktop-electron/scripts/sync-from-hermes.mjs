@@ -10,13 +10,25 @@
 //   node scripts/sync-from-hermes.mjs ... --with-tests               # incl. tests
 //
 // Pipeline: upstream file -> mechanical brand rename -> functional
-// divergence patches (gateway wiring / packaging layout only) -> compare
-// or write. See UPSTREAM-SYNC.md for the divergence catalog.
+// divergence patches (gateway wiring / packaging layout only) -> deterministic
+// lint normalization (the rename breaks perfectionist/sort-* ordering; upstream
+// keeps its tree sorted with an on-merge `npm run fix` bot) -> compare or write.
+// See UPSTREAM-SYNC.md for the divergence catalog.
+//
+// Invariant: after a sync, `npm run lint` reports 0 errors — because the
+// normalization step reuses ESLint's own fixer, the tree equals what
+// `npm run lint:fix` would produce.
 
 import fs from 'node:fs'
 import path from 'node:path'
 
 const SELF_DIR = path.resolve(import.meta.dirname, '..')
+
+// EOL markers as plain text constants: writing /\r\n/ as a regex literal
+// is fragile across editors/tools that normalize escapes, so split/join is used.
+const CRLF_TEXT = '\r\n'
+const LF_TEXT = '\n'
+
 
 // ---------------------------------------------------------------------------
 // Mechanical brand rename (applied to file contents AND file names).
@@ -43,6 +55,94 @@ function renameText(text) {
     out = out.replace(pattern, replacement)
   }
   return out
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic lint normalization, applied AFTER the brand rename.
+//
+// 🔴 The rename is what breaks the ordering: `Hermes` maps to lowercase
+// `ulnclaw`, which silently changes alphabetical position. Upstream's
+// `hermesManagedNodePathEntries` legitimately sorted before
+// `normalizeHermesHomeRoot` (h < n); after the rename it becomes
+// `ulnclawManagedNodePathEntries` vs `normalizeulnclawHomeRoot` (u > n) and
+// perfectionist/sort-* flags it. Upstream keeps its tree sorted with an
+// on-merge `npm run fix` bot, so this fork's pipeline has to reproduce that
+// step — otherwise every sync re-introduces ~125 lint errors AND reverts any
+// local `npm run lint:fix`, making the tree and the sync expectation disagree
+// forever.
+//
+// Reusing ESLint's own fixer (rather than a hand-rolled sorter) is what makes
+// the invariant provable: sync output is byte-identical to `npm run lint:fix`
+// output, so `npm run lint` reports 0 errors immediately after a sync.
+//
+// NOTE: only `perfectionist/sort-*` and `curly` were observed firing; ESLint's
+// full fix set is applied anyway so the invariant stays "tree == lint:fix
+// output" instead of "tree == lint:fix output minus whatever we forgot".
+// ---------------------------------------------------------------------------
+const SORTABLE_EXTENSIONS = new Set(['.ts', '.tsx'])
+// 🔴 Must mirror the `lint` script in package.json (`eslint src/ electron/`).
+// `shared/` is deliberately NOT here: neither this fork nor upstream lints it,
+// so upstream's on-merge fix bot never sorted it either — normalizing it would
+// (a) invent a divergence upstream does not have, and (b) fail outright, because
+// shared/ ships its own `eslint.config.mjs` importing `../../eslint.config.shared.mjs`,
+// which resolves outside this vendored tree (an unported monorepo-root file).
+// If the lint script's targets ever change, change this list with it.
+const LINT_TARGET_DIRS = ['src', 'electron']
+let eslintFixerPromise = null
+
+function getEslintFixer() {
+  if (!eslintFixerPromise) {
+    // Lazy + cached: constructing ESLint parses the flat config once, and the
+    // sync driver lints ~1000 files through this single instance.
+    eslintFixerPromise = import('eslint').then(({ ESLint }) =>
+      new ESLint({
+        fix: true,
+        cwd: SELF_DIR,
+        // Respect the project's own ignores (`**/*.generated.ts`, `src/**/*.js`).
+        warnIgnored: false
+      })
+    )
+  }
+  return eslintFixerPromise
+}
+
+/**
+ * Run the project's own auto-fixable rules over already-renamed source text.
+ * Returns the input unchanged when the file is not lintable (binary, ignored,
+ * or no fixes applicable) so this step can never corrupt a vendored asset.
+ */
+async function normalizeLint(rel, text) {
+  if (!SORTABLE_EXTENSIONS.has(path.extname(rel).toLowerCase())) {
+    return text
+  }
+
+  // Only files the `lint` script actually covers get normalized (see
+  // LINT_TARGET_DIRS). `rel` is target-relative with forward slashes.
+  const topDir = rel.split('/')[0]
+  if (!LINT_TARGET_DIRS.includes(topDir)) {
+    return text
+  }
+
+  const eslint = await getEslintFixer()
+  const targetPath = path.join(SELF_DIR, rel)
+  let results
+
+  try {
+    results = await eslint.lintText(text, { filePath: targetPath })
+  } catch (error) {
+    // 🔴 Fail LOUD. Silently skipping the sort would reintroduce exactly the
+    // drift this step exists to prevent, and the next `npm run lint` would
+    // then look like a local mistake rather than a sync-pipeline gap.
+    throw new Error(`${rel}: eslint normalization failed: ${error.message}`)
+  }
+
+  const result = results && results[0]
+  // No result (ignored file) or no fixable findings: keep the text verbatim.
+  if (!result || result.output === undefined) {
+    return text
+  }
+
+  return result.output
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +304,7 @@ function isTestFile(rel) {
   return TEST_EXCLUDES.some(pattern => pattern.test(rel))
 }
 
-function transform(rel, sourcePath) {
+async function transform(rel, sourcePath) {
   const ext = path.extname(rel).toLowerCase()
   const raw = fs.readFileSync(sourcePath)
   if (!TEXT_EXTENSIONS.has(ext)) {
@@ -236,6 +336,9 @@ function transform(rel, sourcePath) {
       }
     }
   }
+  // 🔴 Deterministic re-sort AFTER rename + functional patches, so the
+  // expectation on disk equals `npm run lint:fix` output byte-for-byte.
+  text = await normalizeLint(rel, text)
   return Buffer.from(text, 'utf8')
 }
 
@@ -278,7 +381,7 @@ for (const job of jobs) {
   const targetPath = path.join(SELF_DIR, renameText(job.rel))
   let expected
   try {
-    expected = transform(job.rel, job.sourcePath)
+    expected = await transform(job.rel, job.sourcePath)
   } catch (error) {
     errors.push(`${job.rel}: ${error.message}`)
     continue
@@ -292,12 +395,48 @@ for (const job of jobs) {
     continue
   }
   const current = fs.readFileSync(targetPath)
-  if (current.equals(expected)) {
+  // 🔴 EOL-agnostic compare. With `core.autocrlf=true` this worktree holds CRLF
+  // while upstream (and this repo's git blob) is LF, so a byte compare flagged
+  // 2297 of 2321 vendored files as "drifted" (`identical: 24`) — the report was
+  // unusable for finding real divergence. Compare line-ending-normalized text.
+  if (sameContent(current, expected)) {
     identical += 1
   } else {
     changed.push(job.rel)
-    if (apply) fs.writeFileSync(targetPath, expected)
+    // Write with the target's existing line endings so `--apply` never rewrites
+    // the whole tree's EOL (which would show up as a giant, meaningless diff).
+    if (apply) fs.writeFileSync(targetPath, matchEol(expected, current))
   }
+}
+
+/** Line-ending-insensitive content equality (CRLF worktree vs LF upstream). */
+function sameContent(a, b) {
+  if (a.equals(b)) {
+    return true
+  }
+  const norm = buf => buf.toString('utf8').split(CRLF_TEXT).join(LF_TEXT)
+  return norm(a) === norm(b)
+}
+
+/**
+ * Re-encode `buf` to the dominant line ending already present in `reference`,
+ * so a write preserves the worktree's checkout style instead of flipping it.
+ */
+function matchEol(buf, reference) {
+  const refText = reference.toString('utf8')
+  const refCrlf = refText.split(CRLF_TEXT).length - 1
+  if (refCrlf === 0) {
+    return buf // reference is LF (or has no newlines): write upstream bytes as-is
+  }
+  const refLfOnly = refText.split(LF_TEXT).length - 1 - refCrlf
+  if (refCrlf < refLfOnly) {
+    return buf // reference is predominantly LF; don't convert
+  }
+  // Reference is predominantly CRLF: re-encode THE NEW CONTENT (buf, not the
+  // reference) to CRLF. Normalize to LF first so an existing CRLF in buf cannot
+  // become CR-CR-LF.
+  const out = buf.toString('utf8').split(CRLF_TEXT).join(LF_TEXT).split(LF_TEXT).join(CRLF_TEXT)
+  return Buffer.from(out, 'utf8')
 }
 
 console.log(`upstream files scanned : ${jobs.length}`)

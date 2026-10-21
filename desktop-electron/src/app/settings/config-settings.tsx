@@ -6,7 +6,6 @@ import { useSearchParams } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { getElevenLabsVoices, getulnclawConfigSchema, saveulnclawConfig } from '@/ulnclaw'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import {
@@ -22,6 +21,7 @@ import { $keepAwake, setKeepAwake } from '@/store/keep-awake'
 import { notify, notifyError } from '@/store/notifications'
 import { repoDiscoveryPolicyFromConfig, repoDiscoveryPolicySignature, scanAndRecordRepos } from '@/store/projects'
 import type { ConfigFieldSchema, ulnclawConfigRecord } from '@/types/ulnclaw'
+import { getElevenLabsVoices, getulnclawConfigSchema, saveulnclawConfig } from '@/ulnclaw'
 
 import { setulnclawConfigCache, useUlnclawConfigRecord } from '../hooks/use-config-record'
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'

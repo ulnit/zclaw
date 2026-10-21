@@ -10,15 +10,6 @@ import { PageLoader } from '@/components/page-loader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CountSkeleton } from '@/components/ui/skeleton'
-import {
-  editLearningNode,
-  getLearningNode,
-  getSkills,
-  getToolsets,
-  getUsageAnalytics,
-  setSkillEnabled,
-  setToolsetEnabled
-} from '@/ulnclaw'
 import { useI18n } from '@/i18n'
 import { isDesktopToolsetVisible } from '@/lib/desktop-toolsets'
 import { compactNumber } from '@/lib/format'
@@ -30,6 +21,15 @@ import { $gateway } from '@/store/gateway'
 import { notify, notifyError } from '@/store/notifications'
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import type { SkillInfo, ToolsetInfo } from '@/types/ulnclaw'
+import {
+  editLearningNode,
+  getLearningNode,
+  getSkills,
+  getToolsets,
+  getUsageAnalytics,
+  setSkillEnabled,
+  setToolsetEnabled
+} from '@/ulnclaw'
 
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'

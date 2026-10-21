@@ -2,7 +2,6 @@ import { isGatewayReauthRequired, resolveGatewayWsUrl } from '@ulnclaw/shared'
 import { useEffect, useRef } from 'react'
 
 import type { ulnclawConnection } from '@/global'
-import { ulnclawGateway } from '@/ulnclaw'
 import { translateNow } from '@/i18n'
 import { desktopDefaultCwd } from '@/lib/desktop-fs'
 import { reconnectBackoffDelayMs } from '@/lib/reconnect-backoff'
@@ -40,6 +39,7 @@ import {
 } from '@/store/session'
 import { $attentionSessionIds, $workingSessionIds, resetTileRuntimeBindings } from '@/store/session-states'
 import type { RpcEvent } from '@/types/ulnclaw'
+import { ulnclawGateway } from '@/ulnclaw'
 
 import { stashGatewaySurvivor, survivorIsStale, takeGatewaySurvivor } from './gateway-hmr-survivor'
 

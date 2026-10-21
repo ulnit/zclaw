@@ -1,6 +1,5 @@
 import { useCallback, useRef } from 'react'
 
-import { getCronJobs, listAllProfileSessions, listSidebarSessions, type SessionInfo } from '@/ulnclaw'
 import { sameCronSignature } from '@/lib/session-signatures'
 import {
   isMessagingSource,
@@ -28,6 +27,7 @@ import {
   setSessionsLoading
 } from '@/store/session'
 import { $workingSessionIds, getRecentlySettledSessionIds } from '@/store/session-states'
+import { getCronJobs, listAllProfileSessions, listSidebarSessions, type SessionInfo } from '@/ulnclaw'
 
 // The recents list is local-only: cron rows have their own section, kanban
 // dispatcher workers are read on the board, and each messaging platform

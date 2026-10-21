@@ -20,7 +20,6 @@ import {
   Button,
   cn,
   evaluateRuntimeReadiness,
-  type ulnclawPlugin,
   host,
   icons,
   LogView,
@@ -30,6 +29,7 @@ import {
   type StatusResponse,
   type StatusTone,
   Tip,
+  type ulnclawPlugin,
   useI18n,
   useValue
 } from '@ulnclaw/plugin-sdk'

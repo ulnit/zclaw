@@ -1,11 +1,11 @@
-import { isGatewayReauthRequired, resolveGatewayWsUrl } from '@ulnclaw/shared'
 import { useStore } from '@nanostores/react'
+import { isGatewayReauthRequired, resolveGatewayWsUrl } from '@ulnclaw/shared'
 import { useCallback, useEffect, useRef } from 'react'
 
-import type { ulnclawGateway } from '@/ulnclaw'
 import { $gateway, ensureActiveGatewayOpen, isActivePrimary } from '@/store/gateway'
 import { $activeGatewayProfile } from '@/store/profile'
 import { $gatewayState, setConnection } from '@/store/session'
+import type { ulnclawGateway } from '@/ulnclaw'
 
 export function useGatewayRequest() {
   const gatewayState = useStore($gatewayState)

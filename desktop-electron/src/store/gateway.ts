@@ -1,10 +1,10 @@
 import { type ConnectionState, type GatewayEvent, resolveGatewayWsUrl } from '@ulnclaw/shared'
 import { atom } from 'nanostores'
 
-import { ulnclawGateway } from '@/ulnclaw'
 import { reconnectBackoffDelayMs } from '@/lib/reconnect-backoff'
 import { markNativeNotifyBaseline } from '@/store/notify-baseline'
 import { setGatewayState } from '@/store/session'
+import { ulnclawGateway } from '@/ulnclaw'
 
 // ── Multi-profile gateway routing ──────────────────────────────────────────
 // Concurrent sessions across profiles need concurrent sockets: the renderer's

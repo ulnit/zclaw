@@ -13,7 +13,6 @@ import { useCallback, useMemo, useRef } from 'react'
 
 import { useGatewayRequest } from '@/app/gateway/hooks/use-gateway-request'
 import type { ClientSessionState } from '@/app/types'
-import { PROMPT_SUBMIT_REQUEST_TIMEOUT_MS } from '@/ulnclaw'
 import { useI18n } from '@/i18n'
 import { textPart } from '@/lib/chat-messages'
 import { SLASH_COMMAND_RE } from '@/lib/chat-runtime'
@@ -31,6 +30,7 @@ import { clearSessionSubagents } from '@/store/subagents'
 import { clearSessionTodos } from '@/store/todos'
 import { setSessionDraftingTool } from '@/store/tool-drafting'
 import type { SessionInfo } from '@/types/ulnclaw'
+import { PROMPT_SUBMIT_REQUEST_TIMEOUT_MS } from '@/ulnclaw'
 
 import { uploadComposerAttachment } from '../session/hooks/use-prompt-actions'
 import {

@@ -154,8 +154,8 @@ export {
   buildDesktopBackendEnv,
   buildDesktopBackendPath,
   delimiterForPlatform,
-  ulnclawManagedNodePathEntries,
   normalizeulnclawHomeRoot,
   pathEnvKey,
-  POSIX_SANE_PATH_ENTRIES
+  POSIX_SANE_PATH_ENTRIES,
+  ulnclawManagedNodePathEntries
 }

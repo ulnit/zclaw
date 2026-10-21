@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { getActionStatus, getComputerUseStatus, grantComputerUsePermissions } from '@/ulnclaw'
 import { AlertTriangle, Check, ExternalLink, Loader2, RefreshCw, X } from '@/lib/icons'
 import { upsertDesktopActionTask } from '@/store/activity'
 import { notify, notifyError } from '@/store/notifications'
 import type { ComputerUseStatus } from '@/types/ulnclaw'
+import { getActionStatus, getComputerUseStatus, grantComputerUsePermissions } from '@/ulnclaw'
 
 import { Pill } from './primitives'
 

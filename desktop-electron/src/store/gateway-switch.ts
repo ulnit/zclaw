@@ -1,7 +1,6 @@
 import { atom } from 'nanostores'
 
 import { resetLiveRuntimeTracking } from '@/app/contrib/hooks/use-background-sync'
-import { resetSidebarBatchCapability } from '@/ulnclaw'
 import { invalidateProfileScopedQueries } from '@/lib/query-client'
 import { clearArtifactRegistry } from '@/store/artifacts'
 import { resetSessionsLimit } from '@/store/layout'
@@ -21,6 +20,7 @@ import {
   setSessionsLoading
 } from '@/store/session'
 import { clearAllSessionStates } from '@/store/session-states'
+import { resetSidebarBatchCapability } from '@/ulnclaw'
 
 // True while a soft gateway-mode apply is mid-flight (wipe → re-dial). Lets the
 // boot hook suppress the backend-exit toast and keeps the cold-boot CONNECTING

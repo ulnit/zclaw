@@ -1,9 +1,9 @@
 import { useStore } from '@nanostores/react'
 
 import { ModelVisibilityDialog } from '@/components/model-visibility-dialog'
-import type { ulnclawGateway } from '@/ulnclaw'
 import { $modelVisibilityOpen, setModelVisibilityOpen } from '@/store/model-visibility'
 import { $activeSessionId, $gatewayState } from '@/store/session'
+import type { ulnclawGateway } from '@/ulnclaw'
 
 interface ModelVisibilityOverlayProps {
   gateway?: ulnclawGateway

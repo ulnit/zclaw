@@ -1,12 +1,12 @@
 import { resolveGatewayWsUrl } from '@ulnclaw/shared'
 
-import { getApiRequestProfile, speakText } from '@/ulnclaw'
 import {
   $voicePlayback,
   setVoicePlaybackState,
   type VoicePlaybackSource,
   type VoicePlaybackState
 } from '@/store/voice-playback'
+import { getApiRequestProfile, speakText } from '@/ulnclaw'
 
 import { sanitizeTextForSpeech } from './speech-text'
 

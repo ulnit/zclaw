@@ -8,10 +8,10 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 
-import { getSession } from '@/ulnclaw'
 import { parseSessionRefValue, sessionRefCacheKey, sessionRefFallbackLabel } from '@/lib/session-refs'
 import { $sessions, sessionMatchesStoredId } from '@/store/session'
 import type { SessionInfo } from '@/types/ulnclaw'
+import { getSession } from '@/ulnclaw'
 
 const titleCache = new Map<string, string>()
 const titleInflight = new Map<string, Promise<string>>()

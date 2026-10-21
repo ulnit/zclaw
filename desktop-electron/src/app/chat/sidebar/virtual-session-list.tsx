@@ -3,12 +3,12 @@ import { CSS } from '@dnd-kit/utilities'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { type FC, useCallback, useRef } from 'react'
 
-import type { SessionInfo } from '@/ulnclaw'
 import { useI18n } from '@/i18n'
 import { type SidebarListRow } from '@/lib/session-date-groups'
 import { sessionBucketLabel } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { sessionPinId } from '@/store/session'
+import type { SessionInfo } from '@/ulnclaw'
 
 import { SidebarDateDivider } from './chrome'
 import { SidebarSessionRow } from './session-row'

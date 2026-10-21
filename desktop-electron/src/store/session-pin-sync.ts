@@ -20,9 +20,9 @@
  * the local set untouched.
  */
 
-import { setSessionPinnedRemote } from '@/ulnclaw'
 import { $pinnedSessionIds, pinSession, unpinSession } from '@/store/layout'
 import { $sessions, sessionMatchesStoredId, sessionPinId } from '@/store/session'
+import { setSessionPinnedRemote } from '@/ulnclaw'
 
 // pin ids we've successfully PATCHed pinned=true this session.
 const mirrored = new Set<string>()

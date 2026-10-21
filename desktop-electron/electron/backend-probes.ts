@@ -213,9 +213,9 @@ export {
   canImportulnclawCli,
   DEFAULT_PROBE_TIMEOUT_MS,
   execProbeSync,
-  ulnclawRuntimeImportProbe,
   PROBE_TIMEOUT_MS,
   resolveProbeTimeoutMs,
   shouldTrustulnclawOverride,
+  ulnclawRuntimeImportProbe,
   verifyulnclawCli
 }

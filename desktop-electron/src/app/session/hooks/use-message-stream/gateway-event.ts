@@ -1,6 +1,6 @@
+import type { QueryClient } from '@tanstack/react-query'
 import type { BillingBlock } from '@ulnclaw/shared'
 import type { ulnclawSkin } from '@ulnclaw/shared/skin'
-import type { QueryClient } from '@tanstack/react-query'
 import { type MutableRefObject, useCallback, useEffect, useRef } from 'react'
 
 import { writeAgentTerminalChunk } from '@/app/right-sidebar/terminal/agent-terminal-stream'

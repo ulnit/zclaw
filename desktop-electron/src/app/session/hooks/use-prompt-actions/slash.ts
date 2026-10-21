@@ -1,7 +1,6 @@
 import { skillInvocationText } from '@ulnclaw/shared'
 import { type MutableRefObject, useCallback, useRef } from 'react'
 
-import { getProfiles } from '@/ulnclaw'
 import type { Translations } from '@/i18n'
 import { type ChatMessage, toChatMessages } from '@/lib/chat-messages'
 import { parseCommandDispatch, parseSlashCommand, sessionTitle } from '@/lib/chat-runtime'
@@ -45,6 +44,7 @@ import {
   type WakeStatusResponse,
   type WakeStopResponse
 } from '@/store/wake-word'
+import { getProfiles } from '@/ulnclaw'
 
 import type {
   BrowserManageResponse,

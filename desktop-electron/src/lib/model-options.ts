@@ -1,5 +1,5 @@
-import { getGlobalModelOptions, type ulnclawGateway, type ModelOptionsResponse } from '@/ulnclaw'
 import type { ModelOptionProvider } from '@/types/ulnclaw'
+import { getGlobalModelOptions, type ModelOptionsResponse, type ulnclawGateway } from '@/ulnclaw'
 
 /**
  * True only when a persisted **manual** composer pick has been removed from the

@@ -24,11 +24,11 @@ import { DecodeText } from '@/components/ui/decode-text'
 import { ContribBoundary } from '@/contrib/react/boundary'
 import { useContributions } from '@/contrib/react/use-contributions'
 import { registry } from '@/contrib/registry'
-import { getLogs } from '@/ulnclaw'
 import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { cn } from '@/lib/utils'
 import { $previewTarget, openPreview } from '@/store/preview'
 import { $currentCwd } from '@/store/session'
+import { getLogs } from '@/ulnclaw'
 
 // ---------------------------------------------------------------------------
 // Logs — live agent-log tail. ⌘K-only chrome: the pane contribution exists

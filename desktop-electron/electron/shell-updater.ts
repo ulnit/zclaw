@@ -35,16 +35,20 @@ export function shellUpdateEligible(deps: Pick<ShellUpdaterDeps, 'isPackaged' | 
   if (!deps.isPackaged) {
     return { eligible: false, reason: 'dev mode (not packaged)' }
   }
+
   if (deps.platform === 'linux' && !deps.isAppImage) {
     return { eligible: false, reason: 'linux install is not an AppImage (deb/rpm have no auto-update transport)' }
   }
+
   return { eligible: true, reason: 'ok' }
 }
 
 export function startShellUpdater(deps: ShellUpdaterDeps): boolean {
   const gate = shellUpdateEligible(deps)
+
   if (!gate.eligible) {
     deps.log(`[shell-update] disabled: ${gate.reason}`)
+
     return false
   }
 
@@ -77,5 +81,6 @@ export function startShellUpdater(deps: ShellUpdaterDeps): boolean {
   setTimeout(check, SHELL_UPDATE_INITIAL_DELAY_MS)
   setInterval(check, SHELL_UPDATE_INTERVAL_MS)
   deps.log('[shell-update] enabled (silent install on quit)')
+
   return true
 }

@@ -172,6 +172,7 @@ export function FloatingPet() {
 
             if (hasPetSpriteForMeta(current, meta)) {
               const merged = mergePetInfoMeta(current, meta)
+
               if (merged !== current) {
                 setPetInfo(merged)
               }

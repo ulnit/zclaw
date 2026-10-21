@@ -20,7 +20,7 @@ import {
   generatedImageEchoSources,
   stripGeneratedImageEchoes
 } from '@/lib/generated-images'
-import { parseTodos, isTodoToolName } from '@/lib/todos'
+import { isTodoToolName, parseTodos } from '@/lib/todos'
 import { dispatchNativeNotification } from '@/store/native-notifications'
 import { isDiskFullErrorMessage, notifyError } from '@/store/notifications'
 import { broadcastSessionsChanged } from '@/store/session-sync'
@@ -287,6 +287,7 @@ export function useMessageStream({
       // stays as the fallback.
       const writeCost = performance.now() - startedAt
       lastFlushCostRef.current = writeCost
+
       // At most one measurement rAF may be pending: only the newest flush's
       // measurement matters (the guard below discards stale frames), and a
       // hidden renderer parks rAF callbacks — without cancellation a long
@@ -295,8 +296,10 @@ export function useMessageStream({
       if (measureRafRef.current !== null) {
         window.cancelAnimationFrame(measureRafRef.current)
       }
+
       measureRafRef.current = window.requestAnimationFrame(frameStart => {
         measureRafRef.current = null
+
         // A newer flush already started; its own measurement wins.
         if (lastFlushAtRef.current !== startedAt) {
           return

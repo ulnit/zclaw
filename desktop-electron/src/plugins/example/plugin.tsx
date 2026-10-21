@@ -22,7 +22,6 @@ import {
   atom,
   cn,
   haptic,
-  type ulnclawPlugin,
   host,
   type KeybindContribution,
   KEYBINDS_AREA,
@@ -30,6 +29,7 @@ import {
   type PaletteContribution,
   STATUSBAR_AREAS,
   Tip,
+  type ulnclawPlugin,
   useValue
 } from '@ulnclaw/plugin-sdk'
 

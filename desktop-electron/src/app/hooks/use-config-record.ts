@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { getulnclawConfigRecord } from '@/ulnclaw'
 import { queryClient, writeCache } from '@/lib/query-client'
 import type { ulnclawConfigRecord } from '@/types/ulnclaw'
+import { getulnclawConfigRecord } from '@/ulnclaw'
 
 // One shared cache for the whole profile config record (`GET /api/config`).
 // Every settings surface (MCP, model, config) reads and writes through this key

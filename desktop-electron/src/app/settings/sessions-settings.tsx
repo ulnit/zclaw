@@ -3,13 +3,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tip } from '@/components/ui/tooltip'
-import {
-  deleteSession,
-  getulnclawConfigRecord,
-  listAllProfileSessions,
-  saveulnclawConfig,
-  setSessionArchived
-} from '@/ulnclaw'
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
 import { pathLeaf } from '@/lib/display-path'
@@ -18,7 +11,14 @@ import { Archive, ArchiveOff, FolderOpen, Loader2, Trash2 } from '@/lib/icons'
 import { notify, notifyError } from '@/store/notifications'
 import { untombstoneSessions } from '@/store/projects'
 import { applyConfiguredDefaultProjectDir, ensureDefaultWorkspaceCwd, setSessions } from '@/store/session'
-import type { ulnclawConfigRecord, SessionInfo } from '@/types/ulnclaw'
+import type { SessionInfo, ulnclawConfigRecord } from '@/types/ulnclaw'
+import {
+  deleteSession,
+  getulnclawConfigRecord,
+  listAllProfileSessions,
+  saveulnclawConfig,
+  setSessionArchived
+} from '@/ulnclaw'
 
 import { EmptyState, ListRow, SectionHeading, SettingsContent, SettingsSkeleton, ToggleRow } from './primitives'
 import { useDeepLinkHighlight } from './use-deep-link-highlight'

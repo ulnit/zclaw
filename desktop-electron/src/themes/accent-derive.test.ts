@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { accentBase, accentedTheme } from './context'
 import { normalizeHex } from './color'
+import { accentBase, accentedTheme } from './context'
 import { midnightTheme, nousTheme } from './presets'
 import type { DesktopTheme } from './types'
 

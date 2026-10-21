@@ -17,14 +17,6 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import {
-  getSkillHubSources,
-  previewSkillHub,
-  scanSkillHub,
-  searchSkillsHub,
-  type SkillHubResult,
-  type SkillHubScanResult
-} from '@/ulnclaw'
 import { useI18n } from '@/i18n'
 import { stripAnsi } from '@/lib/ansi'
 import { Loader2 } from '@/lib/icons'
@@ -41,6 +33,14 @@ import {
   updateHubSkills
 } from '@/store/hub-actions'
 import { notify, notifyError } from '@/store/notifications'
+import {
+  getSkillHubSources,
+  previewSkillHub,
+  scanSkillHub,
+  searchSkillsHub,
+  type SkillHubResult,
+  type SkillHubScanResult
+} from '@/ulnclaw'
 
 // Dedup rank when the same skill surfaces from multiple sources — higher trust
 // wins. Mirrors the backend's unified_search `_TRUST_RANK`.

@@ -2,7 +2,6 @@ import { useStore } from '@nanostores/react'
 
 import type { ModelSelection } from '@/app/shell/model-menu-panel'
 import { ModelPickerDialog } from '@/components/model-picker'
-import type { ulnclawGateway } from '@/ulnclaw'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import {
   $activeSessionId,
@@ -13,6 +12,7 @@ import {
   setModelPickerOpen
 } from '@/store/session'
 import { $focusedRuntimeId, $focusedSessionState } from '@/store/session-states'
+import type { ulnclawGateway } from '@/ulnclaw'
 
 interface ModelPickerOverlayProps {
   gateway?: ulnclawGateway

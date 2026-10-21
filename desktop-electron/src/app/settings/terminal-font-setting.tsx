@@ -8,10 +8,10 @@ import {
 } from '@/app/right-sidebar/terminal/terminal-font'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { saveulnclawConfig } from '@/ulnclaw'
 import { useI18n } from '@/i18n'
 import { notifyError } from '@/store/notifications'
 import type { ulnclawConfigRecord } from '@/types/ulnclaw'
+import { saveulnclawConfig } from '@/ulnclaw'
 
 import { setulnclawConfigCache, useUlnclawConfigRecord } from '../hooks/use-config-record'
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'

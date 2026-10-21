@@ -17,7 +17,6 @@ import { codiconIcon } from '@/components/ui/codicon'
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { HighlightMatches } from '@/components/ui/highlight-matches'
 import { KbdCombo } from '@/components/ui/kbd'
-import { getulnclawConfigRecord, listAllProfileSessions } from '@/ulnclaw'
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
 import {
@@ -83,6 +82,7 @@ import { canOpenNewWindow, openNewWindow } from '@/store/windows'
 import { luminance } from '@/themes/color'
 import { type ThemeMode, useTheme } from '@/themes/context'
 import { isUserTheme, resolveTheme } from '@/themes/user-themes'
+import { getulnclawConfigRecord, listAllProfileSessions } from '@/ulnclaw'
 
 import { openSession, openSessionIntentFromModifiers } from '../open-session'
 import {

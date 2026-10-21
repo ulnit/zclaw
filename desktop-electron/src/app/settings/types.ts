@@ -1,8 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react'
 
-import type { ulnclawGateway } from '@/ulnclaw'
 import type { IconComponent } from '@/lib/icons'
 import type { EnvVarInfo } from '@/types/ulnclaw'
+import type { ulnclawGateway } from '@/ulnclaw'
 
 export type SettingsView =
   | 'about'

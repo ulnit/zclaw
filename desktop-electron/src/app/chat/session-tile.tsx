@@ -30,7 +30,6 @@ import { findGroupOfPane } from '@/components/pane-shell/tree/model'
 import { $layoutTree, closeTreePane, moveTreePane, setTreeGroupHeaderHidden } from '@/components/pane-shell/tree/store'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { transcribeAudio } from '@/ulnclaw'
 import { useI18n } from '@/i18n'
 import type { ChatMessage } from '@/lib/chat-messages'
 import { sessionTitle } from '@/lib/chat-runtime'
@@ -56,6 +55,7 @@ import {
   sessionTileDelegate
 } from '@/store/session-states'
 import type { SessionInfo } from '@/types/ulnclaw'
+import { transcribeAudio } from '@/ulnclaw'
 
 import type { SessionDragPayload } from './composer/inline-refs'
 import { type ComposerScope, ComposerScopeProvider } from './composer/scope'
@@ -162,10 +162,12 @@ function TileChat({
     (url: string) => addContextRefAttachment(`@url:${formatRefValue(url)}`, url),
     [addContextRefAttachment]
   )
+
   const onPasteClipboardImage = useCallback(
     (opts?: { silent?: boolean }) => pasteClipboardImage(opts),
     [pasteClipboardImage]
   )
+
   const onPickFiles = useCallback(() => void pickContextPaths('file'), [pickContextPaths])
   const onPickFolders = useCallback(() => void pickContextPaths('folder'), [pickContextPaths])
   const onPickImages = useCallback(() => void pickImages(), [pickImages])
