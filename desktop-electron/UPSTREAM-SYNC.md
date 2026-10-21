@@ -63,6 +63,8 @@ CI; pass `--with-tests` to vendor them too.
 | `electron/main.ts` | `bundledulnclawBinary()` + prefer `resources/binaries/ulnclaw(.exe)` over PATH | self-contained installers ship the statically linked gateway binary inside the app (fixes clean-Windows "gateway won't start") |
 | `package.json` | name `ulnclaw-desktop`, productName `ulnclaw desktop`, author/description, `file:./shared` dep, `executableName`, extraResources `resources/binaries → binaries`, fork-owned `version` | branding + bundling the gateway binary into installers |
 | `vite.config.ts`, `tsconfig.json` | `../shared` → `./shared`, `../../node_modules` → `./node_modules` | vendored layout: shared/ lives inside desktop-electron/ |
+| `eslint.config.mjs` | `import shared from '../../eslint.config.shared.mjs'` → `'./eslint.config.shared.mjs'` | the shared config is vendored INTO desktop-electron/ (below); `../../` would resolve outside the repo — this was the sole reason `npm run lint` never worked here |
+| `package.json` devDependencies | + `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-perfectionist`, `eslint-plugin-react-hooks`, `eslint-plugin-unused-imports`, `globals` (pinned to upstream's root-package versions) | upstream installs these at the monorepo root; the standalone vendored package must carry them itself or ESLint cannot load the config |
 | `scripts/assert-root-install.mjs` | repo-root depth `../../..` → `..` | desktop-electron/ sits at the repo root |
 
 Everything else — the whole renderer (views, styles, i18n, interactions), the
@@ -76,6 +78,9 @@ patch catalog instead, or send the change upstream to hermes.
   `release-desktop.yml`) packaged via electron-builder `extraResources`
 - `build/` — installer icon assets
 - `scripts/sync-from-hermes.mjs`, `UPSTREAM-SYNC.md` — this machinery
+- `eslint.config.shared.mjs` — vendored copy of the monorepo-root shared ESLint config
+  (body byte-identical to upstream, only the fork header differs); re-vendor on sync, do not
+  hand-edit the body
 - `.gitignore`
 
 ## Gateway contract notes
