@@ -60,6 +60,23 @@ Test files (`*.test.ts`, `e2e/`, playwright/vitest configs) are **excluded by
 default** because the vendored tree does not yet run hermes' test harness in
 CI; pass `--with-tests` to vendor them too.
 
+🔴 **Partial exception — the vitest runner IS vendored (hand-added, not by sync).**
+`vitest.config.ts`, `vitest.setup.ts`, `vitest.run-tmp.ts` and `src/test/jsdom.ts`
+were added verbatim from upstream (verified `diff` = 0 and zero `hermes`
+occurrences, so the brand rename is the identity on them) because `package.json`
+ships `test:ui`/`test` scripts while `TEST_EXCLUDES` skips the configs they need
+— `vitest run --project ui` died with *"No projects matched the filter ui"*, so
+**the test runner had never worked here either**. Consequences to remember:
+
+- these 4 files stay in `TEST_EXCLUDES`, so **sync will not update them** — diff
+  them by hand when bumping upstream;
+- the sync script has **no deletion/sweep step** (verified), so hand-added files
+  survive a sync;
+- `vitest.config.ts` keeps upstream's `css.include: [/status-stack\.css$/]` even
+  though that stylesheet does not exist in this tree — a no-match glob is
+  harmless, and keeping it means zero drift on the next sync;
+- upstream's other 12 `src/themes/*.test.ts(x)` are still NOT vendored.
+
 ## Functional divergence catalog (the ONLY intentional differences)
 
 | File | Divergence | Why |
@@ -69,6 +86,8 @@ CI; pass `--with-tests` to vendor them too.
 | `electron/main.ts` | `bundledulnclawBinary()` + prefer `resources/binaries/ulnclaw(.exe)` over PATH | self-contained installers ship the statically linked gateway binary inside the app (fixes clean-Windows "gateway won't start") |
 | `package.json` | name `ulnclaw-desktop`, productName `ulnclaw desktop`, author/description, `file:./shared` dep, `executableName`, extraResources `resources/binaries → binaries`, fork-owned `version` | branding + bundling the gateway binary into installers |
 | `vite.config.ts`, `tsconfig.json` | `../shared` → `./shared`, `../../node_modules` → `./node_modules` | vendored layout: shared/ lives inside desktop-electron/ |
+| `src/themes/types.ts` | `DesktopTheme` gains `accentOf?` but NOT upstream's `customCSS?` | the accent-retint leg needs `accentOf`; customCSS's consumer pipeline (`$backendCustomCSS` + ThemeProvider `<style>` injection) is unported, so the field would persist a value nothing paints |
+| `src/themes/context.tsx` | `paletteFor(seed, mode)` extracted as its own function; `accentBase`/`accentedTheme`/`committedTheme` added; `accentedTheme` omits upstream's `customCSS: customCSSOf(base)` | `getBaseColors` had inlined `paletteFor`; upstream needs the standalone form because a saved accent retints both modes. `committedTheme` maps to this fork's `skinPref.resolve(profile)` (same accessor ThemeProvider paints with). customCSS omission is observationally equivalent here — see types.ts row |
 | `eslint.config.mjs` | `import shared from '../../eslint.config.shared.mjs'` → `'./eslint.config.shared.mjs'` | the shared config is vendored INTO desktop-electron/ (below); `../../` would resolve outside the repo — this was the sole reason `npm run lint` never worked here |
 | `package.json` devDependencies | + `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-plugin-perfectionist`, `eslint-plugin-react-hooks`, `eslint-plugin-unused-imports`, `globals` (pinned to upstream's root-package versions) | upstream installs these at the monorepo root; the standalone vendored package must carry them itself or ESLint cannot load the config |
 | `scripts/assert-root-install.mjs` | repo-root depth `../../..` → `..` | desktop-electron/ sits at the repo root |

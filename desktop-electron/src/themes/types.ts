@@ -98,4 +98,13 @@ export interface DesktopTheme {
   terminal?: DesktopTerminalPalette
   /** Dark-variant terminal ANSI palette. Falls back to `terminal`. */
   darkTerminal?: DesktopTerminalPalette
+  /**
+   * On a saved accent retint (`<base>-accent-<hex>`): the theme it was
+   * retinted from. Upstream pairs this with a `customCSS?: string` field; that
+   * one is NOT YET PORTED here — prerequisite: the backend-skin customCSS
+   * pipeline (`$backendCustomCSS` + the scoped `<style>` injection in
+   * ThemeProvider), which this fork's backend-sync does not carry yet. Adding
+   * the field without that consumer would persist a value nothing ever paints.
+   */
+  accentOf?: string
 }

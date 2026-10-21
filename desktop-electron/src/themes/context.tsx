@@ -18,9 +18,10 @@ import { persistString, persistStringRecord, storedString, storedStringRecord } 
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 
 import { $backendThemes, $pendingSkinApply } from './backend-sync'
-import { hexToRgb, mix, readableOn } from './color'
+import { hexToRgb, mix, normalizeHex, readableOn } from './color'
 import { BUILTIN_THEME_LIST, DEFAULT_SKIN_NAME, DEFAULT_TYPOGRAPHY, nousTheme } from './presets'
 import { $pendingModeApply } from './request'
+import { retintTheme } from './retint'
 import type { DesktopTheme, DesktopThemeColors } from './types'
 import { $userThemes, listAllThemes, resolveTheme } from './user-themes'
 
@@ -115,15 +116,23 @@ function synthLightColors(seed: DesktopTheme): DesktopThemeColors {
   }
 }
 
-/** Returns the seed palette for a given skin + mode (no overrides applied). */
-export function getBaseColors(skinName: string, mode: 'light' | 'dark'): DesktopThemeColors {
-  const seed = resolveTheme(skinName) ?? nousTheme
-
+/**
+ * The palette `seed` paints in `mode`. Dark uses the hand-tuned `darkColors`
+ * when present; light uses `colors` when the seed shipped a dark variant, else
+ * synthesises one. Upstream keeps this as its own function because a saved
+ * accent retints BOTH modes off the seed, not just the visible one.
+ */
+function paletteFor(seed: DesktopTheme, mode: 'light' | 'dark'): DesktopThemeColors {
   if (mode === 'dark') {
     return seed.darkColors ?? seed.colors
   }
 
   return seed.darkColors ? seed.colors : synthLightColors(seed)
+}
+
+/** Returns the seed palette for a given skin + mode (no overrides applied). */
+export function getBaseColors(skinName: string, mode: 'light' | 'dark'): DesktopThemeColors {
+  return paletteFor(resolveTheme(skinName) ?? nousTheme, mode)
 }
 
 function deriveTheme(skinName: string, mode: 'light' | 'dark'): DesktopTheme {
@@ -137,6 +146,53 @@ function deriveTheme(skinName: string, mode: 'light' | 'dark'): DesktopTheme {
     colors: getBaseColors(skinName, mode)
   }
 }
+
+/** The theme a saved accent was retinted from; any other theme is its own base. */
+export const accentBase = (theme: DesktopTheme): DesktopTheme =>
+  (theme.accentOf && resolveTheme(theme.accentOf)) || theme
+
+/**
+ * `theme` with only its accent moved to `accent`, both modes painted exactly as the live accent preview
+ * paints them. Every other colour stays the base's. One `<base>-accent-<hex>` copy per base and
+ * colour: user themes are shared by every profile, so a copy per base alone let one profile's accent
+ * overwrite another's. The base's own accent returns the base itself.
+ *
+ * 🔴 NOT YET PORTED: upstream also carries `customCSS: customCSSOf(base)` here. The prerequisite is
+ * the backend-skin customCSS pipeline (`$backendCustomCSS` + ThemeProvider's scoped `<style>`
+ * injection), which this fork's backend-sync does not carry — `customCSS` has 0 occurrences in this
+ * tree. `base.customCSS` would always be undefined, so omitting it is observationally equivalent
+ * rather than a narrowing; the field is deliberately absent from `DesktopTheme` too, so nothing
+ * persists a value that would never be painted.
+ */
+export function accentedTheme(theme: DesktopTheme, accent: string): DesktopTheme {
+  const base = accentBase(theme)
+  const hex = normalizeHex(accent)
+
+  if (!hex || hex === normalizeHex(base.colors.primary)) {
+    return base
+  }
+
+  const tint = (mode: 'light' | 'dark') => retintTheme({ ...base, colors: paletteFor(base, mode) }, hex).colors
+
+  return {
+    ...base,
+    name: `${base.name}-accent-${hex.slice(1)}`,
+    label: `${base.label} · ${hex}`,
+    accentOf: base.name,
+    colors: tint('light'),
+    darkColors: tint('dark')
+  }
+}
+
+/**
+ * The live profile's committed theme: what the ThemeProvider paints without a preview.
+ *
+ * Upstream resolves this through `storedSkin()` + `normalizeSkin()` with a boot-profile arm; this
+ * fork's `skinPref.resolve(profile)` already folds those together (record entry → legacy global →
+ * normalize), and it is the same accessor ThemeProvider uses at paint time, so the two agree.
+ */
+export const committedTheme = (): DesktopTheme =>
+  resolveTheme(skinPref.resolve(normalizeProfileKey($activeGatewayProfile.get()))) ?? nousTheme
 
 /**
  * Some palettes intentionally keep a bright background even when
