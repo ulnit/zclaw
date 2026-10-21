@@ -201,7 +201,19 @@ pub fn install() {
         publish(session_id, event, payload);
     })));
     crate::desktop::set_read_terminal_callback(Some(Box::new(read_terminal_roundtrip)));
-    crate::desktop::set_theme_callback(Some(Box::new(set_theme_roundtrip)));
+    // 🔴 The `set_theme` round-trip is wired only once the renderer half exists.
+    // The vendored renderer does NOT yet listen for `theme.set` (pinned by the
+    // negative assertion in `published_event_names_match_the_renderer_listeners`),
+    // so installing the callback would make every `set_theme` call publish to a
+    // window that never answers and block for THEME_TIMEOUT (320s) before failing.
+    // Leaving it uninstalled routes the tool through `desktop::set_theme -> None`
+    // and the "desktop app only" error path immediately — exactly hermes'
+    // `callback is None` guard. Flip this to `true` in the commit that ports the
+    // renderer's `theme.set` listener (`gateway-event.ts`), NOT before.
+    const RENDERER_THEME_WIRED: bool = false;
+    if RENDERER_THEME_WIRED {
+        crate::desktop::set_theme_callback(Some(Box::new(set_theme_roundtrip)));
+    }
     tracing::info!("desktop bridge active: events on /api/desktop/events");
 }
 
