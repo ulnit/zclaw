@@ -47,7 +47,7 @@ import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import { $activeSessionId } from '@/store/session'
 import type { ulnclawConfigRecord } from '@/types/ulnclaw'
 
-import { setulnclawConfigCache, useulnclawConfigRecord } from '../hooks/use-config-record'
+import { setulnclawConfigCache, useUlnclawConfigRecord } from '../hooks/use-config-record'
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
 import { DetailPane, ICON_BUTTON, MASTER_DETAIL_WIDE_COLS } from '../master-detail'
 import { PanelAddButton, PanelEmpty } from '../overlays/panel'
@@ -357,7 +357,7 @@ export function McpTab({ gateway }: { gateway: ulnclawGateway | null }) {
     refetch: refetchConfig,
     dataUpdatedAt: configUpdatedAt,
     errorUpdatedAt: configErroredAt
-  } = useulnclawConfigRecord()
+  } = useUlnclawConfigRecord()
 
   const setConfig = setulnclawConfigCache
 

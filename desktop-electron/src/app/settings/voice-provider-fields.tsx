@@ -6,7 +6,7 @@ import { useI18n } from '@/i18n'
 import { notifyError } from '@/store/notifications'
 import type { ulnclawConfigRecord } from '@/types/ulnclaw'
 
-import { setulnclawConfigCache, useulnclawConfigRecord } from '../hooks/use-config-record'
+import { setulnclawConfigCache, useUlnclawConfigRecord } from '../hooks/use-config-record'
 
 import { ConfigField } from './config-field'
 import { SECTIONS } from './constants'
@@ -33,7 +33,7 @@ export function voiceProviderKeys(section: 'tts' | 'stt', providerKey: string): 
 export function VoiceProviderFields({ section, providerKey }: { section: 'tts' | 'stt'; providerKey: string }) {
   const { t } = useI18n()
   const keys = useMemo(() => voiceProviderKeys(section, providerKey), [section, providerKey])
-  const { data: loadedConfig } = useulnclawConfigRecord()
+  const { data: loadedConfig } = useUlnclawConfigRecord()
 
   const { data: schemaResponse } = useQuery({
     queryKey: ['ulnclaw-config-schema'],

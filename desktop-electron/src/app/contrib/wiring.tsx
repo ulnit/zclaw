@@ -98,7 +98,7 @@ import { SessionSwitcher } from '../session-switcher'
 import { useBackgroundQueueDrain } from '../session/hooks/use-background-queue-drain'
 import { useContextSuggestions } from '../session/hooks/use-context-suggestions'
 import { useCwdActions } from '../session/hooks/use-cwd-actions'
-import { useulnclawConfig } from '../session/hooks/use-ulnclaw-config'
+import { useUlnclawConfig } from '../session/hooks/use-ulnclaw-config'
 import { useMessageStream } from '../session/hooks/use-message-stream'
 import { useModelControls } from '../session/hooks/use-model-controls'
 import { usePreviewRouting } from '../session/hooks/use-preview-routing'
@@ -276,7 +276,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     requestGateway
   })
 
-  const { refreshulnclawConfig, sttEnabled, voiceMaxRecordingSeconds } = useulnclawConfig({ activeSessionIdRef })
+  const { refreshulnclawConfig, sttEnabled, voiceMaxRecordingSeconds } = useUlnclawConfig({ activeSessionIdRef })
 
   const { applySavedMainModel, refreshCurrentModel, selectModel } = useModelControls({
     queryClient,

@@ -24,6 +24,15 @@ const SELF_DIR = path.resolve(import.meta.dirname, '..')
 // ---------------------------------------------------------------------------
 const RENAME_RULES = [
   [/HERMES/g, 'ULNCLAW'],
+  // 🔴 React hook names must stay `use` + Uppercase. The blanket `Hermes →
+  // ulnclaw` rule below turns upstream's `useHermesConfig` into
+  // `useulnclawConfig`, which violates react-hooks/rules-of-hooks (a hook must
+  // start with `use` followed by a capital). This rule runs FIRST and only at an
+  // identifier boundary, so `useHermesConfig` → `useUlnclawConfig` while every
+  // other `Hermes` (types like `HermesSkin` → `ulnclawSkin`, prose, `HERMES_HOME`)
+  // keeps the existing lowercase mapping. Without it, every re-sync re-introduces
+  // the 5 rules-of-hooks errors this fork fixed by hand.
+  [/(?<![A-Za-z0-9_$])useHermes/g, 'useUlnclaw'],
   [/Hermes/g, 'ulnclaw'],
   [/hermes/g, 'ulnclaw'],
 ]

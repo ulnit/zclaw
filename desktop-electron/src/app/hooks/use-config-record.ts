@@ -14,7 +14,7 @@ import type { ulnclawConfigRecord } from '@/types/ulnclaw'
 export const ULNCLAW_CONFIG_KEY = ['ulnclaw-config-record'] as const
 
 // staleTime 0 → serve cache instantly, background-revalidate on every mount.
-export const useulnclawConfigRecord = () =>
+export const useUlnclawConfigRecord = () =>
   useQuery({ queryKey: ULNCLAW_CONFIG_KEY, queryFn: getulnclawConfigRecord, staleTime: 0 })
 
 export const setulnclawConfigCache = writeCache<ulnclawConfigRecord>(ULNCLAW_CONFIG_KEY)

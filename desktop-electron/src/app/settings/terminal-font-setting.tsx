@@ -13,7 +13,7 @@ import { useI18n } from '@/i18n'
 import { notifyError } from '@/store/notifications'
 import type { ulnclawConfigRecord } from '@/types/ulnclaw'
 
-import { setulnclawConfigCache, useulnclawConfigRecord } from '../hooks/use-config-record'
+import { setulnclawConfigCache, useUlnclawConfigRecord } from '../hooks/use-config-record'
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
 
 import { getNested, setNested } from './helpers'
@@ -28,7 +28,7 @@ function fontFamilyFromConfig(config: ulnclawConfigRecord): string {
 export function TerminalFontSetting() {
   const { t } = useI18n()
   const copy = t.settings.appearance
-  const { data: loadedConfig } = useulnclawConfigRecord()
+  const { data: loadedConfig } = useUlnclawConfigRecord()
   // draft === null ⇔ unseeded: nothing painted yet for this profile. The
   // profile-switch handler resets it to null and records the config object
   // it was looking at (`staleConfig`) — the seed effect refuses to re-seed

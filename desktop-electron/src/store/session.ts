@@ -548,7 +548,7 @@ export const setCurrentReasoningEffort = (next: Updater<string>) => {
 // The profile's `agent.reasoning_effort`, mirrored from config so surfaces that
 // need to render or apply "the default" resolve the user's configured level
 // instead of assuming DEFAULT_REASONING_EFFORT (lib/reasoning-effort). Empty
-// until config loads, and re-seeded on every profile switch by useulnclawConfig.
+// until config loads, and re-seeded on every profile switch by useUlnclawConfig.
 export const $defaultReasoningEffort = atom('')
 
 export const setDefaultReasoningEffort = (next: string) => updateAtom($defaultReasoningEffort, next)

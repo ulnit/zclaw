@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils'
 import { notifyError } from '@/store/notifications'
 import { startManualLocalEndpoint, startManualOnboarding, startManualProviderOAuth } from '@/store/onboarding'
 
-import { invalidateulnclawConfig, setulnclawConfigCache, useulnclawConfigRecord } from '../hooks/use-config-record'
+import { invalidateulnclawConfig, setulnclawConfigCache, useUlnclawConfigRecord } from '../hooks/use-config-record'
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
 
 import { CONTROL_TEXT } from './constants'
@@ -197,7 +197,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
   const [newMoaPresetName, setNewMoaPresetName] = useState('')
   // agent.* defaults round-trip through the shared config cache (read → write
   // back the whole record), so a save here shows in the MCP/config surfaces.
-  const { data: config } = useulnclawConfigRecord()
+  const { data: config } = useUlnclawConfigRecord()
   const setConfig = setulnclawConfigCache
   const [applying, setApplying] = useState(false)
   const [editingAuxTask, setEditingAuxTask] = useState<null | string>(null)

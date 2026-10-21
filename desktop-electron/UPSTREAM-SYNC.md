@@ -40,9 +40,15 @@ The script transforms every upstream file in two passes, then compares it
 byte-for-byte against the tree:
 
 1. **Mechanical brand rename** (contents *and* file names):
-   `HERMES → ULNCLAW`, `Hermes → ulnclaw`, `hermes → ulnclaw`
+   `HERMES → ULNCLAW`, `useHermes → useUlnclaw` (hook boundary — see below),
+   `Hermes → ulnclaw`, `hermes → ulnclaw`
    (applied in that order, so `HERMES_HOME` → `ULNCLAW_HOME`,
    `HermesSkin` → `ulnclawSkin`, `~/.hermes` → `~/.ulnclaw`).
+   🔴 The `useHermes → useUlnclaw` rule runs before the blanket `Hermes → ulnclaw`
+   and is anchored at an identifier boundary, because a React hook must be
+   `use` + Uppercase: the blanket rule alone maps `useHermesConfig` →
+   `useulnclawConfig`, violating `react-hooks/rules-of-hooks` (5 errors). It
+   touches only hook names — every other `Hermes` still lowercases as before.
 2. **Functional divergence patches** — the gateway/packaging differences
    cataloged below, re-applied automatically.
 

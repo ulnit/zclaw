@@ -23,7 +23,7 @@ import { notify, notifyError } from '@/store/notifications'
 import { repoDiscoveryPolicyFromConfig, repoDiscoveryPolicySignature, scanAndRecordRepos } from '@/store/projects'
 import type { ConfigFieldSchema, ulnclawConfigRecord } from '@/types/ulnclaw'
 
-import { setulnclawConfigCache, useulnclawConfigRecord } from '../hooks/use-config-record'
+import { setulnclawConfigCache, useUlnclawConfigRecord } from '../hooks/use-config-record'
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
 import { PanelEmpty } from '../overlays/panel'
 
@@ -73,7 +73,7 @@ export function ConfigSettings({
   // from — and saved back through — the shared config cache, so edits are visible
   // in the MCP/model surfaces and reopening the page doesn't reload-flash.
   const [config, setConfig] = useState<ulnclawConfigRecord | null>(null)
-  const { data: loadedConfig, isError: configLoadFailed, refetch: refetchConfig } = useulnclawConfigRecord()
+  const { data: loadedConfig, isError: configLoadFailed, refetch: refetchConfig } = useUlnclawConfigRecord()
 
   const {
     data: schemaResponse,

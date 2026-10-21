@@ -49,7 +49,7 @@ interface ulnclawConfigOptions {
   activeSessionIdRef: MutableRefObject<string | null>
 }
 
-export function useulnclawConfig({ activeSessionIdRef }: ulnclawConfigOptions) {
+export function useUlnclawConfig({ activeSessionIdRef }: ulnclawConfigOptions) {
   const [voiceMaxRecordingSeconds, setVoiceMaxRecordingSeconds] = useState(DEFAULT_VOICE_SECONDS)
   const [sttEnabled, setSttEnabled] = useState(true)
   const profileRefreshEpochRef = useRef(0)
