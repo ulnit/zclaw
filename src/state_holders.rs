@@ -261,6 +261,521 @@ pub fn looks_like_ulnclaw(argv: &[String]) -> bool {
     ULNCLAW_EXECUTABLES.contains(&name.as_str())
 }
 
+// ===========================================================================
+// slice2a — argv home/profile attribution (hermes `hermes_state_holders.py`
+// L185-317). These decide whether a process whose `/proc/<pid>/fd` we cannot
+// read is PROVABLY a different instance. Without them, every unreadable process
+// on a multi-user host counts as a holder and VACUUM would never fire.
+// ===========================================================================
+
+/// Files marking a real ulnclaw home; an arbitrary directory that merely has a
+/// `profiles` segment lacks them. Upstream's tuple is
+/// `("config.yaml", ".env", "state.db")`; this fork's config is TOML
+/// (`config/mod.rs:1838` reads `ulnclaw_home().join("config.toml")`), so
+/// `config.toml` takes the `config.yaml` slot. Verified against a live home
+/// (`.env` and `state.db` both present).
+pub const HOME_MARKERS: &[&str] = &["config.toml", ".env", "state.db"];
+
+/// Only `profile delete` creates this tombstone under `profiles/`, so its
+/// presence proves the parent is a real home (upstream `_DELETED_PROFILES_DIR`).
+pub const DELETED_PROFILES_DIR: &str = ".deleted";
+
+/// Default home directory name (`~/.ulnclaw`); upstream's is `.hermes`.
+pub const HOME_DIR_NAME: &str = ".ulnclaw";
+
+/// The default home root: `ULNCLAW_HOME` when set, else `~/.ulnclaw`.
+/// Delegates to the crate's own resolver rather than re-deriving it, so this
+/// scan and every other consumer agree by construction (upstream
+/// `get_default_hermes_root`).
+fn default_home_root() -> PathBuf {
+    crate::config::ulnclaw_home()
+}
+
+/// `canonicalize` when possible, else the lexical absolute path — upstream
+/// `resolve(strict=False)`. A root that does not exist yet must still compare
+/// equal to itself, so the fallback matters.
+fn resolve_lenient(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| abspath_lexical(&path.to_string_lossy()))
+}
+
+/// True when `profiles_dir` is provably `<ulnclaw-home>/profiles`
+/// (upstream `_is_hermes_profiles_root`).
+fn is_ulnclaw_profiles_root(profiles_dir: &Path) -> bool {
+    let Some(root) = profiles_dir.parent() else {
+        return false;
+    };
+    if root
+        .file_name()
+        .map(|n| n == HOME_DIR_NAME)
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    if profiles_dir.join(DELETED_PROFILES_DIR).is_dir()
+        || HOME_MARKERS.iter().any(|marker| root.join(marker).exists())
+    {
+        return true;
+    }
+    resolve_lenient(root) == resolve_lenient(&default_home_root())
+}
+
+/// `<root>/profiles/<name>` when `path` is that home or under it — upstream
+/// `named_profile_home`. A default home whose path merely CONTAINS a `profiles`
+/// segment is not a named profile, hence the `HOME_DIR_NAME` early return.
+pub fn named_profile_home(path: &Path) -> Option<PathBuf> {
+    let mut candidate: Option<&Path> = Some(path);
+
+    while let Some(current) = candidate {
+        let name = current
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let parent = current.parent();
+        let parent_is_profiles = parent
+            .and_then(|p| p.file_name())
+            .map(|n| n == "profiles")
+            .unwrap_or(false);
+
+        if parent_is_profiles && !name.starts_with('.') {
+            if let Some(profiles_dir) = parent {
+                if is_ulnclaw_profiles_root(profiles_dir) {
+                    return Some(current.to_path_buf());
+                }
+            }
+        }
+        if name == HOME_DIR_NAME {
+            return None;
+        }
+        candidate = parent;
+    }
+
+    None
+}
+
+/// `(<install root>, <our profile name>)` for the home holding the store, else
+/// `(None, None)` — upstream `_store_install_layout`.
+///
+/// Derived with the canonical `named_profile_home` predicate, NEVER a
+/// `basename == "profiles"` string test: an arbitrary `<X>/profiles/<n>/` tree is
+/// not an install, and promoting `<X>` to "ours" swallows an unrelated instance
+/// living under it — the literal two-instance shape of upstream issue #92401.
+/// The root store (`~/.ulnclaw/state.db`) is its own root with no profile name,
+/// so ANY named-profile selection contradicts it.
+pub fn store_install_layout(this_home: &str) -> (Option<String>, Option<String>) {
+    let home = Path::new(this_home);
+
+    if let Some(profile_home) = named_profile_home(home) {
+        if let Some(root) = profile_home.parent().and_then(|p| p.parent()) {
+            let name = profile_home
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let root_str = abspath_lexical(&root.to_string_lossy())
+                .to_string_lossy()
+                .to_string();
+            return (Some(root_str), Some(name));
+        }
+    }
+
+    if home
+        .file_name()
+        .map(|n| n == HOME_DIR_NAME)
+        .unwrap_or(false)
+    {
+        let root_str = abspath_lexical(this_home).to_string_lossy().to_string();
+        return (Some(root_str), None);
+    }
+
+    (None, None)
+}
+
+/// True when `normalized` sits under `<install root>/profiles/<name>` for a name
+/// that is not ours — upstream `_names_other_profile`.
+pub fn names_other_profile(
+    normalized: &str,
+    install_root: Option<&str>,
+    our_profile: Option<&str>,
+) -> bool {
+    let Some(root) = install_root else {
+        return false;
+    };
+    let prefix = format!(
+        "{}{}",
+        norm_path(&Path::new(root).join("profiles").to_string_lossy()),
+        std::path::MAIN_SEPARATOR
+    );
+    let Some(rest) = normalized.strip_prefix(prefix.as_str()) else {
+        return false;
+    };
+    let name = rest.split(std::path::MAIN_SEPARATOR).next().unwrap_or("");
+    if name.is_empty() {
+        return false;
+    }
+    match our_profile {
+        Some(ours) => name != normalize_case(ours),
+        // No profile of our own: any named profile is somebody else's.
+        None => true,
+    }
+}
+
+/// Which home the process's OWN flags select — upstream `_argv_home_selection`.
+///
+/// Under one process per host the shared binary path proves nothing about which
+/// home a process serves; its `--profile` / `ULNCLAW_HOME=` selection does.
+#[derive(Debug, PartialEq, Eq)]
+pub enum HomeSelection {
+    Ours,
+    Other,
+}
+
+pub fn argv_home_selection(
+    argv: &[String],
+    this_home: &str,
+    install_root: Option<&str>,
+    our_profile: Option<&str>,
+) -> Option<HomeSelection> {
+    let home_value = argv_flag_value(argv, HOME_FLAGS).or_else(|| argv_env_home(argv));
+    if let Some(value) = home_value {
+        return Some(if norm_path(&value) == norm_path(this_home) {
+            HomeSelection::Ours
+        } else {
+            HomeSelection::Other
+        });
+    }
+
+    if let Some(value) = argv_flag_value(argv, PROFILE_FLAGS) {
+        if let Some(ours) = our_profile {
+            return Some(if value == ours {
+                HomeSelection::Ours
+            } else {
+                HomeSelection::Other
+            });
+        }
+        // Root/custom home: any explicit named profile selects a different home.
+        return Some(if install_root.is_some() && value == "default" {
+            HomeSelection::Ours
+        } else {
+            HomeSelection::Other
+        });
+    }
+
+    None
+}
+
+/// Does argv PROVE the process belongs to a DIFFERENT instance?
+/// (upstream `_argv_scoped_to_other_home`)
+///
+/// `state.db` lives at the home root, so an absolute-path token carrying a
+/// `/.ulnclaw` segment — or naming a `state.db`/WAL/SHM under some other parent —
+/// identifies that token's own home. When at least one such token exists AND no
+/// token references this instance's store, sidecars or home, the process provably
+/// works on a different generation and must not be counted as an uninspectable
+/// holder of ours (upstream #92401: a second gateway under `/home/demo/.hermes`
+/// deferred this instance's stale-FTS rebuild forever despite `lsof` proving zero
+/// open handles). Ambiguous argv with no absolute-path tokens returns false and
+/// keeps the fail-closed suspicion.
+///
+/// Evidence is RANKED because one host now runs ONE process for every profile:
+/// 1. a token naming our store or a sidecar exactly — definitive, ours;
+/// 2. the process's own home/profile selection — what decides which home a
+///    multiplexer serves;
+/// 3. path tokens: one under `<install root>/profiles/<other>` is another
+///    profile's store even though it sits under our root; a token naming only the
+///    SHARED install root is NEUTRAL (the same binary serves every profile, so it
+///    can neither prove nor disprove a hold); `argv[0]` locates the INSTALL, not
+///    the home, so it is not other-home evidence for a store whose home is not
+///    part of an install layout.
+pub fn argv_scoped_to_other_home(argv: &[String], db_path: &Path) -> bool {
+    let db_path_str = abspath_lexical(&db_path.to_string_lossy())
+        .to_string_lossy()
+        .to_string();
+    let this_home = Path::new(db_path_str.as_str())
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let (install_root, our_profile) = store_install_layout(this_home.as_str());
+
+    let sidecars: std::collections::HashSet<String> = sqlite_family(db_path_str.as_str())
+        .iter()
+        .map(|candidate| normalize_case(candidate))
+        .collect();
+    let this_home_norm = normalize_case(this_home.as_str());
+    let root_norm = install_root.as_deref().map(normalize_case);
+    let path_tokens = argv_path_tokens(argv);
+
+    // (1) Definitive: a token naming our store or one of its sidecars.
+    if path_tokens.iter().any(|(_, n)| sidecars.contains(n)) {
+        return false;
+    }
+
+    // (2) The process's own selection.
+    let selection = argv_home_selection(
+        argv,
+        this_home.as_str(),
+        install_root.as_deref(),
+        our_profile.as_deref(),
+    );
+    if selection == Some(HomeSelection::Ours) {
+        return false;
+    }
+
+    let argv0_locates_home = install_root.is_some();
+    let mut other_home_seen = selection == Some(HomeSelection::Other);
+
+    for (index, normalized) in path_tokens.iter() {
+        if names_other_profile(normalized, install_root.as_deref(), our_profile.as_deref()) {
+            other_home_seen = true;
+            continue;
+        }
+        let under_this_home = format!("{}{}", this_home_norm, std::path::MAIN_SEPARATOR);
+        if normalized == &this_home_norm || normalized.starts_with(under_this_home.as_str()) {
+            return false;
+        }
+        if let Some(root) = root_norm.as_ref() {
+            let under_root = format!("{}{}", root, std::path::MAIN_SEPARATOR);
+            if normalized == root || normalized.starts_with(under_root.as_str()) {
+                // Shared install root: neutral, every served profile lives under it.
+                continue;
+            }
+        }
+        if *index == 0 && !argv0_locates_home {
+            continue;
+        }
+        // Upstream tests the literal POSIX form `"/.hermes" in normalized`. On
+        // Windows `normalize_case` rewrites `/` to `\`, so this arm cannot fire
+        // there. Replicated verbatim (with our dir name) rather than "fixed":
+        // failing to set the flag keeps the process a suspected holder, which is
+        // the fail-closed side, and inventing a Windows arm would be a deviation
+        // upstream has no test for.
+        let home_segment = format!("/{}", HOME_DIR_NAME);
+        let file_name = Path::new(normalized.as_str())
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string());
+        let is_state_name = file_name
+            .as_deref()
+            .map(|n| STATE_DB_NAMES.contains(&n))
+            .unwrap_or(false);
+        if normalized.contains(home_segment.as_str()) || is_state_name {
+            other_home_seen = true;
+        }
+    }
+
+    other_home_seen
+}
+
+#[cfg(test)]
+mod slice2a_tests {
+    use super::*;
+    use std::fs;
+
+    fn argv(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// A real home root carrying a marker file, so `is_ulnclaw_profiles_root`
+    /// can prove it (the marker arm, not the default-root arm).
+    fn fake_home(root: &Path) {
+        fs::create_dir_all(root.join("profiles").join("work")).unwrap();
+        fs::create_dir_all(root.join("profiles").join("other")).unwrap();
+        fs::write(root.join(".env"), "").unwrap();
+    }
+
+    #[test]
+    fn store_install_layout_classifies_the_root_store_as_its_own_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join(HOME_DIR_NAME);
+        fake_home(&home);
+
+        let (root, profile) = store_install_layout(home.to_str().unwrap());
+        assert_eq!(profile, None, "the root store has no profile name");
+        assert_eq!(
+            root.as_deref().map(|r| norm_path(r)),
+            Some(norm_path(home.to_str().unwrap()))
+        );
+    }
+
+    #[test]
+    fn store_install_layout_names_the_profile_and_its_install_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join(HOME_DIR_NAME);
+        fake_home(&home);
+        let profile_home = home.join("profiles").join("work");
+
+        let (root, profile) = store_install_layout(profile_home.to_str().unwrap());
+        assert_eq!(profile.as_deref(), Some("work"));
+        assert_eq!(
+            root.as_deref().map(|r| norm_path(r)),
+            Some(norm_path(home.to_str().unwrap()))
+        );
+    }
+
+    #[test]
+    fn store_install_layout_refuses_an_arbitrary_profiles_tree() {
+        // An <X>/profiles/<n> tree with no home marker is NOT an install. Treating
+        // it as ours is what swallowed an unrelated instance in upstream #92401.
+        let dir = tempfile::tempdir().unwrap();
+        let bogus = dir.path().join("some-app").join("profiles").join("work");
+        fs::create_dir_all(&bogus).unwrap();
+
+        let (root, profile) = store_install_layout(bogus.to_str().unwrap());
+        assert_eq!(root, None);
+        assert_eq!(profile, None);
+    }
+
+    #[test]
+    fn names_other_profile_is_false_without_an_install_root() {
+        assert!(!names_other_profile("/x/profiles/y", None, None));
+    }
+
+    #[test]
+    fn names_other_profile_distinguishes_ours_from_theirs() {
+        let root = norm_path("/home/u/.ulnclaw");
+        let sep = std::path::MAIN_SEPARATOR;
+        let ours = format!("{}{}profiles{}work", root, sep, sep);
+        let theirs = format!("{}{}profiles{}other", root, sep, sep);
+
+        assert!(!names_other_profile(
+            ours.as_str(),
+            Some(root.as_str()),
+            Some("work")
+        ));
+        assert!(names_other_profile(
+            theirs.as_str(),
+            Some(root.as_str()),
+            Some("work")
+        ));
+        // No profile of our own: any named profile is somebody else's.
+        assert!(names_other_profile(
+            theirs.as_str(),
+            Some(root.as_str()),
+            None
+        ));
+    }
+
+    #[test]
+    fn argv_home_selection_prefers_the_env_home_then_the_profile_flag() {
+        let home = norm_path("/home/u/.ulnclaw");
+        // No selection at all.
+        assert_eq!(
+            argv_home_selection(
+                &argv(&["ulnclaw", "gateway"]),
+                "/home/u/.ulnclaw",
+                None,
+                None
+            ),
+            None
+        );
+        // Our own home via the env form.
+        assert_eq!(
+            argv_home_selection(
+                &argv(&["env", "ULNCLAW_HOME=/home/u/.ulnclaw", "ulnclaw"]),
+                "/home/u/.ulnclaw",
+                None,
+                None
+            ),
+            Some(HomeSelection::Ours)
+        );
+        // A different home via the env form.
+        assert_eq!(
+            argv_home_selection(
+                &argv(&["env", "ULNCLAW_HOME=/home/demo/.ulnclaw", "ulnclaw"]),
+                "/home/u/.ulnclaw",
+                None,
+                None
+            ),
+            Some(HomeSelection::Other)
+        );
+        // Our profile.
+        assert_eq!(
+            argv_home_selection(
+                &argv(&["ulnclaw", "--profile", "work"]),
+                "/home/u/.ulnclaw",
+                None,
+                Some("work")
+            ),
+            Some(HomeSelection::Ours)
+        );
+        // Another profile.
+        assert_eq!(
+            argv_home_selection(
+                &argv(&["ulnclaw", "--profile", "other"]),
+                "/home/u/.ulnclaw",
+                None,
+                Some("work")
+            ),
+            Some(HomeSelection::Other)
+        );
+        let _ = home;
+    }
+
+    #[test]
+    fn scoped_to_other_home_is_false_for_ambiguous_argv() {
+        // No absolute-path tokens: keep the fail-closed suspicion.
+        let db = Path::new("/home/u/.ulnclaw/state.db");
+        assert!(!argv_scoped_to_other_home(
+            &argv(&["ulnclaw", "gateway"]),
+            db
+        ));
+    }
+
+    #[test]
+    fn scoped_to_other_home_is_false_when_argv_names_our_store() {
+        let db = Path::new("/home/u/.ulnclaw/state.db");
+        assert!(!argv_scoped_to_other_home(
+            &argv(&["ulnclaw", "--db=/home/u/.ulnclaw/state.db"]),
+            db
+        ));
+        // A WAL sidecar of ours is equally definitive.
+        assert!(!argv_scoped_to_other_home(
+            &argv(&["ulnclaw", "/home/u/.ulnclaw/state.db-wal"]),
+            db
+        ));
+    }
+
+    #[test]
+    fn scoped_to_other_home_is_false_when_argv_names_our_home_dir() {
+        let db = Path::new("/home/u/.ulnclaw/state.db");
+        assert!(!argv_scoped_to_other_home(
+            &argv(&["ulnclaw", "/home/u/.ulnclaw/memory/n.md"]),
+            db
+        ));
+    }
+
+    #[test]
+    fn scoped_to_other_home_is_true_for_a_second_instance_under_another_home() {
+        // The upstream #92401 shape: a sibling gateway under /home/demo/.ulnclaw.
+        let db = Path::new("/home/u/.ulnclaw/state.db");
+        assert!(argv_scoped_to_other_home(
+            &argv(&["/home/demo/.ulnclaw/bin/ulnclaw", "gateway"]),
+            db
+        ));
+        assert!(argv_scoped_to_other_home(
+            &argv(&["ulnclaw", "--db=/home/demo/.ulnclaw/state.db"]),
+            db
+        ));
+    }
+
+    #[test]
+    fn scoped_to_other_home_is_true_when_the_profile_flag_selects_another_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join(HOME_DIR_NAME);
+        fake_home(&home);
+        let db = home.join("profiles").join("work").join("state.db");
+        fs::create_dir_all(db.parent().unwrap()).unwrap();
+
+        // Same install, different named profile: its store is another generation.
+        assert!(argv_scoped_to_other_home(
+            &argv(&["ulnclaw", "--profile", "other"]),
+            &db
+        ));
+        // Our own profile: ours.
+        assert!(!argv_scoped_to_other_home(
+            &argv(&["ulnclaw", "--profile", "work"]),
+            &db
+        ));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
