@@ -787,6 +787,7 @@ mod slice2a_tests {
 // ===========================================================================
 
 use std::collections::HashSet;
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
 /// A holder of the store: `(pid, human-readable target)`. `pid < 0` marks an
@@ -1100,6 +1101,268 @@ mod slice2b_tests {
             holders.is_empty(),
             "quiescent store with sidecars: {holders:?}"
         );
+    }
+}
+
+// ===========================================================================
+// slice3a — the in-process live-store registry (substrate for the in_process
+// arm of the VACUUM gate). NOT YET WIRED into SqliteSessionStore; slice3b adds
+// the `instance_id` field, registers in `open()`, deregisters in `Drop`, and
+// feeds `in_process_state_db_holders` into `maybe_auto_prune_and_vacuum`.
+//
+// Why this exists: `foreign_state_db_holders` (slice2b) skips our own pid, so it
+// answers a cross-PROCESS question only. Upstream pairs it with an in-process arm
+// because "a VACUUM plus its TRUNCATE checkpoint retires the generation a sibling
+// SessionDB in this very process still holds" (hermes `in_process_state_db_holders`
+// → `hermes_state_registry.other_generations_for_path`). Upstream's registry is a
+// 478-line refcount+teardown system because every store goes through
+// `acquire()`/`release()`. This port opens each store independently, so the
+// faithful minimum is a path-keyed set of live instance ids: register on open,
+// deregister on drop, and answer "who else in THIS process holds this path?".
+//
+// 🔴 Without a registry the in-process arm cannot be implemented at all, and the
+// VACUUM gate must stay fail-closed forever (it can never prove no in-process
+// sibling). This registry is the load-bearing substrate that lets the gate open.
+// ===========================================================================
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
+
+/// Live stores keyed by resolved db path → set of instance ids. Process-global:
+/// the question "does THIS process hold another generation of this path?" is
+/// inherently process-scoped. `Mutex` (not `RwLock`) because every op mutates or
+/// is trivially short; contention is nil (open/close are rare).
+static LIVE_STORES: OnceLock<Mutex<HashMap<String, HashSet<u64>>>> = OnceLock::new();
+/// Monotonic instance id source. Ids are never reused within a process, so a
+/// stale deregister cannot remove a live store's entry.
+static NEXT_STORE_ID: AtomicU64 = AtomicU64::new(1);
+
+fn live_stores() -> &'static Mutex<HashMap<String, HashSet<u64>>> {
+    LIVE_STORES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// The registry key for a store path: resolved (symlink-collapsed) + normalized,
+/// so a symlinked `ULNCLAW_HOME` and its target share one key — the same
+/// realpath-not-abspath discipline the foreign scan uses. A store that cannot be
+/// resolved yet (rare at open time) falls back to the lexical absolute path.
+fn store_registry_key(db_path: &Path) -> String {
+    norm_path(&resolve_lenient(db_path).to_string_lossy())
+}
+
+/// Register a freshly-opened store; returns its process-unique instance id.
+/// The caller (slice3b: `SqliteSessionStore::open`) stores the id and passes it
+/// to [`unregister_store`] from `Drop`.
+pub fn register_store(db_path: &Path) -> u64 {
+    let id = NEXT_STORE_ID.fetch_add(1, Ordering::Relaxed);
+    let key = store_registry_key(db_path);
+    // A poisoned lock means a prior holder panicked mid-update; recover the guard
+    // rather than propagate — a holder scan must never take the process down.
+    let mut map = match live_stores().lock() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    map.entry(key).or_default().insert(id);
+    id
+}
+
+/// Deregister a store on drop. Idempotent: a double-drop or an id that was never
+/// registered is a no-op, never a panic.
+pub fn unregister_store(db_path: &Path, instance_id: u64) {
+    let key = store_registry_key(db_path);
+    let mut map = match live_stores().lock() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some(set) = map.get_mut(key.as_str()) {
+        set.remove(&instance_id);
+        if set.is_empty() {
+            map.remove(key.as_str());
+        }
+    }
+}
+
+/// Holders of `db_path` inside THIS process, other than `exclude` — the
+/// in-process analogue of [`foreign_state_db_holders`]. Each entry carries the
+/// current pid (upstream returns `(os.getpid(), description)`), so a consumer can
+/// tell an in-process sibling from a foreign pid by the description text.
+///
+/// 🔴 Returns every OTHER live registration for the resolved path. An empty
+/// result is the "no in-process sibling" proof the VACUUM gate needs; it is only
+/// trustworthy once slice3b registers stores on open (until then nothing is ever
+/// registered, so this is always empty — which is why the gate stays fail-closed
+/// and this arm is not yet consumed).
+pub fn in_process_state_db_holders(db_path: &Path, exclude: Option<u64>) -> Vec<Holder> {
+    let key = store_registry_key(db_path);
+    let map = match live_stores().lock() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let Some(set) = map.get(key.as_str()) else {
+        return Vec::new();
+    };
+    let pid = std::process::id() as i32;
+    let mut out: Vec<Holder> = set
+        .iter()
+        .filter(|id| Some(**id) != exclude)
+        .map(|id| {
+            (
+                pid,
+                format!("in-process live SqliteSessionStore generation (id {id})"),
+            )
+        })
+        .collect();
+    // Deterministic order for stable logs/tests (HashSet iteration is unordered).
+    out.sort_by(|a, b| a.1.cmp(&b.1));
+    out
+}
+
+/// Snapshot of the registry size, for tests and diagnostics (upstream `stats()`).
+pub fn live_store_count() -> usize {
+    let map = match live_stores().lock() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    map.values().map(|set| set.len()).sum()
+}
+
+#[cfg(test)]
+mod slice3a_tests {
+    use super::*;
+    use std::fs;
+
+    // 🔴 The registry is process-global mutable state shared across tests. Each
+    // test uses its OWN tempdir path as the key, so path-keying isolates them —
+    // a test querying its own path never sees another test's registrations.
+    // Instance ids are globally unique, so `exclude` is unambiguous too.
+
+    #[test]
+    fn register_then_query_returns_the_live_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("state.db");
+        fs::write(&db, b"x").unwrap();
+
+        let id = register_store(&db);
+        let holders = in_process_state_db_holders(&db, None);
+        assert_eq!(holders.len(), 1, "one live store => one holder");
+        assert_eq!(
+            holders[0].0,
+            std::process::id() as i32,
+            "in-process arm carries our pid"
+        );
+        assert!(holders[0].1.contains("in-process"), "{:?}", holders[0].1);
+
+        unregister_store(&db, id);
+        assert!(in_process_state_db_holders(&db, None).is_empty());
+    }
+
+    #[test]
+    fn exclude_removes_only_the_caller() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("state.db");
+        fs::write(&db, b"x").unwrap();
+
+        let a = register_store(&db);
+        let b = register_store(&db);
+        assert_ne!(a, b, "instance ids are unique per open");
+
+        // The store doing the VACUUM excludes itself; the sibling remains.
+        let others = in_process_state_db_holders(&db, Some(a));
+        assert_eq!(others.len(), 1);
+        assert!(
+            others[0].1.contains(&format!("id {b}")),
+            "{:?}",
+            others[0].1
+        );
+
+        // Excluding the other one leaves the first.
+        let others = in_process_state_db_holders(&db, Some(b));
+        assert_eq!(others.len(), 1);
+        assert!(others[0].1.contains(&format!("id {a}")));
+
+        // With no exclusion, both are holders.
+        assert_eq!(in_process_state_db_holders(&db, None).len(), 2);
+
+        unregister_store(&db, a);
+        unregister_store(&db, b);
+    }
+
+    #[test]
+    fn distinct_paths_are_isolated() {
+        let dir = tempfile::tempdir().unwrap();
+        let db1 = dir.path().join("one").join("state.db");
+        let db2 = dir.path().join("two").join("state.db");
+        fs::create_dir_all(db1.parent().unwrap()).unwrap();
+        fs::create_dir_all(db2.parent().unwrap()).unwrap();
+        fs::write(&db1, b"x").unwrap();
+        fs::write(&db2, b"y").unwrap();
+
+        let id1 = register_store(&db1);
+        assert_eq!(in_process_state_db_holders(&db1, None).len(), 1);
+        // A different path has no holders from db1's registration.
+        assert!(in_process_state_db_holders(&db2, None).is_empty());
+
+        unregister_store(&db1, id1);
+    }
+
+    #[test]
+    fn unregister_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("state.db");
+        fs::write(&db, b"x").unwrap();
+
+        let id = register_store(&db);
+        unregister_store(&db, id);
+        // Double-drop and never-registered ids must be silent no-ops, not panics.
+        unregister_store(&db, id);
+        unregister_store(&db, 999_999_999);
+        assert!(in_process_state_db_holders(&db, None).is_empty());
+    }
+
+    #[test]
+    fn empty_dir_entry_is_removed_after_last_unregister() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("state.db");
+        fs::write(&db, b"x").unwrap();
+
+        let before = live_store_count();
+        let id = register_store(&db);
+        assert_eq!(live_store_count(), before + 1);
+        unregister_store(&db, id);
+        assert_eq!(
+            live_store_count(),
+            before,
+            "empty path key is pruned, no leak"
+        );
+    }
+
+    #[test]
+    fn symlinked_path_shares_one_key_with_its_target() {
+        // realpath-not-abspath discipline: a symlink and its target must collide
+        // on one key, or an in-process sibling reached via the other name is
+        // invisible — the same failure the foreign scan guards against.
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real-state.db");
+        fs::write(&real, b"x").unwrap();
+        let link = dir.path().join("link-state.db");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        #[cfg(not(unix))]
+        let _ = (&real.clone(), &link.clone());
+
+        #[cfg(unix)]
+        {
+            let id = register_store(&real);
+            // Querying via the symlink resolves to the same key and finds it.
+            let via_link = in_process_state_db_holders(&link, None);
+            assert_eq!(
+                via_link.len(),
+                1,
+                "symlink resolves to the same registry key"
+            );
+            unregister_store(&link, id);
+            assert!(in_process_state_db_holders(&real, None).is_empty());
+        }
     }
 }
 
