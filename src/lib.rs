@@ -224,6 +224,7 @@ pub mod slash_confirm;
 pub mod sms;
 pub mod spotify_auth;
 pub mod spotify_tool;
+pub mod state_holders;
 pub mod status;
 pub mod status_phrases;
 pub mod streaming_tts;
