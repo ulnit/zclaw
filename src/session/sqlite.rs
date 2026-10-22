@@ -185,6 +185,11 @@ pub struct SqliteSessionStore {
     conn: Mutex<Connection>,
     path: PathBuf,
     has_fts: bool,
+    /// Process-unique id in the live-store registry (slice3a). Registered on
+    /// `open()`, deregistered in `Drop`, so the in-process arm of the VACUUM
+    /// holders gate can answer "does THIS process hold another generation of
+    /// this path?". 0 means "not registered" (only in a Default/partial state).
+    instance_id: u64,
 }
 
 /// One skill-scaffolded session row (hermes
@@ -633,6 +638,17 @@ fn ensure_compression_columns(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+impl Drop for SqliteSessionStore {
+    fn drop(&mut self) {
+        // Deregister this generation so the in-process holders arm stops seeing
+        // it. Idempotent + panic-free (slice3a): a double-drop or an unregistered
+        // id is a no-op. Runs when the last Arc<SqliteSessionStore> drops, which
+        // is exactly "no longer held".
+        if self.instance_id != 0 {
+            crate::state_holders::unregister_store(&self.path, self.instance_id);
+        }
+    }
+}
 impl SqliteSessionStore {
     /// Open (or create) the state database at `path`.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -651,10 +667,15 @@ impl SqliteSessionStore {
         ensure_compression_columns(&conn)?;
         ensure_delegation_delivery_columns(&conn)?;
 
+        // Register BEFORE moving `path` into the struct; the id rides the store
+        // and Drop deregisters it. If init_meta() fails, `store` is dropped and
+        // the registration is undone — no leak on the error path.
+        let instance_id = crate::state_holders::register_store(&path);
         let store = Self {
             conn: Mutex::new(conn),
             path,
             has_fts,
+            instance_id,
         };
         store.init_meta()?;
         Ok(store)
@@ -5033,6 +5054,34 @@ mod tests {
         assert_eq!(report.pruned, 1);
     }
 
+    /// slice3b-1: opening a store registers it in the live-store registry and
+    /// dropping it deregisters it — the data the in-process holders arm reads.
+    /// Path-keyed, so this test is isolated from other tests' stores.
+    #[test]
+    fn open_registers_and_drop_unregisters_the_live_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        // Fresh path: nothing registered yet.
+        assert!(crate::state_holders::in_process_state_db_holders(&path, None).is_empty());
+
+        let store = SqliteSessionStore::open(&path).unwrap();
+        assert_ne!(store.instance_id, 0, "open() must assign a registry id");
+        let holders = crate::state_holders::in_process_state_db_holders(&path, None);
+        assert_eq!(holders.len(), 1, "one live generation after open");
+        assert!(holders[0].1.contains("in-process"), "{:?}", holders[0].1);
+
+        // The VACUUM caller excludes itself: with self excluded, no sibling.
+        assert!(
+            crate::state_holders::in_process_state_db_holders(&path, Some(store.instance_id),)
+                .is_empty()
+        );
+
+        drop(store);
+        assert!(
+            crate::state_holders::in_process_state_db_holders(&path, None).is_empty(),
+            "drop must deregister — no leak"
+        );
+    }
     /// 🔴 The VACUUM leg fails closed while the holders scan is unported: even
     /// with every gate passing (vacuum=true, pruned>0, no prior vacuum), no
     /// rewrite happens and the report says why.
