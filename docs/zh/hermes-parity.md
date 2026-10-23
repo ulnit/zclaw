@@ -449,9 +449,13 @@ hermes-agent v2026.8.3 对标兼容 —— 原生性能，单一静态二进制�
   `<db>.auto-maintenance.lock`、**先 prune 后 sweep**（刚关闭的孤儿须享满保留窗口）、负 retention 跳过、never raises。
   `sweep_orphaned_sessions` 关闭白名单源（cli/cron/kanban/acp/api_server/subagent/tool/recovered，逐字
   `hermes_state.py:472`）的陈旧 open 行（`startup_orphan_reap`，非删除、可 resume）；`started_at` 与 last-active
-  须双双早于 cutoff（保护新建 branch/compression 子会话）。🔴 VACUUM 腿 fail-closed：上游须先证明无兄弟进程持有
-  store/WAL（`hermes_state_holders`，#110054），port 无该扫描 → 永不 VACUUM 并记录原因；手动 `sessions optimize`
-  仍是显式路径。pinned-tail CTE（已 pin 压缩祖先的未 pin 续段）随压缩血缘移植排期，非跳过。
+  须双双早于 cutoff（保护新建 branch/compression 子会话）。🔴 VACUUM 腿已**激活**（p3-holders）：上游须先证明无兄弟
+  进程或进程内 sibling store 持有 store/WAL（`hermes_state_maintenance.py:484-516`，`hermes_state_holders`，#110054），
+  本 port 用两臂求和复刻同一证明——`foreign_state_db_holders`（Linux `/proc/*/fd` 扫描）+ `in_process_state_db_holders`
+  （路径键 live-store 注册表，open 注册 / Drop 注销，排除自身 `instance_id`）。和非空 → 记 `vacuum_skipped_holders` 并跳过；
+  和为空 → 按上游顺序 VACUUM（PASSIVE → VACUUM → TRUNCATE）。Windows/macOS 的 foreign 臂（Restart Manager / psutil）未移植，
+  返回占位 holder → 仍 fail-closed（by design，待 slice4）；手动 `sessions optimize` 仍是显式路径。
+  pinned-tail CTE（已 pin 压缩祖先的未 pin 续段）随压缩血缘移植排期，非跳过。
 - hermes 的计费/聊天/分支/成本过滤器对应 ulnclaw 未跟踪的列，不实现
 
 <a id="皮肤-主题引擎-skin-engine-py"></a>

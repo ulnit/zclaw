@@ -6,6 +6,31 @@ Changes landed after v0.6.5. No version bump yet: these are engine-only changes,
 and releasing them as `0.6.6` would invalidate `mobile-ffi/Cargo.lock` and imply a
 mobile app rebuild — that is a release decision, not bookkeeping.
 
+### VACUUM leg activated — the holders scan is ported and wired (p3-holders)
+
+The auto-maintenance VACUUM leg no longer fails closed. Upstream admits a VACUUM
+only after proving no *other* process **and** no in-process sibling store holds
+the state.db or a WAL sidecar (`hermes_state_maintenance.py:484-516`,
+`hermes_state_holders`, #110054) — VACUUM plus its TRUNCATE checkpoint retires a
+WAL generation a live sibling is still bound to, which is exactly the state where
+every agent then refuses turns.
+
+This port now proves it the same way, with both arms summed, never one alone:
+
+- `foreign_state_db_holders` (Linux `/proc/*/fd` scan, `(st_dev,st_ino)` match)
+  covers other processes; it skips our own pid, so it is paired with
+- `in_process_state_db_holders` over a path-keyed live-store registry
+  (`SqliteSessionStore::open` registers, `Drop` deregisters, `exclude=self
+  .instance_id`) which covers a sibling store in this very process.
+
+A non-empty sum records `vacuum_skipped_holders` (upstream's key — the earlier
+`vacuum_skipped_reason` scaffold was removed; it was never an upstream field) and
+skips; an empty sum admits the VACUUM, which now runs upstream's exact order
+(`PASSIVE` fold-in → `VACUUM` → `TRUNCATE` checkpoint, so a 3 GB DB does not
+leave a 3 GB `-wal` behind). Windows/macOS stay fail-closed *by design*: their
+foreign arms (Restart Manager / psutil) are unported and return a placeholder
+holder, so the leg skips there until slice4.
+
 ### Retry 529 as overloaded (P3-2, `1a45671`)
 
 `retriable_status` in both `provider/openai.rs` and `provider/anthropic.rs` was
@@ -431,6 +456,8 @@ safety clause upstream has was ported and test-pinned first.
   scan, so quiescence is never provable and the leg always skips with
   `vacuum_skipped_reason` recorded. Manual `optimize_storage()` remains the
   explicit path; porting the holders scan activates the leg.
+  *(Superseded — see "VACUUM leg activated" below: the holders scan has since
+  been ported and the leg is now live.)*
 - **Startup wiring (`b4242f9`).** `run_session_auto_maintenance(home, config)`
   runs once per process from `main()` before dispatch (covers every
   subcommand) and again per profile inside `build_gateway_stack` (hermes

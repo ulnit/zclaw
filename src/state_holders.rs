@@ -1123,6 +1123,9 @@ mod slice2b_tests {
 // 🔴 Without a registry the in-process arm cannot be implemented at all, and the
 // VACUUM gate must stay fail-closed forever (it can never prove no in-process
 // sibling). This registry is the load-bearing substrate that lets the gate open.
+// It is now WIRED: `SqliteSessionStore::open` registers, `Drop` deregisters, and
+// `maybe_auto_prune_and_vacuum` sums this arm with the foreign scan before it
+// admits a VACUUM.
 // ===========================================================================
 
 use std::collections::HashMap;
@@ -1188,10 +1191,11 @@ pub fn unregister_store(db_path: &Path, instance_id: u64) {
 /// tell an in-process sibling from a foreign pid by the description text.
 ///
 /// 🔴 Returns every OTHER live registration for the resolved path. An empty
-/// result is the "no in-process sibling" proof the VACUUM gate needs; it is only
-/// trustworthy once slice3b registers stores on open (until then nothing is ever
-/// registered, so this is always empty — which is why the gate stays fail-closed
-/// and this arm is not yet consumed).
+/// result is the "no in-process sibling" proof the VACUUM gate needs, and it is
+/// trustworthy because `SqliteSessionStore::open` registers the store and its
+/// `Drop` deregisters it. This arm IS consumed: `maybe_auto_prune_and_vacuum`
+/// sums it with `foreign_state_db_holders` (excluding `self.instance_id`) and
+/// skips the VACUUM whenever the sum is non-empty.
 pub fn in_process_state_db_holders(db_path: &Path, exclude: Option<u64>) -> Vec<Holder> {
     let key = store_registry_key(db_path);
     let map = match live_stores().lock() {

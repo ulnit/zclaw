@@ -500,11 +500,15 @@ performance and a single static binary.
   never raises. `sweep_orphaned_sessions` *closes* (never deletes; resumable, `startup_orphan_reap`)
   stale open rows from the whitelist (cli/cron/kanban/acp/api_server/subagent/tool/recovered,
   verbatim `hermes_state.py:472`); both `started_at` and last-activity must precede the cutoff
-  (protects fresh branch/compression children). 🔴 The VACUUM leg fails closed: upstream rewrites
-  only after proving no sibling process holds the store/WAL (`hermes_state_holders`, #110054); this
-  port has no holders scan, so it never VACUUMs and records why — manual `sessions optimize` stays
-  the explicit path. The pinned-tail CTE (unpinned continuations of a pinned compression ancestor)
-  is sequenced with the compression-lineage port, not skipped.
+  (protects fresh branch/compression children). 🔴 The VACUUM leg is now **live** (p3-holders): upstream rewrites
+  only after proving no sibling process *and* no in-process sibling store holds the store/WAL
+  (`hermes_state_maintenance.py:484-516`, `hermes_state_holders`, #110054). This port replicates the proof by summing
+  both arms — `foreign_state_db_holders` (Linux `/proc/*/fd` scan) + `in_process_state_db_holders` (a path-keyed
+  live-store registry; open registers, `Drop` deregisters, excludes self `instance_id`). A non-empty sum records
+  `vacuum_skipped_holders` and skips; an empty sum admits the VACUUM in upstream's order (PASSIVE → VACUUM → TRUNCATE).
+  Windows/macOS stay fail-closed *by design* (their Restart Manager / psutil arms are unported and return a placeholder
+  holder, pending slice4); manual `sessions optimize` stays the explicit path. The pinned-tail CTE (unpinned
+  continuations of a pinned compression ancestor) is sequenced with the compression-lineage port, not skipped.
 - hermes' billing/chat/branch/cost filters map to columns ulnclaw doesn't track and stay unported
 
 <a id="welcome-banner-update-check-banner-py"></a>

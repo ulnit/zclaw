@@ -279,8 +279,11 @@ pub struct AutoMaintenanceReport {
     pub vacuumed: bool,
     /// Freelist fraction observed when a VACUUM was considered.
     pub freelist_ratio: Option<f64>,
-    /// Why the VACUUM leg did not run even though its gates passed.
-    pub vacuum_skipped_reason: Option<String>,
+    /// Holders (other processes + in-process sibling stores) that blocked the
+    /// VACUUM leg even though its gates passed — upstream's
+    /// `vacuum_skipped_holders`. `0` means upstream would have omitted the key
+    /// entirely, i.e. no holder blocked it.
+    pub vacuum_skipped_holders: usize,
     /// First failure message, if any (the pass still returns normally).
     pub error: Option<String>,
 }
@@ -2111,21 +2114,25 @@ impl SqliteSessionStore {
     /// - Any error is captured in the report and logged; maintenance must never
     ///   block startup or refuse a turn.
     ///
-    /// 🔴 VACUUM leg — NOT YET PORTED, fail-closed: upstream only VACUUMs after
-    /// proving no *other* process or in-process DB generation holds the store or
-    /// a WAL sidecar (`hermes_state_holders`: Linux /proc fd scan, Windows
-    /// Restart Manager, in-process generation registry). VACUUM + TRUNCATE
-    /// checkpoint retire a WAL generation a sibling writer still holds, and that
-    /// is exactly the state where every agent then refuses turns (#110054).
-    /// Upstream treats an unprovable scan as "holders present" and SKIPS — this
-    /// port has no scan at all, so it can never prove quiescence and therefore
-    /// always skips the VACUUM leg, recording why. The gate structure
-    /// (`vacuum` flag, pruned>0, interval throttle, freelist ratio) is fully
-    /// wired; porting the holders scan activates it. Manual `optimize_storage`
-    /// remains the explicit VACUUM path. Pruning itself reclaims nothing on
-    /// disk (SQLite reuses freed pages), so the file stays large until a manual
-    /// optimize — the same tradeoff upstream makes when it cannot prove
-    /// quiescence.
+    /// 🔴 VACUUM leg — LIVE (the holders scan is wired). It runs the SAME store
+    /// rewrite as the manual path (`optimize_storage`), and admits it only after
+    /// proving no *other* process and no in-process sibling store holds this db
+    /// or a WAL sidecar (`state_holders`: Linux `/proc` fd scan plus the
+    /// in-process live-store registry). VACUUM and its TRUNCATE checkpoint
+    /// retire a WAL generation a sibling writer still holds, which is exactly
+    /// the state where every agent then refuses turns (#110054).
+    ///
+    /// Both arms are summed, never one alone: `foreign_state_db_holders` skips
+    /// our own pid, so by itself it would read "quiet" while a sibling store in
+    /// this very process kept the generation open. An empty sum is the proof;
+    /// `vacuum_skipped_holders` records the count when it is not.
+    ///
+    /// Unprovable platforms stay fail-closed BY DESIGN: the Windows (Restart
+    /// Manager) and macOS/BSD (psutil) arms are unported, so they return a
+    /// placeholder holder and the leg always skips there. Automatic maintenance
+    /// only ever SKIPS — a turn is never refused over housekeeping. Pruning
+    /// itself reclaims nothing on disk (SQLite reuses freed pages), so on those
+    /// platforms the file stays large until a manual optimize.
     pub fn maybe_auto_prune_and_vacuum(
         &self,
         retention_days: i64,
@@ -2253,21 +2260,46 @@ impl SqliteSessionStore {
             if vacuum_due {
                 let ratio = self.freelist_ratio();
                 report.freelist_ratio = ratio;
-                // 🔴 NOT YET PORTED (fail-closed): the holders scan
-                // (hermes_state_holders) that proves no sibling process or
-                // in-process DB generation holds this store or its WAL sidecar.
-                // Upstream skips VACUUM whenever quiescence is unproven
-                // (#110054); with no scan, it is always unproven here.
-                report.vacuum_skipped_reason = Some(
-                    "holder scan not ported; quiescence unproven (#110054 fail-closed)".into(),
-                );
-                if ratio.is_none() || ratio.unwrap() > min_vacuum_freelist_ratio {
-                    // Ratio gate passed — would VACUUM here once the holders
-                    // scan exists. Left unreachable-by-design, see above.
+                // Same admission the manual `optimize_storage` path runs:
+                // VACUUM plus its TRUNCATE checkpoint retire the WAL generation
+                // a sibling writer (gateway, desktop, cron) still holds, and
+                // that is exactly the state every agent then refuses turns in
+                // (#110054). The foreign scan skips our own pid, so it is paired
+                // with the in-process arm: under one multiplexed process another
+                // live store for this same path is just as much a holder as
+                // another process would be. Automatic maintenance only ever
+                // SKIPS — a turn is never refused over housekeeping.
+                let mut holders = crate::state_holders::foreign_state_db_holders(&self.path);
+                holders.extend(crate::state_holders::in_process_state_db_holders(
+                    &self.path,
+                    Some(self.instance_id),
+                ));
+                if !holders.is_empty() {
+                    report.vacuum_skipped_holders = holders.len();
+                    // Upstream previews the first three as "{pid}:{target}".
+                    let preview: Vec<String> = holders
+                        .iter()
+                        .take(3)
+                        .map(|(pid, target)| format!("{pid}:{target}"))
+                        .collect();
                     tracing::debug!(
-                        ?ratio,
-                        "state.db auto-maintenance: VACUUM eligible but skipped (no holders scan)"
+                        count = holders.len(),
+                        holders = %preview.join(", "),
+                        "state.db auto-maintenance: skipping VACUUM, other process(es) hold \
+                         the store or a WAL sidecar"
                     );
+                } else if ratio.is_none() || ratio.unwrap() > min_vacuum_freelist_ratio {
+                    match self.optimize_storage() {
+                        Ok(_) => {
+                            report.vacuumed = true;
+                            if let Err(e) = self.set_meta("last_vacuum", &now.to_string()) {
+                                tracing::warn!(error = %e, "could not record last_vacuum");
+                            }
+                        }
+                        // Upstream catches and warns: a failed VACUUM must not
+                        // fail the pass or block startup.
+                        Err(e) => tracing::warn!(error = %e, "state.db VACUUM failed"),
+                    }
                 } else {
                     tracing::debug!(
                         ratio = ratio.unwrap_or(0.0) * 100.0,
@@ -3172,10 +3204,18 @@ impl SqliteSessionStore {
         {
             optimized = 1;
         }
-        // Best-effort WAL checkpoint first so VACUUM rewrites a folded DB.
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)", []).ok();
+        // Upstream `SessionDB.vacuum()` order: PASSIVE fold-in, VACUUM, then
+        // TRUNCATE. The pre-VACUUM checkpoint is PASSIVE, not TRUNCATE — a
+        // TRUNCATE reset there would race a live gateway writer. The
+        // post-VACUUM TRUNCATE is the load-bearing one: VACUUM rewrites every
+        // page THROUGH the WAL, so without it a 3 GB database leaves a 3 GB
+        // `-wal` file behind. The corrupt-image guard and file-identity
+        // re-record that upstream also runs have no counterpart here — this
+        // port has no write-fence / retired-generation mechanism at all.
+        conn.execute("PRAGMA wal_checkpoint(PASSIVE)", []).ok();
         conn.execute("VACUUM", [])
             .map_err(|e| AgentError::session(e.to_string()))?;
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)", []).ok();
         Ok(optimized)
     }
 
@@ -5082,11 +5122,55 @@ mod tests {
             "drop must deregister — no leak"
         );
     }
-    /// 🔴 The VACUUM leg fails closed while the holders scan is unported: even
-    /// with every gate passing (vacuum=true, pruned>0, no prior vacuum), no
-    /// rewrite happens and the report says why.
+    /// 🔴 The VACUUM leg is admitted only when the store is PROVABLY quiet. A
+    /// live in-process sibling for the same path is a holder (upstream
+    /// `test_auto_vacuum_skips_while_a_live_sibling_holds_the_same_store`):
+    /// `foreign_state_db_holders` skips our own pid, so without the in-process
+    /// arm this gate would read "quiet" while a sibling kept the WAL generation
+    /// open, and the TRUNCATE checkpoint would retire it (#110054).
+    ///
+    /// Upstream's parameters, verbatim: `retention_days=0` makes the ended row
+    /// prunable and `min_vacuum_freelist_ratio=-1.0` disables the freelist
+    /// floor, so ONLY a holder can stop the VACUUM.
     #[test]
-    fn auto_maintenance_vacuum_leg_fails_closed() {
+    fn auto_maintenance_vacuum_skips_while_a_live_sibling_holds_the_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.db");
+        let maintainer = SqliteSessionStore::open(&path).unwrap();
+        // A second live store for the same path — e.g. the gateway's own handle.
+        // Dropped at the end of the test, which unregisters it.
+        let _sibling = SqliteSessionStore::open(&path).unwrap();
+        let sid = maintainer.create_session("cli", Some("m"), None).unwrap();
+        backdate(&path, &sid, 100.0 * 86400.0);
+        maintainer.end_session(&sid, "user_exit").unwrap();
+
+        let report = maintainer.maybe_auto_prune_and_vacuum(0, 0, true, 0, -1.0);
+        assert_eq!(report.pruned, 1);
+        assert!(
+            !report.vacuumed,
+            "VACUUM ran under a live in-process holder"
+        );
+        assert!(
+            report.vacuum_skipped_holders > 0,
+            "the holder count must be recorded, not silent: {report:?}"
+        );
+        assert!(maintainer.get_meta("last_vacuum").unwrap().is_none());
+    }
+
+    /// Control half of the same invariant: with no sibling the store is provably
+    /// quiet, so the VACUUM leg RUNS and records `last_vacuum`. This is the
+    /// behaviour the old `auto_maintenance_vacuum_leg_fails_closed` test asserted
+    /// could never happen; that test was RE-POINTED (not deleted) when the scan
+    /// was wired, so both directions stay covered.
+    ///
+    /// 🔴 Linux only, by design: on Windows/macOS `foreign_state_db_holders`
+    /// returns a placeholder holder because the Restart Manager / psutil arms
+    /// are unported, so the leg stays fail-closed there and this control cannot
+    /// pass. Upstream marks its equivalent `platforms("posix")` for the same
+    /// reason.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn auto_maintenance_vacuums_when_the_store_is_provably_quiet() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.db");
         let store = SqliteSessionStore::open(&path).unwrap();
@@ -5094,17 +5178,17 @@ mod tests {
         backdate(&path, &sid, 100.0 * 86400.0);
         store.end_session(&sid, "user_exit").unwrap();
 
-        let report = store.maybe_auto_prune_and_vacuum(90, 24, true, 30, 0.25);
+        let report = store.maybe_auto_prune_and_vacuum(0, 0, true, 0, -1.0);
         assert_eq!(report.pruned, 1);
         assert!(
-            !report.vacuumed,
-            "VACUUM must not run without a holders proof"
+            report.vacuumed,
+            "a provably quiet store must be VACUUMed: {report:?}"
         );
+        assert_eq!(report.vacuum_skipped_holders, 0);
         assert!(
-            report.vacuum_skipped_reason.is_some(),
-            "the skip must be recorded, not silent"
+            store.get_meta("last_vacuum").unwrap().is_some(),
+            "a completed VACUUM must stamp last_vacuum so its throttle holds"
         );
-        assert!(store.get_meta("last_vacuum").unwrap().is_none());
     }
 
     /// A held lock makes a concurrent pass skip instead of waiting or pruning
