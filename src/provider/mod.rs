@@ -17,7 +17,13 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Message in a conversation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `Default` exists so construction sites can write only the fields they care
+/// about (`..Default::default()`), which keeps adding an optional field from
+/// touching all ~159 literals. It is internal Rust convenience — upstream
+/// messages are dicts and have no equivalent, so this is not a contract surface.
+/// A default `Message` is `role: User` with every payload field `None`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Message {
     pub role: Role,
     pub content: Option<String>,
@@ -43,10 +49,20 @@ pub struct Message {
 }
 
 /// Role in a conversation
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+///
+/// `Default = User`. Upstream has no `Message` type at all (messages are plain
+/// dicts), so there is no struct default to copy; the nearest upstream signal is
+/// its helper signatures, which all default to `role: str = "user"`
+/// (`codex_responses_adapter._input_image_part`,
+/// `_chat_content_to_responses_parts`, `plugins.…`, `hermes_state_messages.
+/// latest_message_row_id`). It is also the most common role in this port's own
+/// construction sites. Deriving on the first variant instead (`System`) would
+/// make a default `Message` a system message, which is never the intent.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     System,
+    #[default]
     User,
     Assistant,
     Tool,
@@ -459,5 +475,57 @@ mod message_image_tests {
             media_type: None,
         };
         assert_eq!(http.data_url_base64(), None);
+    }
+}
+
+#[cfg(test)]
+mod message_default_tests {
+    use super::*;
+
+    /// 🔴 Pins `Role::default() == User`. A `Message::default()` whose role were
+    /// `System` or `Assistant` would silently turn every `..Default::default()`
+    /// construction site into a message that is replayed as a system/assistant
+    /// turn. Upstream helpers default to `role: str = "user"`.
+    #[test]
+    fn role_default_is_user() {
+        assert_eq!(Role::default(), Role::User);
+    }
+
+    /// `Message::default()` is a bare user message: role set, every payload
+    /// field `None`. Pinned because ~159 construction sites rely on the
+    /// remaining fields defaulting, and a future non-`Option` field would turn
+    /// that into a compile error here rather than silent garbage downstream.
+    #[test]
+    fn message_default_is_a_bare_user_message() {
+        let m = Message::default();
+        assert_eq!(m.role, Role::User);
+        assert!(m.content.is_none());
+        assert!(m.tool_calls.is_none());
+        assert!(m.tool_call_id.is_none());
+        assert!(m.name.is_none());
+        assert!(m.reasoning.is_none());
+        // 🔴 `content` is the ONLY Option field on `Message` without
+        // `skip_serializing_if` (see the struct above), so it always serializes
+        // — as `null` here. That is pre-existing wire behaviour (upstream message
+        // dicts always carry a `content` key) and deliberately NOT changed by the
+        // P3-1c work: this test pins it, so adding `signature` must not silently
+        // start emitting (or start omitting) keys.
+        let json = serde_json::to_string(&m).unwrap();
+        assert_eq!(json, r#"{"role":"user","content":null}"#);
+    }
+
+    /// The reason `Default` exists: a construction site may set only the fields
+    /// it cares about, so adding an optional field never touches the ~159
+    /// literals. This is the pattern the P3-1c signature field will rely on.
+    #[test]
+    fn default_spread_lets_a_site_set_only_its_fields() {
+        let m = Message {
+            role: Role::Assistant,
+            content: Some("hi".into()),
+            ..Default::default()
+        };
+        assert_eq!(m.role, Role::Assistant);
+        assert_eq!(m.content.as_deref(), Some("hi"));
+        assert!(m.reasoning.is_none(), "unset fields stay None");
     }
 }
