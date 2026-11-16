@@ -51,6 +51,54 @@ export function isWatchWindow(): boolean {
   return result
 }
 
+// A "hud" window is HUD mode: the chrome-free floating chat. Unlike the pet
+// overlay / quick entry it is a FULL app renderer with its own gateway — the
+// flag only tells the shell to render the slim floating layout (composer +
+// scrollback) instead of the pane tree, so the composer it shows is the real
+// one. Read from location.search for the same reason as the flag above.
+let hudWindowCache: boolean | null = null
+
+export function isHudWindow(): boolean {
+  if (hudWindowCache !== null) {
+    return hudWindowCache
+  }
+
+  let result = false
+
+  try {
+    result = new URLSearchParams(window.location.search).get('win') === 'hud'
+  } catch {
+    result = false
+  }
+
+  hudWindowCache = result
+
+  return result
+}
+
+// A "browser" window is a popped-out in-app Browser: the same webview +
+// address bar as the docked tab, in its own OS window. The tab id rides
+// `?tab=` next to `win=browser` (before the hash, same contract as secondary).
+let browserWindowCache: boolean | null = null
+
+export function isBrowserWindow(): boolean {
+  if (browserWindowCache !== null) {
+    return browserWindowCache
+  }
+
+  let result = false
+
+  try {
+    result = new URLSearchParams(window.location.search).get('win') === 'browser'
+  } catch {
+    result = false
+  }
+
+  browserWindowCache = result
+
+  return result
+}
+
 // True when running inside the Electron desktop shell (the preload bridge is
 // present). The "open in new window" affordance is desktop-only.
 export function canOpenSessionWindow(): boolean {

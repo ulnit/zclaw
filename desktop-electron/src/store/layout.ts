@@ -20,6 +20,13 @@ export const FILE_BROWSER_MAX_WIDTH = '20rem'
 
 export const SIDEBAR_SESSIONS_PAGE_SIZE = 50
 
+// The metadata chips a session row can show in the sidebar. Upstream layout.ts
+// carries the full row-meta subsystem (ROW_META, $sidebarRowMetaPref,
+// toggleSidebarRowMeta, …); only this type alias is needed so interface-mode.ts
+// can `import type { SidebarRowMeta }` — the toggle/persist subsystem is not
+// yet ported and would pull in more of layout.ts than this leg requires.
+export type SidebarRowMeta = 'cost' | 'pr' | 'preview' | 'profile' | 'tokens' | 'updated'
+
 const SIDEBAR_PINNED_STORAGE_KEY = 'ulnclaw.desktop.pinnedSessions'
 const SIDEBAR_AGENTS_GROUPED_STORAGE_KEY = 'ulnclaw.desktop.agentsGroupedByWorkspace'
 const SIDEBAR_CRON_OPEN_STORAGE_KEY = 'ulnclaw.desktop.sidebarCronOpen'
