@@ -431,9 +431,16 @@ pub const VALID_REASONING_EFFORTS: &[&str] =
 /// 🔴 `Unresolved` and `Disabled` are DIFFERENT and must not be collapsed:
 /// upstream keeps the raw value on purpose, because "`or ""` would turn a YAML
 /// False into "" and silently re-enable thinking".
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum ReasoningConfig {
     /// Empty or unrecognized input → caller falls back to its default.
+    ///
+    /// 🔴 Also the `Default` variant, which is what makes adding
+    /// [`crate::provider::ProviderRequest::reasoning_config`] non-breaking: a
+    /// construction site that says nothing means "no opinion", and
+    /// `thinking_request` emits NO `thinking` parameter for it — byte-identical
+    /// wire output to before the field existed.
+    #[default]
     Unresolved,
     /// `reasoning_effort: none|false|disabled` → an explicit opt-out.
     Disabled,

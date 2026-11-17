@@ -176,6 +176,7 @@ pub async fn generate_title_forced(
     };
 
     let request = ProviderRequest {
+        reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
         messages,
         tools: Vec::new(),
         model: resolution.model,

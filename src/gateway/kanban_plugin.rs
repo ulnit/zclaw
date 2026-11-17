@@ -915,6 +915,7 @@ async fn run_estimate(state: &Arc<GatewayState>, title: &str, body: Option<&str>
         Err(e) => return json!({ "ok": false, "reason": format!("auxiliary routing: {e}") }),
     };
     let request = crate::provider::ProviderRequest {
+        reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
         messages: vec![crate::provider::Message {
             reasoning: None,
             role: crate::provider::Role::User,

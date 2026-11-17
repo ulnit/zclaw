@@ -114,6 +114,19 @@ pub struct ProviderRequest {
     /// Providers serialize them as content parts; vision-less providers
     /// ignore them (the text turn still carries the path references).
     pub images: Option<Vec<MessageImage>>,
+    /// Resolved reasoning/thinking configuration for this request
+    /// (hermes `reasoning_config`, `hermes_constants.resolve_reasoning_config`).
+    ///
+    /// 🔴 Lives on the COMMON request, not on the Anthropic provider: upstream
+    /// threads `reasoning_config` through both the chat-completions path
+    /// (`chat_completion_helpers.py:1141`) and the Anthropic path (`:1534`), and
+    /// per-request plumbing is what lets the CLI `--reasoning` flag and kanban's
+    /// per-task `reasoning_effort` pin override the profile default for ONE call.
+    /// Putting it on the provider struct instead would lose that override.
+    ///
+    /// `Unresolved` (the default) means "no opinion": the Anthropic wire layer
+    /// emits no `thinking` parameter, byte-identical to before this field.
+    pub reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig,
 }
 
 /// Image attached natively to a user turn (P226 multimodal injection).

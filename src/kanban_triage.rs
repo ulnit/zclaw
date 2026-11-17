@@ -214,6 +214,7 @@ async fn call_aux(
 ) -> std::result::Result<String, AgentError> {
     let resolution = crate::provider::auxiliary::resolve_aux_task(config, task, main_provider)?;
     let request = ProviderRequest {
+        reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
         messages: vec![system_message(system_prompt), user_message(user_prompt)],
         tools: Vec::new(),
         model: resolution.model,

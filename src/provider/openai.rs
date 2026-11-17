@@ -1233,6 +1233,7 @@ mod streaming_tests {
             .build()
             .unwrap();
         let request = crate::provider::ProviderRequest {
+            reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
             messages: vec![crate::provider::Message {
                 reasoning: None,
                 role: crate::provider::Role::User,
@@ -1289,6 +1290,7 @@ mod streaming_tests {
             .build()
             .unwrap();
         let request = crate::provider::ProviderRequest {
+            reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
             messages: vec![],
             tools: vec![],
             model: "retry-model".into(),
@@ -1609,6 +1611,7 @@ mod streaming_tests {
 
     fn req(model: &str) -> crate::provider::ProviderRequest {
         crate::provider::ProviderRequest {
+            reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
             messages: reasoning_history(),
             tools: vec![],
             model: model.into(),

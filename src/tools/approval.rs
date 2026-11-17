@@ -386,6 +386,7 @@ pub async fn smart_assess(
     policy: &str,
 ) -> SmartVerdict {
     let request = crate::provider::ProviderRequest {
+        reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
         messages: vec![
             crate::provider::Message {
                 reasoning: None,

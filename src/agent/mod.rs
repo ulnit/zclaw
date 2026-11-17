@@ -1678,6 +1678,7 @@ impl Agent {
         let tool_definitions = tools.definitions();
 
         let request = ProviderRequest {
+            reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
             messages: messages.to_vec(),
             tools: tool_definitions,
             model,

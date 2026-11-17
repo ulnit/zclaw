@@ -95,6 +95,7 @@ fn simple_user_request(
     max_tokens: Option<u32>,
 ) -> ProviderRequest {
     ProviderRequest {
+        reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
         messages: vec![Message {
             reasoning: None,
             role: Role::User,
@@ -283,6 +284,7 @@ Proceeding without aggregated guidance.]\nReferences: {}\n\n{}",
     let synthesis = match factory(&preset.aggregator) {
         Ok(provider) => {
             let request = ProviderRequest {
+                reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
                 messages: vec![Message {
                     reasoning: None,
                     role: Role::User,
@@ -731,6 +733,7 @@ for this turn. Synthesize it into your answer; do not quote it verbatim.]\n{}",
     let mut messages = request.messages.clone();
     attach_reference_guidance(&mut messages, &wrapped);
     let aggregator_request = ProviderRequest {
+        reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
         messages,
         tools: request.tools.clone(),
         model: preset.aggregator.model.trim().to_string(),
@@ -1103,6 +1106,7 @@ mod tests {
 
     fn facade_request(text: &str) -> ProviderRequest {
         ProviderRequest {
+            reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
             messages: vec![Message {
                 reasoning: None,
                 role: Role::User,

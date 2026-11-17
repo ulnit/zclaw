@@ -564,6 +564,7 @@ impl ContextCompressor {
         }
 
         let summary_request = crate::provider::ProviderRequest {
+            reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
             messages: vec![Message {
                 reasoning: None,
                 role: Role::User,

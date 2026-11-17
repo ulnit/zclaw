@@ -1748,6 +1748,7 @@ pub async fn judge_goal(
     };
 
     let request = ProviderRequest {
+        reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
         messages: vec![system_message(JUDGE_SYSTEM_PROMPT), user_message(prompt)],
         tools: Vec::new(),
         model: resolution.model,
@@ -1818,6 +1819,7 @@ pub async fn draft_contract(
         }
     };
     let request = ProviderRequest {
+        reasoning_config: crate::provider::anthropic_thinking::ReasoningConfig::default(),
         messages: vec![
             system_message(DRAFT_CONTRACT_SYSTEM_PROMPT),
             user_message(format!("Objective:\n{}", truncate_prompt(objective, 4000))),
