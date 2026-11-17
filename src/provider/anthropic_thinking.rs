@@ -400,6 +400,229 @@ pub fn forbids_sampling_params(model: &str) -> bool {
         && !model_matches(model, LEGACY_MANUAL_THINKING_CLAUDE_SUBSTRINGS)
 }
 
+// ===========================================================================
+// P3-1c slice2b — the effort→request-parameter mapping.
+//
+// Verbatim port of `anthropic_adapter.py:616-642` (`_thinking_kwargs`) and
+// `hermes_constants.py:1000-1038` (`VALID_REASONING_EFFORTS` +
+// `parse_reasoning_effort`).
+//
+// Still additive: `build_body` does not consult these yet (slice2c wires them),
+// so no request changes shape and runtime behaviour is unchanged.
+//
+// 🔴 ORDERING CONTRACT for slice2c — do not reorder at the call site:
+// `_thinking_kwargs` runs FIRST, then `_forbids_sampling_params` strips
+// temperature/top_p/top_k (`anthropic_adapter.py:700-706`). The legacy branch
+// below deliberately sets `temperature = 1` (Anthropic requires it when manual
+// thinking is enabled); on 4.7+ models that forbid sampling params the safety
+// net must remove it again. Upstream calls this a "safety net so 4.6 -> 4.7
+// migrations don't need coordinated edits everywhere callers set sampling
+// params". Emitting temperature without the strip produces HTTP 400.
+// ===========================================================================
+
+/// Accepted `agent.reasoning_effort` values.
+/// Upstream `VALID_REASONING_EFFORTS` (`hermes_constants.py:1000`).
+pub const VALID_REASONING_EFFORTS: &[&str] =
+    &["minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+
+/// Resolved reasoning configuration — the three states
+/// `parse_reasoning_effort` can produce.
+///
+/// 🔴 `Unresolved` and `Disabled` are DIFFERENT and must not be collapsed:
+/// upstream keeps the raw value on purpose, because "`or ""` would turn a YAML
+/// False into "" and silently re-enable thinking".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReasoningConfig {
+    /// Empty or unrecognized input → caller falls back to its default.
+    Unresolved,
+    /// `reasoning_effort: none|false|disabled` → an explicit opt-out.
+    Disabled,
+    /// A recognized level. `effort` is passed through VERBATIM so providers with
+    /// bespoke thinking tiers can be asked for their real level; the wire layer
+    /// tolerates unknown names.
+    Enabled { effort: String },
+}
+
+/// Parse a reasoning-effort setting into a [`ReasoningConfig`].
+/// Upstream `parse_reasoning_effort` (`hermes_constants.py:1003-1028`).
+///
+/// 🔴 Structural difference (class (a), not an omission): upstream takes `Any`
+/// and also handles `None`/`True` and a dict form
+/// (`{"enabled": …, "effort": …}`). This port's config field is a typed
+/// `String` (`config/mod.rs:305 agent.reasoning_effort`), so only the string
+/// branch is reachable; the bool/dict forms cannot be constructed. Upstream's
+/// `False -> "false" -> disabled` path is preserved here because a YAML `false`
+/// reaching a String field arrives as the literal text "false".
+pub fn parse_reasoning_effort(effort: &str) -> ReasoningConfig {
+    let e = effort.trim().to_lowercase();
+    if e.is_empty() {
+        return ReasoningConfig::Unresolved;
+    }
+    if e == "none" || e == "false" || e == "disabled" {
+        return ReasoningConfig::Disabled;
+    }
+    if VALID_REASONING_EFFORTS.contains(&e.as_str()) {
+        return ReasoningConfig::Enabled { effort: e };
+    }
+    // Upstream warns and returns None (the caller then uses the default) so a
+    // typo like `hgih` never reaches the wire.
+    tracing::warn!(
+        effort = %effort,
+        "Unknown reasoning_effort, using default (medium)"
+    );
+    ReasoningConfig::Unresolved
+}
+
+/// Anthropic's `thinking.type` discriminator. Wire values are the external
+/// contract — spelled exactly as upstream sends them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThinkingType {
+    /// Claude 4.6+ / Kimi: adaptive thinking, effort via `output_config`.
+    Adaptive,
+    /// Legacy manual thinking with `budget_tokens`.
+    Enabled,
+    /// Explicit opt-out — only legal where [`accepts_thinking_disable`].
+    Disabled,
+    /// Families whose documented "off" is between-tools notes; `disabled` 400s.
+    BetweenTools,
+}
+
+impl ThinkingType {
+    /// Wire spelling of `thinking.type`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ThinkingType::Adaptive => "adaptive",
+            ThinkingType::Enabled => "enabled",
+            ThinkingType::Disabled => "disabled",
+            ThinkingType::BetweenTools => "between_tools",
+        }
+    }
+}
+
+/// The request parameters `_thinking_kwargs` produces.
+///
+/// `None` from [`thinking_request`] means "omit the `thinking` parameter
+/// entirely" — which is NOT the same as sending `disabled` (adaptive models
+/// think by default, so omission is not a disable; and mandatory-thinking
+/// families 400 on an explicit disable).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ThinkingRequest {
+    /// `thinking.type`
+    pub thinking_type: ThinkingType,
+    /// `thinking.display` — "summarized" on the adaptive path only. On 4.7+ the
+    /// field defaults to "omitted", which silently hides reasoning text the CLI
+    /// surfaces, so "summarized" is requested to keep the activity feed
+    /// populated during long tool runs.
+    pub display: Option<&'static str>,
+    /// `thinking.budget_tokens` — legacy manual path only.
+    pub budget_tokens: Option<u32>,
+    /// `output_config.effort` — adaptive path only.
+    pub output_effort: Option<String>,
+    /// Top-level `temperature`. Anthropic REQUIRES `temperature: 1` when manual
+    /// thinking is enabled on older models. See the ordering contract above:
+    /// the caller must strip this when [`forbids_sampling_params`].
+    pub temperature: Option<f32>,
+    /// Top-level `max_tokens` floor: `max(effective, budget + 4096)`.
+    pub max_tokens: Option<u32>,
+}
+
+/// Map a resolved reasoning config to Anthropic thinking parameters.
+/// Upstream `_thinking_kwargs` (`anthropic_adapter.py:616-642`).
+///
+/// Decision order is load-bearing and copied exactly:
+/// 1. explicit disable → `between_tools` for the families that document it,
+///    else `disabled` only where accepted, else **omit** (a silently-ignored
+///    disable beats a dead turn)
+/// 2. Haiku through 4.5 → omit (never gets a thinking request)
+/// 3. adaptive models → `adaptive` + `display: summarized` + `output_config`
+///    (xhigh downgraded to max where the family rejects xhigh)
+/// 4. everything else → legacy manual `enabled` + `budget_tokens` + `temperature: 1`
+///    + a raised `max_tokens` floor
+pub fn thinking_request(
+    config: &ReasoningConfig,
+    model: &str,
+    effective_max_tokens: u32,
+) -> Option<ThinkingRequest> {
+    // An unresolved config means "caller has no opinion"; upstream only calls
+    // `_thinking_kwargs` when `reasoning_config` is a truthy dict, so nothing is
+    // emitted here. `Disabled` is a real opt-out and must go through step 1.
+    if matches!(config, ReasoningConfig::Unresolved) {
+        return None;
+    }
+
+    if matches!(config, ReasoningConfig::Disabled) {
+        // Adaptive models think by DEFAULT, so omitting the parameter is not a
+        // disable — the user silently keeps paying.
+        if model_matches(model, BETWEEN_TOOLS_OFF_CLAUDE_SUBSTRINGS) {
+            return Some(ThinkingRequest {
+                thinking_type: ThinkingType::BetweenTools,
+                display: None,
+                budget_tokens: None,
+                output_effort: None,
+                temperature: None,
+                max_tokens: None,
+            });
+        }
+        // Mandatory-thinking models 400 on the disable, so they keep the
+        // omission: a silently-ignored disable beats a dead turn.
+        if accepts_thinking_disable(model) {
+            return Some(ThinkingRequest {
+                thinking_type: ThinkingType::Disabled,
+                display: None,
+                budget_tokens: None,
+                output_effort: None,
+                temperature: None,
+                max_tokens: None,
+            });
+        }
+        return None;
+    }
+
+    // Step 2: Haiku through 4.5 never gets a thinking request.
+    if is_pre_thinking_haiku(model) {
+        return None;
+    }
+
+    // Upstream: `str(reasoning_config.get("effort", "medium")).lower()`. The
+    // lookup helpers below already apply upstream's own fallbacks
+    // (adaptive → "medium", budget → 8000) for an unmapped level, so passing an
+    // empty string through behaves exactly like "medium".
+    let effort = match config {
+        ReasoningConfig::Enabled { effort } => effort.to_lowercase(),
+        _ => "medium".to_string(),
+    };
+
+    // Step 3: adaptive contract (Claude 4.6+, Kimi/Moonshot).
+    if supports_adaptive_thinking(model) {
+        let mut out = adaptive_effort(&effort).to_string();
+        // Opus/Sonnet 4.6 have no xhigh and 400 on it → downgrade to max.
+        if out == "xhigh" && !supports_xhigh_effort(model) {
+            out = "max".to_string();
+        }
+        return Some(ThinkingRequest {
+            thinking_type: ThinkingType::Adaptive,
+            display: Some("summarized"),
+            budget_tokens: None,
+            output_effort: Some(out),
+            temperature: None,
+            max_tokens: None,
+        });
+    }
+
+    // Step 4: legacy manual thinking (Claude ≤4.5, MiniMax, qwen3, GLM, …).
+    let budget = thinking_budget(&effort);
+    Some(ThinkingRequest {
+        thinking_type: ThinkingType::Enabled,
+        display: None,
+        budget_tokens: Some(budget),
+        output_effort: None,
+        // Required when thinking is enabled on older models.
+        temperature: Some(1.0),
+        // Upstream: max(effective_max_tokens, budget + 4096).
+        max_tokens: Some(effective_max_tokens.max(budget.saturating_add(4096))),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -754,5 +977,186 @@ mod tests {
         assert!(is_claude_model("anthropic/CLAUDE-3-5-sonnet"));
         assert!(!is_claude_model("gpt-4o"));
         assert!(!is_claude_model(""));
+    }
+
+    // -----------------------------------------------------------------------
+    // P3-1c slice2b — `_thinking_kwargs` decision order + effort parsing.
+    // Expectations come from `anthropic_adapter.py:616-642` and
+    // `hermes_constants.py:1000-1028`. If one fails, the PORT is wrong.
+    // -----------------------------------------------------------------------
+
+    fn enabled(e: &str) -> ReasoningConfig {
+        ReasoningConfig::Enabled {
+            effort: e.to_string(),
+        }
+    }
+
+    #[test]
+    fn parse_effort_maps_the_three_upstream_states() {
+        assert_eq!(parse_reasoning_effort(""), ReasoningConfig::Unresolved);
+        assert_eq!(parse_reasoning_effort("   "), ReasoningConfig::Unresolved);
+        // Explicit opt-outs, incl. YAML `false` arriving as text.
+        assert_eq!(parse_reasoning_effort("none"), ReasoningConfig::Disabled);
+        assert_eq!(parse_reasoning_effort("false"), ReasoningConfig::Disabled);
+        assert_eq!(
+            parse_reasoning_effort("disabled"),
+            ReasoningConfig::Disabled
+        );
+        assert_eq!(parse_reasoning_effort("False"), ReasoningConfig::Disabled);
+        // Valid levels pass through verbatim (lowercased + trimmed).
+        assert_eq!(parse_reasoning_effort("medium"), enabled("medium"));
+        assert_eq!(parse_reasoning_effort("  XHIGH "), enabled("xhigh"));
+        assert_eq!(parse_reasoning_effort("ultra"), enabled("ultra"));
+        assert_eq!(parse_reasoning_effort("minimal"), enabled("minimal"));
+        // 🔴 A typo must NOT reach the wire — falls back to Unresolved.
+        assert_eq!(parse_reasoning_effort("hgih"), ReasoningConfig::Unresolved);
+    }
+
+    #[test]
+    fn unresolved_config_emits_nothing() {
+        // Upstream only calls _thinking_kwargs when reasoning_config is truthy.
+        assert!(thinking_request(&ReasoningConfig::Unresolved, "claude-opus-5", 8000).is_none());
+    }
+
+    #[test]
+    fn disabled_takes_the_between_tools_exit_for_sonnet_5_5() {
+        // `disabled` 400s there with a message pointing at between_tools.
+        let r = thinking_request(&ReasoningConfig::Disabled, "claude-sonnet-5-5", 8000).unwrap();
+        assert_eq!(r.thinking_type, ThinkingType::BetweenTools);
+        assert_eq!(r.thinking_type.as_str(), "between_tools");
+        assert!(r.display.is_none() && r.budget_tokens.is_none());
+        assert!(r.output_effort.is_none() && r.temperature.is_none());
+    }
+
+    #[test]
+    fn disabled_is_sent_only_where_accepted() {
+        // Adaptive Claude thinks BY DEFAULT → omission is not a disable.
+        let r = thinking_request(&ReasoningConfig::Disabled, "claude-opus-4-6", 8000).unwrap();
+        assert_eq!(r.thinking_type, ThinkingType::Disabled);
+        assert_eq!(r.thinking_type.as_str(), "disabled");
+    }
+
+    #[test]
+    fn disabled_omits_for_mandatory_thinking_families() {
+        // These 400 on an explicit disable: "a silently-ignored disable beats a
+        // dead turn", so upstream keeps the omission.
+        assert!(thinking_request(&ReasoningConfig::Disabled, "claude-opus-5-5", 8000).is_none());
+        assert!(thinking_request(&ReasoningConfig::Disabled, "claude-fable", 8000).is_none());
+    }
+
+    #[test]
+    fn disabled_omits_for_legacy_and_non_claude_models() {
+        // Legacy manual models are opt-in via budget_tokens → omission is off.
+        assert!(thinking_request(&ReasoningConfig::Disabled, "claude-sonnet-4-5", 8000).is_none());
+        assert!(thinking_request(&ReasoningConfig::Disabled, "claude-3-5-sonnet", 8000).is_none());
+        // Scoped to Claude: Kimi's documented disable is omission.
+        assert!(thinking_request(&ReasoningConfig::Disabled, "kimi-k2.5", 8000).is_none());
+        assert!(thinking_request(&ReasoningConfig::Disabled, "gpt-4o", 8000).is_none());
+    }
+
+    #[test]
+    fn pre_thinking_haiku_never_gets_a_thinking_request() {
+        assert!(thinking_request(&enabled("high"), "claude-haiku-4-5", 8000).is_none());
+        assert!(thinking_request(&enabled("high"), "claude-haiku-3-5", 8000).is_none());
+        // Haiku 5.5+ IS adaptive → gets a request.
+        assert!(thinking_request(&enabled("high"), "claude-haiku-5-5", 8000).is_some());
+    }
+
+    #[test]
+    fn adaptive_path_requests_summarized_display_and_output_config() {
+        let r = thinking_request(&enabled("high"), "claude-opus-5", 8000).unwrap();
+        assert_eq!(r.thinking_type, ThinkingType::Adaptive);
+        // 4.7+ defaults display to "omitted", which would hide the reasoning the
+        // CLI surfaces → "summarized" keeps the activity feed populated.
+        assert_eq!(r.display, Some("summarized"));
+        assert_eq!(r.output_effort.as_deref(), Some("high"));
+        // Adaptive path sends NO budget_tokens / temperature / max_tokens floor.
+        assert!(r.budget_tokens.is_none());
+        assert!(r.temperature.is_none());
+        assert!(r.max_tokens.is_none());
+    }
+
+    #[test]
+    fn adaptive_effort_downgrades_xhigh_only_on_the_4_6_family() {
+        // Opus/Sonnet 4.6 have no xhigh and 400 on it.
+        let r = thinking_request(&enabled("xhigh"), "claude-opus-4-6", 8000).unwrap();
+        assert_eq!(r.output_effort.as_deref(), Some("max"));
+        let r2 = thinking_request(&enabled("xhigh"), "claude-sonnet-4.6", 8000).unwrap();
+        assert_eq!(r2.output_effort.as_deref(), Some("max"));
+        // 4.7+ accepts xhigh.
+        let r3 = thinking_request(&enabled("xhigh"), "claude-opus-4-7", 8000).unwrap();
+        assert_eq!(r3.output_effort.as_deref(), Some("xhigh"));
+        // ultra/max alias to max.
+        let r4 = thinking_request(&enabled("ultra"), "claude-opus-5", 8000).unwrap();
+        assert_eq!(r4.output_effort.as_deref(), Some("max"));
+        // minimal is a legacy alias for low on every model.
+        let r5 = thinking_request(&enabled("minimal"), "claude-opus-5", 8000).unwrap();
+        assert_eq!(r5.output_effort.as_deref(), Some("low"));
+        // Unknown level → upstream's ADAPTIVE_EFFORT_MAP fallback "medium".
+        let r6 = thinking_request(&enabled("bogus"), "claude-opus-5", 8000).unwrap();
+        assert_eq!(r6.output_effort.as_deref(), Some("medium"));
+    }
+
+    #[test]
+    fn kimi_family_uses_the_adaptive_contract() {
+        let r = thinking_request(&enabled("medium"), "kimi-k2.5", 8000).unwrap();
+        assert_eq!(r.thinking_type, ThinkingType::Adaptive);
+        assert_eq!(r.display, Some("summarized"));
+        assert_eq!(r.output_effort.as_deref(), Some("medium"));
+    }
+
+    #[test]
+    fn legacy_path_sets_budget_temperature_one_and_raises_max_tokens() {
+        let r = thinking_request(&enabled("medium"), "claude-sonnet-4-5", 8000).unwrap();
+        assert_eq!(r.thinking_type, ThinkingType::Enabled);
+        assert_eq!(r.thinking_type.as_str(), "enabled");
+        assert_eq!(r.budget_tokens, Some(8000));
+        // 🔴 Anthropic REQUIRES temperature=1 when manual thinking is enabled.
+        // The caller must strip it when forbids_sampling_params(model) — see the
+        // ordering contract in the module header.
+        assert_eq!(r.temperature, Some(1.0));
+        // max(effective, budget + 4096)
+        assert_eq!(r.max_tokens, Some(8000 + 4096));
+        // Adaptive-only fields are absent on this path.
+        assert!(r.display.is_none() && r.output_effort.is_none());
+    }
+
+    #[test]
+    fn legacy_max_tokens_floor_keeps_a_larger_effective_value() {
+        // max(effective=32000, budget 16000 + 4096 = 20096) → 32000
+        let r = thinking_request(&enabled("high"), "claude-sonnet-4-5", 32000).unwrap();
+        assert_eq!(r.budget_tokens, Some(16000));
+        assert_eq!(r.max_tokens, Some(32000));
+        // xhigh on legacy: budget 32000 + 4096 = 36096 > effective 8000
+        let r2 = thinking_request(&enabled("xhigh"), "claude-3-5-sonnet", 8000).unwrap();
+        assert_eq!(r2.budget_tokens, Some(32000));
+        assert_eq!(r2.max_tokens, Some(36096));
+    }
+
+    #[test]
+    fn legacy_path_covers_non_claude_anthropic_messages_models() {
+        // MiniMax / qwen3 / GLM need the manual-thinking path.
+        for m in ["minimax-m2", "qwen3-max", "glm-4.6"] {
+            let r = thinking_request(&enabled("low"), m, 8000)
+                .unwrap_or_else(|| panic!("legacy path must apply to {m}"));
+            assert_eq!(r.thinking_type, ThinkingType::Enabled, "model={m}");
+            assert_eq!(r.budget_tokens, Some(4000), "model={m}");
+            assert_eq!(r.temperature, Some(1.0), "model={m}");
+        }
+        // Non-anthropic-protocol models never reach here in practice; gpt-4o is
+        // not Claude/Kimi and is not pre-thinking-haiku, so it falls to legacy —
+        // harmless because only the anthropic provider calls this function.
+        let r = thinking_request(&enabled("low"), "gpt-4o", 8000).unwrap();
+        assert_eq!(r.thinking_type, ThinkingType::Enabled);
+    }
+
+    #[test]
+    fn empty_effort_behaves_like_medium_on_both_paths() {
+        // Upstream: reasoning_config.get("effort", "medium"); a dict form with an
+        // empty level resolves to None upstream, so this is the fallback path.
+        let a = thinking_request(&enabled(""), "claude-opus-5", 8000).unwrap();
+        assert_eq!(a.output_effort.as_deref(), Some("medium"));
+        let b = thinking_request(&enabled(""), "claude-sonnet-4-5", 8000).unwrap();
+        assert_eq!(b.budget_tokens, Some(8000));
     }
 }
