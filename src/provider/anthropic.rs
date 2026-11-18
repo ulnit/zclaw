@@ -204,9 +204,11 @@ impl AnthropicProvider {
             attach_images_anthropic(&mut messages, images);
         }
         let tools = tools_to_anthropic(&request.tools);
+        let effective_max_tokens =
+            resolve_max_tokens(request.max_tokens, self.max_tokens, &request.model);
         let mut body = json!({
             "model": request.model,
-            "max_tokens": resolve_max_tokens(request.max_tokens, self.max_tokens, &request.model),
+            "max_tokens": effective_max_tokens,
             "messages": messages,
             "stream": stream,
         });
@@ -222,6 +224,57 @@ impl AnthropicProvider {
         if let Some(ref stop) = request.stop {
             if !stop.is_empty() {
                 body["stop_sequences"] = json!(stop);
+            }
+        }
+
+        // Extended thinking (hermes `_thinking_kwargs`,
+        // `anthropic_adapter.py:689-706`). `thinking_request` returns `None` for
+        // `ReasoningConfig::Unresolved` — the default every construction site
+        // uses — so nothing is emitted and the body is byte-identical to before.
+        //
+        // 🔴 ORDER IS LOAD-BEARING: thinking params are merged FIRST, then the
+        // sampling-param safety net strips temperature/top_p/top_k. The legacy
+        // manual-thinking path deliberately sets `temperature: 1` (Anthropic
+        // requires it when thinking is enabled on older models), while 4.7+
+        // models 400 on ANY non-default sampling param. Reversing these two
+        // steps would either kill the required `temperature: 1` or let a 400
+        // through. Upstream calls the strip "a safety net so 4.6 -> 4.7
+        // migrations don't need coordinated edits everywhere callers set
+        // sampling params".
+        use crate::provider::anthropic_thinking::{forbids_sampling_params, thinking_request};
+        if let Some(tr) = thinking_request(
+            &request.reasoning_config,
+            &request.model,
+            effective_max_tokens,
+        ) {
+            let mut thinking = serde_json::Map::new();
+            thinking.insert("type".into(), json!(tr.thinking_type.as_str()));
+            if let Some(display) = tr.display {
+                thinking.insert("display".into(), json!(display));
+            }
+            if let Some(budget) = tr.budget_tokens {
+                thinking.insert("budget_tokens".into(), json!(budget));
+            }
+            body["thinking"] = Value::Object(thinking);
+            if let Some(effort) = tr.output_effort {
+                body["output_config"] = json!({ "effort": effort });
+            }
+            if let Some(temp) = tr.temperature {
+                body["temperature"] = json!(temp);
+            }
+            if let Some(mt) = tr.max_tokens {
+                body["max_tokens"] = json!(mt);
+            }
+        }
+
+        // 🔴 Unconditional on reasoning_config, exactly as upstream: these models
+        // 400 on non-default temperature/top_p/top_k even when thinking was never
+        // requested, so the omission has to happen for every call to them.
+        if forbids_sampling_params(&request.model) {
+            if let Some(obj) = body.as_object_mut() {
+                obj.remove("temperature");
+                obj.remove("top_p");
+                obj.remove("top_k");
             }
         }
         body
@@ -1127,5 +1180,146 @@ mod tests {
         assert!(!AnthropicProvider::retriable_status(StatusCode::NOT_FOUND));
         assert!(!AnthropicProvider::retriable_status(StatusCode::PAYMENT_REQUIRED));
         assert!(!AnthropicProvider::retriable_status(StatusCode::PAYLOAD_TOO_LARGE));
+    }
+
+
+    // ---- P3-1c slice2d: build_body emits Anthropic `thinking` params ----
+    use crate::provider::anthropic_thinking::ReasoningConfig;
+
+    fn think_provider(model: &str) -> AnthropicProvider {
+        AnthropicProvider::builder()
+            .endpoint("https://api.anthropic.com")
+            .api_key("k")
+            .model(model)
+            .build()
+            .unwrap()
+    }
+
+    fn think_req(model: &str, temp: Option<f32>, cfg: ReasoningConfig) -> ProviderRequest {
+        ProviderRequest {
+            messages: vec![Message {
+                role: Role::User,
+                content: Some("hi".into()),
+                ..Default::default()
+            }],
+            tools: vec![],
+            model: model.to_string(),
+            max_tokens: Some(1000),
+            temperature: temp,
+            stream: false,
+            stop: None,
+            images: None,
+            reasoning_config: cfg,
+        }
+    }
+
+    /// `Unresolved` (the default every construction site uses) emits NO thinking
+    /// param and leaves the body byte-identical to before the field existed.
+    #[test]
+    fn build_body_omits_thinking_when_unresolved() {
+        let p = think_provider("claude-sonnet-4-5");
+        let body = p.build_body(
+            &think_req("claude-sonnet-4-5", Some(0.7), ReasoningConfig::Unresolved),
+            false,
+        );
+        assert!(body.get("thinking").is_none(), "must omit thinking");
+        assert!(body.get("output_config").is_none());
+        // sonnet-4-5 does not forbid sampling, so the user temperature survives.
+        // Compare as f32: the wire field is f32, so 0.7 round-trips as 0.699999988079071.
+        assert_eq!(
+            body.get("temperature").and_then(|v| v.as_f64()),
+            Some(0.7f32 as f64)
+        );
+    }
+
+    /// Adaptive family (Claude 4.6) → `thinking.type=adaptive` + display +
+    /// output_config.effort, no budget_tokens, no forced temperature.
+    #[test]
+    fn build_body_emits_adaptive_thinking() {
+        let p = think_provider("claude-sonnet-4-6");
+        let body = p.build_body(
+            &think_req(
+                "claude-sonnet-4-6",
+                Some(0.7),
+                ReasoningConfig::Enabled {
+                    effort: "high".into(),
+                },
+            ),
+            false,
+        );
+        let th = body.get("thinking").expect("adaptive must emit thinking");
+        assert_eq!(th.get("type").and_then(|v| v.as_str()), Some("adaptive"));
+        assert_eq!(th.get("display").and_then(|v| v.as_str()), Some("summarized"));
+        assert!(th.get("budget_tokens").is_none(), "adaptive has no budget");
+        assert_eq!(
+            body.get("output_config")
+                .and_then(|o| o.get("effort"))
+                .and_then(|v| v.as_str()),
+            Some("high")
+        );
+        // 4.6 is not a sampling-forbidding family; user temperature survives.
+        // Compare as f32: the wire field is f32, so 0.7 round-trips as 0.699999988079071.
+        assert_eq!(
+            body.get("temperature").and_then(|v| v.as_f64()),
+            Some(0.7f32 as f64)
+        );
+    }
+
+    /// Legacy manual-thinking family (Claude 4.5) → `thinking.type=enabled` +
+    /// budget_tokens + the Anthropic-required `temperature: 1` (which overrides
+    /// the caller's 0.7) + a raised max_tokens floor.
+    #[test]
+    fn build_body_legacy_sets_budget_and_temperature_one() {
+        let p = think_provider("claude-sonnet-4-5");
+        let body = p.build_body(
+            &think_req(
+                "claude-sonnet-4-5",
+                Some(0.7),
+                ReasoningConfig::Enabled {
+                    effort: "high".into(),
+                },
+            ),
+            false,
+        );
+        let th = body.get("thinking").expect("legacy must emit thinking");
+        assert_eq!(th.get("type").and_then(|v| v.as_str()), Some("enabled"));
+        assert_eq!(
+            th.get("budget_tokens").and_then(|v| v.as_u64()),
+            Some(16000),
+            "high budget = THINKING_BUDGET[high]"
+        );
+        // Legacy path forces temperature:1 (Anthropic requires it with manual
+        // thinking); it must WIN over the caller's 0.7.
+        assert_eq!(body.get("temperature").and_then(|v| v.as_f64()), Some(1.0));
+        // max_tokens floor = max(effective=1000, budget+4096=20096).
+        assert_eq!(body.get("max_tokens").and_then(|v| v.as_u64()), Some(20096));
+    }
+
+    /// 🔴 The sampling-param safety net: a 4.7+ family forbids temperature/top_p
+    /// /top_k, so an explicitly-set temperature is STRIPPED even though thinking
+    /// is still emitted. This is the observable half of the ordering contract.
+    #[test]
+    fn build_body_strips_sampling_params_for_forbidding_model() {
+        let p = think_provider("claude-opus-4-7");
+        let body = p.build_body(
+            &think_req(
+                "claude-opus-4-7",
+                Some(0.7),
+                ReasoningConfig::Enabled {
+                    effort: "high".into(),
+                },
+            ),
+            false,
+        );
+        assert!(
+            body.get("thinking").is_some(),
+            "adaptive thinking still emitted for 4.7+"
+        );
+        assert!(
+            body.get("temperature").is_none(),
+            "forbids_sampling_params must strip temperature"
+        );
+        assert!(body.get("top_p").is_none());
+        assert!(body.get("top_k").is_none());
     }
 }
