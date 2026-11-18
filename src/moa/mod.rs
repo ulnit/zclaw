@@ -103,6 +103,8 @@ fn simple_user_request(
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         }],
         tools: vec![],
         model: model.to_string(),
@@ -292,6 +294,8 @@ Proceeding without aggregated guidance.]\nReferences: {}\n\n{}",
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 }],
                 tools: vec![],
                 model: preset.aggregator.model.trim().to_string(),
@@ -648,6 +652,8 @@ fn attach_reference_guidance(messages: &mut Vec<Message>, guidance: &str) {
         tool_calls: None,
         tool_call_id: None,
         name: None,
+        reasoning_details: None,
+        anthropic_content_blocks: None,
     });
 }
 
@@ -758,6 +764,8 @@ for this turn. Synthesize it into your answer; do not quote it verbatim.]\n{}",
                 model: preset.aggregator.model.trim().to_string(),
                 reasoning: None,
                 finish_reason: Some("stop".to_string()),
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             })
         }
     }
@@ -865,6 +873,8 @@ mod tests {
                 model: request.model,
                 reasoning: None,
                 finish_reason: Some("stop".into()),
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             })
         }
         fn model(&self) -> &str {
@@ -1070,6 +1080,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
             Message {
                 reasoning: None,
@@ -1078,6 +1090,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
             Message {
                 reasoning: None,
@@ -1086,6 +1100,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: Some("t1".into()),
                 name: Some("shell".into()),
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
         ];
         let rendered = render_conversation_for_references(&messages);
@@ -1114,6 +1130,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             }],
             tools: vec![],
             model: "default".to_string(),
@@ -1159,6 +1177,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         });
         messages.push(Message {
             reasoning: None,
@@ -1167,6 +1187,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: Some("t".into()),
             name: Some("shell".into()),
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         });
         let request = ProviderRequest {
             messages,

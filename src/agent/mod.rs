@@ -995,6 +995,8 @@ impl Agent {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             });
         }
 
@@ -1009,6 +1011,8 @@ impl Agent {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         });
 
         // Persistence: create/resume a session row.
@@ -1352,6 +1356,10 @@ impl Agent {
                     tool_calls: Some(response.tool_calls.clone()),
                     tool_call_id: None,
                     name: None,
+                    // hermes `build_assistant_message`: preserve the opaque
+                    // signature carriers verbatim for cross-turn continuity.
+                    reasoning_details: response.reasoning_details.clone(),
+                    anthropic_content_blocks: response.anthropic_content_blocks.clone(),
                 });
                 if let (Some(store), Some(sid)) = (self.store.as_ref(), session_id.as_ref()) {
                     let msg = messages.last().unwrap();
@@ -1413,6 +1421,8 @@ impl Agent {
                         tool_calls: None,
                         tool_call_id: Some(tool_call.id.clone()),
                         name: Some(tool_call.function.name.clone()),
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     };
                     messages.push(tool_message);
                     if let (Some(store), Some(sid)) = (self.store.as_ref(), session_id.as_ref()) {
@@ -1449,6 +1459,8 @@ impl Agent {
                             tool_calls: None,
                             tool_call_id: None,
                             name: None,
+                            reasoning_details: None,
+                            anthropic_content_blocks: None,
                         };
                         messages.push(steer_turn);
                         if let Some(store) = self.store.as_ref() {
@@ -1470,6 +1482,8 @@ impl Agent {
             // Capture the reasoning *before* `response.content` is partially moved
             // (`response` is an immutable binding, hence clone rather than take).
             let reasoning_for_turn = response.reasoning.clone();
+            let details_for_turn = response.reasoning_details.clone();
+            let ordered_for_turn = response.anthropic_content_blocks.clone();
             let mut content = response.content.unwrap_or_default();
             if self.config.strip_thinking_blocks {
                 content = strip_thinking_blocks(&content);
@@ -1482,6 +1496,8 @@ impl Agent {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: details_for_turn,
+                anthropic_content_blocks: ordered_for_turn,
             });
             if let (Some(store), Some(sid)) = (self.store.as_ref(), session_id.as_ref()) {
                 store.append_message(sid, messages.last().unwrap()).ok();
@@ -1717,6 +1733,10 @@ impl Agent {
         let mut content = String::new();
         let mut reasoning = String::new();
         let mut tool_deltas: Vec<crate::provider::ToolCallDelta> = Vec::new();
+        // Anthropic thinking carriers: the signature only exists on the wire as
+        // `signature_delta` fragments, so the blocks must be rebuilt here or the
+        // next turn's replay 400s (hermes `AnthropicStreamAccumulator`).
+        let mut thinking_blocks = crate::provider::anthropic_replay::StreamBlockAccumulator::new();
         let mut finish_reason: Option<String> = None;
         let mut usage: Option<Usage> = None;
         let mut model: Option<String> = None;
@@ -1728,6 +1748,7 @@ impl Agent {
         let mut think_scrubber = crate::think_scrubber::StreamingThinkScrubber::new();
         let scrub_stream = self.config.strip_thinking_blocks;
         while let Some(chunk) = stream.try_next().await? {
+            thinking_blocks.observe(&chunk);
             if let Some(delta) = &chunk.delta_content {
                 if !delta.is_empty() {
                     let visible = if scrub_stream {
@@ -1784,6 +1805,7 @@ impl Agent {
             }
         }
         let tool_calls = crate::provider::assemble_tool_calls(&tool_deltas);
+        let carriers = thinking_blocks.carriers();
         Ok(crate::provider::ProviderResponse {
             content: if content.is_empty() {
                 None
@@ -1799,6 +1821,8 @@ impl Agent {
                 Some(reasoning)
             },
             finish_reason,
+            reasoning_details: carriers.reasoning_details,
+            anthropic_content_blocks: carriers.anthropic_content_blocks,
         })
     }
 
@@ -2233,6 +2257,8 @@ impl SubAgentRunner for Agent {
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 )
                 .ok();
@@ -2385,6 +2411,8 @@ mod tests {
                     model: "counting".into(),
                     reasoning: None,
                     finish_reason: Some("stop".into()),
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 }),
                 None => Err(AgentError::provider("primary down")),
             }
@@ -2915,6 +2943,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         }
     }
 
@@ -3003,6 +3033,8 @@ mod tests {
                 model: "overflow-script".into(),
                 reasoning: None,
                 finish_reason: Some("stop".into()),
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             })
         }
         fn model(&self) -> &str {
@@ -3037,6 +3069,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             });
         }
         history

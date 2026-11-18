@@ -554,6 +554,8 @@ mod tests {
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 ),
                 (
@@ -572,6 +574,8 @@ mod tests {
                         }]),
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 ),
                 (
@@ -583,6 +587,8 @@ mod tests {
                         tool_calls: None,
                         tool_call_id: Some("call_1".into()),
                         name: Some("terminal".into()),
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 ),
             ],
@@ -675,6 +681,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
         ));
         let html = render_session_html_at(&session, 1_750_000_999.0, true);
@@ -720,6 +728,8 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             ),
             (
@@ -738,6 +748,8 @@ mod tests {
                     }]),
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             ),
             (
@@ -749,6 +761,8 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: Some("call_1".into()),
                     name: Some("search".into()),
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             ),
         ];
@@ -773,6 +787,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
         )];
         let out = super::render_session_raw(&messages, true);
@@ -792,6 +808,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         };
         let plain = super::render_show_line(1770700000.0, &message, false);
         let stamped = super::render_show_line(1770700000.0, &message, true);

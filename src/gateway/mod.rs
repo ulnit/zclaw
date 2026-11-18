@@ -14285,6 +14285,8 @@ async fn chat_completions(
                             tool_calls: None,
                             tool_call_id: None,
                             name: None,
+                            reasoning_details: None,
+                            anthropic_content_blocks: None,
                         });
                     }
                     prompt = text;
@@ -14296,6 +14298,8 @@ async fn chat_completions(
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 }),
                 "tool" => history.push(Message {
                     reasoning: None,
@@ -14309,6 +14313,8 @@ async fn chat_completions(
                         .and_then(|v| v.as_str())
                         .map(String::from),
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 }),
                 _ => {}
             }
@@ -15965,6 +15971,8 @@ async fn import_sessions(
                     tool_calls: message.tool_calls.clone(),
                     tool_call_id: message.tool_call_id.clone(),
                     name: message.tool_name.clone(),
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             ));
         }
@@ -18679,6 +18687,8 @@ fn direct_sse_response(
         tool_calls: None,
         tool_call_id: None,
         name: None,
+        reasoning_details: None,
+        anthropic_content_blocks: None,
     };
     let assistant_msg = Message {
         reasoning: None,
@@ -18687,6 +18697,8 @@ fn direct_sse_response(
         tool_calls: None,
         tool_call_id: None,
         name: None,
+        reasoning_details: None,
+        anthropic_content_blocks: None,
     };
     let _ = state.store.append_message(session_id, &user_msg);
     let _ = state.store.append_message(session_id, &assistant_msg);
@@ -18736,6 +18748,8 @@ fn drain_delegations_into_session(state: &GatewayState, session_id: &str) {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         };
         let _ = state.store.append_message(session_id, &message);
     }
@@ -18765,6 +18779,8 @@ async fn session_chat(
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 };
                 let assistant_msg = Message {
                     reasoning: None,
@@ -18773,6 +18789,8 @@ async fn session_chat(
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 };
                 let _ = state.store.append_message(&id, &user_msg);
                 let _ = state.store.append_message(&id, &assistant_msg);
@@ -21644,6 +21662,8 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .expect("user message");
@@ -21752,6 +21772,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         };
         let assistant_msg = Message {
             reasoning: None,
@@ -21760,6 +21782,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         };
         state
             .store
@@ -21804,6 +21828,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         };
         state.store.append_message(&long_id, &long_msg).unwrap();
         let (status, body) =
@@ -22003,6 +22029,8 @@ mod tests {
                 model: request.model,
                 reasoning: None,
                 finish_reason: Some("stop".into()),
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             })
         }
         async fn chat_completion_stream(
@@ -25630,6 +25658,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         };
         state
             .store
@@ -25646,6 +25676,8 @@ mod tests {
                     tool_calls: Some(vec![]),
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();
@@ -28271,6 +28303,8 @@ mod tests {
                 model: request.model,
                 reasoning: None,
                 finish_reason: Some("stop".into()),
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             })
         }
         async fn chat_completion_stream(
@@ -29682,6 +29716,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();
@@ -30060,6 +30096,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();
@@ -30074,6 +30112,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();
@@ -30304,6 +30344,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();
@@ -30594,6 +30636,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 )
                 .unwrap();
@@ -30639,6 +30683,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();
@@ -30705,6 +30751,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();
@@ -30771,6 +30819,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 )
                 .unwrap();
@@ -34375,6 +34425,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();
@@ -34389,6 +34441,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();
@@ -34861,6 +34915,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         };
         state
             .store
@@ -35066,6 +35122,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .expect("user message");
@@ -35310,6 +35368,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();
@@ -35413,6 +35473,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 )
                 .unwrap();
@@ -35442,6 +35504,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 )
                 .unwrap();
@@ -35479,6 +35543,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 )
                 .unwrap();
@@ -35541,6 +35607,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 )
                 .unwrap();
@@ -35614,6 +35682,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 )
                 .unwrap();
@@ -35685,6 +35755,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     },
                 )
                 .unwrap();
@@ -35697,6 +35769,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             })
             .collect();
         state
@@ -37350,6 +37424,8 @@ iQ1Jvuo5E1/jLi2hE0FmBV0laMZHtsQ/6bC/bAyXFmTmMCi+nf3pVpA9T5Qh4iRz
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();

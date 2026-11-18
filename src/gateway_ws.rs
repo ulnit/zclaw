@@ -494,6 +494,8 @@ fn session_create(state: Arc<GatewayState>, params: Value) -> Result<Value, Stri
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     })
                 })
                 .collect()
@@ -2628,6 +2630,8 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .expect("append");
@@ -2843,6 +2847,8 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .expect("message appends");

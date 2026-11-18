@@ -795,6 +795,8 @@ impl Provider for OpenAiProvider {
             model: api_response.model.unwrap_or(request.model),
             reasoning: choice.message.reasoning_content,
             finish_reason: choice.finish_reason,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         })
     }
 
@@ -1032,6 +1034,8 @@ mod streaming_tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         }
     }
 
@@ -1100,6 +1104,8 @@ mod streaming_tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         };
         for route in [
             ReasoningReplay::Off,
@@ -1241,6 +1247,8 @@ mod streaming_tests {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             }],
             tools: vec![],
             model: "retry-model".into(),
@@ -1589,6 +1597,8 @@ mod streaming_tests {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
             Message {
                 reasoning: Some("PRIVATE-THOUGHT".into()),
@@ -1597,6 +1607,8 @@ mod streaming_tests {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
             Message {
                 reasoning: None,
@@ -1605,6 +1617,8 @@ mod streaming_tests {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
         ]
     }

@@ -4700,6 +4700,8 @@ async fn chat_repl(
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             });
         }
         let input = if let Some(next) = pending.take() {
@@ -5144,6 +5146,8 @@ async fn handle_slash(
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     });
                 }
                 Err(e) => println!("reload failed: {}", e),
@@ -5268,6 +5272,8 @@ async fn handle_slash(
                                         tool_calls: None,
                                         tool_call_id: None,
                                         name: None,
+                                        reasoning_details: None,
+                                        anthropic_content_blocks: None,
                                     });
                                 }
                                 Err(e) => println!("connect failed: {e}"),
@@ -5286,6 +5292,8 @@ async fn handle_slash(
                                     tool_calls: None,
                                     tool_call_id: None,
                                     name: None,
+                                    reasoning_details: None,
+                                    anthropic_content_blocks: None,
                                 });
                             }
                             Err(e) => println!("connect failed: {e}"),
@@ -5305,6 +5313,8 @@ async fn handle_slash(
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
                     });
                 }
                 other => {
@@ -10298,6 +10308,8 @@ async fn sessions_cmd(action: SessionAction, config: &UlncLawConfig) -> Result<(
                             .get("tool_name")
                             .and_then(|v| v.as_str())
                             .map(str::to_string),
+                            reasoning_details: None,
+                            anthropic_content_blocks: None,
                     };
                     let at = message
                         .get("timestamp")

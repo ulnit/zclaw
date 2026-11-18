@@ -13,15 +13,10 @@
 //! (Claude 3, Haiku < 5.5, Opus < 4.5, Sonnet < 4.6) strip. Non-Claude ids never
 //! keep.
 //!
-//! **Scope of this first slice (P3-1c):** the pure *model-capability* half plus the
-//! route vocabulary and the route→replay predicate. The route *resolution*
-//! ([`anthropic_thinking_route`]) needs seven endpoint predicates whose bodies were
-//! not yet transcribed (`_is_bedrock_runtime_endpoint`, `_is_vertex_ai_endpoint`,
-//! `_is_azure_anthropic_endpoint`, `_is_kimi_coding_endpoint`,
-//! `base_url_host_matches`, `_MINIMAX_ANTHROPIC_PREFIXES`,
-//! `_model_name_is_kimi_family`, `_model_name_is_deepseek_thinking`, plus the
-//! `NOUS_INFERENCE_BASE_URL` env override) — it is the next slice, recorded rather
-//! than guessed.
+//! **Scope:** the pure *model-capability* half, the route vocabulary and the
+//! route→replay predicate landed in the first slice (P3-1c). The route
+//! *resolution* ([`anthropic_thinking_route`]) and its seven endpoint predicates
+//! landed in slice2e — see the endpoint-predicate section below.
 
 use regex::Regex;
 use std::sync::OnceLock;
@@ -176,10 +171,16 @@ impl ThinkingRoute {
 /// turns, so stale thinking reaches the wire and accounting must charge the signed
 /// carriers.
 ///
-/// hermes `native_anthropic_preserves_prior_thinking`. Takes the route directly
-/// because [`anthropic_thinking_route`] is not ported yet — see the module docs.
+/// hermes `native_anthropic_preserves_prior_thinking`.
 pub fn preserves_prior_thinking_on_route(route: ThinkingRoute, model: &str) -> bool {
     route.replays_prior_thinking(model)
+}
+
+/// hermes `native_anthropic_preserves_prior_thinking(base_url, model)`: true
+/// when the route replays (and the model keeps) signed thinking from earlier
+/// turns, so stale thinking reaches the wire.
+pub fn native_anthropic_preserves_prior_thinking(base_url: &str, model: &str) -> bool {
+    anthropic_thinking_route(base_url, model).replays_prior_thinking(model)
 }
 
 // ===========================================================================
@@ -630,9 +631,444 @@ pub fn thinking_request(
     })
 }
 
+// ===========================================================================
+// P3-1c slice2e — endpoint predicates + route resolution.
+//
+// Verbatim port of `agent/anthropic_endpoints.py` (the predicates the route
+// rules need) and `anthropic_thinking_policy.py:69-96` (`_is_off_anthropic`,
+// `_ROUTE_RULES`, `anthropic_thinking_route`). Pure functions, no I/O beyond
+// the operator env override — both message conversion and signature-rejection
+// state route on the same answer.
+//
+// 🔴 Host matching is hostname equality-or-subdomain, never substring:
+// `evil.com/moonshot.ai` and `moonshot.ai.evil` must NOT match (upstream
+// `utils.base_url_host_matches`).
+// ===========================================================================
+
+use crate::provider::reasoning_echo::host_of;
+
+/// `_normalized_lower`: strip whitespace, rstrip `/`, lowercase — the shape
+/// most predicates match on.
+fn normalized_lower(base_url: &str) -> String {
+    base_url
+        .trim()
+        .trim_end_matches('/')
+        .to_ascii_lowercase()
+}
+
+/// `utils.base_url_hostname`: lowercased hostname, trailing dot stripped,
+/// bare `host[:port][/path]` tolerated. [`host_of`] already does the
+/// scheme/port/userinfo/IPv6 handling; upstream additionally rstrips `.`.
+fn hostname(base_url: &str) -> String {
+    host_of(base_url).trim_end_matches('.').to_string()
+}
+
+/// `utils.base_url_host_matches`: hostname equals the domain or is a
+/// subdomain of it. Both sides must be non-empty.
+fn host_matches(base_url: &str, domain: &str) -> bool {
+    let host = hostname(base_url);
+    let domain = domain.trim().to_ascii_lowercase();
+    let domain = domain.trim_end_matches('.');
+    !host.is_empty()
+        && !domain.is_empty()
+        && (host == domain || host.ends_with(&format!(".{domain}")))
+}
+
+/// Lowercased URL path (no trailing-slash strip — the Azure predicate matches
+/// on the raw path). Same bare-host tolerance as [`hostname`].
+fn url_path_lower(base_url: &str) -> String {
+    let raw = base_url.trim();
+    if raw.is_empty() {
+        return String::new();
+    }
+    let with_scheme = if raw.contains("://") {
+        raw.to_string()
+    } else {
+        format!("//{raw}")
+    };
+    url::Url::parse(&with_scheme)
+        .map(|u| u.path().to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+/// Any non-anthropic.com endpoint. No base_url = direct Anthropic API.
+/// hermes `_is_third_party_anthropic_endpoint`.
+pub fn is_third_party_anthropic_endpoint(base_url: &str) -> bool {
+    let normalized = normalized_lower(base_url);
+    !normalized.is_empty() && !normalized.contains("anthropic.com")
+}
+
+/// Kimi's `/coding` endpoint (requires a claude-code User-Agent upstream).
+/// hermes `_is_kimi_coding_endpoint`.
+pub fn is_kimi_coding_endpoint(base_url: &str) -> bool {
+    normalized_lower(base_url).starts_with("https://api.kimi.com/coding")
+}
+
+/// Kimi / Moonshot family model-name prefixes: official slugs and release
+/// lines. Matched case-insensitively after stripping any `vendor/` prefix.
+/// Any Kimi / Moonshot Anthropic-Messages endpoint: the /coding endpoint, any
+/// api.kimi.com / moonshot.ai / moonshot.cn host, or any endpoint whose *model*
+/// is in the Kimi family — Kimi's thinking semantics apply regardless of
+/// hostname. hermes `_is_kimi_family_endpoint`.
+pub fn is_kimi_family_endpoint(base_url: &str, model: &str) -> bool {
+    is_kimi_coding_endpoint(base_url)
+        || ["api.kimi.com", "moonshot.ai", "moonshot.cn"]
+            .iter()
+            .any(|d| host_matches(base_url, d))
+        || model_name_is_kimi_family(model)
+}
+
+/// Known DeepSeek thinking families behind an Anthropic-compatible relay.
+/// Arbitrary DeepSeek chat/distill names are NOT evidence of the thinking
+/// replay contract. hermes `_DEEPSEEK_THINKING_MODEL_PREFIXES` — EXACT.
+const DEEPSEEK_THINKING_MODEL_PREFIXES: &[&str] = &[
+    "deepseek-r",
+    "deepseek-v4",
+    "deepseek_v4",
+    "deepseek-pro",
+    "deepseek_pro",
+    "deepseek-flash",
+    "deepseek_flash",
+];
+
+/// hermes `_model_name_is_deepseek_thinking`.
+pub fn model_name_is_deepseek_thinking(model: &str) -> bool {
+    let lower = model.trim().to_ascii_lowercase();
+    let name = lower.rsplit('/').next().unwrap_or("");
+    !name.is_empty()
+        && DEEPSEEK_THINKING_MODEL_PREFIXES
+            .iter()
+            .any(|p| name.starts_with(p))
+}
+
+/// DeepSeek's `/anthropic` route: thinking blocks must round-trip but are
+/// unsigned (strip-signed / keep-unsigned, same as Kimi). Pinned to the
+/// `/anthropic` path so the OpenAI-compatible base URL is not misclassified.
+/// hermes `_is_deepseek_anthropic_endpoint`.
+pub fn is_deepseek_anthropic_endpoint(base_url: &str) -> bool {
+    host_matches(base_url, "api.deepseek.com") && normalized_lower(base_url).contains("/anthropic")
+}
+
+/// Nous Portal's Anthropic Messages route (native thinking-signature replay).
+/// Trusted hosts only: prod `inference-api.nousresearch.com` or the
+/// operator-set `NOUS_INFERENCE_BASE_URL` host (EXACT hostname equality, so
+/// neither lookalike domains nor sibling hosts of the override match).
+/// hermes `_is_nous_portal_endpoint`.
+///
+/// Upstream reads the override through the profile secret scope; for a
+/// single-profile process `get_secret` reads `os.environ` directly, which is
+/// what this port does (the multiplexed-profile lost-scope branch has no
+/// counterpart here).
+pub fn is_nous_portal_endpoint(base_url: &str) -> bool {
+    if host_matches(base_url, "inference-api.nousresearch.com") {
+        return true;
+    }
+    let override_url = std::env::var("NOUS_INFERENCE_BASE_URL")
+        .ok()
+        .map(|v| v.trim().trim_end_matches('/').to_string())
+        .filter(|v| !v.is_empty());
+    match override_url {
+        Some(override_url) => {
+            let override_host = hostname(&override_url);
+            !override_host.is_empty() && hostname(base_url) == override_host
+        }
+        None => false,
+    }
+}
+
+/// MiniMax's Anthropic-compatible endpoints. hermes
+/// `_MINIMAX_ANTHROPIC_PREFIXES` — EXACT.
+const MINIMAX_ANTHROPIC_PREFIXES: &[&str] = &[
+    "https://api.minimax.io/anthropic",
+    "https://api.minimaxi.com/anthropic",
+];
+
+/// hermes `_is_minimax_anthropic_endpoint`.
+pub fn is_minimax_anthropic_endpoint(base_url: &str) -> bool {
+    let normalized = normalized_lower(base_url);
+    MINIMAX_ANTHROPIC_PREFIXES
+        .iter()
+        .any(|p| normalized.starts_with(p))
+}
+
+/// Azure-hosted Anthropic Messages endpoints serving `/anthropic`: modern
+/// Foundry (`*.services.ai.azure.*`) and legacy Azure OpenAI
+/// (`*.openai.azure.*`). Deliberately no finite TLD allow-list, so
+/// sovereign/private clouds work. hermes `_is_azure_anthropic_endpoint`.
+pub fn is_azure_anthropic_endpoint(base_url: &str) -> bool {
+    if base_url.trim().is_empty() {
+        return false;
+    }
+    let host_padded = format!(".{}.", hostname(base_url));
+    let is_azure_host =
+        host_padded.contains(".services.ai.azure.") || host_padded.contains(".openai.azure.");
+    is_azure_host && url_path_lower(base_url).contains("/anthropic")
+}
+
+/// Amazon Bedrock's runtime host (`bedrock-runtime[-fips].<region>.amazonaws.com[.cn]`,
+/// and VPC endpoint names carrying the same label).
+/// hermes `_is_bedrock_runtime_endpoint`.
+pub fn is_bedrock_runtime_endpoint(base_url: &str) -> bool {
+    let host = hostname(base_url);
+    host.split('.').any(|label| label.starts_with("bedrock-runtime"))
+        && (host_matches(&host, "amazonaws.com") || host_matches(&host, "amazonaws.com.cn"))
+}
+
+/// Vertex AI hosts: global `aiplatform.googleapis.com` and regional
+/// `<region>-aiplatform.googleapis.com`. hermes `_is_vertex_ai_endpoint`.
+pub fn is_vertex_ai_endpoint(base_url: &str) -> bool {
+    let host = hostname(base_url);
+    host == "aiplatform.googleapis.com" || host.ends_with("-aiplatform.googleapis.com")
+}
+
+/// Cloud platforms serving Claude under Anthropic's own thinking signatures:
+/// Bedrock, Vertex AI and Azure AI Foundry `/anthropic`. Anthropic documents
+/// `signature` values as compatible across the Claude API, Bedrock and Google
+/// Cloud, so these replay signed thinking like the direct API.
+/// hermes `_is_claude_platform_endpoint`.
+pub fn is_claude_platform_endpoint(base_url: &str) -> bool {
+    is_bedrock_runtime_endpoint(base_url)
+        || is_vertex_ai_endpoint(base_url)
+        || is_azure_anthropic_endpoint(base_url)
+}
+
+/// hermes `_is_off_anthropic`.
+fn is_off_anthropic(base_url: &str) -> bool {
+    is_third_party_anthropic_endpoint(base_url) && !is_nous_portal_endpoint(base_url)
+}
+
+/// Which thinking-replay contract an Anthropic Messages request follows.
+/// First match wins; an unmatched relay host is [`ThinkingRoute::ThirdParty`].
+/// DeepSeek models never sign, so they keep the unsigned-only contract on any
+/// host but Anthropic's own, Claude platforms included.
+///
+/// hermes `anthropic_thinking_route` (`_ROUTE_RULES` order is load-bearing:
+/// kimi → deepseek → native → minimax).
+pub fn anthropic_thinking_route(base_url: &str, model: &str) -> ThinkingRoute {
+    if is_kimi_family_endpoint(base_url, model) {
+        return ThinkingRoute::Kimi;
+    }
+    if is_deepseek_anthropic_endpoint(base_url)
+        || (is_off_anthropic(base_url) && model_name_is_deepseek_thinking(model))
+    {
+        return ThinkingRoute::DeepSeek;
+    }
+    if !is_off_anthropic(base_url) || is_claude_platform_endpoint(base_url) {
+        return ThinkingRoute::Native;
+    }
+    if is_minimax_anthropic_endpoint(base_url) {
+        return ThinkingRoute::MiniMax;
+    }
+    ThinkingRoute::ThirdParty
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- slice2e: endpoint predicates + route resolution ---------------------
+
+    /// Hostname equality-or-subdomain, never substring — the lookalike traps
+    /// upstream's `base_url_host_matches` docstring names.
+    #[test]
+    fn host_matching_is_hostname_not_substring() {
+        assert!(host_matches("https://api.kimi.com/coding", "api.kimi.com"));
+        assert!(host_matches("https://sub.moonshot.ai/v1", "moonshot.ai"));
+        assert!(!host_matches("https://evil.com/moonshot.ai", "moonshot.ai"));
+        assert!(!host_matches("https://moonshot.ai.evil.com", "moonshot.ai"));
+        assert!(!host_matches("", "moonshot.ai"));
+        // bare host and trailing-dot tolerance
+        assert!(host_matches("api.deepseek.com", "api.deepseek.com"));
+        assert!(host_matches("https://api.kimi.com./v1", "api.kimi.com"));
+    }
+
+    #[test]
+    fn kimi_family_model_prefixes_and_exact_slugs() {
+        assert!(model_name_is_kimi_family("kimi-k2.5"));
+        assert!(model_name_is_kimi_family("moonshotai/kimi-k2.5"));
+        assert!(model_name_is_kimi_family("KIMI_THINKING"));
+        assert!(model_name_is_kimi_family("k2-thinking"));
+        assert!(model_name_is_kimi_family("k25-preview"));
+        assert!(model_name_is_kimi_family("k3")); // exact slug
+        assert!(!model_name_is_kimi_family("k30")); // prefix-only, not exact
+        assert!(!model_name_is_kimi_family("kimi")); // no separator suffix
+        assert!(!model_name_is_kimi_family("claude-opus-4-6"));
+        assert!(!model_name_is_kimi_family(""));
+    }
+
+    #[test]
+    fn deepseek_thinking_model_prefixes_are_narrow() {
+        assert!(model_name_is_deepseek_thinking("deepseek-r1"));
+        assert!(model_name_is_deepseek_thinking("deepseek-v4"));
+        assert!(model_name_is_deepseek_thinking("vendor/deepseek-flash"));
+        // chat/distill names are NOT thinking-contract evidence
+        assert!(!model_name_is_deepseek_thinking("deepseek-chat"));
+        assert!(!model_name_is_deepseek_thinking("deepseek-distill"));
+        assert!(!model_name_is_deepseek_thinking(""));
+    }
+
+    #[test]
+    fn deepseek_endpoint_pinned_to_anthropic_path() {
+        assert!(is_deepseek_anthropic_endpoint(
+            "https://api.deepseek.com/anthropic"
+        ));
+        // the OpenAI-compatible base URL must NOT be misclassified
+        assert!(!is_deepseek_anthropic_endpoint("https://api.deepseek.com/v1"));
+        assert!(!is_deepseek_anthropic_endpoint("https://api.deepseek.com"));
+    }
+
+    #[test]
+    fn azure_foundry_and_legacy_hosts_with_anthropic_path() {
+        assert!(is_azure_anthropic_endpoint(
+            "https://x.services.ai.azure.com/anthropic"
+        ));
+        assert!(is_azure_anthropic_endpoint(
+            "https://x.openai.azure.com/anthropic"
+        ));
+        // sovereign/private clouds work (no finite TLD allow-list)
+        assert!(is_azure_anthropic_endpoint(
+            "https://x.services.ai.azure.us/anthropic"
+        ));
+        assert!(!is_azure_anthropic_endpoint(
+            "https://x.services.ai.azure.com/openai"
+        ));
+        assert!(!is_azure_anthropic_endpoint(""));
+    }
+
+    #[test]
+    fn bedrock_and_vertex_hosts() {
+        assert!(is_bedrock_runtime_endpoint(
+            "https://bedrock-runtime.us-east-1.amazonaws.com"
+        ));
+        assert!(is_bedrock_runtime_endpoint(
+            "https://bedrock-runtime-fips.us-west-2.amazonaws.com"
+        ));
+        assert!(is_bedrock_runtime_endpoint(
+            "https://bedrock-runtime.cn-north-1.amazonaws.com.cn"
+        ));
+        assert!(!is_bedrock_runtime_endpoint(
+            "https://bedrock.us-east-1.amazonaws.com"
+        ));
+        assert!(!is_bedrock_runtime_endpoint(
+            "https://bedrock-runtime.evil.com"
+        ));
+        assert!(is_vertex_ai_endpoint("https://aiplatform.googleapis.com"));
+        assert!(is_vertex_ai_endpoint(
+            "https://us-central1-aiplatform.googleapis.com"
+        ));
+        assert!(!is_vertex_ai_endpoint("https://evil-aiplatform.googleapis.com.evil"));
+    }
+
+    #[test]
+    fn minimax_prefixes_exact() {
+        assert!(is_minimax_anthropic_endpoint(
+            "https://api.minimax.io/anthropic"
+        ));
+        assert!(is_minimax_anthropic_endpoint(
+            "https://api.minimaxi.com/anthropic/v1"
+        ));
+        assert!(!is_minimax_anthropic_endpoint("https://api.minimax.io/v1"));
+        assert!(!is_minimax_anthropic_endpoint("https://minimax.io/anthropic"));
+    }
+
+    /// First-match-wins route table, including the traps: an empty base URL is
+    /// the direct API (native); a Kimi model on an unknown relay is still kimi;
+    /// DeepSeek thinking models off-Anthropic are deepseek even on a generic
+    /// relay; Claude platforms (Bedrock/Vertex/Foundry) stay native.
+    #[test]
+    fn route_table_first_match_wins() {
+        let claude = "claude-opus-4-6";
+        assert_eq!(anthropic_thinking_route("", claude), ThinkingRoute::Native);
+        assert_eq!(
+            anthropic_thinking_route("https://api.anthropic.com", claude),
+            ThinkingRoute::Native
+        );
+        assert_eq!(
+            anthropic_thinking_route("https://api.kimi.com/coding", claude),
+            ThinkingRoute::Kimi
+        );
+        assert_eq!(
+            anthropic_thinking_route("https://relay.example.com", "kimi-k2.5"),
+            ThinkingRoute::Kimi
+        );
+        assert_eq!(
+            anthropic_thinking_route("https://api.deepseek.com/anthropic", claude),
+            ThinkingRoute::DeepSeek
+        );
+        assert_eq!(
+            anthropic_thinking_route("https://relay.example.com", "deepseek-r1"),
+            ThinkingRoute::DeepSeek
+        );
+        // DeepSeek chat names on a generic relay are NOT deepseek-route
+        assert_eq!(
+            anthropic_thinking_route("https://relay.example.com", "deepseek-chat"),
+            ThinkingRoute::ThirdParty
+        );
+        assert_eq!(
+            anthropic_thinking_route(
+                "https://bedrock-runtime.us-east-1.amazonaws.com",
+                claude
+            ),
+            ThinkingRoute::Native
+        );
+        assert_eq!(
+            anthropic_thinking_route("https://aiplatform.googleapis.com", claude),
+            ThinkingRoute::Native
+        );
+        assert_eq!(
+            anthropic_thinking_route("https://x.services.ai.azure.com/anthropic", claude),
+            ThinkingRoute::Native
+        );
+        assert_eq!(
+            anthropic_thinking_route("https://api.minimax.io/anthropic", claude),
+            ThinkingRoute::MiniMax
+        );
+        assert_eq!(
+            anthropic_thinking_route("https://relay.example.com/anthropic", claude),
+            ThinkingRoute::ThirdParty
+        );
+        // Nous Portal is native (signed replay), not third_party
+        assert_eq!(
+            anthropic_thinking_route("https://inference-api.nousresearch.com", claude),
+            ThinkingRoute::Native
+        );
+    }
+
+    /// The env override is exact-hostname equality: neither lookalike domains
+    /// nor sibling hosts of the override match.
+    #[test]
+    fn nous_env_override_exact_hostname_only() {
+        let prev = std::env::var("NOUS_INFERENCE_BASE_URL").ok();
+        std::env::set_var("NOUS_INFERENCE_BASE_URL", "https://staging.inference.example.dev/");
+        assert!(is_nous_portal_endpoint("https://staging.inference.example.dev/v1"));
+        assert!(!is_nous_portal_endpoint("https://other.inference.example.dev"));
+        assert!(!is_nous_portal_endpoint("https://staging.inference.example.dev.evil.com"));
+        match prev {
+            Some(v) => std::env::set_var("NOUS_INFERENCE_BASE_URL", v),
+            None => std::env::remove_var("NOUS_INFERENCE_BASE_URL"),
+        }
+    }
+
+    #[test]
+    fn route_replays_prior_thinking_matrix() {
+        assert!(native_anthropic_preserves_prior_thinking(
+            "https://api.anthropic.com",
+            "claude-opus-4-6"
+        ));
+        assert!(!native_anthropic_preserves_prior_thinking(
+            "https://api.anthropic.com",
+            "claude-opus-4-1"
+        ));
+        // MiniMax replays regardless of model
+        assert!(native_anthropic_preserves_prior_thinking(
+            "https://api.minimax.io/anthropic",
+            "abab6.5"
+        ));
+        assert!(!native_anthropic_preserves_prior_thinking(
+            "https://relay.example.com",
+            "claude-opus-4-6"
+        ));
+    }
 
     // ---- version parsing ---------------------------------------------------
 

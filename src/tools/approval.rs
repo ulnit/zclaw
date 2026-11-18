@@ -395,6 +395,8 @@ pub async fn smart_assess(
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
             crate::provider::Message {
                 reasoning: None,
@@ -403,6 +405,8 @@ pub async fn smart_assess(
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
         ],
         tools: Vec::new(),
@@ -630,6 +634,8 @@ mod tests {
                 model: "guard".into(),
                 reasoning: None,
                 finish_reason: Some("stop".into()),
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             })
         }
         fn model(&self) -> &str {

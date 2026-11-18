@@ -709,6 +709,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         }
     }
 
@@ -753,6 +755,8 @@ mod tests {
                 ]),
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
             Message {
                 reasoning: None,
@@ -761,6 +765,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: Some("c1".into()),
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
             Message {
                 reasoning: None,
@@ -769,6 +775,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: Some("c2".into()),
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
         ];
         let stats = extract_tool_stats(&messages);
@@ -796,6 +804,8 @@ mod tests {
                 }]),
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
             Message {
                 reasoning: None,
@@ -804,6 +814,8 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: Some("c1".into()),
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             },
             msg(Role::Assistant, "done!"),
         ];

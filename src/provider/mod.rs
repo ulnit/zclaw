@@ -4,6 +4,7 @@
 //! to (api_mode, api_key, base_url).
 
 pub mod anthropic;
+pub mod anthropic_replay;
 pub mod anthropic_thinking;
 pub mod auxiliary;
 pub mod error_class;
@@ -14,6 +15,7 @@ use crate::error::{AgentError, Result};
 use crate::tools::ToolDefinition;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::fmt;
 
 /// Message in a conversation
@@ -46,6 +48,22 @@ pub struct Message {
     /// providers that work today.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<String>,
+    /// Preserved Anthropic thinking/redacted_thinking blocks with their opaque
+    /// `signature`/`data` fields (hermes `msg["reasoning_details"]`,
+    /// `chat_completion_helpers.py:1688-1699`). Whitelisted at capture
+    /// (`_sanitize_replay_block`) so output-only SDK fields never persist.
+    /// Persisted as a JSON column so signatures survive resume; replay is
+    /// Anthropic-only and route-gated (`_manage_thinking_signatures`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_details: Option<Vec<Value>>,
+    /// Ordered sanitized block sidecar for turns interleaving SIGNED thinking
+    /// with tool_use (hermes `msg["anthropic_content_blocks"]`): the parallel
+    /// content/tool_calls lists reconstruct that shape in the wrong order and
+    /// replay → HTTP 400. Runtime-only — upstream has no DB column for it
+    /// (added then removed); cross-process replay falls back to
+    /// `reasoning_details`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anthropic_content_blocks: Option<Vec<Value>>,
 }
 
 /// Role in a conversation
@@ -179,6 +197,12 @@ pub struct ProviderResponse {
     pub model: String,
     /// Reasoning/thinking content (for models that support extended thinking)
     pub reasoning: Option<String>,
+    /// Preserved thinking blocks with opaque signature/data (hermes
+    /// `provider_data["reasoning_details"]`), whitelisted at capture.
+    pub reasoning_details: Option<Vec<Value>>,
+    /// Ordered block sidecar when signed thinking interleaves with tool_use
+    /// (hermes `provider_data["anthropic_content_blocks"]`).
+    pub anthropic_content_blocks: Option<Vec<Value>>,
     /// Finish reason: "stop", "tool_calls", "length", etc.
     pub finish_reason: Option<String>,
 }
@@ -227,6 +251,18 @@ pub struct StreamChunk {
     pub usage: Option<Usage>,
     /// Model echoed by the server.
     pub model: Option<String>,
+    /// Anthropic `content_block_start` for a thinking/redacted_thinking block:
+    /// `(index, sanitized block)`. The signature arrives later via
+    /// `signature_delta`; the accumulator merges them (hermes
+    /// `relay_llm._ANTHROPIC_APPEND_DELTAS`).
+    pub thinking_block_start: Option<(usize, Value)>,
+    /// Anthropic `signature_delta`: `(block index, signature fragment)`.
+    /// Fragments append to the block's `signature` field.
+    pub signature_delta: Option<(usize, String)>,
+    /// Anthropic `content_block_start` for a TEXT block: `(index, text prefix)`.
+    /// Needed only so the ordered replay sidecar preserves text/thinking/tool_use
+    /// order; `delta_content` already carries the same text for display.
+    pub text_block_start: Option<(usize, String)>,
 }
 
 /// Accumulate streamed tool-call deltas into complete tool calls.

@@ -278,6 +278,8 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 },
             )
             .unwrap();

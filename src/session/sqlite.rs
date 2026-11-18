@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS messages (
     finish_reason TEXT,
     active INTEGER NOT NULL DEFAULT 1,
     display_metadata TEXT,
-    reasoning TEXT
+    reasoning TEXT,
+    reasoning_details TEXT
 );
 
 CREATE TABLE IF NOT EXISTS state_meta (
@@ -520,6 +521,48 @@ fn ensure_reasoning_column(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Add `messages.reasoning_details` on pre-existing databases (idempotent).
+///
+/// Stores the preserved Anthropic thinking/redacted_thinking blocks (with their
+/// opaque `signature`/`data`) as JSON so cross-turn signature continuity survives
+/// resume — hermes persists `reasoning_details` in the same table
+/// (`hermes_state_messages.py:31-37`, read back at `:369-372`).
+///
+/// 🔴 The ordered `anthropic_content_blocks` sidecar deliberately gets NO column:
+/// upstream added one and removed it again, keeping it runtime-only. Cross-process
+/// replay falls back to `reasoning_details`.
+fn ensure_reasoning_details_column(conn: &Connection) -> Result<()> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(messages)")
+        .map_err(|e| AgentError::session(e.to_string()))?;
+    let has_column = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| AgentError::session(e.to_string()))?
+        .filter_map(|r| r.ok())
+        .any(|name| name == "reasoning_details");
+    if !has_column {
+        conn.execute_batch("ALTER TABLE messages ADD COLUMN reasoning_details TEXT;")
+            .map_err(|e| AgentError::session(format!("add reasoning_details: {}", e)))?;
+    }
+    Ok(())
+}
+
+/// Decode the stored `reasoning_details` JSON. A malformed value is treated as
+/// absent rather than failing the whole session load: hermes reads the column
+/// with a tolerant `json.loads` guard, and a single bad row must not wedge resume.
+fn decode_reasoning_details(raw: Option<String>) -> Result<Option<Vec<serde_json::Value>>> {
+    match raw {
+        Some(text) if !text.trim().is_empty() => match serde_json::from_str(&text) {
+            Ok(details) => Ok(Some(details)),
+            Err(e) => {
+                tracing::warn!("ignoring malformed reasoning_details: {}", e);
+                Ok(None)
+            }
+        },
+        _ => Ok(None),
+    }
+}
+
 /// `model_config` key holding the durable rejected-reasoning-route table.
 /// Same literal as hermes `_REJECTION_MODEL_CONFIG_KEY`.
 pub const REJECTED_REASONING_KEY: &str = "reasoning_rejected_carriers";
@@ -666,6 +709,7 @@ impl SqliteSessionStore {
         let has_fts = initialize_schema(&conn)?;
         ensure_display_metadata_column(&conn)?;
         ensure_reasoning_column(&conn)?;
+        ensure_reasoning_details_column(&conn)?;
         ensure_model_config_column(&conn)?;
         ensure_compression_columns(&conn)?;
         ensure_delegation_delivery_columns(&conn)?;
@@ -875,10 +919,16 @@ impl SqliteSessionStore {
             .map(|calls| serde_json::to_string(calls))
             .transpose()
             .map_err(|e| AgentError::session(e.to_string()))?;
+        let reasoning_details_json = message
+            .reasoning_details
+            .as_ref()
+            .map(|details| serde_json::to_string(details))
+            .transpose()
+            .map_err(|e| AgentError::session(e.to_string()))?;
         let role = message.role.to_string();
         conn.execute(
-            "INSERT INTO messages (session_id, role, content, tool_call_id, tool_calls, tool_name, timestamp, reasoning)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO messages (session_id, role, content, tool_call_id, tool_calls, tool_name, timestamp, reasoning, reasoning_details)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 session_id,
                 role,
@@ -888,6 +938,7 @@ impl SqliteSessionStore {
                 message.name,
                 timestamp,
                 message.reasoning,
+                reasoning_details_json,
             ],
         )
         .map_err(|e| AgentError::session(format!("append message: {}", e)))?;
@@ -1715,7 +1766,7 @@ impl SqliteSessionStore {
             .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT role, content, tool_call_id, tool_calls, tool_name, reasoning
+                "SELECT role, content, tool_call_id, tool_calls, tool_name, reasoning, reasoning_details
                  FROM messages WHERE session_id = ?1 AND active = 1 ORDER BY id",
             )
             .map_err(|e| AgentError::session(e.to_string()))?;
@@ -1728,12 +1779,13 @@ impl SqliteSessionStore {
                     row.get::<_, Option<String>>(3)?,
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
                 ))
             })
             .map_err(|e| AgentError::session(e.to_string()))?;
         let mut messages = Vec::new();
         for row in rows {
-            let (role, content, tool_call_id, tool_calls, name, reasoning) =
+            let (role, content, tool_call_id, tool_calls, name, reasoning, reasoning_details) =
                 row.map_err(|e| AgentError::session(e.to_string()))?;
             let role = match role.as_str() {
                 "system" => Role::System,
@@ -1752,6 +1804,8 @@ impl SqliteSessionStore {
                 tool_calls,
                 tool_call_id,
                 name,
+                reasoning_details: decode_reasoning_details(reasoning_details)?,
+                anthropic_content_blocks: None,
             });
         }
         Ok(messages)
@@ -1765,7 +1819,7 @@ impl SqliteSessionStore {
             .map_err(|e| AgentError::session(e.to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT timestamp, role, content, tool_call_id, tool_calls, tool_name, reasoning
+                "SELECT timestamp, role, content, tool_call_id, tool_calls, tool_name, reasoning, reasoning_details
                  FROM messages WHERE session_id = ?1 AND active = 1 ORDER BY id",
             )
             .map_err(|e| AgentError::session(e.to_string()))?;
@@ -1779,12 +1833,22 @@ impl SqliteSessionStore {
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
                     row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
                 ))
             })
             .map_err(|e| AgentError::session(e.to_string()))?;
         let mut messages = Vec::new();
         for row in rows {
-            let (timestamp, role, content, tool_call_id, tool_calls, name, reasoning) =
+            let (
+                timestamp,
+                role,
+                content,
+                tool_call_id,
+                tool_calls,
+                name,
+                reasoning,
+                reasoning_details,
+            ) =
                 row.map_err(|e| AgentError::session(e.to_string()))?;
             let role = match role.as_str() {
                 "system" => Role::System,
@@ -1805,6 +1869,8 @@ impl SqliteSessionStore {
                     tool_calls,
                     tool_call_id,
                     name,
+                    reasoning_details: decode_reasoning_details(reasoning_details)?,
+                    anthropic_content_blocks: None,
                 },
             ));
         }
@@ -3717,7 +3783,9 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
-        }
+            reasoning_details: None,
+            anthropic_content_blocks: None,
+    }
     }
 
     #[test]
@@ -3736,7 +3804,9 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
-                },
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
+            },
             )
             .unwrap();
         store.append_message(&sid, &user_msg("second")).unwrap();
@@ -3751,7 +3821,9 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
-                },
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
+            },
             )
             .unwrap();
 
@@ -3855,7 +3927,9 @@ mod tests {
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
-                    },
+                        reasoning_details: None,
+                        anthropic_content_blocks: None,
+                },
                 )
                 .unwrap();
             sid
@@ -3936,7 +4010,9 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
-                },
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
+            },
             )
             .unwrap();
         let msgs = store.load_messages(&sid).unwrap();
@@ -3986,7 +4062,9 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
-                },
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
+            },
             )
             .unwrap();
         let messages = store.load_messages(&sid).unwrap();
@@ -4271,7 +4349,9 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
-                },
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
+            },
             )
             .unwrap();
         store
@@ -4348,7 +4428,9 @@ mod tests {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
-                },
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
+            },
             )
             .unwrap();
         let second = store.create_session("cron", None, None).unwrap();

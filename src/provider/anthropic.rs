@@ -14,6 +14,9 @@ use super::{
     StreamChunk, ToolCall, ToolCallDelta, Usage,
 };
 use crate::error::{AgentError, Result};
+use crate::provider::anthropic_replay::{
+    assistant_blocks, manage_thinking_signatures, thinking_carriers_from_blocks,
+};
 use crate::tools::ToolDefinition;
 use async_trait::async_trait;
 use reqwest::Client;
@@ -199,7 +202,8 @@ impl AnthropicProvider {
     }
 
     fn build_body(&self, request: &ProviderRequest, stream: bool) -> Value {
-        let (system, mut messages) = messages_to_anthropic(&request.messages);
+        let (system, mut messages) =
+            messages_to_anthropic_routed(&request.messages, &self.endpoint, &request.model);
         if let Some(ref images) = request.images {
             attach_images_anthropic(&mut messages, images);
         }
@@ -427,7 +431,22 @@ fn attach_images_anthropic(messages: &mut [Value], images: &[crate::provider::Me
     }
 }
 
+/// Convert history to `(system, messages)`. Thin wrapper preserving the
+/// pre-slice2e signature: no endpoint/model means the route resolves to Native
+/// with no model opinion (hermes `convert_messages_to_anthropic(messages)`).
 pub fn messages_to_anthropic(messages: &[Message]) -> (Option<String>, Vec<Value>) {
+    messages_to_anthropic_routed(messages, "", "")
+}
+
+/// hermes `convert_messages_to_anthropic(messages, base_url, model)`
+/// (`anthropic_message_convert.py:730-756`). `base_url`/`model` drive the
+/// thinking-signature policy: unknown relays strip signatures they cannot verify,
+/// Kimi replays as-is, DeepSeek keeps unsigned only.
+pub fn messages_to_anthropic_routed(
+    messages: &[Message],
+    base_url: &str,
+    model: &str,
+) -> (Option<String>, Vec<Value>) {
     let mut system_parts: Vec<String> = Vec::new();
     let mut out: Vec<Value> = Vec::new();
 
@@ -458,27 +477,9 @@ pub fn messages_to_anthropic(messages: &[Message]) -> (Option<String>, Vec<Value
                 }
             }
             Role::Assistant => {
-                let mut blocks: Vec<Value> = Vec::new();
-                if let Some(ref content) = message.content {
-                    if !content.trim().is_empty() {
-                        blocks.push(json!({"type": "text", "text": content}));
-                    }
-                }
-                if let Some(ref tool_calls) = message.tool_calls {
-                    for call in tool_calls {
-                        let input: Value =
-                            serde_json::from_str(&call.function.arguments).unwrap_or(json!({}));
-                        blocks.push(json!({
-                            "type": "tool_use",
-                            "id": call.id,
-                            "name": call.function.name,
-                            "input": input,
-                        }));
-                    }
-                }
-                if blocks.is_empty() {
-                    blocks.push(json!({"type": "text", "text": EMPTY_TEXT_PLACEHOLDER}));
-                }
+                // hermes `_convert_assistant_message`: thinking carriers first
+                // (thinking must precede text/tool_use), then text, then tool_use.
+                let blocks = assistant_blocks(message, message.tool_calls.as_deref());
                 out.push(json!({"role": "assistant", "content": blocks}));
             }
             Role::Tool => {
@@ -517,12 +518,60 @@ pub fn messages_to_anthropic(messages: &[Message]) -> (Option<String>, Vec<Value
         }
     }
 
+    // hermes calls `_manage_thinking_signatures` then `_scrub_blank_text_blocks`
+    // LAST, so a blank block from any producer never reaches the wire.
+    manage_thinking_signatures(&mut out, base_url, model);
+    scrub_blank_text_blocks(&mut out);
+
     let system = if system_parts.is_empty() {
         None
     } else {
         Some(system_parts.join("\n\n"))
     };
     (system, out)
+}
+
+/// hermes `_scrub_blank_text_blocks` (`:691-711`): final guard against HTTP 400
+/// "text content blocks must contain non-whitespace text", including inside
+/// `tool_result` content. Assistant turns get the assistant placeholder; user
+/// turns get the user one; tool results get "(no output)".
+fn scrub_blank_text_blocks(messages: &mut [Value]) {
+    for msg in messages.iter_mut() {
+        let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
+        let placeholder = if role == "assistant" {
+            EMPTY_TEXT_PLACEHOLDER
+        } else {
+            "(empty message)"
+        };
+        let Some(blocks) = msg.get_mut("content").and_then(|c| c.as_array_mut()) else {
+            continue;
+        };
+        fix_blank_text(blocks, placeholder);
+        for block in blocks.iter_mut() {
+            if block.get("type").and_then(|t| t.as_str()) != Some("tool_result") {
+                continue;
+            }
+            if let Some(inner) = block.get_mut("content").and_then(|c| c.as_array_mut()) {
+                fix_blank_text(inner, "(no output)");
+            }
+        }
+    }
+}
+
+fn fix_blank_text(blocks: &mut [Value], placeholder: &str) {
+    for block in blocks.iter_mut() {
+        if block.get("type").and_then(|t| t.as_str()) != Some("text") {
+            continue;
+        }
+        let blank = block
+            .get("text")
+            .and_then(|t| t.as_str())
+            .map(|t| t.trim().is_empty())
+            .unwrap_or(true);
+        if blank {
+            block["text"] = json!(placeholder);
+        }
+    }
 }
 
 /// Convert tool definitions to Anthropic `tools` entries, dropping duplicate
@@ -566,21 +615,19 @@ pub fn map_stop_reason(stop_reason: Option<&str>) -> Option<String> {
 pub fn parse_anthropic_response(body: &Value) -> ProviderResponse {
     let mut text_parts: Vec<String> = Vec::new();
     let mut tool_calls: Vec<ToolCall> = Vec::new();
-    let mut reasoning = String::new();
-    for block in body
+    let empty: Vec<Value> = Vec::new();
+    let blocks = body
         .get("content")
         .and_then(|c| c.as_array())
-        .unwrap_or(&vec![])
-    {
+        .unwrap_or(&empty);
+    // hermes `AnthropicTransport.normalize_response`: carriers are derived from
+    // the SAME block list as text/tool_calls, whitelisted at capture.
+    let carriers = thinking_carriers_from_blocks(blocks);
+    for block in blocks {
         match block.get("type").and_then(|t| t.as_str()) {
             Some("text") => {
                 if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
                     text_parts.push(text.to_string());
-                }
-            }
-            Some("thinking") => {
-                if let Some(thinking) = block.get("thinking").and_then(|t| t.as_str()) {
-                    reasoning.push_str(thinking);
                 }
             }
             Some("tool_use") => {
@@ -627,12 +674,10 @@ pub fn parse_anthropic_response(body: &Value) -> ProviderResponse {
             .and_then(|v| v.as_str())
             .unwrap_or_default()
             .to_string(),
-        reasoning: if reasoning.is_empty() {
-            None
-        } else {
-            Some(reasoning)
-        },
+        reasoning: carriers.reasoning,
         finish_reason,
+        reasoning_details: carriers.reasoning_details,
+        anthropic_content_blocks: carriers.anthropic_content_blocks,
     }
 }
 
@@ -665,13 +710,32 @@ pub fn parse_anthropic_event(data: &str) -> Result<Option<StreamChunk>> {
         "content_block_start" => {
             let index = event.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
             if let Some(block) = event.get("content_block") {
-                if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
-                    chunk.tool_call_deltas.push(ToolCallDelta {
-                        index,
-                        id: block.get("id").and_then(|v| v.as_str()).map(String::from),
-                        name_delta: block.get("name").and_then(|v| v.as_str()).map(String::from),
-                        arguments_delta: None,
-                    });
+                match block.get("type").and_then(|t| t.as_str()) {
+                    Some("tool_use") => {
+                        chunk.tool_call_deltas.push(ToolCallDelta {
+                            index,
+                            id: block.get("id").and_then(|v| v.as_str()).map(String::from),
+                            name_delta: block.get("name").and_then(|v| v.as_str()).map(String::from),
+                            arguments_delta: None,
+                        });
+                    }
+                    // hermes `AnthropicStreamAccumulator._on_content_block_start`
+                    // records the block verbatim; the signature arrives later as
+                    // `signature_delta` and the accumulator appends it.
+                    Some("thinking") | Some("redacted_thinking") => {
+                        chunk.thinking_block_start = Some((index, block.clone()));
+                    }
+                    Some("text") => {
+                        chunk.text_block_start = Some((
+                            index,
+                            block
+                                .get("text")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                        ));
+                    }
+                    _ => {}
                 }
             }
         }
@@ -688,6 +752,19 @@ pub fn parse_anthropic_event(data: &str) -> Result<Option<StreamChunk>> {
                             .get("thinking")
                             .and_then(|v| v.as_str())
                             .map(String::from);
+                    }
+                    // 🔴 The opaque signature arrives ONLY here, in fragments.
+                    // Dropping it makes the next turn 400 ("Invalid signature in
+                    // thinking block"). hermes `_ANTHROPIC_APPEND_DELTAS`.
+                    Some("signature_delta") => {
+                        chunk.signature_delta = Some((
+                            index,
+                            delta
+                                .get("signature")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                        ));
                     }
                     Some("input_json_delta") => {
                         chunk.tool_call_deltas.push(ToolCallDelta {
@@ -887,7 +964,409 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
+    }
+    }
+
+    // ---- P3-1c slice2e: thinking signature capture + replay ------------------
+
+    fn signed_thinking(text: &str, sig: &str) -> Value {
+        json!({"type": "thinking", "thinking": text, "signature": sig})
+    }
+
+    fn assistant_with_details(content: &str, details: Vec<Value>) -> Message {
+        Message {
+            role: Role::Assistant,
+            content: Some(content.to_string()),
+            reasoning_details: Some(details),
+            ..Default::default()
         }
+    }
+
+    /// Non-streaming capture: the opaque signature must survive into
+    /// `reasoning_details`, whitelisted (no output-only SDK siblings).
+    #[test]
+    fn test_parse_response_preserves_thinking_signature() {
+        let body = json!({
+            "model": "claude-sonnet-4-6",
+            "content": [
+                {"type": "thinking", "thinking": "weighing options",
+                 "signature": "EqQBc3M", "parsed_output": "drop-me"},
+                {"type": "text", "text": "Here you go"},
+            ],
+            "stop_reason": "end_turn",
+        });
+        let r = parse_anthropic_response(&body);
+        assert_eq!(r.content.as_deref(), Some("Here you go"));
+        assert_eq!(r.reasoning.as_deref(), Some("weighing options"));
+        let details = r.reasoning_details.expect("details captured");
+        assert_eq!(details.len(), 1);
+        assert_eq!(details[0]["signature"], "EqQBc3M");
+        assert_eq!(details[0]["thinking"], "weighing options");
+        assert!(details[0].get("parsed_output").is_none(), "output-only field leaked");
+        // No tool_use interleaving -> no ordered sidecar.
+        assert!(r.anthropic_content_blocks.is_none());
+    }
+
+    /// Interleaved SIGNED thinking + tool_use is the shape the parallel lists
+    /// reconstruct in the wrong order (replay -> 400), so the ordered sidecar
+    /// must appear and keep wire order.
+    #[test]
+    fn test_parse_response_interleaved_sidecar_keeps_order() {
+        let body = json!({
+            "content": [
+                {"type": "thinking", "thinking": "plan", "signature": "sig1"},
+                {"type": "text", "text": "Running it"},
+                {"type": "tool_use", "id": "toolu_1", "name": "terminal",
+                 "input": {"command": "ls"}},
+                {"type": "thinking", "thinking": "next", "signature": "sig2"},
+                {"type": "tool_use", "id": "toolu_2", "name": "terminal",
+                 "input": {"command": "pwd"}},
+            ],
+            "stop_reason": "tool_use",
+        });
+        let r = parse_anthropic_response(&body);
+        let ordered = r.anthropic_content_blocks.expect("sidecar");
+        let types: Vec<&str> = ordered
+            .iter()
+            .map(|b| b["type"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            types,
+            vec!["thinking", "text", "tool_use", "thinking", "tool_use"]
+        );
+        assert_eq!(r.reasoning_details.as_ref().unwrap().len(), 2);
+        assert_eq!(r.tool_calls.len(), 2);
+        // Upstream joins thinking parts with a blank line.
+        assert_eq!(r.reasoning.as_deref(), Some("plan\n\nnext"));
+    }
+
+    /// Unsigned thinking + tool_use needs no sidecar (order-independent).
+    #[test]
+    fn test_parse_response_unsigned_interleaving_has_no_sidecar() {
+        let body = json!({
+            "content": [
+                {"type": "thinking", "thinking": "plan"},
+                {"type": "tool_use", "id": "t1", "name": "x", "input": {}},
+            ],
+        });
+        let r = parse_anthropic_response(&body);
+        assert!(r.anthropic_content_blocks.is_none());
+        assert_eq!(r.reasoning_details.as_ref().unwrap().len(), 1);
+    }
+
+    /// redacted_thinking was dropped entirely before this slice; its `data` IS
+    /// the signature, so it must be captured and replayed.
+    #[test]
+    fn test_parse_response_captures_redacted_thinking() {
+        let body = json!({
+            "content": [
+                {"type": "redacted_thinking", "data": "EqoBCkYI"},
+                {"type": "text", "text": "ok"},
+            ],
+        });
+        let r = parse_anthropic_response(&body);
+        let details = r.reasoning_details.unwrap();
+        assert_eq!(details.len(), 1);
+        assert_eq!(details[0]["type"], "redacted_thinking");
+        assert_eq!(details[0]["data"], "EqoBCkYI");
+
+        // Replay puts it back verbatim, ahead of the text.
+        let turn = assistant_with_details("ok", details);
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "hi"), turn],
+            "https://api.anthropic.com",
+            "claude-sonnet-4-6",
+        );
+        let blocks = out[1]["content"].as_array().unwrap();
+        assert_eq!(blocks[0]["type"], "redacted_thinking");
+        assert_eq!(blocks[0]["data"], "EqoBCkYI");
+        assert_eq!(blocks[1]["type"], "text");
+    }
+
+    /// A dataless redacted block is not replayable (upstream drops it).
+    #[test]
+    fn test_redacted_thinking_without_data_is_dropped_on_replay() {
+        let turn = assistant_with_details(
+            "ok",
+            vec![json!({"type": "redacted_thinking", "data": ""})],
+        );
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "hi"), turn],
+            "https://api.anthropic.com",
+            "claude-sonnet-4-6",
+        );
+        let blocks = out[1]["content"].as_array().unwrap();
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0]["type"], "text");
+    }
+
+    /// Stream: the signature arrives ONLY as fragments and must be concatenated
+    /// in arrival order onto the right block index.
+    #[test]
+    fn test_stream_signature_delta_accumulates_onto_block() {
+        let mut acc = crate::provider::anthropic_replay::StreamBlockAccumulator::new();
+        let events = [
+            r#"{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"first "}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"half"}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EqQB"}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"c3M9"}}"#,
+            r#"{"type":"content_block_stop","index":0}"#,
+            r#"{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}"#,
+            r#"{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"answer"}}"#,
+        ];
+        for raw in events {
+            let chunk = parse_anthropic_event(raw).unwrap().expect("chunk");
+            acc.observe(&chunk);
+        }
+        let carriers = acc.carriers();
+        let details = carriers.reasoning_details.expect("details");
+        assert_eq!(details.len(), 1);
+        assert_eq!(details[0]["thinking"], "first half");
+        assert_eq!(details[0]["signature"], "EqQBc3M9", "fragments not appended");
+    }
+
+    /// Stream: interleaved signed thinking + tool_use must produce the ordered
+    /// sidecar with tool_use input reassembled from input_json_delta.
+    #[test]
+    fn test_stream_interleaved_sidecar_order_and_tool_input() {
+        let mut acc = crate::provider::anthropic_replay::StreamBlockAccumulator::new();
+        let events = [
+            r#"{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"plan"}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"s1"}}"#,
+            r#"{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}"#,
+            r#"{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Running"}}"#,
+            r#"{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_1","name":"terminal","input":{}}}"#,
+            r#"{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"comm"}}"#,
+            r#"{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"and\":\"ls\"}"}}"#,
+        ];
+        for raw in events {
+            acc.observe(&parse_anthropic_event(raw).unwrap().unwrap());
+        }
+        let carriers = acc.carriers();
+        let ordered = carriers.anthropic_content_blocks.expect("sidecar");
+        let types: Vec<&str> = ordered.iter().map(|b| b["type"].as_str().unwrap()).collect();
+        assert_eq!(types, vec!["thinking", "text", "tool_use"]);
+        assert_eq!(ordered[0]["signature"], "s1");
+        assert_eq!(ordered[1]["text"], "Running");
+        assert_eq!(ordered[2]["input"]["command"], "ls");
+        assert!(ordered[2].get("_partial_json").is_none(), "internal field leaked");
+    }
+
+    /// Replay keeps the signature and puts thinking BEFORE text/tool_use.
+    #[test]
+    fn test_replay_native_keeps_signature_and_order() {
+        let mut turn = assistant_with_details("Running ls", vec![signed_thinking("plan", "sig1")]);
+        turn.tool_calls = Some(vec![ToolCall {
+            id: "toolu_1".into(),
+            call_type: "function".into(),
+            function: FunctionCall {
+                name: "terminal".into(),
+                arguments: "{\"command\":\"ls\"}".into(),
+            },
+        }]);
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "list"), turn, {
+                let mut t = msg(Role::Tool, "file.txt");
+                t.tool_call_id = Some("toolu_1".into());
+                t
+            }],
+            "https://api.anthropic.com",
+            "claude-sonnet-4-6",
+        );
+        let blocks = out[1]["content"].as_array().unwrap();
+        assert_eq!(blocks[0]["type"], "thinking");
+        assert_eq!(blocks[0]["signature"], "sig1");
+        assert_eq!(blocks[1]["type"], "text");
+        assert_eq!(blocks[2]["type"], "tool_use");
+    }
+
+    /// 🔴 Third-party relays cannot verify signatures: `_strip_thinking`
+    /// (`anthropic_message_convert.py:65-66`) DROPS thinking blocks entirely —
+    /// demote-to-text is `_keep_valid_thinking`'s job on the native route only.
+    #[test]
+    fn test_replay_third_party_strips_signed_thinking() {
+        let turn = assistant_with_details("answer", vec![signed_thinking("secret plan", "sig")]);
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "hi"), turn],
+            "https://relay.example.com/v1",
+            "claude-sonnet-4-6",
+        );
+        let blocks = out[1]["content"].as_array().unwrap();
+        assert_eq!(blocks.len(), 1, "thinking must be dropped, not demoted");
+        assert_eq!(blocks[0]["type"], "text");
+        assert_eq!(blocks[0]["text"], "answer");
+    }
+
+    /// A turn that is ONLY thinking leaves nothing after the strip; upstream
+    /// substitutes the "(thinking elided)" placeholder so content stays valid.
+    #[test]
+    fn test_replay_third_party_thinking_only_turn_gets_placeholder() {
+        let turn = assistant_with_details("", vec![signed_thinking("plan", "sig")]);
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "hi"), turn],
+            "https://relay.example.com/v1",
+            "claude-sonnet-4-6",
+        );
+        let blocks = out[1]["content"].as_array().unwrap();
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0]["type"], "text");
+        assert_eq!(blocks[0]["text"], "(thinking elided)");
+    }
+
+    /// DeepSeek: unsigned blocks round-trip, signed ones are rejected.
+    #[test]
+    fn test_replay_deepseek_keeps_unsigned_drops_signed() {
+        let turn = assistant_with_details(
+            "answer",
+            vec![
+                signed_thinking("signed", "sig"),
+                json!({"type": "thinking", "thinking": "unsigned"}),
+            ],
+        );
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "hi"), turn],
+            "https://api.deepseek.com/anthropic",
+            "deepseek-v4",
+        );
+        let blocks = out[1]["content"].as_array().unwrap();
+        let thinking: Vec<&Value> = blocks
+            .iter()
+            .filter(|b| b["type"] == "thinking")
+            .collect();
+        assert_eq!(thinking.len(), 1);
+        assert_eq!(thinking[0]["thinking"], "unsigned");
+        assert!(thinking[0].get("signature").is_none());
+    }
+
+    /// Kimi replays as-is, including unsigned blocks its /coding endpoint requires.
+    #[test]
+    fn test_replay_kimi_keeps_thinking_as_is() {
+        let turn = assistant_with_details(
+            "answer",
+            vec![json!({"type": "thinking", "thinking": "kimi thought"})],
+        );
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "hi"), turn],
+            "https://api.kimi.com/coding",
+            "kimi-k2.5",
+        );
+        let blocks = out[1]["content"].as_array().unwrap();
+        assert_eq!(blocks[0]["type"], "thinking");
+        assert_eq!(blocks[0]["thinking"], "kimi thought");
+    }
+
+    /// cache_control on a thinking block interferes with signature validation.
+    #[test]
+    fn test_replay_strips_cache_control_from_thinking() {
+        let mut block = signed_thinking("plan", "sig");
+        block["cache_control"] = json!({"type": "ephemeral"});
+        let turn = assistant_with_details("answer", vec![block]);
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "hi"), turn],
+            "https://api.anthropic.com",
+            "claude-sonnet-4-6",
+        );
+        assert!(out[1]["content"][0].get("cache_control").is_none());
+    }
+
+    /// The ordered sidecar wins over reasoning_details, and tool_use input is
+    /// re-sourced from tool_calls (the redacted copy) not the captured block.
+    #[test]
+    fn test_replay_ordered_sidecar_wins_and_resources_tool_input() {
+        let mut turn = assistant_with_details("stale text", vec![signed_thinking("plan", "sig")]);
+        turn.anthropic_content_blocks = Some(vec![
+            signed_thinking("plan", "sig"),
+            json!({"type": "tool_use", "id": "toolu_1", "name": "terminal",
+                   "input": {"command": "SECRET-RAW"}}),
+        ]);
+        turn.tool_calls = Some(vec![ToolCall {
+            id: "toolu_1".into(),
+            call_type: "function".into(),
+            function: FunctionCall {
+                name: "terminal".into(),
+                arguments: "{\"command\":\"[REDACTED]\"}".into(),
+            },
+        }]);
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "hi"), turn],
+            "https://api.anthropic.com",
+            "claude-sonnet-4-6",
+        );
+        let blocks = out[1]["content"].as_array().unwrap();
+        assert_eq!(blocks.len(), 2, "sidecar must replace text+tool_calls rebuild");
+        assert_eq!(blocks[0]["type"], "thinking");
+        assert_eq!(blocks[1]["input"]["command"], "[REDACTED]");
+    }
+
+    /// Parity pin: upstream `_is_third_party_anthropic_endpoint`
+    /// (`anthropic_endpoints.py:28-32`) is a SUBSTRING check on the whole URL,
+    /// so a relay whose path contains "anthropic.com" is treated as native and
+    /// keeps signatures. The hostname equality-or-subdomain rule guards the
+    /// kimi/deepseek/minimax predicates instead (tested in anthropic_thinking).
+    /// Verbatim port: pin the quirk, do not "fix" it.
+    #[test]
+    fn test_relay_path_lookalike_matches_upstream_substring_rule() {
+        let turn = assistant_with_details("answer", vec![signed_thinking("plan", "sig")]);
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "hi"), turn],
+            "https://evil.example.com/anthropic.com/v1",
+            "claude-sonnet-4-6",
+        );
+        let blocks = out[1]["content"].as_array().unwrap();
+        assert_eq!(blocks[0]["type"], "thinking", "upstream substring rule -> native");
+        assert_eq!(blocks[0]["signature"], "sig");
+    }
+
+    /// The REAL lookalike trap: a host that merely ends with a vendor domain
+    /// string must not select that vendor's route. `api.kimi.com.evil.com` is
+    /// neither the /coding prefix nor an api.kimi.com host, so with a non-Kimi
+    /// model it is third-party and signed thinking is stripped.
+    #[test]
+    fn test_vendor_host_lookalike_is_third_party() {
+        let turn = assistant_with_details("answer", vec![signed_thinking("plan", "sig")]);
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "hi"), turn],
+            "https://api.kimi.com.evil.com/coding",
+            "claude-sonnet-4-6",
+        );
+        let blocks = out[1]["content"].as_array().unwrap();
+        assert!(blocks.iter().all(|b| b["type"] != "thinking"));
+    }
+
+    /// Parity pin: a Kimi-family MODEL selects the Kimi route on ANY host
+    /// (`_is_kimi_family_endpoint` ORs in the model check), and Kimi replays
+    /// thinking as-is — so a lookalike host with a kimi model keeps signatures.
+    #[test]
+    fn test_kimi_model_overrides_lookalike_host() {
+        let turn = assistant_with_details("answer", vec![signed_thinking("plan", "sig")]);
+        let (_, out) = messages_to_anthropic_routed(
+            &[msg(Role::User, "hi"), turn],
+            "https://api.kimi.com.evil.com/coding",
+            "kimi-k2.5",
+        );
+        let blocks = out[1]["content"].as_array().unwrap();
+        assert_eq!(blocks[0]["type"], "thinking");
+        assert_eq!(blocks[0]["signature"], "sig");
+    }
+
+    /// History WITHOUT carriers is byte-identical to the pre-slice2e wire.
+    #[test]
+    fn test_no_carriers_wire_is_unchanged() {
+        let messages = vec![
+            msg(Role::System, "You are helpful."),
+            msg(Role::User, "Hi"),
+            msg(Role::Assistant, "Hello!"),
+            msg(Role::User, "Again"),
+        ];
+        let (system, plain) = messages_to_anthropic(&messages);
+        let (system2, routed) =
+            messages_to_anthropic_routed(&messages, "https://api.anthropic.com", "claude-sonnet-4-6");
+        assert_eq!(system, system2);
+        assert_eq!(plain, routed);
     }
 
     #[test]

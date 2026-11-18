@@ -70,6 +70,8 @@ pub fn mirror_to_session(
         tool_calls: None,
         tool_call_id: None,
         name: None,
+        reasoning_details: None,
+        anthropic_content_blocks: None,
     };
     match store.append_message(&session_id, &message) {
         Ok(()) => {

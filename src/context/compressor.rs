@@ -577,6 +577,8 @@ impl ContextCompressor {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning_details: None,
+                anthropic_content_blocks: None,
             }],
             tools: vec![],
             model: model.to_string(),
@@ -616,6 +618,8 @@ impl ContextCompressor {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         });
         compressed.push(Message {
             reasoning: None,
@@ -624,6 +628,8 @@ impl ContextCompressor {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         });
         compressed.extend(messages.into_iter().skip(tail_start));
         Some(compressed)
@@ -642,6 +648,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         }
     }
 
@@ -653,6 +661,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         }
     }
 
@@ -680,6 +690,8 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         }];
         assert!(compressor.needs_compression(&messages));
         let big = ContextCompressor::new(100_000);
@@ -775,6 +787,8 @@ mod tests {
                     model: "echo-model".to_string(),
                     reasoning: None,
                     finish_reason: Some("stop".to_string()),
+                    reasoning_details: None,
+                    anthropic_content_blocks: None,
                 })
             }
             fn model(&self) -> &str {

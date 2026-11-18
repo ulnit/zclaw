@@ -190,6 +190,8 @@ fn system_message(content: &str) -> Message {
         tool_calls: None,
         tool_call_id: None,
         name: None,
+        reasoning_details: None,
+        anthropic_content_blocks: None,
     }
 }
 
@@ -201,6 +203,8 @@ fn user_message(content: String) -> Message {
         tool_calls: None,
         tool_call_id: None,
         name: None,
+        reasoning_details: None,
+        anthropic_content_blocks: None,
     }
 }
 

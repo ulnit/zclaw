@@ -148,6 +148,8 @@ pub async fn generate_title_forced(
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         },
         Message {
             reasoning: None,
@@ -159,6 +161,8 @@ pub async fn generate_title_forced(
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         },
     ];
 

@@ -923,6 +923,8 @@ async fn run_estimate(state: &Arc<GatewayState>, title: &str, body: Option<&str>
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning_details: None,
+            anthropic_content_blocks: None,
         }],
         tools: Vec::new(),
         model: resolution.model.clone(),
