@@ -1259,6 +1259,9 @@ mod tests {
 
     #[tokio::test]
     async fn traces_write_session_jsonl() {
+        // ULNCLAW_HOME is process-wide: serialize against every other
+        // test that reads or swaps the config home.
+        let _env_guard = crate::models_dev::test_env_lock();
         let dir = tempfile::tempdir().unwrap();
         let saved_home = std::env::var("ULNCLAW_HOME").ok();
         std::env::set_var("ULNCLAW_HOME", dir.path());

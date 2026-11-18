@@ -746,6 +746,9 @@ mod tests {
 
     #[tokio::test]
     async fn synthesize_openai_without_key_fails_clean() {
+        // ULNCLAW_HOME is process-wide: serialize against every other
+        // test that reads or swaps the config home.
+        let _env_guard = crate::models_dev::test_env_lock();
         let saved = std::env::var("OPENAI_API_KEY").ok();
         std::env::remove_var("OPENAI_API_KEY");
         // The home .env under a temp dir is empty too.

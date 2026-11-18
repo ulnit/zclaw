@@ -3176,6 +3176,9 @@ mod tests {
 
     #[tokio::test]
     async fn session_save_writes_transcript_file() {
+        // ULNCLAW_HOME is process-wide: serialize against every other
+        // test that reads or swaps the config home.
+        let _env_guard = crate::models_dev::test_env_lock();
         let _guard = ENV_LOCK.lock().unwrap();
         let temp = tempfile::tempdir().expect("tempdir");
         std::env::set_var("ULNCLAW_HOME", temp.path());
@@ -3200,6 +3203,9 @@ mod tests {
 
     #[tokio::test]
     async fn pet_surface_fails_open_without_installed_pets() {
+        // ULNCLAW_HOME is process-wide: serialize against every other
+        // test that reads or swaps the config home.
+        let _env_guard = crate::models_dev::test_env_lock();
         let _guard = ENV_LOCK.lock().unwrap();
         let temp = tempfile::tempdir().expect("tempdir");
         std::env::set_var("ULNCLAW_HOME", temp.path());

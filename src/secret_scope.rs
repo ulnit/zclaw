@@ -687,6 +687,9 @@ mod tests {
 
     #[tokio::test]
     async fn get_secret_globals_never_fail_closed() {
+        // ULNCLAW_HOME is process-wide: serialize against every other
+        // test that reads or swaps the config home.
+        let _env_guard = crate::models_dev::test_env_lock();
         let _guard = test_multiplex_lock();
         set_multiplex_active(true);
         // Exact-match global: resolves from the environment even while

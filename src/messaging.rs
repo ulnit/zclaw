@@ -8287,6 +8287,9 @@ mod tests {
 
     #[tokio::test]
     async fn profile_routing_delegates_matching_events_to_profile_stack() {
+        // Shares the process-wide chat_histories() key (chat-1) with
+        // the slash-confirm tests; serialize against them.
+        let _confirm_guard = slash_confirm_test_lock();
         // P709: events matching a configured route run under the
         // routed profile's dispatcher (its store gains the session);
         // non-matching events stay on the default stack.
@@ -8343,6 +8346,9 @@ mod tests {
 
     #[tokio::test]
     async fn profile_routing_falls_back_when_factory_fails() {
+        // Shares the process-wide chat_histories() key (chat-1) with
+        // the slash-confirm tests; serialize against them.
+        let _confirm_guard = slash_confirm_test_lock();
         // P709: a profile build failure degrades to the default
         // profile — routing never drops a message.
         let (default_agent, default_store, _) = test_dispatcher_parts();
@@ -8379,6 +8385,7 @@ mod tests {
         crate::slash_confirm::clear_all_for_tests();
         let dispatcher = test_dispatcher();
         let key = "platform-testplat-chat-1".to_string();
+        drop_history_cache(&key).await;
 
         // /reload-mcp is gated (approvals.mcp_reload_confirm defaults on):
         // the text-fallback prompt goes out and a confirm registers.
@@ -8423,6 +8430,10 @@ mod tests {
         crate::slash_confirm::clear_all_for_tests();
         let dispatcher = test_dispatcher();
         let key = "platform-testplat-chat-1".to_string();
+        // `chat_histories()` is process-wide and `test_event()` always uses
+        // chat-1, so an unrelated test's turn can leave messages under this
+        // key. Evict first: the assertion below is about what *cancel* adds.
+        drop_history_cache(&key).await;
 
         dispatcher
             .handle_event(test_event("/reload-mcp", "m1"))
